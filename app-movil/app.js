@@ -684,6 +684,20 @@ async function _buscar(q) {
     }).slice(0, 25);
     pintarSugs(res, q);
 }
+/* La identidad que distingue un producto de su hermano: contenido, variedad y
+   marca. Misma redacción que el QR del navegador (_insMetaParts en
+   entrada.html): si las dos pantallas rotularan distinto, el mismo conteo se
+   leería de dos maneras según por dónde se mire. */
+function metaIns(x) {
+    if (!x) return '';
+    var partes = [];
+    var cont = x.contNeto ? (x.contNeto + ' ' + String(x.umContenido || 'ML').toLowerCase()) : '';
+    if (cont) partes.push('📦 ' + cont);
+    var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');
+    if (sub) partes.push(sub);
+    return partes.join(' · ');
+}
+
 async function cargarRecetas() {
     try {
         var rr = await _supabase.rpc('entrada_recetas', { p_neg: NEG, p_token: TOKEN });
@@ -712,6 +726,7 @@ function elegir(x) {
     SEL = x;
     $('elegido').hidden = false;
     $('elegidoNom').textContent = x.nombre || '—';
+    var _em = $('elegidoMeta'); if (_em) _em.textContent = metaIns(x);
     $('sugs').innerHTML = '';
     $('buscar').value = '';
     pintarUnidades();
@@ -769,6 +784,9 @@ function agregarAlLote() {
     var it = {
         id: genId(), insumoId: SEL.id, nombre: SEL.nombre || '—',
         familia: SEL.familia || '', cantidad: cant,
+        /* Se guarda al AGREGAR, no al mandar: cuando el lote sale, SEL ya es
+           otro producto y la identidad del primero se habría perdido. */
+        meta: metaIns(SEL),
         unidad: $('unidad') ? $('unidad').value : 'PZA'
     };
     if (FLUJO === 'entrada') it.tipo = ($('entTipo') || {}).value || 'compra';
@@ -788,7 +806,9 @@ function pintarLote() {
     $('btnEnviar').disabled = false;
     c.innerHTML = '<div class="lote-tit">En la lista (' + LOTE.length + '/' + MAX_ITEMS + ')</div>' +
         LOTE.map(function (it) {
-            var det = [it.tipo, it.motivo, it.salidaTipo].filter(Boolean).join(' · ');
+            /* El meta primero: en una lista de ocho renglones es lo que
+               distingue las tres Bohemias que se acaban de agregar. */
+            var det = [it.meta, it.tipo, it.motivo, it.salidaTipo].filter(Boolean).join(' · ');
             return '<div class="lote-it"><span>' + etx(it.nombre) +
                 (det ? '<small>' + etx(det) + '</small>' : '') + '</span>' +
                 '<b>' + it.cantidad + ' ' + etx(it.unidad) + '</b>' +
@@ -907,7 +927,11 @@ function armarRegistro(it) {
     });
     // conteo
     return Object.assign(base, {
-        insumoId: it.insumoId, nombre: it.nombre, cantidad: it.cantidad, unidad: it.unidad
+        insumoId: it.insumoId, nombre: it.nombre, cantidad: it.cantidad, unidad: it.unidad,
+        /* Viaja con el conteo: el historial lo arma el servidor y ahí no está
+           el catálogo. Sin esto, tres conteos de tres Bohemias distintas se
+           leen como tres renglones idénticos que dicen «Bohemia». */
+        meta: it.meta || ''
     });
 }
 
@@ -1118,10 +1142,31 @@ function pintarHist() {
         _HIST.filtro = b.getAttribute('data-f'); pintarHist();
     };
 
+    /* Un conteo se mira para saber CUÁNTO se contó y DE CUÁL — no a qué hora.
+       Esta pantalla decía el nombre y la hora, que es justo lo que no hace
+       falta. (El `cerradas*` viene del QR del navegador y `cantidad` de aquí:
+       los dos flujos escriben en la misma tabla y la lista los lee a los dos.) */
+    function filaConteo(c) {
+        var pz = [];
+        if (c.cerradasBodega !== '' && c.cerradasBodega != null) pz.push(c.cerradasBodega + ' bodega');
+        if (c.cerradasBarra  !== '' && c.cerradasBarra  != null) pz.push(c.cerradasBarra + ' barra');
+        if (!pz.length && c.cantidad) pz.push(c.cantidad + (c.unidad ? ' ' + c.unidad : ''));
+        var cant = pz.join(' · ');
+        /* Los conteos VIEJOS no traen `meta` —se empezó a guardar con esta
+           entrega— así que se resuelven contra el catálogo ya cargado. */
+        var m = c.meta;
+        if (!m && c.insumoId) {
+            var ins = (INSUMOS || []).find(function (x) { return x.id === c.insumoId; });
+            if (ins) m = metaIns(ins);
+        }
+        return fila('📋', (c.nombre || '—') + (cant ? '  ·  ' + cant : ''),
+            ['Conteo', m, (c.fecha || '')].filter(Boolean).join(' · ') + horaDe(c), c.quien);
+    }
+
     var f = _HIST.filtro, html = '';
     if (f === 'conteo') {
         html = _HIST.cnts.map(function (c) {
-            return fila('📋', c.nombre || '—', 'Conteo · ' + (c.fecha || '') + horaDe(c), c.quien);
+            return filaConteo(c);
         }).join('');
     } else {
         html = _HIST.movs.filter(function (m) { return f === 'todo' || m.concepto === f; })
@@ -1134,7 +1179,7 @@ function pintarHist() {
             }).join('');
         if (f === 'todo' && _HIST.cnts.length) {
             html += _HIST.cnts.map(function (c) {
-                return fila('📋', c.nombre || '—', 'Conteo · ' + (c.fecha || '') + horaDe(c), c.quien);
+                return filaConteo(c);
             }).join('');
         }
     }

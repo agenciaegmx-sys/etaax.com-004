@@ -8772,7 +8772,17 @@ function _step5TablasHTML() {
             const meaBot = mCopasBot>0 ? mea/mCopasBot : mea;   // existencia en botellas (su propia presentación)
             const mfisBot = mCopasBot>0 ? mfis/mCopasBot : mfis;
             const mCont   = _fmtContenido(m); // 📦 contenido por botella (ml/pza) de la presentación
-            const mNom = `<td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}${mCont?`<div style="font-size:9.5px;color:#7ab8f5;margin-top:1px">📦 ${mCont}</div>`:''}</td>`;
+            /* ══ CADA PRESENTACIÓN, SU PROPIA NOTA ════════════════════════
+               La nota vivía solo en el COMPUESTO. Pero el faltante no es del
+               compuesto: es de la Porter, no de la Stout. «La Brü −2 pza» con
+               un comentario que vale para las cinco presentaciones no explica
+               nada, y al que revisa el reporte directivo le llega un renglón
+               rojo sin una línea que lo justifique.
+
+               Las notas ya se guardaban por insumoId —cada miembro tiene el
+               suyo—, así que no hacía falta inventar nada: solo faltaba el
+               botón en el renglón. */
+            const mNom = `<td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}${mCont?`<div style="font-size:9.5px;color:#7ab8f5;margin-top:1px">📦 ${mCont}</div>`:''}${_btnNotaInsumo(m.insumoId)}</td>`;
             // Miembros de pieza: mismas columnas que la tabla de piezas (con
             // teórico y físico), sin "Botella" ni "Copa", que ahí no existen.
             if (esPzaComp0) {
@@ -9418,7 +9428,7 @@ function verReporteDirectivo(gerencial, modo) {
                     const mFisBot = m.copasBot>0 ? m.fisico/m.copasBot : m.fisico;
                     const mcD = scol(m.dif), mcC = scol(m.difCosto), mCont = _fmtContenido(m.f);
                     return `<tr style="background:#fbfaff">
-              <td style="padding-left:22px;color:#666;font-size:9px">↳ ${etx(m.f.nombre)}${mCont?` · <span style="color:#2471a3">📦 ${mCont}</span>`:''}</td>
+              <td style="padding-left:22px;color:#666;font-size:9px">↳ ${etx(m.f.nombre)}${mCont?` · <span style="color:#2471a3">📦 ${mCont}</span>`:''}${_notaInsumo(m.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(m.f.insumoId))}</div>`:''}</td>
               <td class="tc" style="color:#999">${_ncRd(mEaBot)} ${mEx}</td>
               <td class="tc" style="color:${cOk}">${m.entBot>0?'+'+_ncRd(m.entBot)+' '+mEnt:'—'}</td>
               <td class="tc">${m.ventaCopaDir>0?_ncRd(m.ventaCopaDir)+' '+mVta:'—'}</td>

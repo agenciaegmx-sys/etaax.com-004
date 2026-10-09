@@ -874,8 +874,16 @@ function selCnt(id){
     CNT_SEL = INSUMOS.find(function(x){ return x.id===id; });
     if (!CNT_SEL) return;
     document.getElementById('cntNom').textContent = CNT_SEL.nombre || '—';
-    var cont = CNT_SEL.contNeto ? (CNT_SEL.contNeto+' '+(CNT_SEL.umContenido||'ML')) : '';
-    document.getElementById('cntMeta').textContent = [CNT_SEL.categoria, cont].filter(Boolean).join(' · ') || '—';
+    /* ══ AL ELEGIRLO SE PERDÍAN LOS DATOS QUE LO DISTINGUEN ════════════════
+       En la lista se lee «Bohemia 📦 355 ml · Viena Obscura · Bohemia
+       Obscura»; al tocarlo quedaba «Bohemia · Cervezas». Con tres estilos de
+       Bohemia eso es exactamente el momento de dudar —y de contar el
+       equivocado—, porque es la única pantalla donde ya no se puede comparar
+       con las de al lado.
+
+       Los mismos metadatos de la lista (_insMetaParts), más la categoría. */
+    document.getElementById('cntMeta').textContent =
+        [_insMetaParts(CNT_SEL), CNT_SEL.categoria].filter(Boolean).join('  ·  ') || '—';
     /* Los campos arrancan VACÍOS, aunque ya lo haya contado antes.
        Antes se precargaba su conteo anterior porque volver a enviarlo lo
        CORREGÍA. Ahora cada envío es un conteo nuevo que se SUMA, así que
@@ -963,6 +971,11 @@ async function enviarConteo(){
                inventario los suma. */
             id: 'cnt_'+hoy.replace(/-/g,'')+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
             insumoId: CNT_SEL.id, nombre: CNT_SEL.nombre || '',
+            /* La identidad COMPLETA viaja con el conteo. El historial se arma
+               con lo que devuelve el servidor, y ahí no está el catálogo: sin
+               esto, tres conteos de tres Bohemias distintas se leen como tres
+               renglones idénticos que dicen «Bohemia». */
+            meta: _insMetaParts(CNT_SEL) || '',
             sucursalId: SUC || '', area: AREA, fecha: hoy, hora: nowHora(),
             cerradasBodega: bod, cerradasBarra: bar,
             nota: (document.getElementById('cntNota').value||'').trim(),
@@ -996,6 +1009,7 @@ function _renderCntHechos(){
             var num = mismos.length - mismos.indexOf(h);
             return '<div style="display:flex;justify-content:space-between;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:7px">'
                 + '<span style="font-size:13px;color:var(--text)">'+etx(h.nombre)
+                + (h.meta ? '<div style="font-size:11px;color:var(--dim);margin-top:2px">'+etx(h.meta)+'</div>' : '')
                 + (mismos.length>1 ? ' <span style="font-size:11px;color:var(--dim)">· conteo '+num+'</span>' : '')
                 + '</span>'
                 + '<span style="font-size:11.5px;color:var(--dim);text-align:right">'+etx(partes.join(' · '))+' <span style="opacity:.7">'+etx(h.hora||'')+'</span></span></div>';
@@ -1178,7 +1192,26 @@ async function irHistorial(){
         html += '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:16px 0 4px">Ya contados ('+cnts.length+')</div>';
         html += cnts.map(function(c){
             var hc = _horaDe(c);
-            return fila('📋', c.nombre || '—', (c.fecha||'') + (hc ? ' · '+hc : ''), c.quien);
+            /* LA CANTIDAD ERA LO ÚNICO QUE NO SE VEÍA. La lista decía qué
+               producto y a qué hora, pero no CUÁNTO — que es el dato por el
+               que se entra a mirar: «¿ya conté la cava?» se responde con el
+               número, no con la hora. */
+            var pz = [];
+            if (c.cerradasBodega !== '' && c.cerradasBodega != null) pz.push(c.cerradasBodega + ' bodega');
+            if (c.cerradasBarra  !== '' && c.cerradasBarra  != null) pz.push(c.cerradasBarra + ' barra');
+            var cant = pz.join(' · ');
+            /* El meta viene guardado con el conteo; para los conteos VIEJOS,
+               que no lo traen, se busca en el catálogo. Así la lista no queda
+               a medias mientras conviven los de antes y los de ahora. */
+            var m = c.meta;
+            if (!m) {
+                var ins = INSUMOS.find(function (x) { return x.id === c.insumoId; });
+                if (ins) m = _insMetaParts(ins);
+            }
+            return fila('📋',
+                (c.nombre || '—') + (cant ? '  ·  ' + cant : ''),
+                [m, (c.fecha||''), hc].filter(Boolean).join(' · '),
+                c.quien);
         }).join('');
     }
     if (movs.length){

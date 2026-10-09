@@ -20676,6 +20676,130 @@ console.log('\n══ BH32 · Enseñar la cuenta, no solo el resultado ══');
         eq(src.indexOf("mal: 'ligacruzada'") === -1, true, 'sin falsos positivos'));
 }
 
+/* ═══════════ SUITE BH33 · LA NOTA DEL MIEMBRO Y EL CONTEO QUE NO DECÍA CUÁNTO
+   Dos detalles que Edwin pidió, y los dos tenían la misma forma: el dato ya
+   existía y solo faltaba enseñarlo donde se mira.
+
+   1. LA NOTA DE CADA PRESENTACIÓN. El faltante no es del compuesto: es de la
+      Porter, no de la Stout. «La Brü −2 pza» con un comentario que vale para
+      las cinco no explica nada, y al reporte directivo le llega un renglón
+      rojo sin una línea que lo justifique. Las notas YA se guardaban por
+      insumoId —cada miembro tiene el suyo—; faltaba el botón en el renglón.
+
+   2. EL CONTEO DEL QR. «Ya contados» decía qué producto y a qué hora, pero no
+      CUÁNTO — que es el dato por el que se entra: «¿ya conté la cava?» se
+      responde con el número. Y decía «Bohemia» a secas, con tres estilos en
+      el catálogo.                                                           */
+console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuánto ══');
+{
+    const inv  = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const ent  = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const amv  = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
+    const v67  = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v67.sql'), 'utf8');
+
+    /* ── 1. LA NOTA POR PRESENTACIÓN ── */
+    test('cada presentación del compuesto tiene su botón de nota', () => {
+        const i = inv.indexOf('const desgloseRows = members.map');
+        const bloque = inv.slice(i, i + 2600);
+        return eq(bloque.indexOf('${_btnNotaInsumo(m.insumoId)}') > -1, true, 'una por miembro');
+    });
+    /* Y en el impreso, que es donde acaba el reporte directivo: una nota que
+       solo se ve en pantalla no sirve para lo que se pidió. */
+    test('…y esa nota sale en el reporte impreso', () => {
+        const i = inv.indexOf('const subRows = a.members.map');
+        const bloque = inv.slice(i, i + 1800);
+        return eq(bloque.indexOf('_notaInsumo(m.f.insumoId)') > -1, true, 'en el directivo');
+    });
+    /* El compuesto conserva la suya: son dos notas distintas —una del conjunto
+       y otra de cada presentación— y ninguna reemplaza a la otra. */
+    test('…y el compuesto conserva la suya', () =>
+        eq(inv.indexOf('${_btnNotaInsumo(vf.compId||vf.insumoId)}') > -1, true, 'las dos'));
+    /* No hacía falta inventar almacenamiento: ya eran por insumoId. */
+    test('…sin inventar dónde guardarlas: ya eran por insumo', () =>
+        eq(/function _notaInsumo\(id\) \{ return \(invActual && invActual\.notasInsumo/.test(inv),
+           true, 'el mismo cajón'));
+
+    /* ── 2. EL CONTEO DEL QR ──
+       La causa NO era la pantalla: la función que sirve el historial armaba el
+       conteo campo por campo y la cantidad no estaba en la lista. Por eso hubo
+       migración. */
+    test('el servidor devuelve CUÁNTO se contó (v67)', () =>
+        eq(v67.indexOf("'cerradasBodega', c.datos->>'cerradasBodega'") > -1 &&
+           v67.indexOf("'cerradasBarra',  c.datos->>'cerradasBarra'") > -1, true, 'la cantidad viaja'));
+    test('…y de cuál producto, con su contenido y variedad', () =>
+        eq(v67.indexOf("'meta',     c.datos->>'meta'") > -1 &&
+           v67.indexOf("'insumoId', c.datos->>'insumoId'") > -1, true, 'identificable'));
+    /* BH21: un CREATE OR REPLACE se lleva lo que no se vuelva a escribir. La
+       v67 reescribe entrada_historial COMPLETA y todo lo de la v53 tiene que
+       seguir ahí. */
+    ['_entrada_token_ok', 'p_niphash', 'movimientos', 'v_desde', 'cierreOperativo'].forEach(x =>
+        test('…y la v67 conserva `' + x + '` de la v53', () =>
+            eq(v67.indexOf(x) > -1, true, 'sin llevárselo')));
+    test('…y la v67 vuelve a dar su permiso a anon', () =>
+        eq(v67.indexOf('GRANT EXECUTE ON FUNCTION entrada_historial(TEXT,TEXT,TEXT,TEXT,TEXT) TO anon') > -1,
+           true, 'el QR no tiene sesión'));
+
+    /* ── La pantalla del QR ── */
+    test('QR · el conteo guarda su identidad al mandarlo', () => {
+        const i = ent.indexOf('insumoId: CNT_SEL.id, nombre: CNT_SEL.nombre');
+        return eq(ent.slice(i, i + 500).indexOf('meta: _insMetaParts(CNT_SEL)') > -1,
+                  true, 'viaja con el conteo');
+    });
+    test('QR · al elegir el producto NO se pierden sus datos', () => {
+        const i = ent.indexOf("document.getElementById('cntNom').textContent");
+        const bloque = ent.slice(i, i + 900);
+        return eq(bloque.indexOf('_insMetaParts(CNT_SEL)') > -1, true, 'los mismos de la lista');
+    });
+    test('QR · «Ya contados» dice cuántas piezas y de dónde', () => {
+        const i = ent.indexOf("html += '<div style=\"font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:16px 0 4px\">Ya contados");
+        const bloque = ent.slice(i, i + 1600);
+        return eq(bloque.indexOf("' bodega'") > -1 && bloque.indexOf("' barra'") > -1, true, 'la cantidad');
+    });
+    /* Los conteos VIEJOS no traen `meta` —se empezó a guardar con esta
+       entrega—: se resuelven contra el catálogo para que la lista no quede a
+       medias mientras conviven los de antes y los de ahora. */
+    test('QR · un conteo viejo sin `meta` se resuelve con el catálogo', () => {
+        const i = ent.indexOf('Ya contados (');
+        const bloque = ent.slice(i, i + 1800);
+        return eq(/if \(!m\) \{[\s\S]{0,200}INSUMOS\.find/.test(bloque), true, 'sin quedar a medias');
+    });
+
+    /* ── La app móvil, que comparte el flujo ── */
+    test('APP · el conteo también guarda su identidad', () =>
+        eq(/\/\/ conteo\s*\n\s*return Object\.assign\(base, \{[\s\S]{0,400}meta: it\.meta/.test(amv),
+           true, 'igual que el QR'));
+    test('…y se guarda al AGREGAR, no al mandar', () => {
+        const i = amv.indexOf('function agregarAlLote()');
+        return eq(amv.slice(i, i + 900).indexOf('meta: metaIns(SEL)') > -1, true,
+                  'al mandar, SEL ya es otro');
+    });
+    test('APP · el producto elegido enseña sus datos', () => {
+        const i = amv.indexOf('function elegir(x)');
+        return eq(amv.slice(i, i + 400).indexOf("$('elegidoMeta')") > -1, true, 'no se pierden');
+    });
+    test('APP · su historial de conteos dice cuánto', () =>
+        eq(/function filaConteo\(c\) \{[\s\S]{0,700}' bodega'/.test(amv), true, 'la cantidad'));
+    /* Los dos flujos escriben en la MISMA tabla con formas distintas —el QR
+       guarda cerradasBodega/Barra y la app cantidad/unidad— y la lista los lee
+       a los dos. Si solo leyera uno, la mitad de los conteos saldría sin
+       número y nadie sabría por qué unos sí y otros no. */
+    test('…leyendo las DOS formas: la del QR y la suya', () =>
+        eq(/if \(!pz\.length && c\.cantidad\)/.test(amv), true, 'los dos flujos'));
+    /* Tocar la app sin subirle la versión al service worker la deja congelada
+       en lo viejo: el navegador compara el archivo byte a byte. */
+    test('APP · se le subió la versión al service worker', () =>
+        eq(fs.readFileSync(path.join(RAIZ, 'app-movil/sw.js'), 'utf8').indexOf("var CACHE = 'etaax-movil-v4'") > -1,
+           true, 'o se queda con lo viejo'));
+    /* Las dos pantallas tienen que rotular IGUAL: si el QR dice «📦 355 ml ·
+       Viena Obscura» y la app otra cosa, el mismo conteo se lee de dos maneras
+       según por dónde se mire. */
+    test('las dos pantallas rotulan el producto igual', () => {
+        const qr  = ent.indexOf("var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');") > -1;
+        const app = amv.indexOf("var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');") > -1;
+        return eq(qr && app, true, 'misma redacción');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

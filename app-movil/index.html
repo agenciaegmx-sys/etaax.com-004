@@ -187,7 +187,13 @@
 
     <div id="elegido" hidden>
         <div class="elegido-card">
-            <div class="elegido-nom" id="elegidoNom"></div>
+            <div style="flex:1;min-width:0">
+                <div class="elegido-nom" id="elegidoNom"></div>
+                <!-- Los datos que lo distinguen de sus hermanos. En la lista de
+                     resultados se ven; al elegirlo se perdían, y es justo la
+                     pantalla donde ya no se puede comparar con las de al lado. -->
+                <div class="elegido-meta" id="elegidoMeta"></div>
+            </div>
             <button class="elegido-x" onclick="limpiarElegido()" aria-label="Quitar">✕</button>
         </div>
         <div class="fila">
