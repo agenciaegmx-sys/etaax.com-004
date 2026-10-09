@@ -9386,7 +9386,22 @@ function _step5TablasHTML() {
         const fisico    = calcExistencia(vf);
         const teorico   = calcExistenciaTeorica(vf);
         const dif       = fisico - teorico;
-        const difCosto  = dif * (vf.precioCarta || 0);
+        /* ══ EL DINERO DEL COMPUESTO SALE DE SUS MIEMBROS ═════════════════
+           Esto valuaba TODA la diferencia al precio de la PRIMERA
+           presentación. En «La Brü» eso daba −$190 mientras sus cinco
+           presentaciones sumaban −$205: +95 la Stout, +220 la IPA, −190 la
+           Porter, 0 la lisa y −330 la Maíz Azul. Cinco cervezas a precios
+           distintos no se valúan con el precio de una.
+
+           Y como el resumen ejecutivo SÍ sumaba miembro por miembro, los
+           chips de grupo daban +$400 y la tarjeta +$643. La regla ya estaba
+           escrita —«el compuesto es la SUMA SIMPLE de los insumos que
+           incluye, y cada uno entra con SU precio»— y este renglón era el
+           único que no la seguía. */
+        const difCosto  = members.reduce(function (t, m) {
+            var mAj = _repartoDe(m.insumoId);
+            return t + (calcDiferencia(m) + mAj.dif) * (m.precioCarta || 0);
+        }, 0);
         const pctValC   = _pctVarianza(dif, usoComp);
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctStr    = pctValC !== null ? ((pctValC>=0?'+':'')+pctValC.toFixed(1)+'%') : '—';

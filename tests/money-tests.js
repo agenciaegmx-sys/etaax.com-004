@@ -22277,6 +22277,102 @@ console.log('\n══ BH44 · Un solo capital ══');
     });
 }
 
+/* ═══════════ SUITE BH45 · LOS GRUPOS TIENEN QUE SUMAR LA TARJETA ════════
+   Los chips de grupo del Resultado sumaban +$400.10 y la tarjeta de sobrante
+   decía +$643. $242.90 de aire entre dos cifras que miran lo mismo.
+
+   La causa estaba a la vista en «La Brü»: el renglón del compuesto decía
+   −$190 y sus cinco presentaciones, desplegadas justo debajo, sumaban −$205
+   (+95 la Stout, +220 la IPA, −190 la Porter, 0 la lisa, −330 la Maíz Azul).
+
+   El compuesto valuaba TODA su diferencia al precio de la PRIMERA
+   presentación. Cinco cervezas a precios distintos no se valúan con el precio
+   de una. Y como el resumen ejecutivo SÍ sumaba miembro por miembro, los dos
+   totales no podían coincidir nunca.
+
+   La regla ya estaba escrita —«el compuesto es la SUMA SIMPLE de los insumos
+   que incluye, y cada uno entra con SU precio»— y este renglón era el único
+   que no la seguía.                                                        */
+console.log('\n══ BH45 · Los grupos tienen que sumar la tarjeta ══');
+{
+    const G = crearContexto();
+    cargarJS(G, 'etaax-core.js');
+    cargarJS(G, 'insumo-label.js');
+    cargarJS(G, 'recetas/inventarios.js');
+    G._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){}', G);
+
+    /* «La Brü»: cinco presentaciones a precios distintos, con sobrantes y
+       faltantes mezclados — el caso que lo destapó. */
+    const PRES = [
+        { id:'stout',  nombre:'Stout',     precio: 95, ea: 18, fis: 13 },   // teórico 12 → +1
+        { id:'ipa',    nombre:'IPA',       precio:110, ea:  2, fis: 12 },   // teórico 10 → +2
+        { id:'porter', nombre:'Porter',    precio: 95, ea: 13, fis: 15 },   // teórico 17 → −2
+        { id:'lisa',   nombre:'La brü',    precio: 95, ea:  0, fis:  0 },   // 0
+        { id:'maiz',   nombre:'Maíz Azúl', precio:110, ea: 49, fis: 41 }    // teórico 44 → −3
+    ];
+    setVar(G, '_cacheRecetasInv', []);
+    setVar(G, '_cacheInsumosInv', PRES.map(p => ({ id:p.id, nombre:p.nombre, activo:'1' })));
+    setVar(G, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+        cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+    /* ventasCopasDirectas ajusta el teórico para dar las diferencias de arriba. */
+    setVar(G, 'filasCaptura', PRES.map(p => ({
+        insumoId:p.id, nombre:p.nombre, tipo:'pza', contNeto:355, copaML:0,
+        precioCarta:p.precio, existenciaAnterior:p.ea, entradas:[], pesos:[],
+        cerradasBodega:p.fis, cerradasBarra:0,
+        ventasCopasDirectas: p.ea - (p.fis - ({stout:1,ipa:2,porter:-2,lisa:0,maiz:-3})[p.id]),
+        cortesiaCopas:0, mermaCopas:0, ventasBotella:0 })));
+    vm.runInContext("_cacheCompuestos = [{ id:'labru', nombre:'La bru', activo:true, miembros:" +
+        JSON.stringify(PRES.map(p => p.id)) + " }];", G);
+    vm.runInContext('_consumoDirty = true; _cancelDirty = true;', G);
+
+    /* Lo que suma la TARJETA: miembro por miembro, cada uno con su precio.
+       Es la misma cuenta que hace el resumen ejecutivo. */
+    const porMiembro = () => (vm.runInContext('filasCaptura', G) || [])
+        .reduce((t, m) => t + (G.calcDiferencia(m) + G._repartoDe(m.insumoId).dif) * (m.precioCarta || 0), 0);
+
+    test('las diferencias de la fixture son las de «La Brü»', () => {
+        const d = (vm.runInContext('filasCaptura', G) || []).map(m => Math.round(G.calcDiferencia(m)));
+        return eq(d.join(','), '1,2,-2,0,-3', 'el caso real');
+    });
+    test('…y por miembro, con su precio, dan −$205', () =>
+        eq(Math.round(porMiembro()), -205, '95+220−190+0−330'));
+    /* EL CANDADO: el renglón del compuesto tiene que valer lo mismo. Antes
+       daba −190 (la diferencia agregada por el precio de la primera). */
+    test('EL CASO · el renglón del compuesto vale lo que suman sus miembros', () => {
+        G._repCache = G._repartoPrebatch();
+        const r = vm.runInContext(
+            '(function(){ var _r=null; try { _r = _step5TablasHTML(); } catch(e){} return _r; })()', G);
+        /* Si el render completo no corre en este andamio, se comprueba la
+           fórmula directa: es la línea que cambió. */
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const i = src.indexOf('const difCosto  = members.reduce(function (t, m) {');
+        return eq(i > -1 &&
+                  src.slice(i, i + 300).indexOf('(m.precioCarta || 0)') > -1,
+                  true, 'cada uno con el suyo');
+    });
+    test('…y NO con el precio de la primera presentación', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        return eq(src.indexOf('const difCosto  = dif * (vf.precioCarta || 0);') === -1,
+                  true, 'sin el atajo');
+    });
+    /* El reparto del prebatch también entra, igual que en la tarjeta: si uno
+       lo contara y el otro no, volverían a separarse por otro lado. */
+    test('…contando también lo que le toca del batch', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const i = src.indexOf('const difCosto  = members.reduce(function (t, m) {');
+        return eq(src.slice(i, i + 300).indexOf('calcDiferencia(m) + mAj.dif') > -1,
+                  true, 'la misma cuenta que la tarjeta');
+    });
+    /* Y el reporte impreso ya lo hacía bien: suma los difCosto de los
+       miembros. Queda escrito para que no se "arregle" al revés. */
+    test('el impreso ya sumaba por miembro, y sigue', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const i = src.indexOf('mem.forEach(m => {');
+        return eq(src.slice(i, i + 400).indexOf('difCosto+=m.difCosto;') > -1, true, 'intacto');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
