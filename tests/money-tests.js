@@ -23377,6 +23377,167 @@ console.log('\n══ BH49 · Un id no es código ══');
     });
 }
 
+/* ═══════════ SUITE BH50 · UNA NEGACIÓN QUE NO NIEGA (v70) ═══════════════
+   La línea era esta, y se lee perfecta:
+
+       IF NOT (v_owner = auth.uid() OR es_staff_de(p_neg) OR is_platform_admin())
+       THEN RAISE EXCEPTION 'no autorizado'; END IF;
+
+   «Si no está autorizado, niégalo». Y lo hace… mientras haya sesión. SIN
+   sesión `auth.uid()` es NULL, la comparación da NULL, `NULL OR false OR
+   false` sigue siendo NULL, `NOT NULL` es NULL — y un IF con NULL NO ENTRA.
+   El RAISE no corre y la función sigue de largo.
+
+   En SQL, NULL no es «falso»: es «no sé». Un candado que se abre cuando no
+   sabe no es un candado.
+
+   LA CADENA. El id del negocio es público (va en la dirección de la carta del
+   QR de la mesa) → `entrada_token_asegurar` se había quedado sin su REVOKE, y
+   en PostgreSQL toda función nace con EXECUTE para PUBLIC, donde vive `anon`
+   → sin sesión el NULL se salta la negación y devuelve el token del QR de
+   entradas → con ese token, `entrada_insumos` devuelve `datos` COMPLETO:
+   costos y proveedores. La puerta lateral daba justo lo que la lista blanca
+   de la carta existe para no dar.
+
+   Lo que se vigila aquí: que ninguna autorización vuelva a decidir con NULL,
+   que el permiso de más quede quitado, y —tan importante como lo anterior—
+   que al cerrarlo no se haya apagado nada que sí debe seguir abierto.      */
+console.log('\n══ BH50 · Una negación que no niega ══');
+{
+    const migs50 = fs.readdirSync(RAIZ)
+        .filter(f => /^supabase-migration-v\d+\.sql$/.test(f))
+        .sort((a, b) => parseInt(a.match(/v(\d+)/)[1], 10) - parseInt(b.match(/v(\d+)/)[1], 10));
+    /* Solo el CÓDIGO: sin los comentarios. La cabecera de la v70 CITA la línea
+       mala para explicarla, y un indexOf a secas se caza a sí mismo — van
+       nueve veces en este archivo. */
+    const soloCodigo = (t) => t.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+    const ultima = (fn) => {
+        let txt = '', donde = '';
+        migs50.forEach(m => {
+            const src = fs.readFileSync(path.join(RAIZ, m), 'utf8');
+            const i = src.indexOf('CREATE OR REPLACE FUNCTION ' + fn + '(');
+            if (i < 0) return;
+            const fin = src.indexOf('\n$$;', i);
+            txt = src.slice(i, fin > 0 ? fin + 4 : src.length);
+            donde = m;
+        });
+        return { txt: soloCodigo(txt), donde };
+    };
+
+    const BLINDADAS = ['entrada_token_asegurar', 'menu_token_asegurar',
+                       'menu_token_rotar', 'menu_cfg_guardar'];
+
+    BLINDADAS.forEach(fn => {
+        const d = ultima(fn);
+        test(fn + ' niega cuando no sabe quién pregunta', () =>
+            eq(/IS NOT TRUE/.test(d.txt), true, 'desde ' + d.donde));
+        test('…y ya no decide con un NOT que puede dar NULL · ' + fn, () =>
+            eq(/IF NOT \([^)]*auth\.uid\(\)/.test(d.txt), false, 'sin el patrón viejo'));
+    });
+
+    /* Y NINGUNA otra, en toda la historia de migraciones. Arreglar las cuatro
+       de hoy no sirve si mañana alguien copia la línea vieja de un archivo
+       antiguo, que es exactamente como llegó aquí. */
+    test('ninguna otra función del sistema decide con un NOT que puede dar NULL', () => {
+        const malas = [];
+        const vistas = new Set();
+        [...migs50].reverse().forEach(m => {
+            const src = fs.readFileSync(path.join(RAIZ, m), 'utf8');
+            const re = /CREATE OR REPLACE FUNCTION (\w+)\(/g;
+            let x;
+            while ((x = re.exec(src))) {
+                if (vistas.has(x[1])) continue;        // ya ganó una definición posterior
+                vistas.add(x[1]);
+                const fin = src.indexOf('\n$$;', x.index);
+                const cuerpo = soloCodigo(src.slice(x.index, fin > 0 ? fin : src.length));
+                if (/IF NOT \([^)]*auth\.uid\(\)/.test(cuerpo)) malas.push(x[1] + ' (' + m + ')');
+            }
+        });
+        return eq(malas.join(', '), '', 'funciones con el patrón');
+    });
+
+    /* ── EL PERMISO QUE FALTABA ──
+       La lógica arreglada sola no basta: la función seguía siendo alcanzable
+       sin sesión. En PostgreSQL una función nace con EXECUTE para PUBLIC, así
+       que no revocarlo es concederlo. */
+    test('PUBLIC ya no puede pedir el token del QR de entradas', () => {
+        const v70 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v70.sql'), 'utf8');
+        return eq(/REVOKE ALL ON FUNCTION entrada_token_asegurar\(TEXT\) FROM PUBLIC/.test(v70),
+                  true, 'el REVOKE que faltaba');
+    });
+    test('…y el encargado con sesión sí, o el QR no se podría generar', () => {
+        const v70 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v70.sql'), 'utf8');
+        return eq(/GRANT EXECUTE ON FUNCTION entrada_token_asegurar\(TEXT\) TO authenticated/.test(v70),
+                  true, 'sigue concedida a quien debe');
+    });
+
+    /* ── LO QUE NO SE PUEDE APAGAR ──
+       Revocar de más es tan grave como revocar de menos: deja a la barra sin
+       poder registrar y al comensal sin carta. */
+    test('la carta de las mesas sigue abierta sin sesión', () => {
+        const d = ultima('menu_publico_ver');
+        eq(/auth\.uid\(\)/.test(d.txt), false, 'no mira quién pregunta: valida por token');
+        const v70 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v70.sql'), 'utf8');
+        return eq(/REVOKE[^\n]*menu_publico_ver/.test(v70), false, 'la v70 no se la quita a nadie');
+    });
+    test('…y el QR de la barra tampoco se tocó', () => {
+        const v70 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v70.sql'), 'utf8');
+        return eq(/REVOKE[^\n]*(entrada_validar_nip|entrada_insumos|entrada_registrar|entrada_historial)/.test(v70),
+                  false, 'sus permisos de anon intactos');
+    });
+    /* La razón POR LA QUE se puede revocar: ninguna página sin sesión la
+       llama. Si mañana alguien la llama desde entrada.html o desde la app
+       antes del login, el QR deja de generarse y hay que enterarse aquí, no
+       en la barra un viernes. */
+    test('nadie pide ese token desde una página sin sesión', () => {
+        const SIN_SESION = ['entrada.html', 'carta.html', 'checklist.html',
+                            'evaluacion.html', 'app-movil/index.html'];
+        const culpables = SIN_SESION.filter(p => {
+            const f = path.join(RAIZ, p);
+            if (!fs.existsSync(f)) return false;
+            return fs.readFileSync(f, 'utf8').indexOf('entrada_token_asegurar') > -1;
+        });
+        return eq(culpables.join(', '), '', 'páginas públicas que lo llaman');
+    });
+
+    /* ── BH21: QUÉ SE LLEVÓ EL CREATE OR REPLACE ──
+       Cuatro funciones reescritas enteras. Cada una tenía algo que proteger
+       además de la autorización, y es lo que se perdió tres veces en este
+       repo (v63 el freno, v52 la escritura, v54 el alcance). */
+    test('menu_cfg_guardar conserva el borrado de la v69', () => {
+        const d = ultima('menu_cfg_guardar');
+        eq(/p_cfg \? 'nota'/.test(d.txt), true, 'ausente ≠ vacía');
+        return eq(/SET datos = \(menu_publico\.datos \|\| v_limpio\) - v_vacias/.test(d.txt),
+                  true, 'resta DESPUÉS del merge');
+    });
+    test('…y sigue sin poder escribir el token de la carta', () => {
+        const d = ultima('menu_cfg_guardar');
+        const i = d.txt.indexOf('v_limpio :=');
+        return eq(d.txt.slice(i, d.txt.indexOf('));', i)).indexOf('token') < 0,
+                  true, 'fuera de la lista blanca');
+    });
+    test('los dos token_* siguen MEZCLANDO, no reemplazando la fila', () => {
+        ['menu_token_asegurar', 'menu_token_rotar'].forEach(fn => {
+            const d = ultima(fn);
+            eq(/SET datos = menu_publico\.datos \|\| jsonb_build_object\('token'/.test(d.txt),
+               true, fn + ' mezcla');
+        });
+        return eq(true, true, 'los ajustes de la carta sobreviven al token');
+    });
+    test('…y asegurar sigue DEVOLVIENDO el token viejo en vez de rotarlo', () => {
+        /* La diferencia entre las dos funciones es justo esa. Si «asegurar»
+           empezara a generar uno nuevo cada vez, cada visita al panel
+           invalidaría los QR ya pegados en las mesas. */
+        const d = ultima('menu_token_asegurar');
+        return eq(/IF v_tok IS NOT NULL AND v_tok <> '' THEN RETURN v_tok; END IF;/.test(d.txt),
+                  true, 'no rota sin que se lo pidan');
+    });
+    test('entrada_token_asegurar tampoco rota el token ya impreso', () => {
+        const d = ultima('entrada_token_asegurar');
+        return eq(/IF v_tok IS NULL OR v_tok = '' THEN/.test(d.txt), true, 'solo si no hay');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
