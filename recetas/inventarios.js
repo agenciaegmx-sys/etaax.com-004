@@ -3095,7 +3095,20 @@ function _rowsDeInventario(inv) {
         /* insumoId SÍ viaja: el encabezado del impreso cuenta insumos únicos
            con un Set sobre este campo, y sin él todos los renglones eran
            `undefined` — el reporte de 120 productos decía «1 insumos». */
-        rows.push({ insumoId:f.insumoId, nombre:f.nombre||'—', familia:f.familia||f.categoria||'Otros',
+        rows.push({ insumoId:f.insumoId, nombre:f.nombre||'—',
+            /* ══ AGRUPAR COMO EL RESULTADO, NO POR FAMILIA ════════════════
+               La familia de TODA la barra es «Bebidas», así que el reporte
+               impreso salía con un solo bloque de 120 productos: destilados,
+               cervezas, vinos y refrescos revueltos. Imposible cerrar una
+               categoría e irse a la siguiente, que es como se cuenta.
+
+               Se agrupa con la misma regla que el desglose del Paso 5
+               (_grupoCategoria): Destilados, Licores, Vinos, Cervezas,
+               Refrescos / Sodas… Si las dos pantallas agruparan distinto,
+               cotejar una contra otra obligaría a traducir los bloques. */
+            familia: (typeof _grupoCategoria === 'function'
+                        ? _grupoCategoria(f)
+                        : (f.familia||f.categoria||'Otros')),
             subcat:f.subcategoria||f.categoria||'', tipo:f.tipo,
             copaML:f.copaML, contNeto:f.contNeto, baseUnit:f.baseUnit, barra:barra, bodega:bodega, total:total,
             costoUnit:costoCompra, capital:total*cc, capBarra:barra*cc, capBodega:bodega*cc });
@@ -3166,9 +3179,25 @@ function _renderPreviewTabla() {
         return (!q || (r.nombre||'').toLowerCase().includes(q)) && (!_previewSubcat || (r.subcat||r.familia) === _previewSubcat);
     });
     if (!rows.length) { cont.innerHTML = '<div class="empty-state" style="padding:40px"><div class="empty-icon">🔍</div><div class="empty-title">Sin resultados</div></div>'; return; }
-    cont.innerHTML = '<div class="tabla-wrap" style="padding:0 8px"><table style="font-size:12px"><thead><tr><th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th><th style="text-align:right">Exist. Barra</th><th style="text-align:right">Exist. Bodega</th><th style="text-align:right">Total exist.</th><th style="text-align:right">Costo prov.</th><th style="text-align:right">Capital</th></tr></thead><tbody>'+
-        rows.map(function(r){ var cont2=_fmtContenido(r); return '<tr><td style="font-weight:600">'+etx(r.nombre)+(cont2?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont2+'</div>':'')+'</td><td style="color:var(--text-dim)">'+etx(r.familia)+'</td><td style="text-align:right">'+_fmtCant(r.barra,r)+'</td><td style="text-align:right">'+_fmtCant(r.bodega,r)+'</td><td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total,r)+'</td><td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td></tr>'; }).join('')+
-        '</tbody></table></div>';
+    /* Agrupada igual que el impreso y que el desglose del Paso 5. Una lista
+       corrida de 120 productos con destilados, cervezas y refrescos revueltos
+       no se puede cotejar contra la bodega: se cuenta por categoría, se cierra
+       una y se pasa a la siguiente. */
+    var _g = {};
+    rows.forEach(function (r) { var k = r.familia || 'Otros'; (_g[k] = _g[k] || []).push(r); });
+    var _cuerpoP = Object.keys(_g).sort(function (a, b) { return String(a).localeCompare(String(b), 'es'); })
+      .map(function (g) {
+        var lista = _g[g];
+        var sub = lista.reduce(function (t, r) { return t + (r.capital || 0); }, 0);
+        return '<tr><td colspan="7" style="background:var(--surface2);border-top:2px solid var(--green);' +
+            'padding:7px 10px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;' +
+            'color:var(--green)">' + etx(g) + ' <span style="font-weight:400;color:var(--text-dim)">· ' +
+            lista.length + ' insumo' + (lista.length !== 1 ? 's' : '') + ' · ' + _repMoney(sub) +
+            '</span></td></tr>' +
+            lista.map(function(r){ var cont2=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:16px">'+etx(r.nombre)+(cont2?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont2+'</div>':'')+'</td><td style="color:var(--text-dim)">'+etx(r.subcat||'—')+'</td><td style="text-align:right">'+_fmtCant(r.barra,r)+'</td><td style="text-align:right">'+_fmtCant(r.bodega,r)+'</td><td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total,r)+'</td><td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td></tr>'; }).join('');
+      }).join('');
+    cont.innerHTML = '<div class="tabla-wrap" style="padding:0 8px"><table style="font-size:12px"><thead><tr><th style="text-align:left">Insumo</th><th style="text-align:left">Subcategoría</th><th style="text-align:right">Exist. Barra</th><th style="text-align:right">Exist. Bodega</th><th style="text-align:right">Total exist.</th><th style="text-align:right">Costo prov.</th><th style="text-align:right">Capital</th></tr></thead><tbody>'+
+        _cuerpoP + '</tbody></table></div>';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3698,14 +3727,18 @@ function imprimirReporteExistencias(opts){
         var head = '<tr class="grp-h"><td colspan="'+_nCols+'">'+etx(g)+
             ' <span style="font-weight:400;color:#888">· '+lista.length+' insumo'+(lista.length!==1?'s':'')+
             (op?'':' · '+_repMoney(sub))+'</span></td></tr>';
-        return head + lista.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:18px">'+etx(r.nombre)+(cont?'<div class="grp" style="color:#5a8fc7">📦 '+cont+'</div>':'')+'</td><td style="color:#888">'+etx(r.familia)+'</td>'+
+        return head + lista.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:18px">'+etx(r.nombre)+(cont?'<div class="grp" style="color:#5a8fc7">📦 '+cont+'</div>':'')+'</td><td style="color:#56514a">'+etx(r.subcat || '—')+'</td>'+
             '<td class="r">'+_fmtCant(r.barra,r)+'</td><td class="r">'+_fmtCant(r.bodega,r)+'</td>'+
             '<td class="r b" style="color:#1a1916">'+_fmtCant(r.total,r)+'</td><td class="r" style="color:#888">'+_repMoney(r.costoUnit)+'</td>'+
             (op?'':'<td class="r b">'+_repMoney(r.capital)+'</td>')+
             (_hayFechas?'<td class="c" style="color:#56514a">'+_repFecha(r.fecha)+'</td>':'')+'</tr>'; }).join('');
     }).join('');
     var tabla = '<table class="ct"><thead><tr>'+
-        '<th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th>'+
+        /* La columna decía «Familia» y ahora el bloque YA agrupa por eso: en
+           cada renglón repetía su propio encabezado. Se enseña la
+           subcategoría, que es lo que distingue dentro del grupo (un tequila
+           de un mezcal, una lager de una stout). */
+        '<th style="text-align:left">Insumo</th><th style="text-align:left">Subcategoría</th>'+
         '<th class="r">Exist. Barra</th><th class="r">Exist. Bodega</th><th class="r">Total exist.</th>'+
         '<th class="r">Costo prov.</th>'+(op?'':'<th class="r">Capital</th>')+
         (_hayFechas?'<th class="c">Última existencia</th>':'')+'</tr></thead><tbody>'+

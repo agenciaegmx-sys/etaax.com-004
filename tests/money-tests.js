@@ -22379,6 +22379,84 @@ console.log('\n══ BH45 · Los grupos tienen que sumar la tarjeta ══');
     });
 }
 
+/* ═══════════ SUITE BH46 · EL REPORTE DE EXISTENCIAS, AGRUPADO ═══════════
+   Salía con UN solo bloque: «BEBIDAS · 120 insumos». Destilados, cervezas,
+   vinos y refrescos revueltos en una lista corrida — imposible cerrar una
+   categoría e irse a la siguiente, que es como se cuenta caminando la bodega.
+
+   Agrupaba por FAMILIA, y la familia de toda la barra es «Bebidas». Ahora usa
+   la misma regla que el desglose del Paso 5 (_grupoCategoria): si las dos
+   pantallas agruparan distinto, cotejar una contra otra obligaría a traducir
+   los bloques.                                                              */
+console.log('\n══ BH46 · El reporte de existencias, agrupado ══');
+{
+    const E = crearContexto();
+    cargarJS(E, 'etaax-core.js');
+    cargarJS(E, 'insumo-label.js');
+    cargarJS(E, 'recetas/inventarios.js');
+    E._storage['etaax_negocio_activo'] = 'negT';
+
+    /* Cuatro productos de la MISMA familia «Bebidas» y de cuatro categorías
+       distintas: es el caso exacto del reporte de Edwin. */
+    setVar(E, '_cacheInsumosInv', [
+        { id:'ron',   nombre:'Ron',     familia:'Bebidas', tipoInsumo:'destilado', activo:'1' },
+        { id:'vino',  nombre:'Tinto',   familia:'Bebidas', tipoInsumo:'vino',      activo:'1' },
+        { id:'cerv',  nombre:'Lager',   familia:'Bebidas', tipoInsumo:'cerveza',   activo:'1' },
+        { id:'refre', nombre:'Cola',    familia:'Bebidas', tipoInsumo:'refresco',  activo:'1' }]);
+    const fila = (id, nom, sub) => ({ insumoId:id, nombre:nom, familia:'Bebidas',
+        subcategoria:sub, tipo:'pza', contNeto:355, copaML:0, costoUnitario:100,
+        existenciaAnterior:0, entradas:[], pesos:[], cerradasBodega:2, cerradasBarra:1 });
+    const INV = { id:'invT', area:'barra', filas:[
+        fila('ron','Ron','Añejo'), fila('vino','Tinto','Cabernet'),
+        fila('cerv','Lager','Clara'), fila('refre','Cola','Sin azúcar')] };
+    setVar(E, 'filasCaptura', INV.filas);
+
+    const rows = E._rowsDeInventario(INV);
+
+    test('cada producto cae en su categoría, no todos en «Bebidas»', () => {
+        const g = [...new Set(rows.map(r => r.familia))].sort();
+        return eq(g.join(' | '), 'Cervezas | Destilados | Refrescos / Sodas | Vinos',
+                  'cuatro bloques, no uno');
+    });
+    /* La MISMA regla que el Paso 5: si una agrupara por su cuenta, cotejar
+       las dos pantallas obligaría a traducir los bloques. */
+    test('…con la misma regla que el desglose del Resultado', () => {
+        const porPaso5 = INV.filas.map(f => E._grupoCategoria(f)).join('|');
+        return eq(rows.map(r => r.familia).join('|'), porPaso5, 'una sola redacción');
+    });
+    /* La subcategoría se conserva: es lo que distingue DENTRO del grupo —un
+       añejo de un blanco, una clara de una oscura— y ahora es la columna que
+       acompaña, porque la de «Familia» repetía el encabezado del bloque. */
+    test('…y la subcategoría sigue viajando, para la columna de al lado', () =>
+        eq(rows.map(r => r.subcat).join('|'), 'Añejo|Cabernet|Clara|Sin azúcar', 'lo que distingue'));
+
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    /* Acotado a ESTE reporte: el de «últimas existencias» es otro, agrupa por
+       familia a propósito y su columna «Familia» sigue teniendo sentido ahí.
+       Mi primera versión buscaba en todo el archivo y lo cazaba a él. */
+    test('el impreso ya no rotula esa columna como «Familia»', () => {
+        const i = src.indexOf('function imprimirReporteExistencias');
+        const cuerpo = src.slice(i, src.indexOf('\n}', i));
+        return eq(cuerpo.indexOf('>Subcategoría</th>') > -1 &&
+                  cuerpo.indexOf('>Familia</th>') === -1,
+                  true, 'sin repetir el encabezado del bloque');
+    });
+    /* Y la vista previa en PANTALLA agrupa igual: era la misma lista corrida,
+       y tener una agrupada y la otra no obliga a buscar distinto según por
+       dónde se entre. */
+    test('la vista previa en pantalla también agrupa', () => {
+        const i = src.indexOf('function _renderPreviewTabla');
+        const cuerpo = src.slice(i, src.indexOf('\n}', i));
+        return eq(cuerpo.indexOf('var _cuerpoP =') > -1 &&
+                  cuerpo.indexOf('r.familia || \'Otros\'') > -1, true, 'las dos igual');
+    });
+    test('…con el subtotal de capital por categoría', () => {
+        const i = src.indexOf('var _cuerpoP =');
+        return eq(src.slice(i, i + 900).indexOf("t + (r.capital || 0)") > -1,
+                  true, 'cada bloque se cierra solo');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
