@@ -20857,8 +20857,11 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
    sub-receta que se llame EXACTAMENTE como el insumo y que no sea la ligada.
    Si existe, no hay ambigüedad: hay una receta con su nombre exacto y está
    apuntando a otra.                                                         */
+/* Lleva awaits (religar es async), así que va como función encadenada al
+   final del archivo, igual que las otras suites async. Un `await` suelto
+   arriba no compila: este archivo es CommonJS. */
+async function suiteLigaCruzada() {
 console.log('\n══ BH34 · La liga cruzada ══');
-{
     const X = crearContexto();
     cargarJS(X, 'etaax-core.js');
     cargarJS(X, 'insumo-label.js');
@@ -20949,9 +20952,39 @@ console.log('\n══ BH34 · La liga cruzada ══');
        alguien a otro módulo a buscar un insumo entre tres que se llaman casi
        igual, para cambiarle una liga que no se ve, es pedirle que no lo haga. */
     const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
-    test('el aviso trae el botón para ligarlo al correcto', () =>
-        eq(src.indexOf('_religarPrebatch(') > -1 &&
-           src.indexOf('🔗 Ligarlo al correcto') > -1, true, 'accionable'));
+    test('el aviso trae el botón para ligarlo al correcto', () => {
+        montar('srBotella');
+        const h = X._prebatchAvisoHTML();
+        return eq(h.indexOf('_religarPrebatch(') > -1 && h.indexOf('Ligarlo al correcto') > -1,
+                  true, 'accionable');
+    });
+    test('…apuntando al insumo y a la receta correctos', () => {
+        montar('srBotella');
+        return eq(X._prebatchAvisoHTML().indexOf("_religarPrebatch('preLim1','srInfusion')") > -1,
+                  true, 'con los dos ids');
+    });
+    /* OJO con la fixture: arreglar SOLO preLim1 deja a preBot apuntando a la
+       infusión, o sea cruzado al revés — y el aviso tiene razón en seguir
+       señalándolo. Lo que se comprueba es que ya no señale a ESTE. */
+    test('…y el que ya quedó bien deja de señalarse', () => {
+        montar('srInfusion');
+        return eq(X._prebatchAvisoHTML().indexOf("_religarPrebatch('preLim1'") === -1,
+                  true, 'uno por uno');
+    });
+    test('…y con las DOS ligas bien, no se pinta aviso ninguno', () => {
+        setVar(X, '_cacheRecetasInv', RECS);
+        setVar(X, '_cacheInsumosInv', [
+            { id:'preLim1', nombre:'Limoncello SB 1',    esSubReceta:true, recetaId:'srInfusion', activo:'1' },
+            { id:'preBot',  nombre:'Limoncello SB Bot.', esSubReceta:true, recetaId:'srBotella',  activo:'1' },
+            { id:'vodka',   nombre:"Vodka American · Sam's", activo:'1' }]);
+        setVar(X, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        const f = (id, nom) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:1800, copaML:45,
+            existenciaAnterior:40, entradas:[], pesos:[], cerradasBodega:0, cerradasBarra:0 });
+        setVar(X, 'filasCaptura', [f('preLim1','Limoncello SB 1'), f('preBot','Limoncello SB Bot.'),
+                                   f('vodka',"Vodka American · Sam's")]);
+        return eq(X._prebatchAvisoHTML(), '', 'silencio');
+    });
     /* Cambia un dato con consecuencias: el inventario abierto empieza a
        descontar otras cosas. Se pregunta con las DOS recetas por su nombre. */
     test('…y pregunta nombrando las dos recetas, no con un «¿seguro?»', () => {
@@ -20970,16 +21003,61 @@ console.log('\n══ BH34 · La liga cruzada ══');
     /* Cambiar la liga mueve el consumo, el reparto y el teórico: los tres
        cachés tienen que caer o el Resultado seguiría enseñando lo viejo —
        justo el bug que se arregló hace dos entregas. */
-    test('…y tira los tres cachés al cambiarla', () => {
-        const i = src.indexOf('async function _religarPrebatch');
-        const cuerpo = src.slice(i, i + 1800);
-        return eq(cuerpo.indexOf('_consumoDirty = true') > -1 &&
-                  cuerpo.indexOf('_cancelDirty = true') > -1 &&
-                  cuerpo.indexOf('window._step5Force = true') > -1, true, 'repinta de verdad');
+    /* ── RELIGAR, CORRIÉNDOLO ──
+       CUATRO CIEGAS DE LA BATERÍA, todas la misma: los tests leían el TEXTO
+       del archivo. Poner una condición en `false` deja las palabras donde
+       estaban, así que el botón podía desaparecer de la pantalla y la liga
+       dejar de cambiar con el candado en verde. */
+    const religar = async (responde) => {
+        montar('srBotella');
+        const dicho = [], guardado = [];
+        X.confirm = (t) => { dicho.push(t); return responde; };
+        X.alert = () => {};
+        X._supabase = { from: () => ({ upsert: (p) => { guardado.push(p); return Promise.resolve({ error:null }); } }) };
+        await X._religarPrebatch('preLim1', 'srInfusion');
+        const ins = X.getInsumos().find(x => x.id === 'preLim1');
+        return { dicho: dicho.join(''), liga: ins && ins.recetaId, guardado: guardado };
+    };
+
+    await testA('religar PREGUNTA antes de tocar nada', async () =>
+        eq((await religar(false)).dicho.length > 0, true, 'pregunta'));
+    await testA('…y si se dice que no, la liga NO cambia', async () =>
+        eq((await religar(false)).liga, 'srBotella', 'intacta'));
+    await testA('…y si se dice que sí, CAMBIA de verdad', async () =>
+        eq((await religar(true)).liga, 'srInfusion', 'religado'));
+    await testA('…y a partir de ahí el vodka sí se descuenta', async () => {
+        await religar(true);
+        X.setProduccionPrebatch('preLim1', 2);
+        return eq(X.consumoBasesPorProduccion('vodka'), 3500, 'el arreglo sirve');
     });
-    test('…y lo guarda en la nube, no solo en esta pantalla', () => {
+    await testA('…y la pregunta nombra las DOS recetas', async () => {
+        const d = (await religar(false)).dicho;
+        return eq(d.indexOf('Limoncello SB 1') > -1 && d.indexOf('Limoncello SB Bot.') > -1,
+                  true, 'las dos por su nombre');
+    });
+    await testA('…y queda guardado, no solo en pantalla', async () => {
+        const g = (await religar(true)).guardado;
+        return eq(g.length === 1 && g[0].insumo_id === 'preLim1' &&
+                  g[0].datos.recetaId === 'srInfusion', true, 'persiste');
+    });
+    /* Cambiar la liga mueve el consumo, el reparto y el teórico: los tres
+       cachés tienen que caer o el Resultado seguiría enseñando lo viejo —
+       justo el bug que se arregló hace dos entregas. */
+    await testA('…y el Resultado se repinta, no se queda con el número viejo', async () => {
+        montar('srBotella');
+        X.confirm = () => true; X.alert = () => {};
+        X._supabase = { from: () => ({ upsert: () => Promise.resolve({ error:null }) }) };
+        vm.runInContext('window._step5Force = false; _consumoDirty = false; _cancelDirty = false;', X);
+        await X._religarPrebatch('preLim1', 'srInfusion');
+        return eq([vm.runInContext('window._step5Force', X),
+                   vm.runInContext('_consumoDirty', X),
+                   vm.runInContext('_cancelDirty', X)].join('|'), 'true|true|true', 'los tres');
+    });
+    /* El destino del guardado sí se lee del texto: el objeto de mentira de
+       arriba no sabe a qué tabla lo mandaron. */
+    test('…y va a la tabla del catálogo de insumos', () => {
         const i = src.indexOf('async function _religarPrebatch');
-        return eq(src.slice(i, i + 1800).indexOf("from('negocio_insumos')") > -1, true, 'persiste');
+        return eq(src.slice(i, i + 1800).indexOf("from('negocio_insumos')") > -1, true, 'la correcta');
     });
 }
 
@@ -20997,4 +21075,5 @@ function resumen() {
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
 suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
-suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin).then(resumen);
+suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
+    .then(suiteLigaCruzada).then(resumen);
