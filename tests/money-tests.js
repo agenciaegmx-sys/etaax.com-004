@@ -23592,6 +23592,57 @@ console.log('\n══ BH50 · Una negación que no niega ══');
         return eq(/FOR INSERT TO anon[\s\S]{0,200}_entrada_token_ok/.test(v55), true, 'la política sigue ahí');
     });
 
+    /* ── LAS CUATRO QUE NO SE TOCAN, Y POR QUÉ ──
+       La radiografía de la v72 las deja en «⚠ REVISAR» porque corren como
+       dueño y las puede llamar un anónimo. Se revisaron: solo contestan SOBRE
+       QUIEN PREGUNTA — sin sesión `auth.uid()` es NULL y devuelven `false`.
+
+       Y revocarlas sería PEOR que dejarlas. `is_platform_admin` aparece en 62
+       políticas y `es_staff_de` en 9, y el barrido de la v54 las crea `FOR
+       ALL` SIN cláusula `TO`: aplican a todos los roles, anon incluido. Una
+       política se evalúa con el rol de quien consulta, así que sin EXECUTE la
+       consulta deja de devolver «cero filas» y pasa a tronar con
+       `permission denied for function`.
+
+       Esto existe para que la próxima limpieza no las barra «por higiene». */
+    const NO_TOCAR = {
+        'es_staff_de':              'la usan 9 políticas',
+        'is_platform_admin':        'la usan 62 políticas',
+        'etaax_negocio_alcanzable': 'solo contesta sobre quien pregunta',
+        'etaax_puede_neg':          'solo contesta sobre quien pregunta',
+        '_entrada_token_ok':        'la política que sube la foto del QR es TO anon y la llama'
+    };
+    Object.keys(NO_TOCAR).forEach(fn => {
+        test('nadie le revoca a anon ' + fn + ' — ' + NO_TOCAR[fn], () => {
+            const culpables = [];
+            fs.readdirSync(RAIZ).filter(f => /^supabase-migration-v\d+\.sql$/.test(f)).forEach(m => {
+                fs.readFileSync(path.join(RAIZ, m), 'utf8').split('\n').forEach(l => {
+                    const c = l.replace(/--.*$/, '');
+                    if (!new RegExp('REVOKE[\\w ]* ON FUNCTION\\s+' + fn + '\\b').test(c)) return;
+                    if (!/\banon\b/.test(c)) return;
+                    /* La v27 SÍ se la revocó a _entrada_token_ok, y la v32 y
+                       la v55 se la devolvieron a propósito. Lo que no puede
+                       haber es una revocación POSTERIOR a esas. */
+                    if (fn === '_entrada_token_ok' && /v2[0-9]\./.test(m)) return;
+                    culpables.push(m);
+                });
+            });
+            return eq(culpables.join(', '), '', 'migraciones que se la quitan');
+        });
+    });
+    /* Y que la radiografía siga a mano y al día: es lo que convierte «salió
+       limpio» en una línea base contra la que comparar la próxima vez. */
+    test('la radiografía de permisos queda documentada y sin falsas alarmas', () => {
+        const doc = fs.readFileSync(path.join(RAIZ, 'docs/radiografia-permisos.sql'), 'utf8');
+        Object.keys(NO_TOCAR).forEach(fn => {
+            eq(doc.indexOf("('" + fn + "'") > -1, true, fn + ' explicada en la lista');
+        });
+        /* Y NO puede listar como esperadas las dos que sí cerramos: si
+           volvieran a aparecer abiertas, tienen que salir en ⚠. */
+        eq(doc.indexOf("('negocio_esta_activo'") < 0, true, 'la de cobro no se blanquea');
+        return eq(doc.indexOf("('negocio_cobro_estado'") < 0, true, 'ni la otra');
+    });
+
     /* LA REGLA PARA LO QUE VENGA. Una función que revoca a PUBLIC y NUNCA
        nombra a `anon` se queda abierta a `anon` por los privilegios por
        defecto del proyecto — y parece cerrada al leerla, que es lo peligroso.
