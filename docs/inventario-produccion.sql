@@ -13,6 +13,8 @@
 -- Por eso cada renglón dice una de cuatro cosas:
 --   PRESENTE       lo que esperábamos está ahí;
 --   AUSENTE        el objeto no existe → esa migración no corrió;
+--   FALTA          el objeto está y nunca tuvo esa protección (no se la
+--                  llevó nadie: está por escribir);
 --   SUSTITUIDA     el objeto existe pero le falta la protección que debería
 --                  llevar → algo posterior se la llevó por delante. Este es
 --                  el veredicto que más duele y el que nadie mira;
@@ -104,6 +106,12 @@ SELECT '2 · protecciones' AS bloque,
        e.fn || ' · ' || e.que AS comprobacion,
        CASE WHEN p.oid IS NULL THEN 'AUSENTE'
             WHEN position(e.marca in pg_get_functiondef(p.oid)) > 0 THEN 'PRESENTE'
+            -- SUSTITUIDA solo si ALGUNA VEZ lo tuvo. La primera corrida marcó
+            -- así a `obtener_staff_cred` y a `inventario_conteo_registrar`, y
+            -- no es cierto: esas protecciones nunca se escribieron. Llamarle
+            -- «sustituida» manda a buscar qué migración se la llevó, y no hay
+            -- ninguna. Lo distingue la referencia: 'pendiente' = nunca existió.
+            WHEN e.ref = 'pendiente' THEN 'FALTA · nunca la tuvo'
             ELSE 'SUSTITUIDA' END AS veredicto,
        e.ref AS evidencia
   FROM esperado e
@@ -151,7 +159,11 @@ UNION ALL
 SELECT '4 · storage' AS bloque,
        'política "' || p.polname || '" sobre storage.objects' AS comprobacion,
        CASE WHEN p.polcmd <> 'r'
-             AND pg_get_expr(COALESCE(p.polwithcheck, p.polqual), p.polrelid) !~ 'etaax_puede_neg|foldername|_entrada_token_ok|token_pairing_valido'
+             -- `is_platform_admin` cuenta como comprobación: la política
+            -- `guias_escritura` salió marcada en la primera corrida y sí la
+            -- lleva. Un falso positivo en una herramienta de revisión es peor
+            -- que un renglón de menos: enseña a ignorarla.
+            AND pg_get_expr(COALESCE(p.polwithcheck, p.polqual), p.polrelid) !~ 'etaax_puede_neg|foldername|_entrada_token_ok|token_pairing_valido|is_platform_admin'
             THEN 'REVISAR · escribe sin comprobar de quién es la carpeta'
             ELSE 'ok' END AS veredicto,
        CASE p.polcmd WHEN '*' THEN 'ALL' WHEN 'r' THEN 'SELECT' WHEN 'a' THEN 'INSERT'
@@ -211,11 +223,12 @@ SELECT '6 · volumen' AS bloque,
 SELECT bloque, comprobacion, veredicto, evidencia
   FROM todo
  ORDER BY CASE WHEN veredicto LIKE 'SUSTITUIDA%' THEN 0      -- lo más grave
-               WHEN veredicto LIKE 'AUSENTE%'    THEN 1
-               WHEN veredicto LIKE 'REVISAR%'    THEN 2
-               WHEN veredicto LIKE 'VIGILAR%'    THEN 3
-               WHEN veredicto LIKE 'NO COMPROBABLE%' THEN 4
-               ELSE 5 END,
+               WHEN veredicto LIKE 'FALTA%'      THEN 1
+               WHEN veredicto LIKE 'AUSENTE%'    THEN 2
+               WHEN veredicto LIKE 'REVISAR%'    THEN 3
+               WHEN veredicto LIKE 'VIGILAR%'    THEN 4
+               WHEN veredicto LIKE 'NO COMPROBABLE%' THEN 5
+               ELSE 6 END,
           bloque, comprobacion;
 
 -- ============================================================================

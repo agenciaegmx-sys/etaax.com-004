@@ -24332,9 +24332,19 @@ console.log('\n══ BH52 · Saber qué hay puesto ══');
 
     /* Los cuatro veredictos. El que hace el trabajo es SUSTITUIDA: sin él,
        esto sería una lista de «existe / no existe», que ya sabíamos mirar. */
-    ['PRESENTE', 'AUSENTE', 'SUSTITUIDA', 'NO COMPROBABLE'].forEach(v => {
+    /* «SUSTITUIDA» y «FALTA» NO son lo mismo, y confundirlas manda a buscar
+       una migración culpable que no existe. La primera corrida marcó como
+       sustituidas dos protecciones que sencillamente nunca se escribieron. */
+    test('distingue «se la llevaron» de «nunca la tuvo»', () => {
+        eq(codigo.indexOf("'FALTA · nunca la tuvo'") > -1, true, 'el veredicto existe');
+        return eq(/WHEN e\.ref = 'pendiente' THEN 'FALTA/.test(codigo), true,
+                  'lo decide la referencia, no el azar');
+    });
+    ['PRESENTE', 'AUSENTE', 'SUSTITUIDA', 'FALTA', 'NO COMPROBABLE'].forEach(v => {
         test('distingue «' + v + '»', () =>
-            eq(codigo.indexOf("'" + v + "'") > -1, true, 'veredicto presente'));
+            /* Sin la comilla de cierre: algunos veredictos llevan su
+               explicación pegada («FALTA · nunca la tuvo»). */
+            eq(codigo.indexOf("'" + v) > -1, true, 'veredicto presente'));
     });
     test('…y SUSTITUIDA se decide mirando la definición VIVA', () => {
         /* No contra el archivo de la migración: contra lo que el servidor
@@ -24401,6 +24411,13 @@ console.log('\n══ BH52 · Saber qué hay puesto ══');
     });
     test('mira la escritura del bucket público (R06)', () =>
         eq(/storage\.objects/.test(codigo) && /polwithcheck/.test(codigo), true, 'sus políticas'));
+    /* …sin falsos positivos. `guias_escritura` SÍ comprueba —con
+       `is_platform_admin()`— y salió marcada igual en la primera corrida. Un
+       falso positivo en una herramienta de revisión es peor que un renglón de
+       menos: enseña a ignorarla, y entonces el verdadero pasa con los demás. */
+    test('…y cuenta is_platform_admin como comprobación válida', () =>
+        eq(/is_platform_admin/.test(codigo.slice(codigo.indexOf('polwithcheck'))), true,
+           'sin marcar la política del admin'));
     test('y lista las tablas sin RLS', () =>
         eq(/relrowsecurity/.test(codigo), true, 'quien no la tiene se ve'));
 }
