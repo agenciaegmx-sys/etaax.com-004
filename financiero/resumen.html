@@ -255,7 +255,7 @@ function _avisoCarga(){
         'color:inherit;border-radius:7px;padding:3px 11px;font:inherit;font-size:12px;' +
         'cursor:pointer;margin-left:6px">Reintentar</button>';
 }
-async function _recargar(){ await cargar(); _avisoCarga(); render(); }
+async function _recargar(){ await cargar(); render(); }
 
 /* Alcance por sucursal: vacío = el negocio entero. Misma regla del resto. */
 function _suc(){ return localStorage.getItem('etaax_sucursal_activa')||''; }
@@ -433,6 +433,9 @@ function _conLupa(k, nom){
 }
 
 function render(mantenFoco){
+    /* El cartel se pinta AQUÍ y no en cada llamador: así no hay forma de
+       repintar el reporte y dejar el aviso viejo —o ninguno— arriba. */
+    _avisoCarga();
     var foco = mantenFoco ? (document.activeElement&&document.activeElement.id) : null;
     var selStart = null;
     try { if(foco) selStart = document.activeElement.selectionStart; } catch(e){}
@@ -875,10 +878,31 @@ function _imprimirResumen(){
         'venta <b>total</b>, porque el corte registra la venta por forma de pago y no por lo que se vendió.'+
         '</div>';
 
+    /* ══ EL PAPEL TAMBIÉN TIENE QUE DECIRLO ══════════════════════════════
+       El aviso de carga incompleta vivía solo en la pantalla. Y el impreso es
+       JUSTO el que se le entrega a alguien: un P&L en papel con la utilidad
+       neta y sin una palabra de que le falta un pedazo es peor que el de la
+       pantalla, porque viaja sin su contexto y nadie puede reintentar.
+
+       Va ARRIBA del cuerpo, con marco y en negro sobre gris —no en rojo
+       claro—: en una impresora en blanco y negro un recuadro tenue
+       desaparece, y el aviso que no se ve es el que no existe. */
+    var _f = (_c.falló||[]);
+    var _aviso = _f.length
+        ? '<div style="border:2.5px solid #1a1916;background:#ececec;border-radius:8px;' +
+          'padding:12px 14px;margin:0 0 16px;font-size:12px;line-height:1.6;color:#1a1916">' +
+          '<b style="font-size:13px">⚠ ESTE REPORTE ESTÁ INCOMPLETO</b><br>' +
+          'No se pudo leer: <b>' + esc(_f.join(', ')) + '</b>. Las cifras de abajo ' +
+          '<b>no incluyen esa información</b> y los ceros que veas ahí no son ceros ' +
+          'reales. Vuelve a cargar el reporte en pantalla antes de tomar una decisión ' +
+          'con estos números.</div>'
+        : '';
+
     var html=etaaxReporteDoc({
         titulo:'Resumen de Resultados',
-        subtitulo:_periodoTxt()+(_suc()?' · esta sucursal':' · todo el negocio'),
-        cuerpo:cuerpo, pie:'Salud Financiera · Resumen de Resultados'
+        subtitulo:_periodoTxt()+(_suc()?' · esta sucursal':' · todo el negocio') +
+                  (_f.length ? ' · INCOMPLETO' : ''),
+        cuerpo:_aviso+cuerpo, pie:'Salud Financiera · Resumen de Resultados'
     });
     // Ventana emergente y, si la bloquean, iframe oculto: el botón NUNCA debe
     // quedarse en silencio (que es justo lo que hacía).
@@ -897,8 +921,7 @@ document.addEventListener('DOMContentLoaded', async function(){
     document.getElementById('pickerEnd').value   = todayStr();
     if(typeof _ctxBarInit==='function') _ctxBarInit();
     await cargar();
-    _avisoCarga();
-    render();
+    render();          // render() ya pinta el aviso de carga
 });
 </script>
 

@@ -24021,6 +24021,28 @@ console.log('\n══ BH51 · Un corte viejo no puede sumar dos veces ══');
             .reduce((t, s) => t + C.scopeSuc(datos, s).length, 0);
         return eq(porSuc, global, 'cinco registros, cinco veces contados');
     });
+    /* CONTAR REGISTROS NO BASTA. Que haya cinco de un lado y cinco del otro no
+       dice que el DINERO cuadre: el bug se vive en el P&L, no en un conteo.
+       Aquí se suman importes, con cifras distintas por registro para que una
+       doble cuenta no pueda disimularse. */
+    test('…y el DINERO también cuadra, que es donde se veía el bug', () => {
+        const cortes = [
+            { ventasBruta: 12500.50 },                                // legacy
+            { ventasBruta:  3200.25 },                                // legacy
+            { ventasBruta: 48000,   sucursalId:'suc_principal' },
+            { ventasBruta: 31750.75, sucursalId:'suc_tulum' },
+            { ventasBruta:  9900,   sucursalId:'suc_centro' }
+        ];
+        const suma = (l) => l.reduce((t, c) => t + c.ventasBruta, 0);
+        const global = suma(C.scopeSuc(cortes, ''));
+        const porSuc = ['suc_principal','suc_tulum','suc_centro']
+            .reduce((t, s) => t + suma(C.scopeSuc(cortes, s)), 0);
+        const r2 = (v) => Math.round(v * 100) / 100;      // centavos, sin arrastre binario
+        eq(r2(global), 105351.50, 'la vista global suma todo');
+        /* Con el bug, los $15,700.75 de los dos legacy entraban TRES veces:
+           el total por sucursal daba $136,752.00. */
+        return eq(r2(porSuc), r2(global), 'y las sucursales dan lo mismo');
+    });
     /* Y que `scopeSuc` y `esDeSuc` no puedan divergir: una filtra, el otro
        decide, pero la regla tiene que ser la misma pieza. */
     test('scopeSuc usa el mismo predicado, no su propia copia', () => {
@@ -24128,6 +24150,54 @@ console.log('\n══ BH51 · Un corte viejo no puede sumar dos veces ══');
         eq(getVar(R, '_c').falló.length, 0, 'nada falló');
         return eq(R.document.getElementById('rsFalla').style.display, 'none', 'sin cartel');
     }]);
+    /* ── Y EL PAPEL ──
+       El aviso vivía solo en la pantalla. El impreso es JUSTO el que se le
+       entrega a alguien: viaja sin su contexto, nadie puede reintentar desde
+       él, y lleva la utilidad neta en grande. Un P&L en papel al que le falta
+       un pedazo y no lo dice es peor que el de la pantalla. */
+    testAsyncCola.push(['el reporte IMPRESO también avisa de que está incompleto', async () => {
+        const caso = TODO_OK();
+        caso.gastos = { data: null, error: { message: 'Failed to fetch' } };
+        const R = resumenCon(caso);
+        let doc = null;
+        R.etaaxReporteDoc = (cfg) => { doc = cfg; return '<html></html>'; };
+        R.etaaxAbrirReporte = () => true;
+        await R.cargar();
+        R._imprimirResumen();
+        eq(!!doc, true, 'se generó el documento');
+        eq(doc.cuerpo.indexOf('INCOMPLETO') > -1, true, 'lo dice en el cuerpo');
+        eq(doc.cuerpo.indexOf('gastos') > -1, true, 'y dice qué falta');
+        /* Y en el subtítulo, que es lo que se lee de reojo en una junta. */
+        return eq(doc.subtitulo.indexOf('INCOMPLETO') > -1, true, 'también en el encabezado');
+    }]);
+    testAsyncCola.push(['…y cuando todo cargó, el impreso no lleva cartel', async () => {
+        const R = resumenCon(TODO_OK());
+        let doc = null;
+        R.etaaxReporteDoc = (cfg) => { doc = cfg; return '<html></html>'; };
+        R.etaaxAbrirReporte = () => true;
+        await R.cargar();
+        R._imprimirResumen();
+        eq(doc.cuerpo.indexOf('INCOMPLETO') < 0, true, 'sin cartel');
+        return eq(doc.subtitulo.indexOf('INCOMPLETO') < 0, true, 'ni en el encabezado');
+    }]);
+    /* En blanco y negro, un recuadro tenue desaparece. El aviso que no se ve
+       es el que no existe. */
+    test('el cartel del impreso sobrevive a una impresora en blanco y negro', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/resumen.html'), 'utf8');
+        const i = src.indexOf('var _aviso = _f.length');
+        const bloque = src.slice(i, i + 700);
+        eq(/border:2[.,]?5?px solid #1a1916/.test(bloque), true, 'marco negro y grueso');
+        return eq(/color:#1a1916/.test(bloque), true, 'texto negro, no rojo claro');
+    });
+
+    /* El aviso se pinta desde `render()`, no desde cada llamador: así no hay
+       forma de repintar el reporte y dejar arriba el cartel viejo. */
+    test('el aviso se pinta desde render(), no desde cada entrada', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/resumen.html'), 'utf8');
+        const i = src.indexOf('function render(mantenFoco){');
+        return eq(src.slice(i, i + 300).indexOf('_avisoCarga();') > -1, true, 'dentro de render');
+    });
+
     /* Un cero LEGÍTIMO —la consulta respondió y no hay filas— tiene que
        seguir viéndose como cero. Si el aviso saltara también ahí, en dos días
        nadie lo leería. */
