@@ -104,19 +104,27 @@ GRANT EXECUTE ON FUNCTION etaax_negocio_alcanzable(TEXT)  TO authenticated;
 -- FUNCTION` de arriba, y la migración se vería correr sin haber cambiado nada.
 -- No hace falta: las pruebas solo LEEN (las dos funciones son STABLE y cada
 -- rechazo levanta excepción antes de tocar una fila).
-CREATE TEMP TABLE IF NOT EXISTS _v73 (n INT, prueba TEXT, resultado TEXT, detalle TEXT);
-TRUNCATE _v73;
-
+-- Y SIN TABLA TEMPORAL. La primera versión juntaba los resultados en una
+-- `CREATE TEMP TABLE`, y el editor de Supabase avisaba de dos cosas: que el
+-- script hace «operaciones destructivas» (el TRUNCATE y el DROP de esa tabla)
+-- y que «crea una tabla sin RLS». Lo segundo es ruido —una tabla temporal vive
+-- solo en esta sesión y PostgREST no la ve nunca—, pero acostumbrarse a pasar
+-- por encima de un aviso es justo como se cuela el que sí importaba.
+--
+-- Así que los renglones viajan en una variable de sesión y se despliegan al
+-- final: misma tabla en Results, sin crear ni borrar nada.
 DO $p$
 DECLARE
     v_neg TEXT; v_dueno UUID; v_staff UUID; v_otro UUID; v_r JSONB;
+    v_out JSONB := '[]'::jsonb;        -- los renglones del informe
     OK_RECHAZO CONSTANT TEXT[] := ARRAY['P0001','42501'];
 BEGIN
     SELECT n.id, n.usuario_id, n.staff_uid INTO v_neg, v_dueno, v_staff
       FROM negocios n ORDER BY n.created_at LIMIT 1;
     IF v_neg IS NULL THEN
-        INSERT INTO _v73 VALUES (0,'SIN DATOS: no hay negocios','—','');
-        RETURN;
+        v_out := v_out || jsonb_build_array(jsonb_build_array(0,'SIN DATOS: no hay negocios','—',''));
+        PERFORM set_config('etaax.v73', v_out::text, false);
+        RETURN;   -- sin guardar aquí, el SELECT de abajo no encontraría nada
     END IF;
 
     -- 1 · sin sesión
@@ -124,12 +132,12 @@ BEGIN
         SET LOCAL ROLE anon;
         v_r := negocio_cobro_estado(v_neg);
         RESET ROLE;
-        INSERT INTO _v73 VALUES (1,'Un anónimo NO ve el cobro','FALLA','lo obtuvo');
+        v_out := v_out || jsonb_build_array(jsonb_build_array(1,'Un anónimo NO ve el cobro','FALLA','lo obtuvo'));
     EXCEPTION WHEN OTHERS THEN
         RESET ROLE;
-        INSERT INTO _v73 VALUES (1,'Un anónimo NO ve el cobro',
+        v_out := v_out || jsonb_build_array(jsonb_build_array(1,'Un anónimo NO ve el cobro',
             CASE WHEN SQLSTATE = ANY(OK_RECHAZO) THEN 'PASA' ELSE 'FALLA' END,
-            SQLSTATE || ' · ' || SQLERRM);
+            SQLSTATE || ' · ' || SQLERRM));
     END;
 
     -- 2 · el dueño SÍ
@@ -139,17 +147,17 @@ BEGIN
                  json_build_object('sub', v_dueno::text, 'role','authenticated')::text, true);
         v_r := negocio_cobro_estado(v_neg);
         RESET ROLE; PERFORM set_config('request.jwt.claims', NULL, true);
-        INSERT INTO _v73 VALUES (2,'El dueño SÍ ve su cobro',
-            CASE WHEN v_r ? 'estado' THEN 'PASA' ELSE 'FALLA' END, v_r::text);
+        v_out := v_out || jsonb_build_array(jsonb_build_array(2,'El dueño SÍ ve su cobro',
+            CASE WHEN v_r ? 'estado' THEN 'PASA' ELSE 'FALLA' END, v_r::text));
     EXCEPTION WHEN OTHERS THEN
         RESET ROLE; PERFORM set_config('request.jwt.claims', NULL, true);
-        INSERT INTO _v73 VALUES (2,'El dueño SÍ ve su cobro','FALLA', SQLSTATE||' · '||SQLERRM);
+        v_out := v_out || jsonb_build_array(jsonb_build_array(2,'El dueño SÍ ve su cobro','FALLA', SQLSTATE||' · '||SQLERRM));
     END;
 
     -- 3 · el STAFF de ese negocio también (lo pide el gate del colaborador)
     IF v_staff IS NULL THEN
-        INSERT INTO _v73 VALUES (3,'El staff SÍ ve el cobro de SU negocio','SIN DATOS',
-                                 'ese negocio no tiene cuenta de staff');
+        v_out := v_out || jsonb_build_array(jsonb_build_array(3,'El staff SÍ ve el cobro de SU negocio','SIN DATOS',
+                                 'ese negocio no tiene cuenta de staff'));
     ELSE
         BEGIN
             SET LOCAL ROLE authenticated;
@@ -157,12 +165,12 @@ BEGIN
                      json_build_object('sub', v_staff::text, 'role','authenticated')::text, true);
             v_r := negocio_cobro_estado(v_neg);
             RESET ROLE; PERFORM set_config('request.jwt.claims', NULL, true);
-            INSERT INTO _v73 VALUES (3,'El staff SÍ ve el cobro de SU negocio',
-                CASE WHEN v_r ? 'estado' THEN 'PASA' ELSE 'FALLA' END, v_r::text);
+            v_out := v_out || jsonb_build_array(jsonb_build_array(3,'El staff SÍ ve el cobro de SU negocio',
+                CASE WHEN v_r ? 'estado' THEN 'PASA' ELSE 'FALLA' END, v_r::text));
         EXCEPTION WHEN OTHERS THEN
             RESET ROLE; PERFORM set_config('request.jwt.claims', NULL, true);
-            INSERT INTO _v73 VALUES (3,'El staff SÍ ve el cobro de SU negocio','FALLA',
-                                     SQLSTATE||' · '||SQLERRM);
+            v_out := v_out || jsonb_build_array(jsonb_build_array(3,'El staff SÍ ve el cobro de SU negocio','FALLA',
+                                     SQLSTATE||' · '||SQLERRM));
         END;
     END IF;
 
@@ -177,8 +185,8 @@ BEGIN
                           AND (n2.usuario_id = u.id OR n2.staff_uid = u.id))
      LIMIT 1;
     IF v_otro IS NULL THEN
-        INSERT INTO _v73 VALUES (4,'Una cuenta ajena NO ve ese cobro','SIN DATOS',
-                                 'no hay otra cuenta que no tenga acceso');
+        v_out := v_out || jsonb_build_array(jsonb_build_array(4,'Una cuenta ajena NO ve ese cobro','SIN DATOS',
+                                 'no hay otra cuenta que no tenga acceso'));
     ELSE
         BEGIN
             SET LOCAL ROLE authenticated;
@@ -186,41 +194,50 @@ BEGIN
                      json_build_object('sub', v_otro::text, 'role','authenticated')::text, true);
             v_r := negocio_cobro_estado(v_neg);
             RESET ROLE; PERFORM set_config('request.jwt.claims', NULL, true);
-            INSERT INTO _v73 VALUES (4,'Una cuenta ajena NO ve ese cobro','FALLA',
-                                     'lo obtuvo: '||v_r::text);
+            v_out := v_out || jsonb_build_array(jsonb_build_array(4,'Una cuenta ajena NO ve ese cobro','FALLA',
+                                     'lo obtuvo: '||v_r::text));
         EXCEPTION WHEN OTHERS THEN
             RESET ROLE; PERFORM set_config('request.jwt.claims', NULL, true);
-            INSERT INTO _v73 VALUES (4,'Una cuenta ajena NO ve ese cobro',
+            v_out := v_out || jsonb_build_array(jsonb_build_array(4,'Una cuenta ajena NO ve ese cobro',
                 CASE WHEN SQLSTATE = ANY(OK_RECHAZO) THEN 'PASA' ELSE 'FALLA' END,
-                SQLSTATE || ' · ' || SQLERRM);
+                SQLSTATE || ' · ' || SQLERRM));
         END;
     END IF;
 
     -- 5 · los permisos de las dos que solo usan políticas TO authenticated
-    INSERT INTO _v73 VALUES (5,'anon ya no puede llamar etaax_puede_neg',
+    v_out := v_out || jsonb_build_array(jsonb_build_array(5,'anon ya no puede llamar etaax_puede_neg',
         CASE WHEN has_function_privilege('anon','etaax_puede_neg(text)','EXECUTE')
-             THEN 'FALLA' ELSE 'PASA' END, '');
+             THEN 'FALLA' ELSE 'PASA' END, ''));
     -- 6 · y las dos que NO se tocan, porque sus políticas no llevan TO
-    INSERT INTO _v73 VALUES (6,'es_staff_de SIGUE abierta (sus políticas la necesitan)',
+    v_out := v_out || jsonb_build_array(jsonb_build_array(6,'es_staff_de SIGUE abierta (sus políticas la necesitan)',
         CASE WHEN has_function_privilege('anon','es_staff_de(text)','EXECUTE')
-             THEN 'PASA' ELSE 'FALLA' END, '');
+             THEN 'PASA' ELSE 'FALLA' END, ''));
 
     -- 7 · DE PASO: ¿la v70 quedó de verdad aplicada? Llevaba un
     -- `BEGIN; … ROLLBACK;` al final, y si el editor ya tenía una transacción
     -- abierta, ese ROLLBACK pudo deshacer sus CREATE OR REPLACE. Esto lo
     -- resuelve mirando la definición VIVA, no el archivo.
-    INSERT INTO _v73 VALUES (7,'La v70 quedó aplicada (nada autoriza con NULL)',
+    v_out := v_out || jsonb_build_array(jsonb_build_array(7,'La v70 quedó aplicada (nada autoriza con NULL)',
         CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace
                     WHERE ns.nspname='public'
                       AND p.proname IN ('entrada_token_asegurar','menu_token_asegurar',
                                         'menu_token_rotar','menu_cfg_guardar')
                       AND pg_get_functiondef(p.oid) LIKE '%IS NOT TRUE%') = 4
              THEN 'PASA' ELSE 'FALLA' END,
-        'si dice FALLA, volver a correr la v70 SIN su bloque BEGIN/ROLLBACK');
+        'si dice FALLA, volver a correr la v70 SIN su bloque BEGIN/ROLLBACK'));
+
+    PERFORM set_config('etaax.v73', v_out::text, false);
 END
 $p$;
-SELECT n, prueba, resultado, detalle FROM _v73 ORDER BY n;
-DROP TABLE _v73;
+SELECT (e->>0)::INT AS n,
+       e->>1            AS prueba,
+       e->>2            AS resultado,
+       e->>3            AS detalle
+  /* `true` = si la variable no existe, devuelve NULL en vez de reventar. Pasa
+     si el bloque de arriba murió por algo no previsto: así se ve «sin
+     resultados» en vez de un error que tapa el de verdad. */
+  FROM jsonb_array_elements(COALESCE(current_setting('etaax.v73', true), '[]')::jsonb) AS e
+ ORDER BY 1;
 
 -- ============================================================================
 -- Fin v73. Los siete renglones deben decir PASA (o SIN DATOS donde el negocio

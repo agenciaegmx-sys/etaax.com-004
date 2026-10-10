@@ -23784,6 +23784,36 @@ console.log('\n══ BH50 · Una negación que no niega ══');
        La v70 cerraba con `BEGIN; … ROLLBACK;`. Si el editor ya tiene una
        transacción abierta, ese ROLLBACK deshace también los CREATE OR REPLACE
        de arriba: la migración se vería correr sin haber cambiado nada. */
+    /* ── NI PEDIRLE AL QUE LA CORRE QUE IGNORE UN AVISO ──
+       La primera versión juntaba los renglones en una `CREATE TEMP TABLE`, y
+       el editor de Supabase avisaba de «operaciones destructivas» (su TRUNCATE
+       y su DROP) y de «una tabla sin RLS». Lo segundo es ruido —una temporal
+       vive en la sesión y PostgREST no la ve— pero acostumbrarse a pasar por
+       encima de un aviso es como se cuela el que sí importaba. Se quitó la
+       tabla: los renglones viajan en una variable de sesión. */
+    test('la v73 no crea tablas ni borra nada para enseñar su resultado', () => {
+        const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+        const codigo = v73.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+        eq(/CREATE\s+(TEMP|TEMPORARY)?\s*TABLE/i.test(codigo), false, 'sin CREATE TABLE');
+        eq(/\bTRUNCATE\b/i.test(codigo), false, 'sin TRUNCATE');
+        return eq(/\bDROP\s+TABLE\b/i.test(codigo), false, 'sin DROP TABLE');
+    });
+    test('…y el informe sale igual en Results, no en Messages', () => {
+        const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+        eq(/jsonb_array_elements\(COALESCE\(current_setting\('etaax\.v73', true\)/.test(v73),
+           true, 'se despliega como tabla');
+        /* Y si el bloque muriera por algo no previsto, el SELECT tiene que
+           decir «sin resultados», no tapar el error con otro error. */
+        return eq(/current_setting\('etaax\.v73', true\)/.test(v73), true, 'missing_ok');
+    });
+    test('…y la salida temprana también deja informe', () => {
+        const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+        const i = v73.indexOf('SIN DATOS: no hay negocios');
+        /* Sin guardar antes del RETURN, ese caso enseñaría una tabla vacía sin
+           explicar por qué. */
+        return eq(v73.slice(i, i + 220).indexOf("set_config('etaax.v73'") > -1, true, 'guarda antes del RETURN');
+    });
+
     test('la comprobación de la v73 no puede deshacer la propia migración', () => {
         const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
         const codigo = v73.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
