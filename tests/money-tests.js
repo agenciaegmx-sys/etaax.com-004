@@ -24211,6 +24211,118 @@ console.log('\n══ BH51 · Un corte viejo no puede sumar dos veces ══');
     });
 }
 
+/* ═══════════ SUITE BH52 · SABER QUÉ HAY PUESTO ══════════════════════════
+   Las notas del proyecto arrastran «pendiente de correr» para media docena de
+   migraciones —v12, v13, v19, v21, v25, v34, v38, v62— y varias de ellas
+   seguro ya corrieron: v48, v54 y v55 figuraban igual y sabemos que están.
+   O sea: no sabíamos qué hay puesto en producción, y llevábamos tres bloques
+   arreglando cosas sobre esa base.
+
+   NO SE PUEDE PREGUNTAR «¿QUÉ MIGRACIONES CORRIERON?». Una posterior
+   REEMPLAZA la definición de la anterior: si la v63 reescribió `staff_login`,
+   el servidor no guarda rastro de la v30. Lo contestable —y lo que importa—
+   es qué hay AHORA.
+
+   El inventario (`docs/inventario-produccion.sql`) contesta eso, y su valor
+   está en un veredicto que las otras herramientas no dan: **SUSTITUIDA**. El
+   objeto existe pero le falta la protección que debería llevar. Es
+   exactamente el patrón que ya nos mordió tres veces y el que nadie mira,
+   porque «la función está ahí» parece suficiente.                           */
+console.log('\n══ BH52 · Saber qué hay puesto ══');
+{
+    const inv = fs.readFileSync(path.join(RAIZ, 'docs/inventario-produccion.sql'), 'utf8');
+    const codigo = inv.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+
+    /* Se corre contra la base de producción de un negocio en marcha. Si algún
+       día escribe algo, lo hace sin red. */
+    test('el inventario no puede cambiar nada', () => {
+        /* Al INICIO DE SENTENCIA, no en cualquier parte. Mi primera versión
+           buscaba la palabra suelta y cazó el texto `'GRANT de ' ||
+           table_name` —un literal que el propio informe imprime—, declarando
+           destructivo un script que solo lee. Medir texto otra vez. */
+        const sentencias = codigo.replace(/'(?:[^']|'')*'/g, "''")   // fuera los literales
+                                 .split(';');
+        const malas = sentencias
+            .map(x => (x.match(/^\s*(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE)\b/i) || [])[1])
+            .filter(Boolean);
+        return eq(malas.join(', '), '', 'solo lectura');
+    });
+
+    /* Los cuatro veredictos. El que hace el trabajo es SUSTITUIDA: sin él,
+       esto sería una lista de «existe / no existe», que ya sabíamos mirar. */
+    ['PRESENTE', 'AUSENTE', 'SUSTITUIDA', 'NO COMPROBABLE'].forEach(v => {
+        test('distingue «' + v + '»', () =>
+            eq(codigo.indexOf("'" + v + "'") > -1, true, 'veredicto presente'));
+    });
+    test('…y SUSTITUIDA se decide mirando la definición VIVA', () => {
+        /* No contra el archivo de la migración: contra lo que el servidor
+           tiene puesto. Es toda la diferencia. */
+        return eq(/position\(e\.marca in pg_get_functiondef\(p\.oid\)\)/.test(codigo),
+                  true, 'pg_get_functiondef');
+    });
+
+    /* Que estén las huellas de las migraciones que las notas dan por
+       pendientes: son la pregunta que este bloque viene a cerrar. */
+    const DUDOSAS = {
+        'gf_nomina_params': 'v12', 'capturas_pendientes': 'v13', 'staff_uid': 'v19',
+        'perfiles_puesto': 'v25', 'checklists': 'v34', 'checklist_ejecuciones': 'v38',
+        'accesos_log': 'v62'
+    };
+    Object.keys(DUDOSAS).forEach(obj => {
+        test('comprueba la huella de ' + DUDOSAS[obj] + ' (' + obj + ')', () =>
+            eq(inv.indexOf(obj) > -1, true, 'en el bloque 1'));
+    });
+
+    /* Y las protecciones que YA sabemos que se perdieron o que faltan: el
+       inventario tiene que nombrarlas para que el resultado sea comparable
+       con los hallazgos abiertos, no una lista suelta. */
+    const VIGILADAS = {
+        '_login_golpe': 'R04 · el freno que se llevó la v63',
+        'negocio_id = p_neg': 'R05 · el conflicto sin acotar de los conteos',
+        'IS NOT TRUE': 'v70 · la autorización que niega con NULL',
+        'etaax_negocio_alcanzable': 'v73 · pertenencia antes de leer el cobro',
+        'v_vacias': 'v69 · borrar un texto lo borra',
+        '_receta_en_suc': 'v66 · el candado de sucursal de la carta'
+    };
+    Object.keys(VIGILADAS).forEach(marca => {
+        test('vigila «' + marca + '» — ' + VIGILADAS[marca], () =>
+            eq(inv.indexOf("'" + marca + "'") > -1, true, 'en el bloque 2'));
+    });
+
+    /* R10 se MIDE aquí en vez de discutirse: filas por tabla y por el negocio
+       que más tiene. Si ya se pasa el límite, deja de ser un problema futuro. */
+    test('mide el volumen real, no lo supone', () => {
+        /* CONTAR, no buscar. Hay una medición por tabla y cada una necesita
+           SU `GROUP BY negocio_id`: con un `test()` a secas, quitarle el
+           agrupado a una sola tabla pasaba desapercibido porque las otras
+           seis seguían teniéndolo. Es el patrón que existe en varios sitios y
+           solo uno roto — van cuatro veces en este archivo. */
+        const medidas  = (codigo.match(/max\(c\) FROM \(SELECT count\(\*\) c FROM/g) || []).length;
+        const agrupadas = (codigo.match(/GROUP BY negocio_id/g) || []).length;
+        eq(medidas > 0, true, 'hay mediciones');
+        eq(agrupadas, medidas, 'TODAS agrupan por negocio (' + agrupadas + '/' + medidas + ')');
+        return eq(/YA pasa el límite|se acerca/.test(inv), true, 'con umbral');
+    });
+    test('…y dice que el límite de la API no es comprobable desde SQL', () => {
+        /* Inventarse que son 1000 sería peor que no medirlo: el proyecto lo
+           puede tener en otro número. */
+        const i = inv.indexOf('límite de filas de la Data API');
+        return eq(inv.slice(i, i + 260).indexOf('NO COMPROBABLE') > -1, true, 'se dice, no se adivina');
+    });
+
+    /* Los tres hallazgos abiertos que el inventario tiene que dimensionar. */
+    test('mira quién puede ESCRIBIR en las tablas de cobro (R02)', () => {
+        eq(inv.indexOf('pagos_suscripcion') > -1, true, 'las dos tablas');
+        /* La política sola no basta: hace falta el GRANT de tabla. Mirar una
+           y no la otra da un diagnóstico a medias. */
+        return eq(/role_table_grants/.test(codigo), true, 'y los grants, no solo las políticas');
+    });
+    test('mira la escritura del bucket público (R06)', () =>
+        eq(/storage\.objects/.test(codigo) && /polwithcheck/.test(codigo), true, 'sus políticas'));
+    test('y lista las tablas sin RLS', () =>
+        eq(/relrowsecurity/.test(codigo), true, 'quien no la tiene se ve'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
