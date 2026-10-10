@@ -2822,7 +2822,7 @@ function abrirFormProveedor(id) {
             '<textarea class="form-textarea" id="fp_notas" placeholder="Condiciones de pago, días de entrega...">' + esc(d.notas||'') + '</textarea>' +
         '</div>' +
         '<div class="form-error" id="fp_error"></div>' +
-        '<button class="btn-form-save" id="fp_btn" onclick="guardarProveedor(\'' + (id||'') + '\')">' +
+        '<button class="btn-form-save" id="fp_btn" onclick="guardarProveedor(\'' + etaaxJsArg(id || '') + '\')">' +
             (es ? 'Guardar cambios' : 'Agregar proveedor') +
         '</button>' +
         (es ? '<button class="btn-form-delete" onclick="eliminarProveedor(\'' + etaaxJsArg(id) + '\')">Eliminar proveedor</button>' : '');
@@ -3077,8 +3077,20 @@ function renderInvitaciones() {
     }).join('');
 }
 
+/* Escapa para HTML: texto entre etiquetas Y valores de atributo.
+
+   LAS COMILLAS SE ESCAPAN. Antes solo iban `&`, `<` y `>`, y este `esc()`
+   se usa en 43 sitios de la forma `value="' + esc(x) + '"`. Un dato con
+   una comilla doble cerraba el atributo y permitía añadir otro —
+   `onmouseover=`, por ejemplo — sin necesidad de un solo `<`.
+
+   OJO: esto NO sirve para meter un dato dentro de un `onclick`. Ahí el
+   parser de HTML descodifica `&#39;` y lo devuelve a ser `'`, que rompe la
+   cadena de JavaScript igual. Para eso está `etaaxJsArg()` (/js-arg.js). */
 function esc(s) {
-    return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return (s||'').toString()
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 window.onload = init;

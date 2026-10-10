@@ -223,8 +223,11 @@ GRANT EXECUTE ON FUNCTION menu_token_rotar(TEXT, TEXT) TO authenticated;
 REVOKE ALL ON FUNCTION menu_cfg_guardar(TEXT, TEXT, JSONB) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION menu_cfg_guardar(TEXT, TEXT, JSONB) TO authenticated;
 
--- ── Comprobación ────────────────────────────────────────────────────────────
--- Los seis renglones deben decir PASA.
+-- ── Comprobación, en dos partes ─────────────────────────────────────────────
+-- PRIMERO cómo quedó escrito (1-6, salen como tabla) y DESPUÉS qué pasa al
+-- llamarla de verdad con cada rol (7-10, salen como avisos en la pestaña
+-- «Messages» / NOTICE). Las dos hacen falta: la línea de este bug SE LEÍA
+-- BIEN, y por eso duró año y medio. Los diez deben decir PASA.
 WITH d AS (
     SELECT p.proname, pg_get_functiondef(p.oid) AS def
       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -263,6 +266,96 @@ SELECT * FROM (
            CASE WHEN has_function_privilege('anon', 'menu_publico_ver(text,text)', 'EXECUTE')
                 THEN 'PASA' ELSE 'FALLA' END
 ) t ORDER BY n;
+
+-- ── La prueba que de verdad importa: LLAMARLA ───────────────────────────────
+-- Lo de arriba lee definiciones y permisos. Eso dice cómo está escrito, no qué
+-- pasa al llamarla — y es justo la diferencia que dejó pasar este bug durante
+-- año y medio: la línea se leía bien.
+--
+-- Esto SÍ la llama, poniéndose en la piel de cada rol:
+--   7. un anónimo pide el token  → debe ser RECHAZADO;
+--   8. el dueño del negocio pide el token → debe FUNCIONAR (si no, el QR de
+--      entradas deja de poder generarse y la barra se queda sin registrar);
+--   9. un dueño AJENO pide el token de un negocio que no es suyo → RECHAZADO;
+--  10. el token NO cambió al probar  → los QR ya pegados siguen sirviendo.
+--
+-- No escribe nada: con el arreglo puesto, 7 y 9 fallan antes de tocar la fila,
+-- y 8 solo lee porque el token ya existe. Aun así va dentro de una transacción
+-- que se deshace, para que ni un caso raro deje rastro.
+BEGIN;
+DO $prueba$
+DECLARE
+    v_neg TEXT; v_dueno UUID; v_otro UUID;
+    v_antes TEXT; v_despues TEXT; v_r TEXT;
+BEGIN
+    SELECT n.id, n.usuario_id INTO v_neg, v_dueno
+      FROM negocios n WHERE n.entrada_token IS NOT NULL LIMIT 1;
+    IF v_neg IS NULL THEN
+        RAISE NOTICE '7-10. SIN DATOS: no hay ningún negocio con token de entradas todavía.';
+        RETURN;
+    END IF;
+    SELECT entrada_token INTO v_antes FROM negocios WHERE id = v_neg;
+
+    -- 7 · sin sesión
+    BEGIN
+        SET LOCAL ROLE anon;
+        v_r := entrada_token_asegurar(v_neg);
+        RESET ROLE;
+        RAISE NOTICE '7. Un anónimo NO obtiene el token ....... FALLA (lo obtuvo)';
+    EXCEPTION WHEN OTHERS THEN
+        RESET ROLE;
+        RAISE NOTICE '7. Un anónimo NO obtiene el token ....... PASA (%)', SQLERRM;
+    END;
+
+    -- 8 · el dueño, que sí debe poder
+    BEGIN
+        SET LOCAL ROLE authenticated;
+        PERFORM set_config('request.jwt.claims',
+                           json_build_object('sub', v_dueno::text, 'role', 'authenticated')::text, true);
+        v_r := entrada_token_asegurar(v_neg);
+        RESET ROLE;
+        PERFORM set_config('request.jwt.claims', NULL, true);
+        IF v_r IS NOT NULL AND v_r <> '' THEN
+            RAISE NOTICE '8. El dueño SÍ obtiene el token .......... PASA';
+        ELSE
+            RAISE NOTICE '8. El dueño SÍ obtiene el token .......... FALLA (vino vacío)';
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RESET ROLE;
+        PERFORM set_config('request.jwt.claims', NULL, true);
+        RAISE NOTICE '8. El dueño SÍ obtiene el token .......... FALLA (%)', SQLERRM;
+    END;
+
+    -- 9 · el dueño de OTRO negocio
+    SELECT usuario_id INTO v_otro FROM negocios WHERE usuario_id <> v_dueno LIMIT 1;
+    IF v_otro IS NULL THEN
+        RAISE NOTICE '9. Un dueño ajeno NO lo obtiene .......... SIN DATOS (un solo dueño)';
+    ELSE
+        BEGIN
+            SET LOCAL ROLE authenticated;
+            PERFORM set_config('request.jwt.claims',
+                               json_build_object('sub', v_otro::text, 'role', 'authenticated')::text, true);
+            v_r := entrada_token_asegurar(v_neg);
+            RESET ROLE;
+            PERFORM set_config('request.jwt.claims', NULL, true);
+            RAISE NOTICE '9. Un dueño ajeno NO lo obtiene .......... FALLA (lo obtuvo)';
+        EXCEPTION WHEN OTHERS THEN
+            RESET ROLE;
+            PERFORM set_config('request.jwt.claims', NULL, true);
+            RAISE NOTICE '9. Un dueño ajeno NO lo obtiene .......... PASA (%)', SQLERRM;
+        END;
+    END IF;
+
+    -- 10 · y nada de esto cambió el token impreso en los QR
+    SELECT entrada_token INTO v_despues FROM negocios WHERE id = v_neg;
+    IF v_despues IS NOT DISTINCT FROM v_antes THEN
+        RAISE NOTICE '10. Los QR ya pegados siguen sirviendo ... PASA';
+    ELSE
+        RAISE NOTICE '10. Los QR ya pegados siguen sirviendo ... FALLA (el token cambió)';
+    END IF;
+END
+$prueba$;
+ROLLBACK;
 
 -- ── Para decidir el siguiente paso CON DATOS ─────────────────────────────────
 -- No hace nada: solo lista qué funciones de la casa puede ejecutar todavía

@@ -23342,12 +23342,18 @@ console.log('\n══ BH49 · Un id no es código ══');
         const codigo = m[1]
             .replace(/&quot;/g, '"').replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-        let recibido = null, marcador = null;
-        const caja = { eliminarNegocio: (v) => { recibido = v; }, globalThis: {} };
+        let recibido = null;
+        /* LA FIXTURE NO PUEDE TRAGARSE EL ATAQUE. Mi primera versión declaraba
+           `globalThis: {}` en la caja: el payload escribe en
+           `globalThis.auditMarker`, así que caía en ESE objeto vacío mientras
+           la prueba leía `caja.auditMarker` — siempre undefined, pasara lo que
+           pasara. Una comprobación que no puede fallar no comprueba nada.
+           Sin declararlo, `globalThis` dentro del contexto ES la caja, y el
+           marcador aterriza donde se le busca. */
+        const caja = { eliminarNegocio: (v) => { recibido = v; } };
         vm.createContext(caja);
         vm.runInContext(codigo, caja);
-        marcador = caja.auditMarker;
-        eq(marcador, undefined, 'no se ejecutó el ataque');
+        eq(caja.auditMarker, undefined, 'no se ejecutó el ataque');
         return eq(recibido, VENENO, 'el id llegó entero, como dato');
     });
 
@@ -23355,21 +23361,77 @@ console.log('\n══ BH49 · Un id no es código ══');
        Arreglar los diecinueve sitios de hoy no sirve si el de mañana se
        escribe a la antigua. Esto recorre los dos paneles y exige que todo
        dato que entre a un `onclick` pase por el escape. */
+    /* ── EL GUARDIÁN, MIRANDO CADA ARGUMENTO ──
+       Mi primera versión tenía DOS agujeros, y por los dos se coló un botón
+       real (`guardarProveedor`, admin.html:2825):
+
+         · exigía una LETRA después del `+`, así que `+ (id||'')` —que empieza
+           con paréntesis— ni siquiera se revisaba;
+         · y con encontrar UN `etaaxJsArg` daba la línea entera por buena,
+           aunque llevara tres argumentos y solo uno fuera seguro.
+
+       Ahora se extrae el trozo de CADA `onclick` y dentro se revisa cada
+       expresión encajada entre literales, una por una. */
+    /* El trozo EXACTO del handler: de `onclick="` hasta la comilla doble que
+       lo cierra. Mi primera versión cortaba en el `>` del tag y se llevaba
+       dentro el `+ btnBase +` de los estilos — ruido que obligaba a aflojar la
+       revisión, y aflojándola se coló un botón de verdad. */
+    const handlers = (linea) => {
+        const out = [];
+        let i = linea.indexOf('onclick="');
+        while (i > -1) {
+            const fin = linea.indexOf('"', i + 9);
+            out.push(linea.slice(i + 9, fin > -1 ? fin : linea.length));
+            i = linea.indexOf('onclick="', fin > -1 ? fin : linea.length);
+        }
+        return out;
+    };
+    /* Y dentro, CADA expresión encajada entre literales: `' + lo que sea + '`.
+       Sin exigir que empiece por letra — fue justo `+ (id||'')`, que empieza
+       con paréntesis, lo que se escapó. */
+    const ARGS = /'\s*\+\s*([\s\S]+?)\s*\+\s*'/g;
     ['admin.html', 'admin-catalogo-insumos.html'].forEach(archivo => {
-        test('ningún onclick de ' + archivo + ' concatena un dato sin escapar', () => {
+        test('ningún argumento de un onclick de ' + archivo + ' va sin escapar', () => {
             const src = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
-            const sueltos = src.split('\n').map((l, i) => ({ l, n: i + 1 })).filter(x => {
-                if (x.l.indexOf('onclick') < 0) return false;
-                /* Solo los GENERADOS: un onclick escrito a mano en el HTML no
-                   concatena nada y no puede llevar un dato dentro. */
-                if (!/onclick=[^>]*\+\s*[A-Za-z_]/.test(x.l)) return false;
-                if (x.l.indexOf('etaaxJsArg') > -1) return false;
-                /* Los índices de un forEach son números, no texto de nadie. */
-                if (/\+\s*(v\.)?idx\s*\+/.test(x.l)) return false;
-                return true;
+            const sueltos = [];
+            src.split('\n').forEach((linea, i) => {
+                if (linea.indexOf('onclick') < 0) return;
+                handlers(linea).forEach(trozo => {
+                    let m;
+                    ARGS.lastIndex = 0;
+                    while ((m = ARGS.exec(trozo))) {
+                        const expr = m[1].trim();
+                        if (expr.indexOf('etaaxJsArg') > -1) return;
+                        /* Los índices de un forEach son números, no texto que
+                           escriba nadie. */
+                        if (/^[\w.]*idx$/.test(expr)) return;
+                        sueltos.push((i + 1) + ' → ' + expr.slice(0, 40));
+                    }
+                });
             });
-            return eq(sueltos.map(x => x.n).join(', '), '', 'líneas sin escapar');
+            return eq(sueltos.join(' | '), '', 'argumentos sin escapar');
         });
+        /* La regresión concreta del botón que se escapó. */
+        if (archivo === 'admin.html') {
+            test('…incluido el de guardar proveedor, que se me había pasado', () => {
+                const src = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
+                return eq(/guardarProveedor\(\\'' \+ etaaxJsArg\(/.test(src), true, 'escapado');
+            });
+        }
+        /* Y el escape de HTML del panel tiene que cubrir las comillas: se usa
+           en decenas de `value="' + esc(x) + '"`, y sin ellas un dato con una
+           comilla doble cierra el atributo y deja meter otro. Es la misma
+           puerta de R01, un piso más abajo. */
+        if (archivo === 'admin.html') {
+            test('…y el esc() del panel cubre también las comillas', () => {
+                const E2 = crearContexto();
+                cargarJS(E2, 'js-arg.js');
+                cargarInline(E2, 'admin.html');
+                const atributo = '<b title="' + E2.esc('a" onmouseover="x') + '">';
+                eq(/title="[^"]*"\s+onmouseover/.test(atributo), false, 'no se sale del atributo');
+                return eq(E2.esc("o'brien").indexOf("'") < 0, true, 'la simple también');
+            });
+        }
         test('…y ' + archivo + ' carga el escape', () => {
             const src = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
             return eq(src.indexOf('src="/js-arg.js"') > -1, true, 'el helper va cargado');
@@ -23498,6 +23560,35 @@ console.log('\n══ BH50 · Una negación que no niega ══');
             return fs.readFileSync(f, 'utf8').indexOf('entrada_token_asegurar') > -1;
         });
         return eq(culpables.join(', '), '', 'páginas públicas que lo llaman');
+    });
+
+    /* ── LA MIGRACIÓN SE PRUEBA LLAMANDO, NO LEYENDO ──
+       Las comprobaciones 1-6 de la v70 miran definiciones y permisos: dicen
+       cómo quedó ESCRITO. Y la línea de este bug se leía perfecta — por eso
+       duró año y medio. Las 7-10 la LLAMAN poniéndose en la piel de cada rol,
+       que es lo único que distingue «parece bien» de «funciona». */
+    /* SIN COMENTARIOS, otra vez. Comentar una línea la deja en el archivo, y
+       un regex a secas la sigue encontrando: la mutación que la apagaba pasó
+       de largo. Van diez veces en este archivo — por eso va escrito. */
+    const sinComentarios = (t) => t.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+    test('la v70 no solo se lee: se llama con cada rol', () => {
+        const v70 = sinComentarios(fs.readFileSync(path.join(RAIZ, 'supabase-migration-v70.sql'), 'utf8'));
+        eq(/SET LOCAL ROLE anon;/.test(v70), true, 'prueba al anónimo');
+        eq(/request\.jwt\.claims/.test(v70), true, 'y se pone en la piel del dueño');
+        return eq(/v_r := entrada_token_asegurar\(v_neg\);/.test(v70), true, 'la llama de verdad');
+    });
+    test('…comprobando que el dueño SÍ puede, no solo que el anónimo no', () => {
+        const v70 = sinComentarios(fs.readFileSync(path.join(RAIZ, 'supabase-migration-v70.sql'), 'utf8'));
+        /* Una migración que solo prueba lo que debe fallar se puede «pasar»
+           revocándole el permiso a todo el mundo. */
+        return eq(/8\. El dueño SÍ obtiene el token/.test(v70), true, 'el caso positivo');
+    });
+    test('…y que probar no rote el token impreso en los QR', () => {
+        const v70 = sinComentarios(fs.readFileSync(path.join(RAIZ, 'supabase-migration-v70.sql'), 'utf8'));
+        eq(/10\. Los QR ya pegados siguen sirviendo/.test(v70), true, 'lo comprueba');
+        /* Y encima va envuelto en una transacción que se deshace: una prueba
+           que deja rastro en producción no es una prueba, es un cambio. */
+        return eq(/^BEGIN;$[\s\S]*^ROLLBACK;$/m.test(v70), true, 'no deja rastro');
     });
 
     /* ── BH21: QUÉ SE LLEVÓ EL CREATE OR REPLACE ──
