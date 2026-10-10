@@ -224,7 +224,13 @@ BEGIN
                                         'menu_token_rotar','menu_cfg_guardar')
                       AND pg_get_functiondef(p.oid) LIKE '%IS NOT TRUE%') = 4
              THEN 'PASA' ELSE 'FALLA' END,
-        'si dice FALLA, volver a correr la v70 SIN su bloque BEGIN/ROLLBACK'));
+        CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace
+                    WHERE ns.nspname='public'
+                      AND p.proname IN ('entrada_token_asegurar','menu_token_asegurar',
+                                        'menu_token_rotar','menu_cfg_guardar')
+                      AND pg_get_functiondef(p.oid) LIKE '%IS NOT TRUE%') = 4
+             THEN 'las 4 definiciones vivas la llevan'
+             ELSE 'VOLVER A CORRER LA v70 SIN su bloque BEGIN/ROLLBACK' END));
 
     PERFORM set_config('etaax.v73', v_out::text, false);
 END
