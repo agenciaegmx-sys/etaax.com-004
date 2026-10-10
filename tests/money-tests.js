@@ -24405,6 +24405,98 @@ console.log('\n══ BH52 · Saber qué hay puesto ══');
         eq(/relrowsecurity/.test(codigo), true, 'quien no la tiene se ve'));
 }
 
+/* ═══════════ SUITE BH53 · EL COBRO Y LOS ARCHIVOS (R02 y R06) ═══════════
+   Los dos dejaron de ser teoría: el inventario los encontró PUESTOS en
+   producción.
+
+   R02 · `staff_acceso` sobre `suscripciones` y `pagos_suscripcion`, FOR ALL y
+   sin cláusula TO. La v54 barrió `public` poniéndole esa política a toda
+   tabla con `negocio_id`, y arrastró las dos de cobro, que la v24 y la v44
+   habían reservado al admin. Las permisivas se combinan con OR: tener un
+   `own_read` al lado no limita nada. La cuenta compartida del negocio podía
+   ponerse `estado='activa'` desde la consola del navegador.
+
+   R06 · las tres políticas de escritura del bucket público comprobaban
+   `bucket_id = 'evidencias'` y nada más. Cualquier cuenta con sesión podía
+   sobrescribir o BORRAR los tickets de gastos de otro negocio. Borrar no pide
+   leer, así que la v48 —que cerró la lectura— no alcanzaba.
+
+   Lo que esta suite vigila con el mismo peso es lo contrario: que al cerrar
+   no se haya apagado el panel de admin ni el QR de la barra.               */
+console.log('\n══ BH53 · El cobro y los archivos ══');
+{
+    const v74 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v74.sql'), 'utf8');
+    const codigo = v74.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+
+    /* ── R02 ── */
+    ['suscripciones', 'pagos_suscripcion'].forEach(t => {
+        test('se quita el barrido de la v54 de ' + t, () =>
+            eq(new RegExp('DROP POLICY IF EXISTS "staff_acceso" ON ' + t).test(codigo),
+               true, 'fuera staff_acceso'));
+    });
+    test('…y a anon se le quita escribir en las dos', () => {
+        eq(/REVOKE[^;]*ON suscripciones\s+FROM anon/.test(codigo), true, 'suscripciones');
+        return eq(/REVOKE[^;]*ON pagos_suscripcion\s+FROM anon/.test(codigo), true, 'pagos');
+    });
+    test('los pagos los escribe SOLO el webhook', () =>
+        eq(/REVOKE[^;]*ON pagos_suscripcion\s+FROM authenticated/.test(codigo),
+           true, 'ni el admin desde el navegador'));
+
+    /* LO QUE NO SE PUEDE ROMPER, y es la parte sutil: el admin entra como un
+       `authenticated` cualquiera, y los GRANT son por ROL. Quitarle UPDATE a
+       `authenticated` dejaría al admin sin poder activar a nadie — el paywall
+       cerrado para todos, incluido quien sí pagó. */
+    test('el panel de admin CONSERVA poder escribir suscripciones', () => {
+        const revocados = (codigo.match(/REVOKE ([^;]*?) ON suscripciones\s+FROM authenticated/) || [])[1] || '';
+        eq(/UPDATE/.test(revocados), false, 'no se le quita UPDATE');
+        return eq(/INSERT/.test(revocados), false, 'ni INSERT');
+    });
+    test('…porque quien separa al admin del cliente es la política, no el grant', () =>
+        eq(/DROP POLICY[^;]*"admin_all"/.test(codigo), false, 'admin_all no se toca'));
+    test('…y el negocio sigue LEYENDO su propio estado', () => {
+        /* Sin esto, el gate del paywall no podría saber si está al corriente
+           y bloquearía a todo el mundo. */
+        eq(/DROP POLICY[^;]*"own_read"/.test(codigo), false, 'own_read intacta');
+        return eq(/DROP POLICY[^;]*"staff_read"/.test(codigo), false, 'staff_read intacta');
+    });
+
+    /* ── R06 ── */
+    ['evidencias_insert', 'evidencias_update', 'evidencias_delete'].forEach(p => {
+        test(p + ' comprueba de quién es la carpeta', () => {
+            const i = codigo.indexOf('CREATE POLICY "' + p + '"');
+            eq(i > -1, true, 'se redefine');
+            const cuerpo = codigo.slice(i, codigo.indexOf(';', i));
+            eq(/etaax_puede_neg\(\(storage\.foldername\(name\)\)\[1\]\)/.test(cuerpo),
+               true, 'misma condición que el bucket privado');
+            /* Y que no se quede SOLO con el bucket, que era el bug. */
+            return eq(/bucket_id = 'evidencias'\s*\)\s*;/.test(cuerpo), false, 'no basta el bucket');
+        });
+    });
+    /* La de BORRAR es la peor de las tres y merece su propia línea: borrar no
+       pide leer, así que el arreglo de lectura de la v48 no la cubría. */
+    test('borrar la evidencia de otro negocio deja de ser posible', () => {
+        const i = codigo.indexOf('CREATE POLICY "evidencias_delete"');
+        return eq(codigo.slice(i, codigo.indexOf(';', i)).indexOf('etaax_puede_neg') > -1,
+                  true, 'con dueño comprobado');
+    });
+    /* Y LO QUE NO SE TOCA. Si una de estas cae, la barra deja de poder subir
+       su foto y nadie sabe por qué. */
+    ['evidencias_anon_insert', 'evidencias_entrada_anon_insert',
+     'evpriv_anon_entradas', 'evpriv_anon_inbox', 'guias_escritura', 'evidencias_read'].forEach(p => {
+        test('no se toca ' + p, () =>
+            eq(new RegExp('DROP POLICY[^;]*"' + p + '"').test(codigo), false, 'intacta'));
+    });
+
+    /* La comprobación de la migración tiene que probar las dos caras: lo que
+       se cerró Y lo que sigue abierto a propósito. Una que solo mire lo
+       primero se «pasa» revocándole todo a todo el mundo. */
+    test('la v74 comprueba también que no cerró de más', () => {
+        eq(/SIGUE pudiendo activar una suscripción/.test(v74), true, 'el admin');
+        eq(/SIGUE viendo su propio estado/.test(v74), true, 'el negocio');
+        return eq(/SIGUE pudiendo subir su foto/.test(v74), true, 'el QR de la barra');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
