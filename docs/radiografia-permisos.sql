@@ -15,11 +15,17 @@
 -- Lo único que pide decisión es «⚠ REVISAR». Lo demás ya está explicado:
 --   · disparador            → PostgreSQL no deja llamarlo a mano;
 --   · corre como quien llama → manda la RLS, no puede saltársela;
---   · ayudante puro          → solo mira sus argumentos, no toca una fila;
 --   · abierta a propósito    → alguien decidió que sí, y dice por qué.
 --
--- Al 9-oct-2026 esta consulta debe salir SIN NINGÚN «⚠ REVISAR». Si aparece
--- uno, es nuevo: lo trajo la última migración y hay que mirarlo.
+-- Tras la v73 esta consulta debe salir SIN NINGÚN «⚠ REVISAR». Si aparece uno,
+-- es nuevo: lo trajo la última migración y hay que mirarlo.
+--
+-- Y UNA ADVERTENCIA SOBRE ESTA CONSULTA. «Cero ⚠» no demuestra que el sistema
+-- sea seguro: solo que ninguna función SE SALIÓ de lo acordado. La lista de
+-- esperadas acepta por NOMBRE, así que si alguien reescribe el cuerpo de una
+-- de ellas para que devuelva de más, esto seguirá diciendo que está bien.
+-- Comparar firma, permisos y definición contra una base revisada es el
+-- siguiente escalón, y todavía no está hecho.
 -- ============================================================================
 WITH esperadas(fn, porque) AS (VALUES
     -- ── Lo que abre el QR de la barra y la cocina, sin sesión ───────────────
@@ -53,21 +59,24 @@ WITH esperadas(fn, porque) AS (VALUES
     ('acceso_registrar','la bitácora de entradas'),
     ('etaax_area_de_rol','ayudante de áreas'),
     ('etaax_carpeta_global','ayudante de carpetas'),
-    -- ── LAS CUATRO QUE PARECEN SOSPECHOSAS Y NO LO SON ──────────────────────
-    -- Corren como dueño, sí, pero solo contestan SOBRE QUIEN PREGUNTA: sin
-    -- sesión `auth.uid()` es NULL y las cuatro devuelven `false`. No hay nada
-    -- que sacarles.
+    -- ── LAS DOS QUE NO SE PUEDEN CERRAR ─────────────────────────────────────
+    -- Corren como dueño, pero solo contestan SOBRE QUIEN PREGUNTA: sin sesión
+    -- `auth.uid()` es NULL y devuelven `false`. No hay nada que sacarles.
     --
-    -- Y REVOCARLAS SERÍA PEOR QUE DEJARLAS. `is_platform_admin` aparece en 62
-    -- políticas y `es_staff_de` en 9, y el barrido de la v54 las crea `FOR
-    -- ALL` SIN cláusula `TO`, o sea que aplican a todos los roles —anon
-    -- incluido—. Una política se evalúa con el rol de quien consulta: si anon
-    -- no puede ejecutar la función, la consulta deja de devolver «cero filas»
-    -- y pasa a tronar con `permission denied for function`.
-    ('es_staff_de','solo dice si TÚ eres staff; además la usan 9 políticas'),
-    ('is_platform_admin','solo dice si TÚ eres admin; además la usan 62 políticas'),
-    ('etaax_negocio_alcanzable','solo dice si TÚ alcanzas ese negocio'),
-    ('etaax_puede_neg','solo dice si TÚ alcanzas esa carpeta')
+    -- Y REVOCARLAS SERÍA PEOR QUE DEJARLAS: `is_platform_admin` aparece en 62
+    -- políticas y `es_staff_de` en 9, creadas por el barrido de la v54 como
+    -- `FOR ALL` SIN cláusula `TO`, o sea que aplican a TODOS los roles, anon
+    -- incluido. Una política se evalúa con el rol de quien consulta: sin
+    -- EXECUTE, la consulta deja de devolver «cero filas» y pasa a tronar con
+    -- `permission denied for function`.
+    --
+    -- OJO: esto vale para ESTAS DOS. `etaax_puede_neg` y
+    -- `etaax_negocio_alcanzable` parecían el mismo caso y NO lo eran —solo
+    -- aparecen en políticas `TO authenticated`—, así que la v73 sí se las
+    -- cierra a anon. Generalizar «las cuatro» fue un error mío; la diferencia
+    -- está en la cláusula `TO` de la política, no en el parecido de la función.
+    ('es_staff_de','solo dice si TÚ eres staff; y la usan 9 políticas sin cláusula TO'),
+    ('is_platform_admin','solo dice si TÚ eres admin; y la usan 62 políticas sin TO')
 )
 SELECT p.proname AS funcion,
        CASE
@@ -77,8 +86,11 @@ SELECT p.proname AS funcion,
               THEN 'abierta a propósito · ' || e.porque
          WHEN NOT p.prosecdef
               THEN 'corre como quien llama · manda la RLS'
-         WHEN p.provolatile = 'i'
-              THEN 'ayudante puro · solo mira sus argumentos'
+         -- NO hay rama de «ayudante puro». `IMMUTABLE` es una DECLARACIÓN del
+         -- programador, no una garantía: PostgreSQL no comprueba que la
+         -- función no lea tablas, y una `SECURITY DEFINER` mal declarada haría
+         -- exactamente lo que esta consulta estaría dando por bueno. Si corre
+         -- como dueño y no está en la lista de arriba, se revisa a mano.
          ELSE '⚠ REVISAR · corre como dueño y la puede llamar un anónimo'
        END AS veredicto
   FROM pg_proc p
@@ -87,7 +99,7 @@ SELECT p.proname AS funcion,
  WHERE n.nspname = 'public'
    AND has_function_privilege('anon', p.oid, 'EXECUTE')
  ORDER BY (CASE WHEN p.prorettype <> 'trigger'::regtype AND e.fn IS NULL
-                     AND p.prosecdef AND p.provolatile <> 'i' THEN 0 ELSE 1 END),
+                     AND p.prosecdef THEN 0 ELSE 1 END),
           p.proname;
 
 -- ============================================================================

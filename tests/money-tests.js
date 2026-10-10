@@ -23390,27 +23390,110 @@ console.log('\n══ BH49 · Un id no es código ══');
        Sin exigir que empiece por letra — fue justo `+ (id||'')`, que empieza
        con paréntesis, lo que se escapó. */
     const ARGS = /'\s*\+\s*([\s\S]+?)\s*\+\s*'/g;
+    /* UNA SOLA COPIA del escáner. Mi primera versión tenía el bucle escrito
+       dos veces —una para recorrer el archivo y otra dentro de la prueba
+       unitaria— y la prueba seguía pasando aunque el escáner de verdad
+       estuviera roto: medía su propia copia. */
+    const argsInseguros = (linea) => {
+        const malos = [];
+        handlers(linea).forEach(trozo => {
+            let m;
+            ARGS.lastIndex = 0;
+            while ((m = ARGS.exec(trozo))) {
+                const expr = m[1].trim();
+                /* `continue`, NO `return`. Un `return` dentro de la función de
+                   forEach abandona el HANDLER ENTERO: el primer argumento
+                   seguro daba por buenos a todos los que vinieran detrás. */
+                if (expr.indexOf('etaaxJsArg') > -1) continue;
+                /* Los índices de un forEach son números, no texto de nadie. */
+                if (/^[\w.]*idx$/.test(expr)) continue;
+                malos.push(expr);
+            }
+        });
+        return malos;
+    };
     ['admin.html', 'admin-catalogo-insumos.html'].forEach(archivo => {
         test('ningún argumento de un onclick de ' + archivo + ' va sin escapar', () => {
             const src = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
             const sueltos = [];
             src.split('\n').forEach((linea, i) => {
                 if (linea.indexOf('onclick') < 0) return;
-                handlers(linea).forEach(trozo => {
-                    let m;
-                    ARGS.lastIndex = 0;
-                    while ((m = ARGS.exec(trozo))) {
-                        const expr = m[1].trim();
-                        if (expr.indexOf('etaaxJsArg') > -1) return;
-                        /* Los índices de un forEach son números, no texto que
-                           escriba nadie. */
-                        if (/^[\w.]*idx$/.test(expr)) return;
-                        sueltos.push((i + 1) + ' → ' + expr.slice(0, 40));
-                    }
-                });
+                argsInseguros(linea).forEach(e => sueltos.push((i + 1) + ' → ' + e.slice(0, 40)));
             });
             return eq(sueltos.join(' | '), '', 'argumentos sin escapar');
         });
+        /* ── LA PRECONDICIÓN DEL ESCÁNER, HECHA EXPLÍCITA ──
+           El guardián de arriba revisa LÍNEA POR LÍNEA. Eso es correcto solo
+           mientras ningún handler se parta en dos líneas — hoy ninguno lo
+           hace, pero el día que alguien formatee uno así, el escáner dejaría
+           de verlo EN SILENCIO y nadie se enteraría.
+           En vez de complicar el escáner, se vigila su supuesto. */
+        test('ningún handler de ' + archivo + ' se parte en dos líneas', () => {
+            const src = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
+            const partidos = [];
+            src.split('\n').forEach((l, i) => {
+                let j = l.indexOf('onclick="');
+                while (j > -1) {
+                    if (l.indexOf('"', j + 9) === -1) partidos.push(i + 1);
+                    j = l.indexOf('onclick="', j + 9);
+                }
+            });
+            return eq(partidos.join(', '), '', 'el escáner los vería a medias');
+        });
+
+        /* ── LOS OTROS ATRIBUTOS QUE TAMBIÉN EJECUTAN ──
+           `onclick` no es el único. Cualquier `on*` corre código, y hoy no hay
+           ninguno con datos dentro en estos paneles — pero el día que alguien
+           escriba un `onchange="f('+id+')"` repetiría R01 por otra puerta sin
+           que el guardián de arriba lo mire. */
+        test('ningún otro atributo ejecutable de ' + archivo + ' lleva datos', () => {
+            const src = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
+            const malos = [];
+            src.split('\n').forEach((l, i) => {
+                const m = l.match(/\bon(?!click\b)[a-z]+="[^"]*'\s*\+/g);
+                if (m) malos.push((i + 1) + ' → ' + m[0].slice(0, 30));
+            });
+            return eq(malos.join(' | '), '', 'atributos on* con concatenación');
+        });
+
+        /* ── UNA PUERTA QUE EL ESCAPE NO PUEDE CERRAR ──
+           `href="javascript:…"` ejecuta igual que un onclick, y ahí NINGÚN
+           escape de texto ayuda: el problema es el ESQUEMA, no las comillas.
+           La única defensa es que el esquema lo ponga el código, no el dato.
+           Hoy los dos `href` con datos del panel lo hacen —`'mailto:' + …` y
+           `'https://wa.me/?text=' + …`, los dos con encodeURIComponent—, y
+           esto exige que siga siendo así. */
+        if (archivo === 'admin.html') {
+            test('todo href con datos lleva el esquema puesto por el código', () => {
+                const src = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
+                const sospechosos = [];
+                src.split('\n').forEach((l, i) => {
+                    if (!/href="'\s*\+/.test(l)) return;
+                    /* La variable que entra debe construirse de un literal con
+                       esquema fijo. Se busca su declaración en el archivo. */
+                    const v = (l.match(/href="'\s*\+\s*(?:esc\()?([\w.]+)/) || [])[1];
+                    if (!v) { sospechosos.push((i + 1) + ' → sin variable clara'); return; }
+                    const decl = new RegExp('var\\s+' + v + '\\s*=\\s*\'(mailto:|https?://)');
+                    if (!decl.test(src)) sospechosos.push((i + 1) + ' → ' + v);
+                });
+                return eq(sospechosos.join(' | '), '', 'href cuyo esquema puede venir del dato');
+            });
+        }
+
+        /* ── EL ORDEN NO PUEDE IMPORTAR ──
+           Se le da al escáner un handler con el argumento SEGURO primero y el
+           inseguro después. Con el `return` de antes, el primero lo daba todo
+           por bueno y este caso pasaba invisible. */
+        test('el escáner de ' + archivo + ' revisa TODOS los argumentos, no solo el primero', () => {
+            /* Tal cual se escribe en el archivo: dos argumentos, el
+               seguro primero. `String.raw` para que las barras del
+               escape lleguen literales y no haya que escaparlas otra
+               vez — justo el enredo que me rompió el primer intento. */
+            const linea = String.raw`    var x = '<button onclick="f(\'' + etaaxJsArg(a) + '\',\'' + b.id + '\')">';`;
+            const encontrados = argsInseguros(linea);
+            return eq(encontrados.join(','), 'b.id', 've el segundo aunque el primero esté bien');
+        });
+
         /* La regresión concreta del botón que se escapó. */
         if (archivo === 'admin.html') {
             test('…incluido el de guardar proveedor, que se me había pasado', () => {
@@ -23605,12 +23688,15 @@ console.log('\n══ BH50 · Una negación que no niega ══');
        `permission denied for function`.
 
        Esto existe para que la próxima limpieza no las barra «por higiene». */
+    /* OJO con la lista: generalicé «las cuatro» y estaba mal. Lo que decide no
+       es que la función se parezca, sino la cláusula `TO` de las políticas que
+       la llaman. `etaax_puede_neg` y `etaax_negocio_alcanzable` solo aparecen
+       en políticas `TO authenticated`, así que la v73 SÍ se las cierra a anon.
+       Solo estas tres no se pueden tocar. */
     const NO_TOCAR = {
-        'es_staff_de':              'la usan 9 políticas',
-        'is_platform_admin':        'la usan 62 políticas',
-        'etaax_negocio_alcanzable': 'solo contesta sobre quien pregunta',
-        'etaax_puede_neg':          'solo contesta sobre quien pregunta',
-        '_entrada_token_ok':        'la política que sube la foto del QR es TO anon y la llama'
+        'es_staff_de':       'la usan 9 políticas creadas sin cláusula TO',
+        'is_platform_admin': 'la usan 62 políticas creadas sin cláusula TO',
+        '_entrada_token_ok': 'la política que sube la foto del QR es TO anon y la llama'
     };
     Object.keys(NO_TOCAR).forEach(fn => {
         test('nadie le revoca a anon ' + fn + ' — ' + NO_TOCAR[fn], () => {
@@ -23641,6 +23727,83 @@ console.log('\n══ BH50 · Una negación que no niega ══');
            volvieran a aparecer abiertas, tienen que salir en ⚠. */
         eq(doc.indexOf("('negocio_esta_activo'") < 0, true, 'la de cobro no se blanquea');
         return eq(doc.indexOf("('negocio_cobro_estado'") < 0, true, 'ni la otra');
+    });
+
+    /* ── v73 · EL COBRO ENTRE CUENTAS AUTENTICADAS ──
+       La v72 le cerró a `anon` las dos funciones de cobro y ahí me detuve. Lo
+       que faltaba es lo que más pesa: entre cuentas CON sesión seguían
+       abiertas. Corren como dueño y consultan el `p_neg` que se les nombre;
+       con el id de un negocio ajeno —que es público, va en la dirección de la
+       carta— cualquier cliente leía el estado de pago de otro. */
+    ['negocio_esta_activo', 'negocio_cobro_estado'].forEach(fn => {
+        test(fn + ' comprueba pertenencia antes de leer', () => {
+            const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+            const i = v73.indexOf('CREATE OR REPLACE FUNCTION ' + fn + '(');
+            const cuerpo = v73.slice(i, v73.indexOf('\n$$;', i));
+            eq(/etaax_negocio_alcanzable\(p_neg\) OR is_platform_admin\(\)/.test(cuerpo),
+               true, 'dueño, staff o admin');
+            /* Y con la forma de la v70: sin sesión la expresión da NULL, y un
+               `NOT (...)` dejaría pasar. */
+            return eq(/IS NOT TRUE THEN[\s\S]{0,60}RAISE EXCEPTION/.test(cuerpo),
+                      true, 'niega cuando no sabe');
+        });
+        test('…y lanza en vez de devolver «inactivo» · ' + fn, () => {
+            const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+            const i = v73.indexOf('CREATE OR REPLACE FUNCTION ' + fn + '(');
+            const cuerpo = v73.slice(i, v73.indexOf('\n$$;', i));
+            /* Un `false` se confundiría con «este negocio no ha pagado», que
+               es otra respuesta y una fuga en sí misma. */
+            return eq(cuerpo.indexOf("RAISE EXCEPTION 'no autorizado'") > -1, true, 'excepción');
+        });
+    });
+
+    /* ── LAS PRUEBAS SQL NO PUEDEN DAR FALSOS «PASA» ──
+       Un `WHEN OTHERS` da por buena CUALQUIER excepción: con una función mal
+       escrita, «no existe» se leía como «denegado correctamente». Cada rechazo
+       tiene que comprobar su código de error. */
+    test('cada rechazo de la v73 comprueba el error que espera', () => {
+        const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+        eq(/OK_RECHAZO[^;]*ARRAY\['P0001','42501'\]/.test(v73), true, 'solo esos dos');
+        /* Y cuántos WHEN OTHERS hay sin mirar el SQLSTATE: deben ser cero en
+           los casos de rechazo. */
+        const rechazos = (v73.match(/SQLSTATE = ANY\(OK_RECHAZO\)/g) || []).length;
+        return eq(rechazos >= 2, true, 'los dos rechazos lo comprueban');
+    });
+    test('…y prueba al staff, no solo al dueño y al anónimo', () => {
+        const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+        return eq(/El staff SÍ ve el cobro de SU negocio/.test(v73), true, 'el caso del colaborador');
+    });
+    test('…y elige una cuenta ajena que de verdad no tenga acceso', () => {
+        const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+        /* Tomar «cualquier otro usuario» puede caer en el admin de plataforma,
+           que SÍ debe poder, y el renglón diría FALLA sin que nada esté mal. */
+        eq(/<> 'admin@etaax\.com'/.test(v73), true, 'descarta al admin');
+        return eq(/NOT EXISTS \(SELECT 1 FROM negocios n2/.test(v73), true, 'ni dueño ni staff de ese negocio');
+    });
+    /* ── Y QUE LA PRUEBA NO SE LLEVE LA MIGRACIÓN POR DELANTE ──
+       La v70 cerraba con `BEGIN; … ROLLBACK;`. Si el editor ya tiene una
+       transacción abierta, ese ROLLBACK deshace también los CREATE OR REPLACE
+       de arriba: la migración se vería correr sin haber cambiado nada. */
+    test('la comprobación de la v73 no puede deshacer la propia migración', () => {
+        const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+        const codigo = v73.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+        return eq(/^\s*(BEGIN|ROLLBACK)\s*;/m.test(codigo), false, 'sin transacción envolvente');
+    });
+    test('…y la v73 comprueba de paso que la v70 sí quedó aplicada', () => {
+        const v73 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v73.sql'), 'utf8');
+        return eq(/La v70 quedó aplicada/.test(v73), true, 'mira la definición viva');
+    });
+
+    /* ── LA RADIOGRAFÍA NO PUEDE FIARSE DE UNA ETIQUETA ──
+       `IMMUTABLE` es una declaración del programador: PostgreSQL no comprueba
+       que la función no lea tablas. Dar por «ayudante puro» a una SECURITY
+       DEFINER por venir declarada IMMUTABLE era justificar lo que había que
+       revisar. */
+    test('la radiografía no toma IMMUTABLE como prueba de que no lee datos', () => {
+        const doc = fs.readFileSync(path.join(RAIZ, 'docs/radiografia-permisos.sql'), 'utf8');
+        const codigo = doc.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+        eq(/provolatile = 'i'/.test(codigo), false, 'sin rama de «ayudante puro»');
+        return eq(/ayudante puro/.test(codigo), false, 'ni la etiqueta');
     });
 
     /* LA REGLA PARA LO QUE VENGA. Una función que revoca a PUBLIC y NUNCA
