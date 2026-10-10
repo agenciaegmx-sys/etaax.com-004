@@ -24258,12 +24258,76 @@ console.log('\n══ BH52 · Saber qué hay puesto ══');
         return eq(sentencias.length, 1, 'una sentencia, no seis');
     });
     test('…y lo que pide atención sale ARRIBA', () => {
-        /* Con 60 renglones, un SUSTITUIDA en medio de la lista no se ve. */
-        const i = codigo.indexOf('ORDER BY CASE WHEN veredicto');
-        const orden = codigo.slice(i, i + 420);
-        return eq(orden.indexOf("'SUSTITUIDA%'") < orden.indexOf("'AUSENTE%'") &&
-                  orden.indexOf("'AUSENTE%'") < orden.indexOf("'REVISAR%'"),
-                  true, 'lo más grave primero');
+        /* Se leen los NÚMEROS de prioridad, no el orden en que están
+           escritos. Mi primera versión comparaba posiciones de texto: cambiar
+           `THEN 0` por `THEN 9` mandaba SUSTITUIDA al final de la tabla y la
+           prueba no se enteraba, porque la palabra seguía escrita primero.
+           Con sesenta renglones, un hallazgo grave en medio no se ve. */
+        /* Acotado al ORDEN FINAL. El archivo tiene varios `CASE … ELSE … END`
+           —uno por bloque, para decidir cada veredicto— y buscar en todo el
+           texto agarraba el `ELSE 0` de otro, dando una comparación sin
+           sentido. Es el mismo error de siempre: medir el archivo entero
+           cuando el patrón vive en varios sitios. */
+        const orden = codigo.slice(codigo.indexOf('ORDER BY CASE WHEN veredicto'));
+        const pri = {};
+        const re = /WHEN veredicto LIKE '(\w[\w ]*)%'\s+THEN\s+(\d+)/g;
+        let m;
+        while ((m = re.exec(orden))) pri[m[1]] = parseInt(m[2], 10);
+        eq(Object.keys(pri).length >= 4, true, 'se encontraron las prioridades');
+        eq(pri['SUSTITUIDA'] < pri['AUSENTE'], true, 'lo más grave, primero');
+        eq(pri['AUSENTE'] < pri['REVISAR'], true, 'y lo que falta antes que lo que se revisa');
+        /* Y por encima de todo lo que está bien, que es la mayoría. */
+        const ok = parseInt((orden.match(/ELSE (\d+) END/) || [])[1], 10);
+        return eq(pri['SUSTITUIDA'] < ok && pri['REVISAR'] < ok, true, 'antes que lo correcto');
+    });
+
+    /* ── QUE EL SQL SEA VÁLIDO, NO SOLO QUE PAREZCA ──
+       Al unir los seis bloques en una sentencia aparecieron dos errores de
+       sintaxis que ninguna prueba de texto habría visto, y el script
+       simplemente no habría corrido:
+
+         · los ORDER BY de cada bloque quedaron DENTRO del UNION, donde
+           PostgreSQL no los acepta;
+         · el bloque 2 traía su propio `WITH`, y un CTE no puede vivir dentro
+           de una rama de UNION.
+
+       Sin Postgres a mano, esto valida la estructura: una sola sentencia, un
+       solo WITH, un solo ORDER BY, y cada rama de nivel superior con sus
+       cuatro columnas. */
+    test('el inventario es una consulta estructuralmente válida', () => {
+        const limpio = codigo.replace(/'(?:[^']|'')*'/g, "''");
+        eq((limpio.match(/\bWITH\b/g) || []).length, 1, 'un solo WITH, y arriba');
+        eq((limpio.match(/\bORDER BY\b/g) || []).length, 1, 'un solo ORDER BY, al final');
+        return eq(limpio.split('(').length, limpio.split(')').length, 'paréntesis balanceados');
+    });
+    test('…y cada rama del UNION devuelve las mismas cuatro columnas', () => {
+        /* Una rama a la que le falte una columna hace fallar la consulta
+           ENTERA: no se pierde un bloque, se pierden los seis. */
+        const ini = codigo.indexOf('todo AS (') + 'todo AS ('.length;
+        let prof = 1, k = ini;
+        while (prof > 0 && k < codigo.length) {
+            if (codigo[k] === '(') prof++;
+            else if (codigo[k] === ')') prof--;
+            k++;
+        }
+        const cuerpo = codigo.slice(ini, k - 1);
+        /* Solo los UNION ALL de NIVEL SUPERIOR: los bloques 1 y 6 tienen los
+           suyos dentro de una subconsulta y ésos no llevan los alias. */
+        const ramas = [];
+        let p = 0, ant = 0, re = /\(|\)|\bUNION ALL\b/g, m;
+        while ((m = re.exec(cuerpo))) {
+            if (m[0] === '(') p++;
+            else if (m[0] === ')') p--;
+            else if (p === 0) { ramas.push(cuerpo.slice(ant, m.index)); ant = m.index + m[0].length; }
+        }
+        ramas.push(cuerpo.slice(ant));
+        const malas = ramas.filter(r => {
+            const t = r.trim();
+            return !/^SELECT/i.test(t) || !/ AS bloque/.test(t) || !/ AS comprobacion/.test(t) ||
+                   !/ AS veredicto/.test(t) || !/ AS evidencia/.test(t);
+        });
+        eq(ramas.length >= 6, true, 'hay al menos un bloque por sección (' + ramas.length + ')');
+        return eq(malas.length, 0, 'todas con sus cuatro columnas');
     });
 
     /* Los cuatro veredictos. El que hace el trabajo es SUSTITUIDA: sin él,

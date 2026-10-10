@@ -30,7 +30,27 @@
 -- que hay que correr seis veces se corre una.
 --
 -- Todo ordenado con lo que pide atención ARRIBA.
-WITH todo AS (
+-- El catálogo de protecciones que el bloque 2 compara. Va ARRIBA y no
+-- dentro de su rama: un `WITH` no puede vivir dentro de una rama de
+-- UNION ALL, y ahí el script no habría corrido.
+WITH esperado(fn, marca, que, ref) AS (VALUES
+    ('staff_login','_login_golpe','freno de intentos de login','v30 → ¿la v63 se lo llevó? (R04)'),
+    ('staff_login','estado','filtro de colaborador dado de baja','v63'),
+    ('obtener_staff_cred','_login_golpe','freno de intentos','v30'),
+    ('obtener_staff_cred','estado','filtro de baja — NO lo tenía (R03)','pendiente'),
+    ('entrada_validar_nip','_login_golpe','freno del NIP','v30/v63'),
+    ('inventario_conteo_registrar','negocio_id = p_neg','conflicto acotado al negocio (R05)','pendiente'),
+    ('entrada_token_asegurar','IS NOT TRUE','autorización que niega con NULL','v70'),
+    ('menu_cfg_guardar','IS NOT TRUE','autorización que niega con NULL','v70'),
+    ('menu_cfg_guardar','v_vacias','borrar un texto lo borra','v69'),
+    ('menu_publico_ver','_receta_en_suc','candado de sucursal en la carta','v66'),
+    ('menu_publico_ver','grupoNotas','texto por grupo en la carta','v69'),
+    ('negocio_cobro_estado','etaax_negocio_alcanzable','pertenencia antes de leer el cobro','v73'),
+    ('negocio_esta_activo','etaax_negocio_alcanzable','pertenencia antes de leer el cobro','v73'),
+    ('entrada_historial','cerradasBodega','cantidades en el historial del QR','v67'),
+    ('portal_perfil','sucursalId','sucursal en el portal del colaborador','v65')
+),
+todo AS (
 -- ════ BLOQUE 1 · ¿EXISTEN LOS OBJETOS QUE CADA MIGRACIÓN DEJÓ? ════════════
 -- Contesta las notas viejas de «pendiente de correr». Si una tabla no está,
 -- esa migración no corrió y hay funcionalidad apagada que nadie ha notado.
@@ -74,29 +94,12 @@ SELECT '1 · objetos' AS bloque, nombre AS comprobacion,
                    WHERE table_schema='public' AND table_name='suscripciones' AND column_name='proximo_cobro'), 'v43'
     UNION ALL SELECT 'tabla negocio_sucursales (v15 · sucursales sincronizadas)',
            to_regclass('public.negocio_sucursales') IS NOT NULL, 'v15'
-  ) t ORDER BY veredicto DESC, comprobacion
+  ) t
 UNION ALL
 -- ════ BLOQUE 2 · LAS PROTECCIONES QUE DEBERÍAN SEGUIR PUESTAS ══════════════
 -- Aquí sale «SUSTITUIDA»: la función está, pero le falta lo que la protegía.
 -- Es el patrón que ya nos mordió tres veces (v63 se llevó el freno de
 -- intentos, v52 reabrió la escritura del bucket, v54 amplió el alcance).
-WITH esperado(fn, marca, que, ref) AS (VALUES
-    ('staff_login','_login_golpe','freno de intentos de login','v30 → ¿la v63 se lo llevó? (R04)'),
-    ('staff_login','estado','filtro de colaborador dado de baja','v63'),
-    ('obtener_staff_cred','_login_golpe','freno de intentos','v30'),
-    ('obtener_staff_cred','estado','filtro de baja — NO lo tenía (R03)','pendiente'),
-    ('entrada_validar_nip','_login_golpe','freno del NIP','v30/v63'),
-    ('inventario_conteo_registrar','negocio_id = p_neg','conflicto acotado al negocio (R05)','pendiente'),
-    ('entrada_token_asegurar','IS NOT TRUE','autorización que niega con NULL','v70'),
-    ('menu_cfg_guardar','IS NOT TRUE','autorización que niega con NULL','v70'),
-    ('menu_cfg_guardar','v_vacias','borrar un texto lo borra','v69'),
-    ('menu_publico_ver','_receta_en_suc','candado de sucursal en la carta','v66'),
-    ('menu_publico_ver','grupoNotas','texto por grupo en la carta','v69'),
-    ('negocio_cobro_estado','etaax_negocio_alcanzable','pertenencia antes de leer el cobro','v73'),
-    ('negocio_esta_activo','etaax_negocio_alcanzable','pertenencia antes de leer el cobro','v73'),
-    ('entrada_historial','cerradasBodega','cantidades en el historial del QR','v67'),
-    ('portal_perfil','sucursalId','sucursal en el portal del colaborador','v65')
-)
 SELECT '2 · protecciones' AS bloque,
        e.fn || ' · ' || e.que AS comprobacion,
        CASE WHEN p.oid IS NULL THEN 'AUSENTE'
@@ -106,10 +109,6 @@ SELECT '2 · protecciones' AS bloque,
   FROM esperado e
   LEFT JOIN pg_proc p ON p.proname = e.fn
        AND p.pronamespace = 'public'::regnamespace
- ORDER BY CASE WHEN p.oid IS NULL THEN 1
-               WHEN position(e.marca in pg_get_functiondef(p.oid)) > 0 THEN 3
-               ELSE 0 END,
-          e.fn
 UNION ALL
 -- ════ BLOQUE 3 · QUIÉN PUEDE ESCRIBIR EN LAS TABLAS DE COBRO (R02) ═════════
 -- La v54 barrió `public` y le puso `staff_acceso FOR ALL` a toda tabla con
@@ -144,7 +143,7 @@ SELECT '4 · storage' AS bloque,
        'bucket ' || id || (CASE WHEN public THEN ' es PÚBLICO' ELSE ' es privado' END) AS comprobacion,
        CASE WHEN public THEN 'REVISAR · sus URLs sirven sin sesión' ELSE 'ok' END AS veredicto,
        'creado ' || to_char(created_at,'YYYY-MM-DD') AS evidencia
-  FROM storage.buckets ORDER BY 3 DESC, 2
+  FROM storage.buckets
 UNION ALL
 -- La política de ESCRITURA del bucket público: la v48 la acotó y la v52 la
 -- volvió a abrir a cualquier autenticado. Si en `evidencia` solo aparece el
@@ -207,7 +206,7 @@ SELECT '6 · volumen' AS bloque,
            COALESCE((SELECT max(c) FROM (SELECT count(*) c FROM depositos GROUP BY negocio_id) x),0)
     UNION ALL SELECT 'staff', (SELECT count(*) FROM staff),
            COALESCE((SELECT max(c) FROM (SELECT count(*) c FROM staff GROUP BY negocio_id) x),0)
-  ) v ORDER BY peor DESC
+  ) v
 )
 SELECT bloque, comprobacion, veredicto, evidencia
   FROM todo
