@@ -23552,6 +23552,46 @@ console.log('\n══ BH50 · Una negación que no niega ══');
                       true, 'no se revocó de más');
         });
     });
+    /* ── LAS DOS QUE SÍ FILTRABAN (v72) ──
+       De las 20 que la v71 marcó, 18 no podían hacer daño: disparadores que
+       PostgreSQL no deja llamar a mano, ayudantes que solo miran sus
+       argumentos, y funciones que solo contestan sobre quien pregunta.
+
+       Dos sí: `negocio_esta_activo` y `negocio_cobro_estado` corren como
+       dueño y leen `suscripciones` de cualquier negocio que se les nombre. Y
+       el id del negocio NO es secreto — viaja en la dirección de la carta del
+       QR de la mesa. Cualquiera que escaneara una mesa podía preguntar en qué
+       estado de pago está ese negocio. */
+    [['negocio_esta_activo(TEXT)', 'si un negocio está al corriente'],
+     ['negocio_cobro_estado(TEXT)', 'su fecha de cobro y su tolerancia']].forEach(([firma, que]) => {
+        test('un anónimo ya no puede preguntar ' + que, () => {
+            const v72 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v72.sql'), 'utf8');
+            const esc = firma.replace(/[()]/g, m => '\\' + m);
+            return eq(new RegExp('REVOKE ALL ON FUNCTION\\s+' + esc + '\\s+FROM PUBLIC, anon').test(v72),
+                      true, 'a los dos');
+        });
+    });
+    test('…y el candado del paywall sigue funcionando para quien entra', () => {
+        const v72 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v72.sql'), 'utf8');
+        return eq(/GRANT EXECUTE ON FUNCTION negocio_cobro_estado\(TEXT\) TO authenticated/.test(v72),
+                  true, 'no se revocó de más');
+    });
+    /* LA QUE NO SE PUEDE CERRAR, Y POR QUÉ. La v27 le revocó
+       `_entrada_token_ok` a anon; la v32 y la v55 se la DEVOLVIERON a
+       propósito, porque la política de Storage que deja al QR de la barra
+       subir su foto es `TO anon` y la llama. Es el ejemplo de por qué esto se
+       hace leyendo y no barriendo: revocarla apagaría las evidencias. */
+    test('la función que el QR necesita para subir fotos NO se revoca', () => {
+        const v72 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v72.sql'), 'utf8');
+        const v71 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v71.sql'), 'utf8');
+        const codigo = (t) => t.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+        eq(/REVOKE[^\n]*_entrada_token_ok/.test(codigo(v72) + codigo(v71)), false, 'nadie se la quita');
+        /* Y la política que la necesita sigue existiendo: si alguien la
+           borrara, esta prueba dejaría de tener sentido en silencio. */
+        const v55 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v55.sql'), 'utf8');
+        return eq(/FOR INSERT TO anon[\s\S]{0,200}_entrada_token_ok/.test(v55), true, 'la política sigue ahí');
+    });
+
     /* LA REGLA PARA LO QUE VENGA. Una función que revoca a PUBLIC y NUNCA
        nombra a `anon` se queda abierta a `anon` por los privilegios por
        defecto del proyecto — y parece cerrada al leerla, que es lo peligroso.
