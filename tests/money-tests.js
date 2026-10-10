@@ -24248,6 +24248,24 @@ console.log('\n══ BH52 · Saber qué hay puesto ══');
         return eq(malas.join(', '), '', 'solo lectura');
     });
 
+    /* UNA SOLA SENTENCIA. El editor de Supabase enseña solo el resultado de
+       la última, así que con los bloques sueltos Edwin vio el 6 y los otros
+       cinco se perdieron sin que nada avisara. Una herramienta que hay que
+       correr seis veces se corre una. */
+    test('el inventario sale completo en una sola corrida', () => {
+        const sentencias = codigo.replace(/'(?:[^']|'')*'/g, "''")
+                                 .split(';').filter(x => /\S/.test(x));
+        return eq(sentencias.length, 1, 'una sentencia, no seis');
+    });
+    test('…y lo que pide atención sale ARRIBA', () => {
+        /* Con 60 renglones, un SUSTITUIDA en medio de la lista no se ve. */
+        const i = codigo.indexOf('ORDER BY CASE WHEN veredicto');
+        const orden = codigo.slice(i, i + 420);
+        return eq(orden.indexOf("'SUSTITUIDA%'") < orden.indexOf("'AUSENTE%'") &&
+                  orden.indexOf("'AUSENTE%'") < orden.indexOf("'REVISAR%'"),
+                  true, 'lo más grave primero');
+    });
+
     /* Los cuatro veredictos. El que hace el trabajo es SUSTITUIDA: sin él,
        esto sería una lista de «existe / no existe», que ya sabíamos mirar. */
     ['PRESENTE', 'AUSENTE', 'SUSTITUIDA', 'NO COMPROBABLE'].forEach(v => {

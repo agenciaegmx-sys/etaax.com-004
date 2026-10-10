@@ -18,11 +18,19 @@
 --                  el veredicto que más duele y el que nadie mira;
 --   NO COMPROBABLE no se puede decidir desde SQL (va dicho, no adivinado).
 --
--- Son SEIS bloques. El 6 (volumen) puede tardar en una base grande: cuenta
--- filas de verdad.
+-- Son SEIS bloques y salen en UNA sola tabla, con lo que pide atención
+-- arriba. El 6 (volumen) puede tardar: cuenta filas de verdad.
 -- ============================================================================
 
 
+-- ══ UNA SOLA CONSULTA, SEIS BLOQUES ══════════════════════════════════════
+-- Van unidos con UNION ALL a propósito: el editor de Supabase enseña SOLO el
+-- resultado de la última sentencia, así que con seis consultas sueltas se veía
+-- un bloque y los otros cinco se perdían sin que nada avisara. Una herramienta
+-- que hay que correr seis veces se corre una.
+--
+-- Todo ordenado con lo que pide atención ARRIBA.
+WITH todo AS (
 -- ════ BLOQUE 1 · ¿EXISTEN LOS OBJETOS QUE CADA MIGRACIÓN DEJÓ? ════════════
 -- Contesta las notas viejas de «pendiente de correr». Si una tabla no está,
 -- esa migración no corrió y hay funcionalidad apagada que nadie ha notado.
@@ -66,9 +74,8 @@ SELECT '1 · objetos' AS bloque, nombre AS comprobacion,
                    WHERE table_schema='public' AND table_name='suscripciones' AND column_name='proximo_cobro'), 'v43'
     UNION ALL SELECT 'tabla negocio_sucursales (v15 · sucursales sincronizadas)',
            to_regclass('public.negocio_sucursales') IS NOT NULL, 'v15'
-  ) t ORDER BY veredicto DESC, comprobacion;
-
-
+  ) t ORDER BY veredicto DESC, comprobacion
+UNION ALL
 -- ════ BLOQUE 2 · LAS PROTECCIONES QUE DEBERÍAN SEGUIR PUESTAS ══════════════
 -- Aquí sale «SUSTITUIDA»: la función está, pero le falta lo que la protegía.
 -- Es el patrón que ya nos mordió tres veces (v63 se llevó el freno de
@@ -102,9 +109,8 @@ SELECT '2 · protecciones' AS bloque,
  ORDER BY CASE WHEN p.oid IS NULL THEN 1
                WHEN position(e.marca in pg_get_functiondef(p.oid)) > 0 THEN 3
                ELSE 0 END,
-          e.fn;
-
-
+          e.fn
+UNION ALL
 -- ════ BLOQUE 3 · QUIÉN PUEDE ESCRIBIR EN LAS TABLAS DE COBRO (R02) ═════════
 -- La v54 barrió `public` y le puso `staff_acceso FOR ALL` a toda tabla con
 -- `negocio_id`. Eso incluye las de cobro, que estaban reservadas al admin.
@@ -121,8 +127,7 @@ SELECT '3 · cobro' AS bloque,
                                    FROM pg_roles WHERE oid = ANY(p.polroles)), 'TODOS') AS evidencia
   FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
  WHERE c.relname IN ('suscripciones','pagos_suscripcion')
- ORDER BY 3 DESC, 2;
-
+UNION ALL
 -- Y los permisos de tabla: sin ellos, la política no alcanza para escribir.
 SELECT '3 · cobro' AS bloque,
        'GRANT de ' || table_name || ' a ' || grantee AS comprobacion,
@@ -133,16 +138,14 @@ SELECT '3 · cobro' AS bloque,
  WHERE table_schema = 'public'
    AND table_name IN ('suscripciones','pagos_suscripcion')
    AND grantee IN ('anon','authenticated')
- ORDER BY 3 DESC, 2;
-
-
+UNION ALL
 -- ════ BLOQUE 4 · STORAGE (R06) ═════════════════════════════════════════════
 SELECT '4 · storage' AS bloque,
        'bucket ' || id || (CASE WHEN public THEN ' es PÚBLICO' ELSE ' es privado' END) AS comprobacion,
        CASE WHEN public THEN 'REVISAR · sus URLs sirven sin sesión' ELSE 'ok' END AS veredicto,
        'creado ' || to_char(created_at,'YYYY-MM-DD') AS evidencia
-  FROM storage.buckets ORDER BY 3 DESC, 2;
-
+  FROM storage.buckets ORDER BY 3 DESC, 2
+UNION ALL
 -- La política de ESCRITURA del bucket público: la v48 la acotó y la v52 la
 -- volvió a abrir a cualquier autenticado. Si en `evidencia` solo aparece el
 -- bucket y ninguna condición de dueño, el agujero sigue.
@@ -157,9 +160,7 @@ SELECT '4 · storage' AS bloque,
        left(COALESCE(pg_get_expr(COALESCE(p.polwithcheck, p.polqual), p.polrelid), '—'), 110) AS evidencia
   FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
  WHERE c.relname = 'objects' AND c.relnamespace = 'storage'::regnamespace
- ORDER BY 3 DESC, 2;
-
-
+UNION ALL
 -- ════ BLOQUE 5 · TABLAS SIN RLS ════════════════════════════════════════════
 -- Una tabla de `public` sin RLS la lee cualquiera con la llave anónima, que va
 -- en el código de la página.
@@ -170,9 +171,7 @@ SELECT '5 · RLS' AS bloque,
          || ' política(s)' AS evidencia
   FROM pg_class c
  WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
- ORDER BY 3 DESC, 2;
-
-
+UNION ALL
 -- ════ BLOQUE 6 · VOLUMEN (R10) ═════════════════════════════════════════════
 -- Las pantallas cargan tablas enteras con un `select` y tratan la respuesta
 -- como completa. La Data API corta en un máximo (1.000 por defecto) SIN
@@ -185,8 +184,8 @@ SELECT '6 · volumen' AS bloque,
        'límite de filas de la Data API' AS comprobacion,
        'NO COMPROBABLE' AS veredicto,
        COALESCE(current_setting('pgrst.db_max_rows', true),
-                'míralo en Settings → API → Max rows (por defecto 1000)') AS evidencia;
-
+                'míralo en Settings → API → Max rows (por defecto 1000)') AS evidencia
+UNION ALL
 SELECT '6 · volumen' AS bloque,
        'tabla ' || tabla AS comprobacion,
        CASE WHEN peor >= 1000 THEN 'REVISAR · YA pasa el límite por defecto'
@@ -208,7 +207,17 @@ SELECT '6 · volumen' AS bloque,
            COALESCE((SELECT max(c) FROM (SELECT count(*) c FROM depositos GROUP BY negocio_id) x),0)
     UNION ALL SELECT 'staff', (SELECT count(*) FROM staff),
            COALESCE((SELECT max(c) FROM (SELECT count(*) c FROM staff GROUP BY negocio_id) x),0)
-  ) v ORDER BY peor DESC;
+  ) v ORDER BY peor DESC
+)
+SELECT bloque, comprobacion, veredicto, evidencia
+  FROM todo
+ ORDER BY CASE WHEN veredicto LIKE 'SUSTITUIDA%' THEN 0      -- lo más grave
+               WHEN veredicto LIKE 'AUSENTE%'    THEN 1
+               WHEN veredicto LIKE 'REVISAR%'    THEN 2
+               WHEN veredicto LIKE 'VIGILAR%'    THEN 3
+               WHEN veredicto LIKE 'NO COMPROBABLE%' THEN 4
+               ELSE 5 END,
+          bloque, comprobacion;
 
 -- ============================================================================
 -- CÓMO SE LEE EL RESULTADO
