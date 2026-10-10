@@ -137,6 +137,11 @@
     </div>
 
     <!-- Score -->
+    <!-- Cuando una consulta falla, el aviso va ARRIBA del reporte y en rojo:
+         un P&L incompleto que no lo dice es peor que no tenerlo. -->
+    <div id="rsFalla" style="display:none;background:rgba(232,90,90,.10);
+         border:1px solid rgba(232,90,90,.45);color:#e85a5a;border-radius:10px;
+         padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.6"></div>
     <div class="rs-score" id="rsScore" style="margin-bottom:14px"></div>
 
     <!-- La tabla -->
@@ -188,7 +193,7 @@ function mesStr(){ return todayStr().slice(0,7); }
    Se leen las MISMAS tablas que KPIs y con las MISMAS reglas del núcleo. Si
    esta pantalla calculara por su cuenta, un día diría una utilidad distinta a
    la de KPIs sobre el mismo mes y no habría forma de saber cuál creer. */
-var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{} };
+var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{}, falló:[] };
 
 async function cargar(){
     var negId = getNegocioActivo(); if(!negId) return;
@@ -203,20 +208,62 @@ async function cargar(){
         _supabase.from('kpi_targets').select('datos').eq('negocio_id',negId).maybeSingle(),
         _supabase.from('sf_metas').select('datos').eq('negocio_id',negId).maybeSingle()
     ]);
-    var fila = function(x){ return (x.data||[]).map(function(y){return y.datos;}).filter(Boolean); };
-    _c.cortes=fila(r[0]); _c.otros=fila(r[1]); _c.gastos=fila(r[2]); _c.deps=fila(r[3]);
-    _c.ctas=fila(r[4]); _c.fijos=fila(r[5]); _c.staff=fila(r[6]);
+    /* ══ UN ERROR NO ES UN CERO ══════════════════════════════════════════
+       `(x.data||[])` convertía una consulta FALLIDA en una lista vacía, y de
+       ahí salía un P&L con ingresos en cero y utilidad negativa — presentado
+       con la misma cara que una cifra real. Sesión vencida, red caída o un
+       permiso denegado se leían como «este mes no vendiste nada».
+
+       Un cero verdadero y un cero por no haber podido preguntar son cosas
+       distintas, y la que más daño hace es la segunda: nadie sospecha de un
+       número, se sospecha de un error. */
+    var falló = [];
+    var fila = function(x, que){
+        if (x && x.error) { falló.push(que); return []; }
+        return (x.data||[]).map(function(y){return y.datos;}).filter(Boolean);
+    };
+    _c.cortes=fila(r[0],'ventas');  _c.otros=fila(r[1],'otros ingresos');
+    _c.gastos=fila(r[2],'gastos');  _c.deps=fila(r[3],'depósitos');
+    _c.ctas=fila(r[4],'cuentas');   _c.fijos=fila(r[5],'gastos fijos');
+    _c.staff=fila(r[6],'nómina');
     _c.targets=(r[7].data&&r[7].data.datos)||null;
     /* La meta de VENTA es otra cosa que las metas de porcentaje: vive en
        sf_metas por mes y la pone el encargado desde Ventas Totales. Se lee aquí
        para poder decir «vas al 86% de tu meta» sin que haya que cambiar de
        pantalla a averiguarlo. */
     _c.metas=(r[8].data&&r[8].data.datos)||{};
+    /* Las dos de abajo (metas y objetivos) no hacen cero el P&L si fallan:
+       solo quitan la línea de comparación. Se avisan igual, pero aparte. */
+    if (r[7] && r[7].error) falló.push('objetivos');
+    if (r[8] && r[8].error) falló.push('metas de venta');
+    _c.falló = falló;
 }
+
+/* El aviso, arriba del reporte y en rojo. No se esconde el P&L: lo que se
+   pudo leer sigue sirviendo para trabajar. Lo que no se puede es dejar que
+   pase por completo. */
+function _avisoCarga(){
+    var f = (_c.falló||[]);
+    var box = document.getElementById('rsFalla');
+    if(!box) return;
+    if(!f.length){ box.style.display='none'; box.innerHTML=''; return; }
+    box.style.display='block';
+    box.innerHTML = '<b>Este reporte está incompleto.</b> No se pudo leer: ' +
+        esc(f.join(', ')) + '. Los totales de abajo NO incluyen esa información — ' +
+        'no son ceros reales. Revisa tu conexión y vuelve a cargar.' +
+        ' <button onclick="_recargar()" style="background:none;border:1px solid currentColor;' +
+        'color:inherit;border-radius:7px;padding:3px 11px;font:inherit;font-size:12px;' +
+        'cursor:pointer;margin-left:6px">Reintentar</button>';
+}
+async function _recargar(){ await cargar(); _avisoCarga(); render(); }
 
 /* Alcance por sucursal: vacío = el negocio entero. Misma regla del resto. */
 function _suc(){ return localStorage.getItem('etaax_sucursal_activa')||''; }
-function _deSuc(x){ var s=_suc(); if(!s) return true; return (x&&(x.sucursalId||''))===s || !(x&&x.sucursalId); }
+/* Alias delgado al núcleo. La regla «sin sucursalId = Matriz» vive en
+   EtaaxCore.esDeSuc y NO se copia aquí: cinco copias a mano fue lo que
+   dejó al Resumen financiero contando los registros viejos en todas las
+   sucursales a la vez. */
+function _deSuc(x){ return EtaaxCore.esDeSuc(x, _suc()); }
 
 var periodoTipo='mes';
 function _pVal(){ var e=document.getElementById('pickerInput'); return (e&&e.value)||mesStr(); }
@@ -850,6 +897,7 @@ document.addEventListener('DOMContentLoaded', async function(){
     document.getElementById('pickerEnd').value   = todayStr();
     if(typeof _ctxBarInit==='function') _ctxBarInit();
     await cargar();
+    _avisoCarga();
     render();
 });
 </script>

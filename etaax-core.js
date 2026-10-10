@@ -21,10 +21,28 @@
     function todayStr() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
     function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
     function sucActiva() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
-    // Acotar una lista a una sucursal (regla del sistema: sin sello = matriz 'suc_principal')
+    /* ══ ¿ESTE REGISTRO ES DE ESTA SUCURSAL? ══════════════════════════
+       LA REGLA DEL SISTEMA: un registro SIN sello de sucursal es de Matriz.
+       Son los de antes de que existieran las sucursales, y tienen que sumar
+       en UN solo lado.
+
+       Estaba escrita a mano en cinco pantallas —kpis, estadísticas, ventas,
+       gastos globales y resumen— y cuatro coincidían. La quinta, el Resumen
+       financiero, decía `|| !(x && x.sucursalId)`: aceptaba los registros sin
+       sello en TODAS las sucursales. Un corte viejo sumaba en Matriz Y en
+       Tulum, el P&L no cuadraba con KPIs sobre el mismo mes, y no había forma
+       de saber cuál creer.
+
+       Por eso el predicado vive aquí y las cinco lo llaman. Copiar el cuerpo
+       es lo que permitió que una se desviara. */
+    function esDeSuc(x, suc) {
+        if (!suc) return true;                                   // vista global
+        return ((x && x.sucursalId) || 'suc_principal') === suc;
+    }
+    // Acotar una lista a una sucursal, con la MISMA regla de arriba.
     function scopeSuc(lista, suc) {
         if (!suc) return lista || [];
-        return (lista || []).filter(function (x) { return ((x && x.sucursalId) || 'suc_principal') === suc; });
+        return (lista || []).filter(function (x) { return esDeSuc(x, suc); });
     }
 
     /* ── Periodos (día / semana ISO / mes / rango) ───────────── */
@@ -1630,7 +1648,7 @@
         escaleraPL: escaleraPL, CATS_FINANCIERO: CATS_FINANCIERO, costoFinanciero: costoFinanciero,
         PL_PESOS: PL_PESOS,
         planFijoPago: planFijoPago,
-        getNegocioActivo: getNegocioActivo, sucActiva: sucActiva, scopeSuc: scopeSuc,
+        getNegocioActivo: getNegocioActivo, sucActiva: sucActiva, scopeSuc: scopeSuc, esDeSuc: esDeSuc,
         getWeekStr: getWeekStr, semanaISO: semanaISO, getRange: getRange, prevRange: prevRange, inRange: inRange,
         efNeto: efNeto, taBanco: taBanco, ventasBruta: ventasBruta, flujoNeto: flujoNeto,
         propinas: propinas, cheque: cheque, resultado: resultado, resguardo: resguardo,

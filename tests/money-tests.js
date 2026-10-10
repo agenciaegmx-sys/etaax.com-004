@@ -11372,9 +11372,21 @@ console.log('\n══ BF6 · Los gastos fijos son de una sucursal ══');
         return eq(gg.slice(i, i + 1800).indexOf('_cacheGG_Fijos = loadFijos().filter(') > -1,
                   true, 'sin tirar los ajenos');
     });
+    /* Esta prueba buscaba el texto `|| 'suc_principal'` dentro de `_deSuc`, o
+       sea la regla COPIADA a mano. Al pasar las cinco pantallas a delegar en
+       `EtaaxCore.esDeSuc` el literal desapareció y la prueba falló… sin que
+       nada estuviera mal. Medía la implementación, no la regla.
+       Ahora CORRE la función, que es lo que prometía su nombre. */
     test('un fijo sin sucursal es de Matriz, como todo lo demás', () => {
-        const i = gg.indexOf('function _deSuc(x)');
-        return eq(gg.slice(i, i + 220).indexOf("|| 'suc_principal'") > -1, true, 'misma regla');
+        const E = crearContexto();
+        cargarJS(E, 'etaax-core.js');
+        cargarInline(E, 'financiero/gastos-globales.html');
+        setVar(E, '_sucursalId', 'suc_tulum');
+        eq(E._deSuc({ id:'viejo' }), false, 'un fijo sin sello NO es de Tulum');
+        setVar(E, '_sucursalId', 'suc_principal');
+        eq(E._deSuc({ id:'viejo' }), true, '…sí es de Matriz');
+        setVar(E, '_sucursalId', '');
+        return eq(E._deSuc({ id:'viejo' }), true, 'y en vista global entra');
     });
     /* En Ventas y Gastos Diarios, lo mismo: elegir cuál pagar y el recordatorio. */
     test('elegir qué gasto fijo pagar solo ofrece los de la sucursal', () => {
@@ -23955,6 +23967,177 @@ console.log('\n══ BH50 · Una negación que no niega ══');
     test('entrada_token_asegurar tampoco rota el token ya impreso', () => {
         const d = ultima('entrada_token_asegurar');
         return eq(/IF v_tok IS NULL OR v_tok = '' THEN/.test(d.txt), true, 'solo si no hay');
+    });
+}
+
+/* ═══════════ SUITE BH51 · UN CORTE VIEJO NO PUEDE SUMAR DOS VECES ═══════
+   LA REGLA DEL SISTEMA: un registro SIN sello de sucursal es de Matriz. Son
+   los de antes de que existieran las sucursales y tienen que sumar en UN solo
+   lado.
+
+   Estaba escrita A MANO en cinco pantallas, y cuatro coincidían. La quinta
+   —el Resumen financiero— decía además `|| !(x && x.sucursalId)`: aceptaba
+   los registros sin sello en TODAS las sucursales. Un corte viejo sumaba en
+   Matriz Y en Tulum; el P&L no cuadraba con KPIs sobre el mismo mes y no
+   había forma de saber cuál creer.
+
+   Lo que se arregla no es esa línea: es que haya cinco. La regla vive ahora
+   en `EtaaxCore.esDeSuc` y las cinco la llaman.
+
+   Y la segunda mitad (R13): `(x.data||[])` convertía una consulta FALLIDA en
+   una lista vacía, y de ahí salía un P&L con ingresos en cero presentado con
+   la misma cara que una cifra real. Un cero de verdad y un cero por no haber
+   podido preguntar son cosas distintas, y la segunda hace más daño: nadie
+   sospecha de un número.                                                    */
+console.log('\n══ BH51 · Un corte viejo no puede sumar dos veces ══');
+{
+    const E = crearContexto();
+    cargarJS(E, 'etaax-core.js');
+    const C = E.EtaaxCore;
+
+    /* ── La regla, en el núcleo ── */
+    test('un registro sin sucursal es de Matriz', () =>
+        eq(C.esDeSuc({ id:'viejo' }, 'suc_principal'), true, 'cae en Matriz'));
+    test('…y NO es de ninguna otra', () =>
+        eq(C.esDeSuc({ id:'viejo' }, 'suc_tulum'), false, 'no se cuela en Tulum'));
+    test('…y en vista global entra todo', () =>
+        eq(C.esDeSuc({ id:'viejo' }, ''), true, 'sin sucursal elegida'));
+    test('un registro sellado va solo a la suya', () => {
+        eq(C.esDeSuc({ sucursalId:'suc_tulum' }, 'suc_tulum'), true, 'la suya');
+        return eq(C.esDeSuc({ sucursalId:'suc_tulum' }, 'suc_principal'), false, 'y no Matriz');
+    });
+    /* El caso que de verdad importa: la SUMA de las sucursales tiene que dar
+       la vista global. Si un registro cuenta en dos, no da — y ese era el
+       síntoma que se veía en pantalla. */
+    test('la suma de las sucursales es igual a la vista global', () => {
+        const datos = [
+            { id:'legacy1' }, { id:'legacy2' },
+            { id:'a', sucursalId:'suc_principal' },
+            { id:'b', sucursalId:'suc_tulum' },
+            { id:'c', sucursalId:'suc_centro' }
+        ];
+        const global = C.scopeSuc(datos, '').length;
+        const porSuc = ['suc_principal','suc_tulum','suc_centro']
+            .reduce((t, s) => t + C.scopeSuc(datos, s).length, 0);
+        return eq(porSuc, global, 'cinco registros, cinco veces contados');
+    });
+    /* Y que `scopeSuc` y `esDeSuc` no puedan divergir: una filtra, el otro
+       decide, pero la regla tiene que ser la misma pieza. */
+    test('scopeSuc usa el mismo predicado, no su propia copia', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'etaax-core.js'), 'utf8');
+        const i = src.indexOf('function scopeSuc(');
+        const cuerpo = src.slice(i, src.indexOf('\n    }', i));
+        eq(cuerpo.indexOf('esDeSuc(x, suc)') > -1, true, 'delega');
+        return eq(cuerpo.indexOf("'suc_principal'") < 0, true, 'sin copiar la regla');
+    });
+
+    /* ── LAS CINCO PANTALLAS, CORRIENDO ──
+       No se mira el texto de cada `_deSuc`: se cargan las páginas y se les
+       pregunta. Es la diferencia entre «dice lo mismo» y «hace lo mismo». */
+    const PANTALLAS = [
+        ['financiero/resumen.html',         '_suc',        'etaax_sucursal_activa'],
+        ['financiero/kpis.html',            '_sucursalId', null],
+        ['financiero/estadisticas.html',    '_sucursalId', null],
+        ['financiero/ventas.html',          '_sucursalId', null],
+        ['financiero/gastos-globales.html', '_sucursalId', null]
+    ];
+    PANTALLAS.forEach(([pagina, variable, clave]) => {
+        const nombre = pagina.split('/')[1].replace('.html', '');
+        const conSuc = (suc) => {
+            const P = crearContexto();
+            cargarJS(P, 'etaax-core.js');
+            if (clave) P._storage[clave] = suc; else { /* se pone abajo */ }
+            cargarInline(P, pagina);
+            if (!clave) setVar(P, variable, suc);
+            return P;
+        };
+        test(nombre + ': un registro viejo NO se cuela en otra sucursal', () =>
+            eq(conSuc('suc_tulum')._deSuc({ id:'viejo' }), false, 'fuera de Tulum'));
+        test('…y sí suma en Matriz · ' + nombre, () =>
+            eq(conSuc('suc_principal')._deSuc({ id:'viejo' }), true, 'en Matriz'));
+    });
+    /* Ninguna puede volver a escribir la regla a mano: fue tenerla cinco veces
+       lo que permitió que una se desviara sin que nadie lo notara. */
+    test('ninguna de las cinco se guarda una copia de la regla', () => {
+        const copias = [];
+        PANTALLAS.forEach(([pagina]) => {
+            const src = fs.readFileSync(path.join(RAIZ, pagina), 'utf8');
+            const i = src.indexOf('function _deSuc(');
+            if (i < 0) { copias.push(pagina + ' (sin _deSuc)'); return; }
+            const cuerpo = src.slice(i, src.indexOf('}', i));
+            if (cuerpo.indexOf('EtaaxCore.esDeSuc') < 0) copias.push(pagina + ' (no delega)');
+            if (cuerpo.indexOf('suc_principal') > -1) copias.push(pagina + ' (copia la regla)');
+        });
+        return eq(copias.join(', '), '', 'páginas con la regla propia');
+    });
+
+    /* ── R13 · UN ERROR NO ES UN CERO ── */
+    /* El doble de Supabase, POR TABLA y no por orden de llegada. Mi primera
+       versión llevaba un contador: `maybeSingle()` se resuelve al CONSTRUIR la
+       cadena —no al esperarla— así que las dos últimas consultas consumían los
+       primeros índices y cada respuesta acababa en la consulta equivocada. La
+       prueba fallaba por el andamio, no por el código. */
+    const TABLAS = ['cortes','sf_otros','gastos','depositos','tarjetas_credito',
+                    'gf_fijos','staff','kpi_targets','sf_metas'];
+    const resumenCon = (porTabla) => {
+        const R = crearContexto();
+        cargarJS(R, 'etaax-core.js');
+        cargarInline(R, 'financiero/resumen.html');
+        R._storage['etaax_negocio_activo'] = 'negT';
+        R._supabase.from = function (tabla) {
+            const resp = porTabla[tabla] || { data: [], error: null };
+            const q = {
+                select(){ return this; }, eq(){ return this; },
+                maybeSingle(){ return Promise.resolve(resp); },
+                then(res){ return Promise.resolve(resp).then(res); }
+            };
+            return q;
+        };
+        return R;
+    };
+    const TODO_OK = () => { const o = {}; TABLAS.forEach(t => o[t] = { data: [], error: null }); return o; };
+    const TODO_MAL = () => {
+        const o = {}; TABLAS.forEach(t => o[t] = { data: null, error: { message: 'Failed to fetch' } }); return o;
+    };
+
+    testAsyncCola.push(['una consulta fallida NO se presenta como cero', async () => {
+        /* Falla SOLO `gastos`: la que convertiría el P&L en «no gastaste nada
+           este mes», con la utilidad inflada y cara de cifra real. */
+        const caso = TODO_OK();
+        caso.gastos = { data: null, error: { message: 'Failed to fetch' } };
+        const R = resumenCon(caso);
+        await R.cargar();
+        const falló = getVar(R, '_c').falló;
+        eq(falló.length > 0, true, 'queda registrado que falló');
+        return eq(falló.indexOf('gastos') > -1, true, 'y se sabe cuál');
+    }]);
+    testAsyncCola.push(['…y se avisa ARRIBA del reporte, no en la consola', async () => {
+        const R = resumenCon(TODO_MAL());
+        await R.cargar();
+        R._avisoCarga();
+        const html = R.document.getElementById('rsFalla').innerHTML;
+        eq(html.indexOf('incompleto') > -1, true, 'lo dice');
+        /* Y dice que los ceros de abajo no son reales: sin esa frase, el
+           aviso se lee como «hubo un problema» y los números se creen igual. */
+        return eq(html.indexOf('no son ceros reales') > -1, true, 'y por qué importa');
+    }]);
+    testAsyncCola.push(['cuando todo carga bien, no hay cartel', async () => {
+        const R = resumenCon(TODO_OK());
+        await R.cargar();
+        R._avisoCarga();
+        eq(getVar(R, '_c').falló.length, 0, 'nada falló');
+        return eq(R.document.getElementById('rsFalla').style.display, 'none', 'sin cartel');
+    }]);
+    /* Un cero LEGÍTIMO —la consulta respondió y no hay filas— tiene que
+       seguir viéndose como cero. Si el aviso saltara también ahí, en dos días
+       nadie lo leería. */
+    test('un cero de verdad sigue siendo un cero', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/resumen.html'), 'utf8');
+        const i = src.indexOf('var fila = function(x, que)');
+        const cuerpo = src.slice(i, src.indexOf('\n    };', i));
+        /* Solo `x.error` dispara el aviso; una lista vacía sin error no. */
+        eq(/if \(x && x\.error\)/.test(cuerpo), true, 'solo el error avisa');
+        return eq(cuerpo.indexOf('x.data.length') < 0, true, 'no confunde vacío con fallo');
     });
 }
 

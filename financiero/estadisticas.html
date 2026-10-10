@@ -359,7 +359,11 @@ function _sucsNeg(){
             .filter(function(s){return s&&s.id&&s.activa!==false;});
     }catch(e){ return []; }
 }
-function _deSuc(x){ if(!_sucursalId) return true; return ((x&&x.sucursalId)||'suc_principal')===_sucursalId; }
+/* Alias delgado al núcleo. La regla «sin sucursalId = Matriz» vive en
+   EtaaxCore.esDeSuc y NO se copia aquí: cinco copias a mano fue lo que
+   dejó al Resumen financiero contando los registros viejos en todas las
+   sucursales a la vez. */
+function _deSuc(x){ return EtaaxCore.esDeSuc(x, _sucursalId); }
 function _sucLabel(){
     if(!_sucursalId) return '🌐 Vista global';
     if(_sucursalId==='suc_principal'){ var m=_sucsNeg().find(function(s){return s.id==='suc_principal';}); return '🏢 '+((m&&m.nombre)||'Matriz'); }
