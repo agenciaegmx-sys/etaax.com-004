@@ -23518,19 +23518,64 @@ console.log('\n══ BH50 · Una negación que no niega ══');
         return eq(malas.join(', '), '', 'funciones con el patrón');
     });
 
-    /* ── EL PERMISO QUE FALTABA ──
+    /* ── EL PERMISO, Y LA LECCIÓN QUE COSTÓ CORRERLO ──
        La lógica arreglada sola no basta: la función seguía siendo alcanzable
-       sin sesión. En PostgreSQL una función nace con EXECUTE para PUBLIC, así
-       que no revocarlo es concederlo. */
-    test('PUBLIC ya no puede pedir el token del QR de entradas', () => {
-        const v70 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v70.sql'), 'utf8');
-        return eq(/REVOKE ALL ON FUNCTION entrada_token_asegurar\(TEXT\) FROM PUBLIC/.test(v70),
-                  true, 'el REVOKE que faltaba');
+       sin sesión. Pero el REVOKE de la v70 iba solo contra PUBLIC, y al
+       correrla en Supabase la comprobación 4 dijo FALLA: `anon` SEGUÍA
+       pudiendo.
+
+       EN SUPABASE NO BASTA CON PUBLIC. El proyecto trae privilegios por
+       defecto en el esquema `public` que le conceden EXECUTE a `anon` sobre
+       CADA función nueva. Ese permiso es PROPIO de `anon`, no heredado de
+       PUBLIC, así que sobrevive al revoke. Nuestro patrón de siempre cerraba
+       una puerta y dejaba la de al lado abierta — repetido en v66, v68 y v69.
+
+       Esto vigila que las cuatro que exigen sesión se le quiten a los DOS. */
+    const FUERA_DE_ANON = [
+        ['entrada_token_asegurar(TEXT)',          'el token del QR de entradas'],
+        ['menu_token_asegurar(TEXT, TEXT)',       'el token de la carta'],
+        ['menu_token_rotar(TEXT, TEXT)',          'rotar el token y matar los QR de las mesas'],
+        ['menu_cfg_guardar(TEXT, TEXT, JSONB)',   'reescribir los ajustes de la carta']
+    ];
+    FUERA_DE_ANON.forEach(([firma, que]) => {
+        const nom = firma.slice(0, firma.indexOf('('));
+        test('a anon se le quita ' + que, () => {
+            const v71 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v71.sql'), 'utf8');
+            const esc = firma.replace(/[().,]/g, m => '\\' + m).replace(/\s+/g, '\\s*');
+            return eq(new RegExp('REVOKE ALL ON FUNCTION\\s+' + esc + '\\s+FROM PUBLIC, anon').test(v71),
+                      true, 'a los dos, no solo a PUBLIC');
+        });
+        test('…y el que trabaja con sesión la conserva · ' + nom, () => {
+            const v71 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v71.sql'), 'utf8');
+            return eq(v71.indexOf('GRANT EXECUTE ON FUNCTION ' + firma) > -1 ||
+                      new RegExp('GRANT EXECUTE ON FUNCTION\\s+' + nom + '[^;]*TO authenticated').test(v71),
+                      true, 'no se revocó de más');
+        });
     });
-    test('…y el encargado con sesión sí, o el QR no se podría generar', () => {
-        const v70 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v70.sql'), 'utf8');
-        return eq(/GRANT EXECUTE ON FUNCTION entrada_token_asegurar\(TEXT\) TO authenticated/.test(v70),
-                  true, 'sigue concedida a quien debe');
+    /* LA REGLA PARA LO QUE VENGA. Una función que revoca a PUBLIC y NUNCA
+       nombra a `anon` se queda abierta a `anon` por los privilegios por
+       defecto del proyecto — y parece cerrada al leerla, que es lo peligroso.
+       Esto recorre toda la historia de migraciones buscando ese caso.
+
+       No se marca la que SÍ concede a anon a propósito (la carta, el NIP, el
+       QR de la barra): ahí el permiso es la función, no un descuido. */
+    test('ninguna función se queda abierta a anon por descuido', () => {
+        const estado = {};
+        fs.readdirSync(RAIZ).filter(f => /^supabase-migration-v\d+\.sql$/.test(f))
+          .sort((a, b) => parseInt(a.match(/v(\d+)/)[1], 10) - parseInt(b.match(/v(\d+)/)[1], 10))
+          .forEach(m => {
+            fs.readFileSync(path.join(RAIZ, m), 'utf8').split('\n').forEach(linea => {
+                const c = linea.replace(/--.*$/, '');
+                const g = c.match(/(REVOKE|GRANT)[\w ]* ON FUNCTION\s+(\w+)/);
+                if (!g) return;
+                const e = estado[g[2]] || (estado[g[2]] = { revPub: false, nombraAnon: false });
+                if (/PUBLIC/.test(c)) e.revPub = true;
+                if (/\banon\b/.test(c)) e.nombraAnon = true;   // revocada o concedida: es una decisión
+            });
+        });
+        const descuidadas = Object.keys(estado)
+            .filter(fn => estado[fn].revPub && !estado[fn].nombraAnon);
+        return eq(descuidadas.join(', '), '', 'revocan a PUBLIC sin decidir sobre anon');
     });
 
     /* ── LO QUE NO SE PUEDE APAGAR ──
