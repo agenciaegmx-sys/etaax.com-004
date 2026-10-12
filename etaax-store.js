@@ -180,9 +180,20 @@
        porque se ve guardado y desaparece en la recarga siguiente. Al revés
        —marca sin dato— no hace daño: la hidratación la limpia sola. */
     function _respaldoLocal(k, v) {
+        /* ¿YA HABÍA UN RESPALDO? Importa para el catch. Un `setItem` que falla
+           por cuota NO borra lo que había: deja el valor anterior intacto. Si
+           al fallar se desmarcara la clave, ese respaldo —que sigue siendo la
+           última versión durable— quedaría sin marca, y en la recarga
+           siguiente `_migrarDesdeLocal` lo tomaría por espejo viejo y lo
+           borraría. O sea: fallar al guardar 3 botellas se llevaba por delante
+           las 2 que YA estaban a salvo. */
+        var yaEstaba = !!_marcas()[k];
         if (!_marcar(k, true)) return false;
         try { _lsSet(k, v); return true; }
-        catch (e) { _marcar(k, false); return false; }
+        catch (e) {
+            if (!yaEstaba) _marcar(k, false);   // si no había nada, no dejar marca huérfana
+            return false;                       // pero el respaldo anterior se CONSERVA
+        }
     }
     function _borrarRespaldo(k) { try { _lsDel(k); } catch (e) {} _marcar(k, false); }
 

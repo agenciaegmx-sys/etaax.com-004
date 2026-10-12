@@ -125,6 +125,12 @@ function hacerLS(inicial, opts) {
             if (opts.rechazar && opts.rechazar.test(String(k))) {
                 const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e;
             }
+            /* Cuota por TAMAÑO: lo que ya está se queda, lo nuevo no entra si
+               pasa del límite. Es como se llena de verdad — y un `setItem` que
+               falla NO borra el valor anterior. */
+            if (opts.maxLen && String(v).length > opts.maxLen) {
+                const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e;
+            }
             m[k] = String(v);
         },
         removeItem(k) { delete m[k]; },
@@ -159,8 +165,8 @@ function hacerDoc() {
 // Levanta etaax-store.js en un contexto propio y devuelve sus piezas.
 function montarStore({ enIDB = {}, enLS = {}, abrirDiferido = false, sinIDB = false,
                        lsLleno = false, fallaEscritura = false,
-                       retenerEscritura = false, lsRechaza = null } = {}) {
-    const localStorage = hacerLS(enLS, { lleno: lsLleno, rechazar: lsRechaza });
+                       retenerEscritura = false, lsRechaza = null, lsMaxLen = 0 } = {}) {
+    const localStorage = hacerLS(enLS, { lleno: lsLleno, rechazar: lsRechaza, maxLen: lsMaxLen });
     /* `sinIDB` tiene que valer ANTES de levantar el script: el almacén abre la base
        al cargarse, así que anular window.indexedDB después ya no prueba nada. */
     const indexedDB    = sinIDB ? null : hacerIDB(enIDB, { abrirDiferido });
@@ -714,10 +720,11 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
     }
     {
         /* Y `set()` lo dice en el acto cuando ya se sabe que no hay base. */
-        const { store } = montarStore({ sinIDB: true, lsRechaza: /respaldo/ });
+        const { store, localStorage } = montarStore({ sinIDB: true, lsRechaza: /respaldo/ });
         await respirar();
         test('…y set() devuelve FALSE, no «true» a medias', () =>
             eq(store.set('etaax_n1_inv_local', '[]'), false));
+
     }
 
     /* ── 3f · 1 → 2 → 1: EL CONTENIDO IGUAL NO PRUEBA NADA ──
@@ -777,6 +784,72 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
         await respirar();
         test('…y 1 → 2 → 1 por esa puerta también deja el ÚLTIMO 1', () =>
             eq(dos.store.get(K), JSON.stringify({ botellas: 1 })));
+    }
+
+    /* ── 3g-bis · UNA MARCA SIN RESPALDO NO SE QUEDA ──
+       El caso es el contrario del de arriba: la marca SÍ cabe (es un JSON
+       corto) y el dato NO. Si ahí no se desmarcara, el índice quedaría
+       apuntando a un respaldo que no existe — y esa clave se trataría como si
+       lo tuviera en la siguiente carga.
+
+       Hay que montarlo con un límite por TAMAÑO: con el rechazo por nombre, el
+       índice también se rechaza y el `catch` ni se alcanza. Mi primera versión
+       de esta prueba hacía eso y pasaba con el defecto puesto. */
+    {
+        const { store, localStorage } = montarStore({ sinIDB: true, lsMaxLen: 40 });
+        await respirar();
+        const grande = JSON.stringify([{ id: 'una captura larga que no va a caber de ninguna manera' }]);
+        const r = store.set('etaax_n1_inv_local', grande);
+        await respirar();
+        test('un respaldo que no cabe devuelve FALSE', () => eq(r, false));
+        test('…y no deja una marca apuntando a un respaldo que no existe', () => {
+            const reg = durable(localStorage, 'etaax__respaldo_v1');
+            return eq(reg === null || reg.indexOf('etaax_n1_inv_local') < 0, true);
+        });
+    }
+
+    /* ── 3h · UN RESPALDO FALLIDO NO SE LLEVA AL ANTERIOR ──
+       Un `setItem` que falla por cuota NO borra lo que había: el valor viejo
+       se queda. Pero el `catch` desmarcaba la clave, y sin marca ese respaldo
+       —que sigue siendo la última versión durable— se toma por espejo viejo y
+       se borra en la recarga siguiente.
+
+       O sea: fallar al guardar 3 botellas se llevaba por delante las 2 que YA
+       estaban a salvo. */
+    {
+        const K = 'etaax_n1_inv_local';
+        const dosB = JSON.stringify({ botellas: 2 });
+        const idbViejo = { [K]: JSON.stringify({ botellas: 1 }) };
+
+        /* Límite justo: cabe el respaldo de 2, no cabe el de 3 (más largo). */
+        const uno = montarStore({ enIDB: idbViejo, fallaEscritura: true, lsMaxLen: dosB.length + 20 });
+        await respirar();
+        uno.store.set(K, dosB);
+        for (let i = 0; i < 12; i++) await respirar();     // falla en IDB → respalda 2
+        test('el respaldo de 2 quedó bien guardado y marcado', () => {
+            eq(durable(uno.localStorage, K), dosB);
+            const reg = durable(uno.localStorage, 'etaax__respaldo_v1') || '';
+            return eq(reg.indexOf(K) > -1, true);
+        });
+
+        /* Y ahora una captura MÁS GRANDE que no cabe. */
+        const tresB = JSON.stringify({ botellas: 3, nota: 'una captura bastante más larga que la anterior' });
+        const r = uno.store.set(K, tresB);
+        for (let i = 0; i < 12; i++) await respirar();
+        test('la captura que no cabe se rechaza y se avisa', () => {
+            eq(r === false || /no puede guardar/i.test(uno.documento._carteles()), true);
+            return eq(durable(uno.localStorage, K), dosB);   // el valor viejo sigue
+        });
+        test('…y el respaldo anterior CONSERVA su marca', () => {
+            const reg = durable(uno.localStorage, 'etaax__respaldo_v1') || '';
+            return eq(reg.indexOf(K) > -1, true);
+        });
+
+        /* La prueba que importa: recargar. */
+        const dos = montarStore({ enIDB: idbViejo, enLS: uno.localStorage._m, lsMaxLen: dosB.length + 20 });
+        await respirar();
+        test('al recargar se recupera el respaldo VÁLIDO, no lo viejo de IndexedDB', () =>
+            eq(dos.store.get(K), dosB));
     }
 
     /* ── 4 · Si tampoco cabe en localStorage: NO se dice «guardado» ── */
