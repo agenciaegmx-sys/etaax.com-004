@@ -161,17 +161,28 @@
     function _marcas() {
         try { return JSON.parse(_lsGet(MARCA) || '{}') || {}; } catch (e) { return {}; }
     }
+    /* Devuelve si pudo. UN RESPALDO SIN MARCA ES UN RESPALDO PERDIDO: a la
+       siguiente carga, `_migrarDesdeLocal` lo toma por espejo viejo y lo borra.
+       Antes esta función se tragaba la excepción y `_respaldoLocal` contestaba
+       «sí» igual: con la cuota justa para el dato pero no para el índice,
+       cabían las 2 botellas, no salía aviso, y al recargar volvían a ser 1. */
     function _marcar(k, si) {
         var m = _marcas();
-        if (si) m[k] = 1; else { if (!(k in m)) return; delete m[k]; }
+        if (si) m[k] = 1; else { if (!(k in m)) return true; delete m[k]; }
         try {
             if (Object.keys(m).length) _lsSet(MARCA, JSON.stringify(m));
             else _lsDel(MARCA);
-        } catch (e) {}
+            return true;
+        } catch (e) { return false; }
     }
+    /* EL ÍNDICE PRIMERO, el dato después. Si no cabe la marca, no se escribe
+       nada y se contesta que no: un respaldo a medias es peor que ninguno,
+       porque se ve guardado y desaparece en la recarga siguiente. Al revés
+       —marca sin dato— no hace daño: la hidratación la limpia sola. */
     function _respaldoLocal(k, v) {
-        try { _lsSet(k, v); _marcar(k, true); return true; }
-        catch (e) { return false; }           // cuota llena: no hay a dónde
+        if (!_marcar(k, true)) return false;
+        try { _lsSet(k, v); return true; }
+        catch (e) { _marcar(k, false); return false; }
     }
     function _borrarRespaldo(k) { try { _lsDel(k); } catch (e) {} _marcar(k, false); }
 
@@ -208,6 +219,18 @@
     }
     var _reintentos = {};            // clave → cuántas veces falló su bajada
     var MAX_REINTENTOS = 3;
+
+    /* ══ VERSIÓN POR CLAVE ════════════════════════════════════════════════
+       Comparar el CONTENIDO para saber si alguien escribió encima no basta, y
+       el caso es este: 1 → 2 → 1 con dos escrituras retenidas. Cuando confirma
+       la primera (que mandó «1»), la memoria vale «1» otra vez —por la tercera
+       edición— así que se da por suya y borra ese pendiente. Después confirma
+       la segunda y deja «2» en disco. Pantalla 1, cero pendientes, recarga 2.
+
+       Un contador no se puede confundir: cada escritura o borrado sube la
+       versión, y el pendiente solo se limpia si la versión no se movió. */
+    var version = {};
+    function _nuevaVersion(k) { version[k] = (version[k] || 0) + 1; return version[k]; }
 
     function _bajar() {
         var claves = Object.keys(pendientes);
@@ -246,13 +269,16 @@
                enseñaba 2 botellas, la cola decía cero pendientes, y al
                recargar volvían a aparecer 1. */
             var enviado = mem[k];
+            var vEnviada = version[k] || 0;        // la VERSIÓN que se manda
             var p = (enviado == null) ? _borrar(k) : _escribir(k, enviado);
             return p.then(function (ok) {
                 if (ok) {
                     /* Solo se da por resuelto si NADIE escribió encima
-                       mientras tanto. Si cambió, sigue pendiente y la bajada
-                       que programó ese `set` se encarga. */
-                    if (mem[k] !== enviado) return true;
+                       mientras tanto. Se compara la VERSIÓN, no el contenido:
+                       el contenido puede volver a ser el mismo por casualidad
+                       —1 → 2 → 1— y entonces una escritura vieja se cree la
+                       última y borra el pendiente de la nueva. */
+                    if ((version[k] || 0) !== vEnviada) return true;
                     delete pendientes[k];
                     delete _reintentos[k];
                     /* Con el valor nuevo YA en disco, el espejo viejo de
@@ -408,7 +434,11 @@
             }});
             Object.defineProperty(ls, 'setItem', { configurable: true, value: function (k, v) {
                 if (_esGrandeKey(String(k))) {
-                    mem[k] = String(v); pendientes[k] = 1; escritasEnSesion[k] = 1;
+                    /* También por aquí sube la versión: si no, una escritura
+                       hecha por el parche sería invisible para el control de
+                       carreras y una bajada vieja la daría por suya. */
+                    mem[k] = String(v); _nuevaVersion(k);
+                    pendientes[k] = 1; escritasEnSesion[k] = 1;
                     _programarBajada();
                     return;   // NO se escribe en localStorage: para eso está IndexedDB
                 }
@@ -416,7 +446,8 @@
             }});
             Object.defineProperty(ls, 'removeItem', { configurable: true, value: function (k) {
                 if (_esGrandeKey(String(k))) {
-                    mem[k] = null; pendientes[k] = 1; escritasEnSesion[k] = 1;
+                    mem[k] = null; _nuevaVersion(k);
+                    pendientes[k] = 1; escritasEnSesion[k] = 1;
                     _programarBajada();
                 }
                 return _del(k);
@@ -452,6 +483,7 @@
             if (_esGrandeKey(k)) {
                 mem[k] = String(v);
                 escritasEnSesion[k] = 1;
+                _nuevaVersion(k);
                 /* Si YA se sabe que no hay IndexedDB, el respaldo se intenta
                    AHORA y `set` puede contestar la verdad en el acto, en vez de
                    devolver `true` y descubrirlo medio segundo después. */
@@ -473,7 +505,7 @@
         },
 
         del: function (k) {
-            if (_esGrandeKey(k)) { mem[k] = null; pendientes[k] = 1; _programarBajada(); }
+            if (_esGrandeKey(k)) { mem[k] = null; _nuevaVersion(k); pendientes[k] = 1; _programarBajada(); }
             try { _lsDel(k); } catch (e) {}
         },
 

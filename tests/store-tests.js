@@ -118,6 +118,13 @@ function hacerLS(inicial, opts) {
         getItem(k) { return Object.prototype.hasOwnProperty.call(m, k) ? m[k] : null; },
         setItem(k, v) {
             if (this._lleno) { const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e; }
+            /* CUOTA PARCIAL: deja pasar el dato y rechaza el índice de
+               respaldos. Es el caso real —la cuota se acaba con el último
+               byte, no de golpe— y el que destapó que una marca fallida se
+               tragaba en silencio. */
+            if (opts.rechazar && opts.rechazar.test(String(k))) {
+                const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e;
+            }
             m[k] = String(v);
         },
         removeItem(k) { delete m[k]; },
@@ -152,8 +159,8 @@ function hacerDoc() {
 // Levanta etaax-store.js en un contexto propio y devuelve sus piezas.
 function montarStore({ enIDB = {}, enLS = {}, abrirDiferido = false, sinIDB = false,
                        lsLleno = false, fallaEscritura = false,
-                       retenerEscritura = false } = {}) {
-    const localStorage = hacerLS(enLS, { lleno: lsLleno });
+                       retenerEscritura = false, lsRechaza = null } = {}) {
+    const localStorage = hacerLS(enLS, { lleno: lsLleno, rechazar: lsRechaza });
     /* `sinIDB` tiene que valer ANTES de levantar el script: el almacén abre la base
        al cargarse, así que anular window.indexedDB después ya no prueba nada. */
     const indexedDB    = sinIDB ? null : hacerIDB(enIDB, { abrirDiferido });
@@ -686,6 +693,90 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
             const reg = durable(dos.localStorage, 'etaax__respaldo_v1');
             return eq(reg === null || reg.indexOf('etaax_n1_inv_local') < 0, true);
         });
+    }
+
+    /* ── 3e · UN RESPALDO SIN MARCA ES UN RESPALDO PERDIDO ──
+       La cuota no se acaba de golpe: se acaba con el último byte. Puede caber
+       el dato y no el índice de respaldos — y sin índice, a la recarga
+       siguiente `_migrarDesdeLocal` lo toma por espejo viejo y lo borra.
+       Antes `_marcar` se tragaba esa excepción y `_respaldoLocal` contestaba
+       «sí»: cabían las 2 botellas, no salía aviso, y al recargar eran 1. */
+    {
+        const idbViejo = { 'etaax_n1_inv_local': JSON.stringify({ botellas: 1 }) };
+        const { store, documento } = montarStore({
+            enIDB: idbViejo, fallaEscritura: true, lsRechaza: /respaldo/,
+        });
+        await respirar();
+        store.set('etaax_n1_inv_local', JSON.stringify({ botellas: 2 }));
+        for (let i = 0; i < 12; i++) await respirar();
+        test('si el índice de respaldos no cabe, NO se da por guardado', () =>
+            eq(/no puede guardar/i.test(documento._carteles()), true));
+    }
+    {
+        /* Y `set()` lo dice en el acto cuando ya se sabe que no hay base. */
+        const { store } = montarStore({ sinIDB: true, lsRechaza: /respaldo/ });
+        await respirar();
+        test('…y set() devuelve FALSE, no «true» a medias', () =>
+            eq(store.set('etaax_n1_inv_local', '[]'), false));
+    }
+
+    /* ── 3f · 1 → 2 → 1: EL CONTENIDO IGUAL NO PRUEBA NADA ──
+       Con dos escrituras retenidas y las ediciones 1 → 2 → 1, al confirmar la
+       PRIMERA la memoria vale «1» otra vez —por la tercera edición— así que
+       se daba por suya y borraba ese pendiente. Después confirmaba la segunda
+       y dejaba «2» en disco. Pantalla 1, cero pendientes, recarga 2.
+
+       Por eso la comparación es por VERSIÓN y no por contenido: un contador
+       no se puede confundir consigo mismo. */
+    {
+        const K = 'etaax_n1_inv_local';
+        const uno = montarStore({ retenerEscritura: true });
+        await respirar();
+        uno.store.set(K, JSON.stringify({ botellas: 1 }));
+        await respirar();                                  // escritura 1 EN VUELO
+        uno.store.set(K, JSON.stringify({ botellas: 2 }));
+        await respirar();                                  // escritura 2 EN VUELO
+        uno.store.set(K, JSON.stringify({ botellas: 1 })); // vuelve al MISMO contenido
+        const enVuelo = uno.indexedDB._disco.__enVuelo || [];
+        test('las dos escrituras quedaron retenidas (la carrera es reproducible)', () =>
+            eq(enVuelo.length, 2));
+        uno.indexedDB._disco.__retener = false;
+        enVuelo.forEach(f => f());                         // confirman EN ORDEN
+        await respirar(); await respirar(); await respirar();
+        const dos = montarStore({ enIDB: uno.indexedDB._disco });
+        await respirar();
+        test('1 → 2 → 1: al recargar está el ÚLTIMO 1, no el 2 de en medio', () =>
+            eq(dos.store.get(K), JSON.stringify({ botellas: 1 })));
+    }
+
+    /* ── 3g · LA MISMA CARRERA, POR LA PUERTA DE ATRÁS ──
+       Catorce lugares del sistema escriben estas claves con
+       `localStorage.setItem` directo, y el almacén parchea esa función para
+       atenderlas. Si ese camino no sube la versión, una bajada vieja da por
+       suya una edición que entró por ahí — y la prueba de 3f no lo ve, porque
+       usa `store.set`.
+
+       Es el mismo bug con otro disfraz, y el candado tiene que mirar las dos
+       puertas. */
+    {
+        const K = 'etaax_n1_inv_local';
+        const uno = montarStore({ retenerEscritura: true });
+        await respirar();
+        uno.localStorage.setItem(K, JSON.stringify({ botellas: 1 }));
+        await respirar();                                  // escritura 1 EN VUELO
+        uno.localStorage.setItem(K, JSON.stringify({ botellas: 2 }));
+        await respirar();                                  // escritura 2 EN VUELO
+        uno.localStorage.setItem(K, JSON.stringify({ botellas: 1 }));
+        const enVuelo = uno.indexedDB._disco.__enVuelo || [];
+        test('por localStorage parcheado, la carrera también es reproducible', () =>
+            eq(enVuelo.length, 2));
+        uno.indexedDB._disco.__retener = false;
+        enVuelo.forEach(f => f());
+        await respirar(); await respirar(); await respirar();
+        const dos = montarStore({ enIDB: uno.indexedDB._disco });
+        await respirar();
+        test('…y 1 → 2 → 1 por esa puerta también deja el ÚLTIMO 1', () =>
+            eq(dos.store.get(K), JSON.stringify({ botellas: 1 })));
     }
 
     /* ── 4 · Si tampoco cabe en localStorage: NO se dice «guardado» ── */
