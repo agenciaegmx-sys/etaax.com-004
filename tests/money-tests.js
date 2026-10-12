@@ -24514,6 +24514,114 @@ console.log('\n══ BH53 · El cobro y los archivos ══');
     });
 }
 
+/* ═══════════ SUITE BH54 · EL NOMBRE DE UNA CARPETA NO ES UNA LLAVE ══════
+   Dos agujeros con la misma forma: un identificador que ESCRIBE EL CLIENTE
+   decide, él solo, a qué se puede llegar.
+
+   1 · El bucket guarda, además de la carpeta de cada negocio, tres de
+   plataforma: `catalogo`, `__catalogo__` y `_guias` — el catálogo maestro y
+   los manuales que ven todos los clientes. La autorización mira la primera
+   carpeta de la ruta y pregunta si quien escribe alcanza ESE negocio. Pero el
+   id de un negocio es texto libre que manda el cliente (la misma raíz de
+   R01): registrando un negocio llamado `_guias`, uno queda dueño de los
+   manuales de todos.
+
+   LA v48 YA LO HABÍA VISTO Y MI v74 SE LO LLEVÓ, que es exactamente el patrón
+   que llevo tres bloques señalando. Y la forma de la v48 tampoco bastaba: con
+   `OR`, el dueño del negocio `_guias` pasaba por la primera rama sin
+   necesitar la segunda. Por eso ahora es un `CASE`, que es EXCLUYENTE.
+
+   2 · R05, el mismo mecanismo: `inventario_conteo_registrar` acepta el `id`
+   que mande el celular y hace `ON CONFLICT (id) DO UPDATE` sin comprobar de
+   quién es la fila, siendo `SECURITY DEFINER`.                              */
+console.log('\n══ BH54 · El nombre de una carpeta no es una llave ══');
+{
+    const v75 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v75.sql'), 'utf8');
+    const codigo = v75.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+
+    /* ── Las seis políticas de escritura ── */
+    const POLS = ['evidencias_insert', 'evidencias_update', 'evidencias_delete',
+                  'evpriv_insert', 'evpriv_update', 'evpriv_delete'];
+    POLS.forEach(p => {
+        test(p + ' separa carpeta de plataforma de carpeta de negocio', () => {
+            const i = codigo.indexOf('CREATE POLICY "' + p + '"');
+            eq(i > -1, true, 'se redefine');
+            const cuerpo = codigo.slice(i, codigo.indexOf(';', i));
+            /* CASE y no OR: con un OR, el dueño de un negocio llamado
+               `_guias` entra por la primera rama y la segunda nunca se
+               evalúa. El CASE decide ANTES cuál de las dos aplica. */
+            eq(/CASE WHEN etaax_carpeta_global/.test(cuerpo), true, 'decide por el tipo de carpeta');
+            eq(/THEN is_platform_admin\(\)/.test(cuerpo), true, 'global → solo el admin');
+            return eq(/ELSE etaax_puede_neg/.test(cuerpo), true, 'de negocio → su dueño');
+        });
+    });
+    /* La regresión con nombre propio: que nadie vuelva a simplificarlo a un
+       solo `etaax_puede_neg`, que es lo que hice yo en la v74. */
+    test('ninguna política se conforma con «¿alcanzas ese negocio?»', () => {
+        const flojas = [];
+        POLS.forEach(p => {
+            const i = codigo.indexOf('CREATE POLICY "' + p + '"');
+            const cuerpo = codigo.slice(i, codigo.indexOf(';', i));
+            if (!/etaax_carpeta_global/.test(cuerpo)) flojas.push(p);
+        });
+        return eq(flojas.join(', '), '', 'sin la puerta de la carpeta global');
+    });
+    /* Y lo que NO se puede haber cerrado de más. */
+    test('las carpetas globales se siguen LEYENDO', () => {
+        /* Los manuales y el catálogo son para todos los clientes: lo que no
+           puede ser es que cualquiera los escriba. */
+        eq(/DROP POLICY[^;]*"evidencias_read"/.test(codigo), false, 'la lectura no se toca');
+        return eq(/etaax_carpeta_global/.test(v75.slice(v75.indexOf('La LECTURA no se toca'))), true,
+                  'y se dice por qué');
+    });
+    ['evidencias_entrada_anon_insert', 'evpriv_anon_entradas',
+     'evidencias_anon_insert', 'evpriv_anon_inbox'].forEach(p => {
+        test('no se toca ' + p + ' (el QR sube sin sesión)', () =>
+            eq(new RegExp('DROP POLICY[^;]*"' + p + '"').test(codigo), false, 'intacta'));
+    });
+
+    /* ── R05 ── */
+    const fn = codigo.slice(codigo.indexOf('CREATE OR REPLACE FUNCTION inventario_conteo_registrar'),
+                            codigo.indexOf('\n$$;', codigo.indexOf('CREATE OR REPLACE FUNCTION inventario_conteo_registrar')));
+    test('un conteo no puede pisar el de otro negocio', () =>
+        eq(/ON CONFLICT \(id\) DO UPDATE[\s\S]{0,160}WHERE inventario_conteos\.negocio_id = p_neg/.test(fn),
+           true, 'el conflicto va acotado'));
+    test('…y si no pisó nada, se dice en vez de fingir que guardó', () => {
+        /* Sin esto la función devolvía el id tan campante: el celular decía
+           «guardado» y no se había guardado nada — que es la misma clase de
+           mentira que R09. */
+        eq(/GET DIAGNOSTICS v_filas = ROW_COUNT/.test(fn), true, 'mira si escribió');
+        return eq(/IF v_filas = 0 THEN[\s\S]{0,80}RAISE EXCEPTION/.test(fn), true, 'y rechaza');
+    });
+    test('…y el celular le enseña ese error a quien contó', () => {
+        const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+        const i = ent.indexOf("rpc('inventario_conteo_registrar'");
+        return eq(ent.slice(i, i + 260).indexOf('No se pudo guardar') > -1, true, 'lo dice en pantalla');
+    });
+    /* BH21: la función se reescribió entera. Lo que ya protegía va igual. */
+    test('…sin perder nada de lo que ya hacía (BH21)', () => {
+        eq(/entrada_validar_nip\(p_neg, p_token, p_niphash\)/.test(fn), true, 'sigue pidiendo NIP');
+        eq(/'contadoPor', v_nombre/.test(fn), true, 'sella quién contó');
+        eq(/'origen',\s*'qr'/.test(fn), true, 'y de dónde vino');
+        return eq(/'registrado'/.test(fn), true, 'y cuándo');
+    });
+
+    /* ── La raíz de los dos: el id lo escribe el cliente ── */
+    test('un negocio ya no puede llamarse como una carpeta de plataforma', () => {
+        eq(/ADD CONSTRAINT negocios_id_formato/.test(codigo), true, 'hay restricción');
+        ['catalogo', '__catalogo__', '_guias'].forEach(c =>
+            eq(codigo.indexOf("'" + c + "'") > -1, true, c + ' reservada'));
+        return eq(/id ~ '\^\[A-Za-z0-9_-\]\{1,64\}\$'/.test(codigo), true, 'y con formato');
+    });
+    test('…y la restricción no tumba la migración por una fila vieja', () => {
+        /* `NOT VALID` aplica a lo nuevo sin revisar lo existente. Si un
+           negocio viejo tuviera un id raro, un CHECK normal haría fallar el
+           ALTER y la migración entera no correría. */
+        eq(/NOT VALID/.test(codigo), true, 'solo para lo que venga');
+        return eq(/negocio_con_id_raro/.test(codigo), true, 'y lista las que no encajarían');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
