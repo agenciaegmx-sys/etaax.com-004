@@ -71,6 +71,17 @@ function hacerDB(disco) {
                        dato NO queda. Antes de este bloque, el almacén ya había
                        vaciado sus pendientes y nadie se enteraba. */
                     if (disco.__fallaEscritura) { setTimeout(() => tx.onerror && tx.onerror(), 0); return; }
+                    /* Y `__retener` deja la transacción EN VUELO hasta que la
+                       prueba la suelte. Es lo único que permite reproducir la
+                       carrera de verdad: editar mientras una escritura va en
+                       camino. Sin esto, el agrupado de 250 ms fusiona las dos
+                       ediciones y la carrera nunca ocurre — mi primera prueba
+                       de este caso pasaba con el bug puesto por eso. */
+                    if (disco.__retener) {
+                        disco.__enVuelo = disco.__enVuelo || [];
+                        disco.__enVuelo.push(() => { disco[k] = v; tx.oncomplete && tx.oncomplete(); });
+                        return;
+                    }
                     disco[k] = v; setTimeout(() => tx.oncomplete && tx.oncomplete(), 0);
                 },
                 delete(k) { delete disco[k]; setTimeout(() => tx.oncomplete && tx.oncomplete(), 0); },
@@ -140,12 +151,14 @@ function hacerDoc() {
 
 // Levanta etaax-store.js en un contexto propio y devuelve sus piezas.
 function montarStore({ enIDB = {}, enLS = {}, abrirDiferido = false, sinIDB = false,
-                       lsLleno = false, fallaEscritura = false } = {}) {
+                       lsLleno = false, fallaEscritura = false,
+                       retenerEscritura = false } = {}) {
     const localStorage = hacerLS(enLS, { lleno: lsLleno });
     /* `sinIDB` tiene que valer ANTES de levantar el script: el almacén abre la base
        al cargarse, así que anular window.indexedDB después ya no prueba nada. */
     const indexedDB    = sinIDB ? null : hacerIDB(enIDB, { abrirDiferido });
     if (indexedDB && fallaEscritura) indexedDB._disco.__fallaEscritura = true;
+    if (indexedDB && retenerEscritura) indexedDB._disco.__retener = true;
     const documento = hacerDoc();
     const ctx = {
         console: { log() {}, warn() {}, error() {} },
@@ -584,6 +597,95 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
         await respirar();
         test('…y con IndexedDB también, que es el camino normal', () =>
             eq(dos.store.get('etaax_n1_inv_local'), inv));
+    }
+
+    /* ── 3b · UNA EDICIÓN NUEVA NO SE PIERDE POR UNA ESCRITURA VIEJA ──
+       Una transacción tarda. Si mientras vuela alguien edita otra vez, al
+       confirmar se borraba el pendiente de la edición NUEVA: la pantalla
+       enseñaba 2 botellas, la cola decía cero pendientes, y al recargar
+       volvían a aparecer 1.
+
+       HAY QUE RETENER LA ESCRITURA PARA QUE LA CARRERA OCURRA. Mi primer
+       intento ponía las dos ediciones separadas por 20 ms y pasaba con el bug
+       puesto: el agrupado de 250 ms las fusiona en una sola bajada y nunca
+       hay nada en vuelo. Con `retenerEscritura` la transacción se queda
+       abierta hasta que la prueba la suelte, que es cuando el bug existe.
+
+       Y la comprobación va hasta la RECARGA: mirar la memoria habría dicho
+       «2» y todo en orden. */
+    {
+        const uno = montarStore({ retenerEscritura: true });
+        await respirar();
+        uno.store.set('etaax_n1_inv_local', JSON.stringify({ botellas: 1 }));
+        await respirar();                       // la bajada arranca y queda EN VUELO
+        const enVuelo = uno.indexedDB._disco.__enVuelo || [];
+        test('la escritura quedó retenida (la carrera es reproducible)', () =>
+            eq(enVuelo.length, 1));
+        /* AHORA la segunda edición, con la primera todavía en el aire. */
+        uno.store.set('etaax_n1_inv_local', JSON.stringify({ botellas: 2 }));
+        uno.indexedDB._disco.__retener = false;
+        enVuelo.forEach(f => f());              // confirma la PRIMERA (botellas: 1)
+        await respirar(); await respirar();
+        test('editar en pleno vuelo NO deja la edición nueva sin bajar', () =>
+            eq(uno.store.pendientes(), 0));
+        const dos = montarStore({ enIDB: uno.indexedDB._disco });
+        await respirar();
+        test('…y al recargar está la EDICIÓN NUEVA, no la vieja', () =>
+            eq(dos.store.get('etaax_n1_inv_local'), JSON.stringify({ botellas: 2 })));
+    }
+
+    /* ── 3c · EL RESPALDO NUEVO NO SE BORRA AL RECARGAR ──
+       El respaldo se escribe porque IndexedDB RECHAZÓ la versión nueva, así
+       que es MÁS NUEVO que lo que hay en la base. La migración lo trataba como
+       un espejo viejo y lo borraba: la captura no se perdía en la recarga del
+       fallo, sino en la siguiente. */
+    {
+        const idbViejo = { 'etaax_n1_inv_local': JSON.stringify({ botellas: 1 }) };
+        const uno = montarStore({ enIDB: idbViejo, fallaEscritura: true });
+        await respirar();
+        const nuevo = JSON.stringify({ botellas: 2 });
+        uno.store.set('etaax_n1_inv_local', nuevo);
+        for (let i = 0; i < 12; i++) await respirar();      // falla, reintenta, se rinde
+        test('tras rendirse, el respaldo tiene la versión nueva', () =>
+            eq(durable(uno.localStorage, 'etaax_n1_inv_local'), nuevo));
+
+        /* Segunda carga: IndexedDB sigue con la vieja, localStorage con la
+           nueva. Gana la nueva, y el respaldo NO se borra todavía. */
+        const dos = montarStore({ enIDB: idbViejo, enLS: uno.localStorage._m, fallaEscritura: true });
+        await respirar();
+        test('al recargar gana el respaldo, no lo viejo de IndexedDB', () =>
+            eq(dos.store.get('etaax_n1_inv_local'), nuevo));
+        test('…y el respaldo sigue ahí mientras no se confirme su bajada', () =>
+            eq(durable(dos.localStorage, 'etaax_n1_inv_local'), nuevo));
+    }
+
+    /* ── 3d · Y cuando SÍ baja, el respaldo se suelta ──
+       Lo contrario también importa: si el respaldo nunca se borrara, la cuota
+       de localStorage quedaría secuestrada para siempre, que es el problema
+       que este archivo vino a resolver. */
+    {
+        const idbViejo = { 'etaax_n1_inv_local': JSON.stringify({ botellas: 1 }) };
+        const uno = montarStore({ enIDB: idbViejo, fallaEscritura: true });
+        await respirar();
+        const nuevo = JSON.stringify({ botellas: 2 });
+        uno.store.set('etaax_n1_inv_local', nuevo);
+        for (let i = 0; i < 12; i++) await respirar();
+        /* Recarga con IndexedDB sano: ahora sí acepta la escritura. */
+        const dos = montarStore({ enIDB: idbViejo, enLS: uno.localStorage._m });
+        await respirar(); await respirar();
+        test('con IndexedDB sano, el respaldo baja y se libera la cuota', () =>
+            eq(durable(dos.localStorage, 'etaax_n1_inv_local'), null));
+        test('…y el dato quedó en IndexedDB, que es donde va', () =>
+            eq(dos.indexedDB._disco['etaax_n1_inv_local'], nuevo));
+        /* Y el registro de respaldos queda limpio. Si la marca no se soltara,
+           ese índice crecería sin fin y cada carga trataría como «respaldo»
+           claves que ya bajaron hace sesiones. Se arregla solo a la siguiente
+           carga, pero un índice que acumula basura es el tipo de cosa que
+           dentro de un año nadie entiende. */
+        test('…y el registro de respaldos no se queda con la marca vieja', () => {
+            const reg = durable(dos.localStorage, 'etaax__respaldo_v1');
+            return eq(reg === null || reg.indexOf('etaax_n1_inv_local') < 0, true);
+        });
     }
 
     /* ── 4 · Si tampoco cabe en localStorage: NO se dice «guardado» ── */

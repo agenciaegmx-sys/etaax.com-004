@@ -145,11 +145,35 @@
 
        Pasa de verdad: Safari en navegación privada, un perfil de navegador
        dañado, o la apertura de IndexedDB fallando por cuota. */
+    /* UN RESPALDO NO ES UN ESPEJO VIEJO. Esta distinción es todo el asunto.
+
+       Lo que `_migrarDesdeLocal` encuentra en localStorage suele ser una copia
+       ANTIGUA que ya está a salvo en IndexedDB, y por eso la borra para
+       liberar cuota. Pero el respaldo que escribe el arreglo de arriba es lo
+       CONTRARIO: se escribió justamente porque IndexedDB lo rechazó, así que
+       es MÁS NUEVO que lo que hay en la base.
+
+       Sin marcarlos, al recargar pasaba esto: IndexedDB conserva «1 botella»,
+       el respaldo tiene «2», la hidratación se queda con el 1 y la migración
+       borra el 2 por considerarlo espejo. La captura se perdía en la recarga
+       siguiente al fallo, no en la del fallo. */
+    var MARCA = 'etaax__respaldo_v1';     // clave chica: qué claves son respaldo
+    function _marcas() {
+        try { return JSON.parse(_lsGet(MARCA) || '{}') || {}; } catch (e) { return {}; }
+    }
+    function _marcar(k, si) {
+        var m = _marcas();
+        if (si) m[k] = 1; else { if (!(k in m)) return; delete m[k]; }
+        try {
+            if (Object.keys(m).length) _lsSet(MARCA, JSON.stringify(m));
+            else _lsDel(MARCA);
+        } catch (e) {}
+    }
     function _respaldoLocal(k, v) {
-        try { _lsSet(k, v); return true; }
+        try { _lsSet(k, v); _marcar(k, true); return true; }
         catch (e) { return false; }           // cuota llena: no hay a dónde
     }
-    function _borrarRespaldo(k) { try { _lsDel(k); } catch (e) {} }
+    function _borrarRespaldo(k) { try { _lsDel(k); } catch (e) {} _marcar(k, false); }
 
     /* El aviso. Una sola vez por carga y pegado arriba: un `console.warn` no lo
        lee quien está contando botellas, y lo que está en juego es su trabajo
@@ -216,9 +240,19 @@
            reintento. Cada clave sale de la lista SOLO cuando su escritura
            confirmó. */
         return Promise.all(claves.map(function (k) {
-            var p = (mem[k] == null) ? _borrar(k) : _escribir(k, mem[k]);
+            /* LA VERSIÓN QUE SE MANDA, GUARDADA. Una transacción tarda; si
+               mientras vuela alguien edita otra vez, al confirmar se borraba
+               el pendiente de la edición NUEVA y esa se perdía: la pantalla
+               enseñaba 2 botellas, la cola decía cero pendientes, y al
+               recargar volvían a aparecer 1. */
+            var enviado = mem[k];
+            var p = (enviado == null) ? _borrar(k) : _escribir(k, enviado);
             return p.then(function (ok) {
                 if (ok) {
+                    /* Solo se da por resuelto si NADIE escribió encima
+                       mientras tanto. Si cambió, sigue pendiente y la bajada
+                       que programó ese `set` se encarga. */
+                    if (mem[k] !== enviado) return true;
                     delete pendientes[k];
                     delete _reintentos[k];
                     /* Con el valor nuevo YA en disco, el espejo viejo de
@@ -227,7 +261,7 @@
                        anterior. Así se quedaba pegada la cola de salida en sus
                        314 pendientes, carga tras carga. Se borra solo después de
                        confirmar la escritura. */
-                    if (mem[k] != null) { desdeIDB[k] = 1; _borrarRespaldo(k); }
+                    if (enviado != null) { desdeIDB[k] = 1; _borrarRespaldo(k); }
                     return true;
                 }
                 /* Falló la transacción. Se queda pendiente y se reintenta — pero
@@ -277,8 +311,13 @@
            SIN catálogo. Con el paso intermedio siempre existe al menos una copia
            legible, y el espacio se libera igual en la siguiente carga. */
         var bytes = 0, liberadas = 0, copiadas = 0;
+        var marcadas = _marcas();
         return Promise.all(candidatas.map(function (k) {
             var v = _lsGet(k);
+            /* UN RESPALDO MARCADO NO SE LIBERA. No es un espejo viejo que ya
+               esté a salvo: es lo único que tiene la versión nueva, y se
+               borrará solo cuando su bajada a IndexedDB confirme. */
+            if (marcadas[k]) return Promise.resolve();
             if (desdeIDB[k]) {
                 // Ya estaba a salvo en IndexedDB desde antes de esta carga.
                 bytes += v.length;
@@ -307,12 +346,29 @@
             return;
         }
         return _leerTodo(d).then(function (todo) {
+            var marcadas = _marcas();
             Object.keys(todo).forEach(function (k) {
                 desdeIDB[k] = 1;                     // sí estaba en disco (para la migración)
                 if (escritasEnSesion[k]) return;     // pero la app ya la reescribió: no la pises
                 mem[k] = todo[k];
             });
+            /* Los respaldos entran AHORA, ENCIMA de lo que acaba de poner
+               IndexedDB: se escribieron precisamente porque la base rechazó la
+               versión nueva, así que son lo más reciente que hay. Y vuelven a
+               quedar pendientes para reintentar su bajada; el respaldo no se
+               borra hasta que esa bajada confirme.
+               (Este bucle va DESPUÉS a propósito. Poner además una guarda en
+               el de arriba era código muerto: la batería lo borraba y nada se
+               quejaba, porque este pisa igual.) */
+            Object.keys(marcadas).forEach(function (k) {
+                if (escritasEnSesion[k]) return;
+                var v = _lsGet(k);
+                if (v == null) { _marcar(k, false); return; }   // ya no está: la marca sobra
+                mem[k] = v;
+                pendientes[k] = 1;
+            });
             hidratado = true;
+            if (Object.keys(pendientes).length) _programarBajada();
             return _migrarDesdeLocal();
         });
     }).catch(function (e) {
