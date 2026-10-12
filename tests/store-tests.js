@@ -187,6 +187,17 @@ function montarDb(opciones) {
 
 /* Deja correr timers y microtareas. El default pasa de los 250 ms del debounce de
    bajada a IndexedDB: por debajo de eso no se ha escrito nada al disco todavía. */
+/* ══ LEER EL DISCO, NO EL ESPEJO ══════════════════════════════════════════
+   `etaax-store.js` PARCHEA `localStorage.getItem` para servir las claves
+   grandes desde su memoria —ese parche existe para que las páginas viejas que
+   leen por localStorage sigan funcionando—. O sea que preguntarle a `getItem`
+   si algo se guardó devuelve «sí» aunque no haya tocado el disco.
+
+   Mis primeras pruebas de R09 hacían exactamente eso y pasaban con el bug
+   puesto: cuatro mutaciones se escaparon por esto. `durable()` va al objeto
+   crudo del localStorage de mentira, que es lo único que sobrevive a recargar. */
+const durable = (ls, k) => Object.prototype.hasOwnProperty.call(ls._m, k) ? ls._m[k] : null;
+
 const respirar = (ms = 400) => new Promise(res => setTimeout(res, ms));
 const parpadeo = () => new Promise(res => setTimeout(res, 20)); // menos que el debounce
 
@@ -472,7 +483,7 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
         await respirar();
         test('sin IndexedDB, set() dice que SÍ guardó', () => eq(r, true));
         test('…y de verdad quedó algo durable, no solo en memoria', () =>
-            eq(localStorage.getItem('etaax_n1_inv_local'), inv));
+            eq(durable(localStorage, 'etaax_n1_inv_local'), inv));
         test('…y se sigue leyendo igual desde la app', () =>
             eq(store.get('etaax_n1_inv_local'), inv));
     }
@@ -486,7 +497,35 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
         store.set('etaax_n1_inv_local', inv);      // ANTES de respirar
         await respirar();
         test('lo escrito antes de saber que no hay IndexedDB también aterriza', () =>
-            eq(localStorage.getItem('etaax_n1_inv_local'), inv));
+            eq(durable(localStorage, 'etaax_n1_inv_local'), inv));
+    }
+
+    /* ── 1c · Y se vuelve durable YA, no en el próximo cuarto de segundo ──
+       Lo escrito antes de hidratar baja por el temporizador de 250 ms. Al
+       saberse que no hay IndexedDB se fuerza la bajada en el acto: la ventana
+       en la que un cierre de pestaña se lleva la captura pasa de 250 ms a
+       casi cero. Sin esta prueba, esa línea parecía código muerto —el
+       temporizador acaba haciéndolo igual— y la batería la borraba sin que
+       nada se quejara. */
+    {
+        const { store, localStorage } = montarStore({ sinIDB: true });
+        const inv = JSON.stringify([{ id: 'ya' }]);
+        store.set('etaax_n1_inv_local', inv);
+        await parpadeo();                         // 20 ms: MENOS que el debounce
+        test('al saberse que no hay IndexedDB, baja en el acto', () =>
+            eq(durable(localStorage, 'etaax_n1_inv_local'), inv));
+    }
+
+    /* ── 1d · Y si en ese momento tampoco cabe, se avisa igual ──
+       Este es el camino que NO pasa por `set()`: la clave quedó pendiente
+       antes de hidratar, y el fallo se descubre después. Sin esta prueba, el
+       aviso de esa rama se podía borrar sin que nada se quejara. */
+    {
+        const { store, documento } = montarStore({ sinIDB: true, lsLleno: true });
+        store.set('etaax_n1_inv_local', JSON.stringify([{ id: 'tarde' }]));
+        await respirar();
+        test('lo pendiente que tampoco cabe también avisa en pantalla', () =>
+            eq(/no puede guardar/i.test(documento._carteles()), true));
     }
 
     /* ── 2 · Transacción fallida: conserva los pendientes y reintenta ── */
@@ -516,7 +555,7 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
         /* Y al rendirse NO tira el dato: lo manda al respaldo. Un bucle callado
            es otra forma de mentir, pero perder la captura es peor. */
         test('…y antes de rendirse lo manda al respaldo', () =>
-            eq(localStorage.getItem('etaax_n1_inv_local'), inv));
+            eq(durable(localStorage, 'etaax_n1_inv_local'), inv));
     }
 
     /* ── 3 · Después de recargar: se recupera EXACTAMENTE lo guardado ── */
@@ -527,6 +566,8 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
         uno.store.set('etaax_n1_inv_local', inv);
         await respirar();
         /* Segunda carga: el mismo localStorage, almacén nuevo. */
+        /* La segunda carga parte del disco crudo: es lo que de verdad hay
+           cuando se cierra la pestaña y se vuelve a abrir. */
         const dos = montarStore({ sinIDB: true, enLS: uno.localStorage._m });
         await respirar();
         test('al recargar sin IndexedDB, la captura sigue ahí', () =>

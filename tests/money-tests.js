@@ -24613,6 +24613,28 @@ console.log('\n══ BH54 · El nombre de una carpeta no es una llave ══');
         eq(/GET DIAGNOSTICS v_filas = ROW_COUNT/.test(fn), true, 'mira si escribió');
         return eq(/IF v_filas = 0 THEN[\s\S]{0,80}RAISE EXCEPTION/.test(fn), true, 'y rechaza');
     });
+    /* EL MENSAJE NO PUEDE DELATAR. «ese conteo es de otro negocio» rechaza
+       bien pero confirma que ese id existe en otro lado — un oráculo chico y
+       gratis. La v76 lo deja neutro: rechaza igual sin decir por qué. Para
+       quien cuenta de verdad no cambia nada, porque su conteo nunca llega
+       aquí. */
+    test('el rechazo no delata de quién es la fila', () => {
+        const v76 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v76.sql'), 'utf8');
+        const i = v76.indexOf('CREATE OR REPLACE FUNCTION inventario_conteo_registrar');
+        /* SIN COMENTARIOS. El comentario que explica por qué el mensaje viejo
+           delataba CITA ese mensaje, y un regex a secas se caza a sí mismo.
+           Van once veces en este archivo. */
+        const cuerpo = v76.slice(i, v76.indexOf('\n$$;', i))
+                          .split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+        eq(/RAISE EXCEPTION 'No se pudo registrar el conteo'/.test(cuerpo), true, 'mensaje neutro');
+        eq(/de otro negocio/.test(cuerpo), false, 'sin confirmar nada');
+        /* Y que siga RECHAZANDO: cambiar solo el texto dejaría el agujero. */
+        return eq(/WHERE inventario_conteos\.negocio_id = p_neg/.test(cuerpo), true, 'sigue acotado');
+    });
+    test('…y la restricción del id queda validada, no solo vigilando lo nuevo', () => {
+        const v76 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v76.sql'), 'utf8');
+        return eq(/VALIDATE CONSTRAINT negocios_id_formato/.test(v76), true, 'certifica lo viejo');
+    });
     test('…y el celular le enseña ese error a quien contó', () => {
         const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
         const i = ent.indexOf("rpc('inventario_conteo_registrar'");
