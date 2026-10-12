@@ -172,13 +172,22 @@ ALTER TABLE negocios ADD CONSTRAINT negocios_id_formato
 -- ── Comprobación ────────────────────────────────────────────────────────────
 -- Los siete renglones deben decir PASA.
 SELECT * FROM (
+    -- OJO CON CÓMO SE COMPRUEBA ESTO. PostgreSQL no guarda el texto que uno
+    -- escribe: reescribe la expresión a su forma interna, y el `CASE` vuelve
+    -- partido en varias líneas. Buscar la frase literal «CASE WHEN
+    -- etaax_carpeta_global» daba FALLA con las políticas bien puestas — era la
+    -- comprobación la que estaba mal, no el servidor.
+    -- Se miran las TRES piezas por separado: que decida con un CASE (y no con
+    -- un OR, que es lo que dejaba pasar al dueño del negocio «_guias»), que
+    -- pregunte por la carpeta global, y que exija administrador.
     SELECT 1 AS n, 'Las carpetas de plataforma solo las escribe el admin' AS prueba,
            CASE WHEN (SELECT count(*) FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid
                        WHERE c.relname='objects' AND c.relnamespace='storage'::regnamespace
                          AND p.polname IN ('evidencias_insert','evidencias_update','evidencias_delete',
                                            'evpriv_insert','evpriv_update','evpriv_delete')
-                         AND pg_get_expr(COALESCE(p.polwithcheck,p.polqual), p.polrelid)
-                             LIKE '%CASE WHEN etaax_carpeta_global%') = 6
+                         AND pg_get_expr(COALESCE(p.polwithcheck,p.polqual), p.polrelid) LIKE '%CASE%'
+                         AND pg_get_expr(COALESCE(p.polwithcheck,p.polqual), p.polrelid) LIKE '%etaax_carpeta_global%'
+                         AND pg_get_expr(COALESCE(p.polwithcheck,p.polqual), p.polrelid) LIKE '%is_platform_admin%') = 6
                 THEN 'PASA' ELSE 'FALLA' END AS resultado
     UNION ALL SELECT 2, 'Y se siguen pudiendo LEER (los manuales son de todos)',
            CASE WHEN EXISTS (SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid
@@ -222,6 +231,19 @@ SELECT id AS negocio_con_id_raro, datos->>'nombre' AS nombre
   FROM negocios
  WHERE id !~ '^[A-Za-z0-9_-]{1,64}$'
     OR id IN ('catalogo','__catalogo__','_guias');
+
+-- Y para VERLO con los propios ojos: así quedó guardada cada política. Si el
+-- renglón 1 vuelve a decir FALLA, aquí se ve cuál de las seis no tiene el
+-- CASE, en vez de adivinar.
+SELECT p.polname AS politica,
+       CASE p.polcmd WHEN '*' THEN 'ALL' WHEN 'r' THEN 'SELECT' WHEN 'a' THEN 'INSERT'
+                     WHEN 'w' THEN 'UPDATE' WHEN 'd' THEN 'DELETE' END AS operacion,
+       pg_get_expr(COALESCE(p.polwithcheck, p.polqual), p.polrelid) AS como_quedo_guardada
+  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
+ WHERE c.relname = 'objects' AND c.relnamespace = 'storage'::regnamespace
+   AND p.polname IN ('evidencias_insert','evidencias_update','evidencias_delete',
+                     'evpriv_insert','evpriv_update','evpriv_delete')
+ ORDER BY p.polname;
 
 -- ============================================================================
 -- Fin v75. Después, pasar otra vez `docs/inventario-produccion.sql`.

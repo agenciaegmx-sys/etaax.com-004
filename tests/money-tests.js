@@ -24555,6 +24555,26 @@ console.log('\n══ BH54 · El nombre de una carpeta no es una llave ══');
             return eq(/ELSE etaax_puede_neg/.test(cuerpo), true, 'de negocio → su dueño');
         });
     });
+    /* ── Y QUE LA COMPROBACIÓN NO MIDA EL TEXTO QUE YO ESCRIBÍ ──
+       La primera corrida de la v75 dio FALLA en este renglón con las
+       políticas BIEN puestas: PostgreSQL no guarda el texto que uno teclea,
+       reescribe la expresión a su forma interna y parte el `CASE` en varias
+       líneas. Mi `LIKE '%CASE WHEN etaax_carpeta_global%'` exigía esa frase
+       pegada. Es la misma lección de siempre, ahora del lado del servidor:
+       medir lo que hay, no lo que escribí. */
+    test('la comprobación no depende de cómo PostgreSQL formatee la expresión', () => {
+        const i = v75.indexOf("SELECT 1 AS n, 'Las carpetas de plataforma");
+        const bloque = v75.slice(i, v75.indexOf('UNION ALL', i));
+        eq(/LIKE '%CASE WHEN etaax_carpeta_global%'/.test(bloque), false, 'sin la frase pegada');
+        /* Las tres piezas por separado: CASE (no OR), la carpeta global, y el
+           admin. Pedir solo dos dejaría pasar la forma que ya falló. */
+        eq(/LIKE '%CASE%'/.test(bloque), true, 'decide con CASE');
+        eq(/LIKE '%etaax_carpeta_global%'/.test(bloque), true, 'mira la carpeta');
+        return eq(/LIKE '%is_platform_admin%'/.test(bloque), true, 'y exige admin');
+    });
+    test('…y si falla, la migración enseña cómo quedó guardada cada política', () =>
+        eq(/como_quedo_guardada/.test(v75), true, 'diagnóstico, no adivinanza'));
+
     /* La regresión con nombre propio: que nadie vuelva a simplificarlo a un
        solo `etaax_puede_neg`, que es lo que hice yo en la v74. */
     test('ninguna política se conforma con «¿alcanzas ese negocio?»', () => {
