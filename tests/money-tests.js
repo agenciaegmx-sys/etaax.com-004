@@ -9770,7 +9770,13 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
        seguir — la carta se ve igual de noche en la mesa 4 para todos. */
     const PUBLICAS = ['index.html', 'evaluacion.html', 'carta.html',
                       'app-movil/index.html', 'app-movil/instalar.html'];
+    /* Y las de `docs/` no son pantallas de la app: son herramientas de
+       diagnóstico que se abren a mano en local —`docs/*` devuelve 404 en
+       producción— y que a propósito cargan lo MÍNIMO. La de almacén existe
+       justamente para probar `etaax-store.js` aislado; meterle el tema sería
+       añadirle una variable que no tiene nada que ver con lo que mide. */
     const sinTema = paginas.filter(function (p) {
+        if (p.indexOf('docs/') === 0) return false;
         if (PUBLICAS.indexOf(p) > -1) return false;
         const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
         if (s.split('\n').length < 25 && /location\.(replace|href)|http-equiv="refresh"/.test(s)) return false;
