@@ -9775,9 +9775,17 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
        producción— y que a propósito cargan lo MÍNIMO. La de almacén existe
        justamente para probar `etaax-store.js` aislado; meterle el tema sería
        añadirle una variable que no tiene nada que ver con lo que mide. */
-    const sinTema = paginas.filter(function (p) {
+    /* UNA SOLA COPIA de qué páginas entran a la revisión. Tenerla dos veces
+       —una aquí y otra en la prueba que comprueba que la lista no se vacíe—
+       hacía que mutar esta no afectara a aquella: la mutación que ampliaba la
+       exclusión a TODO pasaba limpia. Van tres veces en este proyecto. */
+    const esPantallaDeApp = function (p) {
         if (p.indexOf('docs/') === 0) return false;
         if (PUBLICAS.indexOf(p) > -1) return false;
+        return true;
+    };
+    const sinTema = paginas.filter(function (p) {
+        if (!esPantallaDeApp(p)) return false;
         const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
         if (s.split('\n').length < 25 && /location\.(replace|href)|http-equiv="refresh"/.test(s)) return false;
         return s.indexOf('/theme.js') === -1;
@@ -9789,6 +9797,17 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
         const am = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
         return eq(am.indexOf("'etaax_appmovil_tema'") > -1 && am.indexOf('etaax_theme') === -1,
                   true, 'su propia clave');
+    });
+    /* Y QUE LA LISTA NO SE VACÍE. Una exclusión que se come todas las páginas
+       deja `sinTema` vacío y esta prueba verde sin haber mirado nada. La
+       mutación que ampliaba el filtro de `docs/` a todo pasaba limpia por eso:
+       el candado se felicitaba con cero páginas revisadas. */
+    test('la revisión del tema mira de verdad las pantallas de la app', () => {
+        const revisadas = paginas.filter(esPantallaDeApp);
+        eq(revisadas.length > 20, true, 'se revisan ' + revisadas.length + ' páginas');
+        /* Y que las de siempre estén entre ellas, no solo que haya muchas. */
+        return eq(revisadas.indexOf('hub.html') > -1 &&
+                  revisadas.indexOf('recetas/index.html') > -1, true, 'las principales');
     });
     test('todas las pantallas de la app cargan el tema compartido', () =>
         eq(sinTema.join(', '), '', 'sin rezagadas'));
