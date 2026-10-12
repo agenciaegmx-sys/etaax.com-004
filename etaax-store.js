@@ -135,6 +135,46 @@
         });
     }
 
+    /* ══ CUANDO NO HAY DÓNDE GUARDAR, SE DICE ════════════════════════════
+       El comentario de abajo decía «la app sigue leyendo de memoria y de
+       localStorage». Lo primero era cierto; lo segundo NO: para una clave
+       GRANDE nunca se escribía nada en localStorage. Sin IndexedDB, `set`
+       actualizaba la memoria, devolvía `true` y los pendientes se tiraban. Un
+       inventario capturado se perdía al recargar, sin un solo aviso — y esa
+       frase es justo la que hacía que pareciera seguro.
+
+       Pasa de verdad: Safari en navegación privada, un perfil de navegador
+       dañado, o la apertura de IndexedDB fallando por cuota. */
+    function _respaldoLocal(k, v) {
+        try { _lsSet(k, v); return true; }
+        catch (e) { return false; }           // cuota llena: no hay a dónde
+    }
+    function _borrarRespaldo(k) { try { _lsDel(k); } catch (e) {} }
+
+    /* El aviso. Una sola vez por carga y pegado arriba: un `console.warn` no lo
+       lee quien está contando botellas, y lo que está en juego es su trabajo
+       de la última media hora. Sin dependencias a propósito — este archivo
+       carga antes que cualquier otro del sistema. */
+    var _avisado = false;
+    function _avisarNoGuarda(detalle) {
+        try { console.error('[etaax-store] NO SE PUDO GUARDAR:', detalle); } catch (e) {}
+        if (_avisado || typeof document === 'undefined' || !document.body) return;
+        _avisado = true;
+        var d = document.createElement('div');
+        d.setAttribute('data-etaax-store-fallo', '1');
+        d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:2147483647;' +
+            'background:#b3261e;color:#fff;font:600 13px/1.5 system-ui,sans-serif;' +
+            'padding:11px 46px 11px 16px;box-shadow:0 2px 14px rgba(0,0,0,.4)';
+        d.innerHTML = '⚠️ <b>Este dispositivo no puede guardar.</b> Lo que captures se ' +
+            'pierde al recargar o cerrar la pestaña. Termina en otro equipo, o copia lo ' +
+            'capturado antes de salir.' +
+            '<button style="position:absolute;right:8px;top:7px;background:transparent;' +
+            'border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:6px;' +
+            'padding:3px 9px;font:inherit;cursor:pointer">Entendido</button>';
+        d.querySelector('button').onclick = function () { d.remove(); };
+        document.body.appendChild(d);
+    }
+
     /* Bajada a IndexedDB agrupada. Escribir en cada tecla sería una transacción
        por pulsación; se juntan las claves tocadas y se bajan de golpe. */
     var _bajaTimer = null;
@@ -142,33 +182,67 @@
         clearTimeout(_bajaTimer);
         _bajaTimer = setTimeout(_bajar, 250);
     }
+    var _reintentos = {};            // clave → cuántas veces falló su bajada
+    var MAX_REINTENTOS = 3;
+
     function _bajar() {
         var claves = Object.keys(pendientes);
         if (!claves.length) return Promise.resolve();
+
         if (!db) {
-            /* Sin base todavía: puede ser que IndexedDB NO EXISTA en este navegador,
-               o que simplemente aún no termine de abrir. Antes se trataban igual y se
-               tiraban las claves pendientes — lo escrito en el primer cuarto de
-               segundo de la página no llegaba nunca al disco y volvía a aparecer el
-               estado viejo en la siguiente carga. Si solo es que aún no abre, se
-               vuelve a intentar; si de plano no hay IndexedDB, ahí sí no hay a dónde
-               bajarlas (la app sigue leyendo de memoria y de localStorage). */
+            /* Sin base TODAVÍA puede significar dos cosas muy distintas, y
+               tratarlas igual fue el bug: que aún no termine de abrir, o que no
+               haya IndexedDB en este navegador. */
             if (!hidratado) { _programarBajada(); return Promise.resolve(); }
-            pendientes = {};
+            /* No hay IndexedDB y no la va a haber. Antes aquí se tiraban los
+               pendientes y se acabó. Ahora se usa localStorage DE VERDAD, que es
+               lo que el comentario viejo decía que pasaba. Cabe menos —5 MB
+               compartidos— pero un inventario cabe, y perderlo no es opción. */
+            var fallidas = [];
+            claves.forEach(function (k) {
+                var ok = (mem[k] == null) ? (_borrarRespaldo(k), true)
+                                          : _respaldoLocal(k, mem[k]);
+                if (ok) delete pendientes[k]; else fallidas.push(k);
+            });
+            /* Y si tampoco cabe ahí, se dice. Callarlo es lo que convertía una
+               captura perdida en un misterio. */
+            if (fallidas.length) _avisarNoGuarda('sin IndexedDB y localStorage lleno: ' + fallidas.join(', '));
             return Promise.resolve();
         }
-        pendientes = {};
+
+        /* LOS PENDIENTES NO SE LIMPIAN ANTES DE ESCRIBIR. Así estaba: se vaciaba
+           el objeto y después se intentaba la transacción, así que una
+           transacción fallida se perdía sin dejar rastro ni posibilidad de
+           reintento. Cada clave sale de la lista SOLO cuando su escritura
+           confirmó. */
         return Promise.all(claves.map(function (k) {
-            if (mem[k] == null) return _borrar(k);
-            return _escribir(k, mem[k]).then(function (ok) {
-                /* Con el valor nuevo YA en disco, el espejo viejo de localStorage
-                   solo puede hacer daño: `get` vuelve a él mientras la memoria no
-                   hidrata y resucita el estado anterior. Así se quedaba pegada la
-                   cola de salida en sus 314 pendientes, carga tras carga.
-                   Se borra solo después de confirmar la escritura — antes sería
-                   quedarse sin ninguna copia legible. */
-                if (ok) { desdeIDB[k] = 1; try { _lsDel(k); } catch (e) {} }
-                return ok;
+            var p = (mem[k] == null) ? _borrar(k) : _escribir(k, mem[k]);
+            return p.then(function (ok) {
+                if (ok) {
+                    delete pendientes[k];
+                    delete _reintentos[k];
+                    /* Con el valor nuevo YA en disco, el espejo viejo de
+                       localStorage solo puede hacer daño: `get` vuelve a él
+                       mientras la memoria no hidrata y resucita el estado
+                       anterior. Así se quedaba pegada la cola de salida en sus
+                       314 pendientes, carga tras carga. Se borra solo después de
+                       confirmar la escritura. */
+                    if (mem[k] != null) { desdeIDB[k] = 1; _borrarRespaldo(k); }
+                    return true;
+                }
+                /* Falló la transacción. Se queda pendiente y se reintenta — pero
+                   no para siempre: tres intentos y se avisa, porque un bucle
+                   callado es otra forma de mentir. */
+                _reintentos[k] = (_reintentos[k] || 0) + 1;
+                if (_reintentos[k] >= MAX_REINTENTOS) {
+                    delete pendientes[k];
+                    /* Último cartucho antes de rendirse: el respaldo de siempre. */
+                    if (mem[k] != null && _respaldoLocal(k, mem[k])) return false;
+                    _avisarNoGuarda('IndexedDB rechazó ' + k + ' ' + MAX_REINTENTOS + ' veces');
+                } else {
+                    _programarBajada();
+                }
+                return false;
             });
         }));
     }
@@ -225,6 +299,11 @@
         if (!d) {
             hidratado = true;
             console.warn('[etaax-store] sin IndexedDB: se sigue usando localStorage (tope ~5 MB)');
+            /* Lo que la app alcanzó a escribir ANTES de saber que no había
+               IndexedDB está en memoria y en `pendientes`. Hay que bajarlo al
+               respaldo ya: si no, se pierde igual que antes, solo que más
+               tarde. */
+            _bajar();
             return;
         }
         return _leerTodo(d).then(function (todo) {
@@ -316,8 +395,17 @@
         set: function (k, v) {
             if (_esGrandeKey(k)) {
                 mem[k] = String(v);
-                pendientes[k] = 1;
                 escritasEnSesion[k] = 1;
+                /* Si YA se sabe que no hay IndexedDB, el respaldo se intenta
+                   AHORA y `set` puede contestar la verdad en el acto, en vez de
+                   devolver `true` y descubrirlo medio segundo después. */
+                if (hidratado && !db) {
+                    if (_respaldoLocal(k, mem[k])) { delete pendientes[k]; return true; }
+                    pendientes[k] = 1;
+                    _avisarNoGuarda('no cupo en localStorage: ' + k);
+                    return false;                  // NO se dice «guardado»
+                }
+                pendientes[k] = 1;
                 _programarBajada();
                 return true;                       // ya está disponible para leer
             }

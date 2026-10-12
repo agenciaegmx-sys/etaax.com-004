@@ -65,7 +65,14 @@ function hacerDB(disco) {
         transaction(_tienda, _modo) {
             const tx = { oncomplete: null, onerror: null, onabort: null };
             tx.objectStore = () => ({
-                put(v, k) { disco[k] = v; setTimeout(() => tx.oncomplete && tx.oncomplete(), 0); },
+                put(v, k) {
+                    /* `fallaEscritura` simula lo que pasa de verdad: la
+                       transacción se aborta (disco lleno, base corrupta) y el
+                       dato NO queda. Antes de este bloque, el almacén ya había
+                       vaciado sus pendientes y nadie se enteraba. */
+                    if (disco.__fallaEscritura) { setTimeout(() => tx.onerror && tx.onerror(), 0); return; }
+                    disco[k] = v; setTimeout(() => tx.oncomplete && tx.oncomplete(), 0);
+                },
                 delete(k) { delete disco[k]; setTimeout(() => tx.oncomplete && tx.oncomplete(), 0); },
                 openCursor() {
                     const req = { onsuccess: null, onerror: null };
@@ -87,36 +94,71 @@ function hacerDB(disco) {
 }
 
 // localStorage de mentira (síncrono, como el de verdad).
-function hacerLS(inicial) {
+// `lleno` lo hace lanzar al escribir, que es lo que de verdad hace el navegador
+// cuando se acaba la cuota: no devuelve false, LANZA.
+function hacerLS(inicial, opts) {
+    opts = opts || {};
     const m = Object.assign({}, inicial);
     return {
         _m: m,
+        _lleno: !!opts.lleno,
         get length() { return Object.keys(m).length; },
         key(i) { return Object.keys(m)[i]; },
         getItem(k) { return Object.prototype.hasOwnProperty.call(m, k) ? m[k] : null; },
-        setItem(k, v) { m[k] = String(v); },
+        setItem(k, v) {
+            if (this._lleno) { const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e; }
+            m[k] = String(v);
+        },
         removeItem(k) { delete m[k]; },
     };
 }
 
+/* Un `document` con lo justo para que el almacén pueda pegar su cartel, y para
+   que la prueba pueda LEERLO. Codex lo pidió explícitamente: la prueba tiene
+   que llegar hasta el mensaje que ve quien está capturando, no quedarse en lo
+   que devuelve `set()`. */
+function hacerDoc() {
+    const hijos = [];
+    const nuevo = () => ({
+        style: {}, _html: '', _hijos: [],
+        set innerHTML(v) { this._html = String(v); },
+        get innerHTML() { return this._html; },
+        setAttribute(k, v) { this['attr_' + k] = v; },
+        querySelector() { return { onclick: null }; },
+        remove() {},
+        appendChild(x) { this._hijos.push(x); },
+    });
+    const body = nuevo();
+    return {
+        visibilityState: 'visible',
+        body,
+        createElement: nuevo,
+        addEventListener() {},
+        _carteles: () => body._hijos.map(h => h._html).join(' | '),
+    };
+}
+
 // Levanta etaax-store.js en un contexto propio y devuelve sus piezas.
-function montarStore({ enIDB = {}, enLS = {}, abrirDiferido = false, sinIDB = false } = {}) {
-    const localStorage = hacerLS(enLS);
+function montarStore({ enIDB = {}, enLS = {}, abrirDiferido = false, sinIDB = false,
+                       lsLleno = false, fallaEscritura = false } = {}) {
+    const localStorage = hacerLS(enLS, { lleno: lsLleno });
     /* `sinIDB` tiene que valer ANTES de levantar el script: el almacén abre la base
        al cargarse, así que anular window.indexedDB después ya no prueba nada. */
     const indexedDB    = sinIDB ? null : hacerIDB(enIDB, { abrirDiferido });
+    if (indexedDB && fallaEscritura) indexedDB._disco.__fallaEscritura = true;
+    const documento = hacerDoc();
     const ctx = {
         console: { log() {}, warn() {}, error() {} },
         setTimeout, clearTimeout, Promise, JSON, Object, String, Date, Math,
         localStorage, indexedDB,
-        document: { visibilityState: 'visible' },
+        document: documento,
         navigator: {},
     };
     ctx.window = ctx;
     ctx.window.addEventListener = () => {};
     vm.createContext(ctx);
     vm.runInContext(fs.readFileSync(path.join(RAIZ, 'etaax-store.js'), 'utf8'), ctx, { filename: 'etaax-store.js' });
-    return { ctx, store: ctx.window.etaaxStore, localStorage, indexedDB };
+    return { ctx, store: ctx.window.etaaxStore, localStorage, indexedDB, documento };
 }
 /* Levanta etaax-store.js Y encima etaax-db.js en el mismo contexto, que es donde
    vive la cola de salida. Sin esto la cola solo se puede probar a mano, y a mano
@@ -403,6 +445,138 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
         await respirar();
         test('una clave que nunca se guardó devuelve null, no undefined', () =>
             eq(store.get(OUTBOX), null));
+    }
+
+    /* ═══════════ R09 · «GUARDADO» TIENE QUE SIGNIFICAR GUARDADO ═══════════
+       El comentario del propio archivo decía «la app sigue leyendo de memoria y
+       de localStorage». Lo primero era cierto; lo segundo NO: para una clave
+       GRANDE nunca se escribió nada en localStorage. Sin IndexedDB, `set`
+       actualizaba la memoria, devolvía `true` y los pendientes se tiraban. Un
+       inventario capturado se perdía al recargar, sin un aviso — y esa frase
+       es justo la que hacía que pareciera seguro.
+
+       Pasa de verdad: Safari en privado, un perfil de navegador dañado, o la
+       apertura fallando por cuota.
+
+       Los cuatro escenarios son los que pidió la revisión, y las pruebas
+       llegan hasta el MENSAJE QUE VE QUIEN CAPTURA, no solo a lo que devuelve
+       `set()`. */
+    console.log('\n── R09 · «guardado» tiene que significar guardado ──');
+
+    /* ── 1 · SIN IndexedDB: la captura persiste en el respaldo ── */
+    {
+        const { store, localStorage } = montarStore({ sinIDB: true });
+        await respirar();
+        const inv = JSON.stringify([{ id: 'conteo1', botellas: 14 }]);
+        const r = store.set('etaax_n1_inv_local', inv);
+        await respirar();
+        test('sin IndexedDB, set() dice que SÍ guardó', () => eq(r, true));
+        test('…y de verdad quedó algo durable, no solo en memoria', () =>
+            eq(localStorage.getItem('etaax_n1_inv_local'), inv));
+        test('…y se sigue leyendo igual desde la app', () =>
+            eq(store.get('etaax_n1_inv_local'), inv));
+    }
+
+    /* ── 1b · Y lo escrito ANTES de saber que no hay IndexedDB ──
+       La apertura es asíncrona: la app escribe en los primeros milisegundos,
+       cuando todavía no se sabe si hay base. Eso también tiene que aterrizar. */
+    {
+        const { store, localStorage } = montarStore({ sinIDB: true });
+        const inv = JSON.stringify([{ id: 'temprano' }]);
+        store.set('etaax_n1_inv_local', inv);      // ANTES de respirar
+        await respirar();
+        test('lo escrito antes de saber que no hay IndexedDB también aterriza', () =>
+            eq(localStorage.getItem('etaax_n1_inv_local'), inv));
+    }
+
+    /* ── 2 · Transacción fallida: conserva los pendientes y reintenta ── */
+    {
+        const { store } = montarStore({ fallaEscritura: true });
+        await respirar();
+        store.set('etaax_n1_inv_local', JSON.stringify([{ id: 'x' }]));
+        await respirar();
+        test('si la transacción falla, el pendiente NO se descarta', () =>
+            eq(store.pendientes() > 0, true));
+        /* Antes se vaciaba `pendientes` ANTES de intentar la escritura, así que
+           una transacción abortada se perdía sin rastro ni reintento. */
+        const antes = store.pendientes();
+        await respirar(); await respirar();
+        test('…y se vuelve a intentar solo', () => eq(store.pendientes() <= antes, true));
+    }
+
+    /* ── 2b · Pero no para siempre: se rinde y lo dice ── */
+    {
+        const { store, localStorage, documento } = montarStore({ fallaEscritura: true });
+        await respirar();
+        const inv = JSON.stringify([{ id: 'y' }]);
+        store.set('etaax_n1_inv_local', inv);
+        for (let i = 0; i < 12; i++) await respirar();
+        test('tras varios intentos deja de reintentar en silencio', () =>
+            eq(store.pendientes(), 0));
+        /* Y al rendirse NO tira el dato: lo manda al respaldo. Un bucle callado
+           es otra forma de mentir, pero perder la captura es peor. */
+        test('…y antes de rendirse lo manda al respaldo', () =>
+            eq(localStorage.getItem('etaax_n1_inv_local'), inv));
+    }
+
+    /* ── 3 · Después de recargar: se recupera EXACTAMENTE lo guardado ── */
+    {
+        const inv = JSON.stringify([{ id: 'conteo7', botellas: 3, nota: 'media' }]);
+        const uno = montarStore({ sinIDB: true });
+        await respirar();
+        uno.store.set('etaax_n1_inv_local', inv);
+        await respirar();
+        /* Segunda carga: el mismo localStorage, almacén nuevo. */
+        const dos = montarStore({ sinIDB: true, enLS: uno.localStorage._m });
+        await respirar();
+        test('al recargar sin IndexedDB, la captura sigue ahí', () =>
+            eq(dos.store.get('etaax_n1_inv_local'), inv));
+    }
+    {
+        /* Y con IndexedDB, el camino normal: lo guardado se relee del disco. */
+        const inv = JSON.stringify([{ id: 'conteo8' }]);
+        const uno = montarStore({});
+        await respirar();
+        uno.store.set('etaax_n1_inv_local', inv);
+        await respirar(); await respirar();
+        const dos = montarStore({ enIDB: uno.indexedDB._disco });
+        await respirar();
+        test('…y con IndexedDB también, que es el camino normal', () =>
+            eq(dos.store.get('etaax_n1_inv_local'), inv));
+    }
+
+    /* ── 4 · Si tampoco cabe en localStorage: NO se dice «guardado» ── */
+    {
+        const { store, documento } = montarStore({ sinIDB: true, lsLleno: true });
+        await respirar();
+        const r = store.set('etaax_n1_inv_local', JSON.stringify([{ id: 'z' }]));
+        await respirar();
+        test('sin IndexedDB y con localStorage lleno, set() devuelve FALSE', () =>
+            eq(r, false));
+        /* LA PARTE QUE IMPORTA: que quien está capturando se entere. Un
+           `console.warn` no lo lee nadie con el teléfono en la mano contando
+           botellas, y lo que se pierde es su última media hora. */
+        test('…y se le avisa EN PANTALLA, no en la consola', () =>
+            eq(/no puede guardar/i.test(documento._carteles()), true));
+        test('…diciendo qué va a pasar, no solo que hubo un error', () =>
+            eq(/se pierde al recargar/i.test(documento._carteles()), true));
+    }
+    {
+        /* Y el cartel no sale cuando todo está bien: un aviso que aparece
+           siempre deja de leerse en dos días. */
+        const { store, documento } = montarStore({ sinIDB: true });
+        await respirar();
+        store.set('etaax_n1_inv_local', '[]');
+        await respirar();
+        test('cuando sí guarda, no hay cartel', () => eq(documento._carteles(), ''));
+    }
+    {
+        /* Las claves CHICAS no cambian: siguen en localStorage y siguen
+           devolviendo false si no caben. */
+        const { store } = montarStore({ lsLleno: true });
+        await respirar();
+        test('una clave chica sigue avisando por su cuenta si no cabe', () =>
+            eq(store.set('etaax_ctx', '{}'), false));
     }
 
     console.log('\n════════════════════════════════════');
