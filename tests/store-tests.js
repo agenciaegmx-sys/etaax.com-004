@@ -886,6 +886,42 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
             eq(store.set('etaax_ctx', '{}'), false));
     }
 
+    /* ── La página de verificación en navegador real ──
+       El candado prueba la lógica con un IndexedDB de mentira. Lo que NO puede
+       probar es el navegador de verdad: su IndexedDB, su cuota, su modo
+       privado. `docs/prueba-almacen.html` cubre eso sin tocar Supabase — se
+       abre en local, rompe IndexedDB a propósito y enseña si lo capturado
+       sobrevive a una recarga.
+       Aquí solo se vigila que exista y que siga sin poder salir a producción
+       ni tocar datos del negocio. */
+    {
+        const p = path.join(RAIZ, 'docs/prueba-almacen.html');
+        test('existe la página para verificar R09 en un navegador real', () =>
+            eq(fs.existsSync(p), true));
+        const html = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+        test('…que no habla con Supabase', () => {
+            /* Se mira lo que HACE, no lo que dice: el comentario de la página
+               explica que no toca Supabase, y un regex a secas se caza a sí
+               mismo. Van doce veces en este proyecto. */
+            eq(/<script[^>]*src=[^>]*supabase/i.test(html), false, 'no carga su cliente');
+            eq(/\b_supabase\b/.test(html), false, 'no lo usa');
+            return eq(/createClient/.test(html), false, 'ni lo crea');
+        });
+        test('…que usa una clave de prueba, no la de un negocio', () =>
+            eq(/etaax_' \+ NEG|pruebaR09/.test(html), true));
+        test('…que lee el disco CRUDO, no el espejo parcheado', () => {
+            /* Si preguntara por `localStorage.getItem` a secas, el parche del
+               almacén le contestaría desde memoria y diría «sobrevivió»
+               siempre. Es el error que casi invalida el candado entero. */
+            eq(/Storage\.prototype\.getItem\.call/.test(html), true, 'lee el crudo');
+            return eq(/function crudo/.test(html), true, 'con su propio lector');
+        });
+        test('…y que docs/ sigue sin servirse en producción', () => {
+            const nt = fs.readFileSync(path.join(RAIZ, 'netlify.toml'), 'utf8');
+            return eq(/from = "\/docs\/\*"[\s\S]{0,120}status = 404/.test(nt), true);
+        });
+    }
+
     console.log('\n════════════════════════════════════');
     if (fallan) {
         console.log('🚨 ' + fallan + ' falla(s) de ' + (pasan + fallan) + ' — el almacenamiento cambió de comportamiento.');

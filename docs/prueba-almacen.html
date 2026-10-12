@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ETAAX · ¿Este dispositivo guarda?</title>
+<!-- No se sirve en producción: `/docs/*` devuelve 404 en netlify.toml. Se abre
+     con `python3 -m http.server 8000` desde la raíz del repo:
+     http://localhost:8000/docs/prueba-almacen.html -->
+<style>
+:root { --bg:#13120f; --sup:#1b1915; --bor:#3b3935; --txt:#f0ece4; --dim:#8d8a84;
+        --ok:#3dbe7a; --mal:#e05a3a; --av:#e0a93d; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--txt); font:15px/1.6 system-ui,sans-serif;
+       padding:26px 18px 60px; max-width:760px; margin:0 auto; }
+h1 { font-size:21px; margin-bottom:6px; }
+p.sub { color:var(--dim); font-size:13.5px; margin-bottom:22px; }
+.caja { background:var(--sup); border:1px solid var(--bor); border-radius:12px;
+        padding:16px 18px; margin-bottom:14px; }
+.caja h2 { font-size:15px; margin-bottom:6px; }
+.caja p { color:var(--dim); font-size:13px; margin-bottom:12px; }
+button { background:transparent; border:1px solid var(--bor); color:var(--txt);
+         border-radius:9px; padding:10px 16px; font:inherit; font-size:13.5px;
+         cursor:pointer; margin-right:8px; margin-bottom:6px; }
+button:hover { border-color:var(--ok); color:var(--ok); }
+button.primario { background:var(--ok); color:#0c1a12; border-color:var(--ok); font-weight:600; }
+.res { margin-top:14px; font-size:13.5px; }
+.res div { padding:7px 0; border-top:1px solid var(--bor); display:flex; gap:10px; }
+.res b { flex-shrink:0; }
+.ok { color:var(--ok); } .mal { color:var(--mal); } .av { color:var(--av); }
+code { background:#0f0e0c; padding:1px 6px; border-radius:5px; font-size:12px; color:var(--dim); }
+</style>
+</head>
+<body>
+
+<h1>¿Este dispositivo guarda de verdad?</h1>
+<p class="sub">Comprueba R09 en un navegador REAL, sin tocar Supabase ni ningún dato del
+negocio. Solo usa el almacenamiento local de ESTE navegador y escribe una clave de prueba
+que se puede borrar al final.</p>
+
+<div class="caja">
+    <h2>1 · Elige cómo romperlo</h2>
+    <p>Lo que se quiere probar no es el camino feliz: es qué pasa cuando IndexedDB
+    no está o falla. Elige un modo y la página se recarga con él puesto.</p>
+    <button onclick="modo('normal')">Normal (control)</button>
+    <button onclick="modo('sin')">Sin IndexedDB</button>
+    <button onclick="modo('falla')">IndexedDB que falla al abrir</button>
+    <div class="res" id="modoAhora"></div>
+</div>
+
+<div class="caja">
+    <h2>2 · Captura algo</h2>
+    <p>Escribe una clave grande, como haría el inventario. Abajo se ve si quedó
+    algo <b>durable</b> — leyendo el almacenamiento crudo, no el espejo en memoria.</p>
+    <button class="primario" onclick="capturar()">Capturar</button>
+    <button onclick="verEstado()">Ver estado</button>
+    <div class="res" id="res1"></div>
+</div>
+
+<div class="caja">
+    <h2>3 · Recarga y comprueba</h2>
+    <p>Es la prueba de verdad: lo capturado tiene que seguir ahí después de recargar,
+    <b>o</b> el aviso rojo de arriba tiene que haber salido al capturar.</p>
+    <button class="primario" onclick="location.reload()">Recargar</button>
+    <button onclick="limpiar()">Borrar la clave de prueba</button>
+    <div class="res" id="res2"></div>
+</div>
+
+<script>
+/* El modo viaja en sessionStorage porque hay que fijarlo ANTES de que cargue
+   el almacén, y eso solo se puede hacer en una carga nueva. */
+var MODO = sessionStorage.getItem('etaax_prueba_modo') || 'normal';
+function modo(m) { sessionStorage.setItem('etaax_prueba_modo', m); location.reload(); }
+
+if (MODO === 'sin') {
+    try { Object.defineProperty(window, 'indexedDB', { value: null, configurable: true }); } catch (e) {}
+} else if (MODO === 'falla') {
+    /* Abre y falla, que es lo que pasa con un perfil dañado o la cuota llena.
+       Distinto de «no existe»: el almacén los trata por caminos separados. */
+    try {
+        Object.defineProperty(window, 'indexedDB', { configurable: true, value: {
+            open: function () {
+                var req = { onsuccess: null, onerror: null, onblocked: null, onupgradeneeded: null };
+                setTimeout(function () { if (req.onerror) req.onerror(); }, 10);
+                return req;
+            }
+        }});
+    } catch (e) {}
+}
+</script>
+
+<script src="/etaax-store.js"></script>
+
+<script>
+var NEG = 'pruebaR09';
+var CLAVE = 'etaax_' + NEG + '_inv_local';
+var MARCA = 'etaax__respaldo_v1';
+
+/* El almacén PARCHEA localStorage.getItem para servir las claves grandes desde
+   su memoria. Preguntarle a él si algo se guardó devuelve «sí» aunque no haya
+   tocado el disco — fue el error que casi invalida todo el candado de R09.
+   Esto lee el objeto crudo, que es lo único que sobrevive a recargar. */
+function crudo(k) {
+    for (var i = 0; i < localStorage.length; i++) {
+        if (localStorage.key(i) === k) {
+            var d = Object.getOwnPropertyDescriptor(Storage.prototype, 'getItem');
+            return d ? Storage.prototype.getItem.call(localStorage, k) : null;
+        }
+    }
+    return null;
+}
+
+function linea(txt, clase) { return '<div><b class="' + (clase||'') + '">' + txt + '</b></div>'; }
+
+document.getElementById('modoAhora').innerHTML =
+    linea('Modo actual: ' + ({normal:'normal (control)', sin:'SIN IndexedDB',
+                             falla:'IndexedDB que FALLA al abrir'})[MODO],
+          MODO === 'normal' ? '' : 'av');
+
+function capturar() {
+    var valor = JSON.stringify({ capturadoA: new Date().toISOString(),
+                                 botellas: Math.floor(Math.random() * 90) + 10 });
+    sessionStorage.setItem('etaax_prueba_esperado', valor);
+    var r = etaaxStore.set(CLAVE, valor);
+    var h = linea('set() devolvió: ' + r, r ? 'ok' : 'mal');
+    h += linea('Lo capturado: ' + valor);
+    document.getElementById('res1').innerHTML = h;
+    /* La bajada es diferida; se mira un momento después. */
+    setTimeout(verEstado, 700);
+}
+
+function verEstado() {
+    var esperado = sessionStorage.getItem('etaax_prueba_esperado');
+    var enDisco  = crudo(CLAVE);
+    var marcas   = crudo(MARCA);
+    var cartel   = !!document.querySelector('[data-etaax-store-fallo]');
+    var h = '';
+    h += linea('En memoria (lo que ve la app): ' + (etaaxStore.get(CLAVE) ? 'sí' : 'no'));
+    h += linea('Respaldo durable en localStorage: ' + (enDisco ? 'sí' : 'no'),
+               enDisco ? 'ok' : (MODO === 'normal' ? '' : 'av'));
+    h += linea('Índice de respaldos: ' + (marcas || '—'));
+    h += linea('Pendientes sin bajar: ' + etaaxStore.pendientes());
+    h += linea('¿Salió el aviso rojo?: ' + (cartel ? 'sí' : 'no'), cartel ? 'av' : '');
+    document.getElementById('res1').innerHTML += h;
+}
+
+/* Al cargar: si había algo capturado antes, esta es la comprobación que importa. */
+(function tras_recargar() {
+    var esperado = sessionStorage.getItem('etaax_prueba_esperado');
+    if (!esperado) {
+        document.getElementById('res2').innerHTML =
+            linea('Captura algo primero y después recarga.', '');
+        return;
+    }
+    /* Se espera a que el almacén termine de hidratar: antes de eso la memoria
+       todavía no tiene lo que hubiera en disco. */
+    etaaxStore.ready.then(function () {
+        setTimeout(function () {
+            var leido = etaaxStore.get(CLAVE);
+            var cartel = !!document.querySelector('[data-etaax-store-fallo]');
+            var h = '';
+            if (leido === esperado) {
+                h += linea('✅ SOBREVIVIÓ a la recarga. Lo capturado sigue completo.', 'ok');
+            } else if (leido) {
+                h += linea('⚠️ Sobrevivió algo, pero NO es lo último que se capturó.', 'mal');
+                h += linea('esperado: ' + esperado);
+                h += linea('se leyó:  ' + leido);
+            } else {
+                h += linea('❌ SE PERDIÓ. No quedó nada después de recargar.', 'mal');
+                h += linea(cartel
+                    ? 'Pero el aviso rojo SÍ salió: el sistema avisó que no podía guardar. Eso es lo esperado si el almacenamiento está lleno.'
+                    : 'Y NO salió ningún aviso. Eso es el bug de R09: se perdió en silencio.',
+                    cartel ? 'av' : 'mal');
+            }
+            document.getElementById('res2').innerHTML = h;
+        }, 400);
+    });
+})();
+
+function limpiar() {
+    etaaxStore.del(CLAVE);
+    sessionStorage.removeItem('etaax_prueba_esperado');
+    try { localStorage.removeItem(CLAVE); } catch (e) {}
+    document.getElementById('res1').innerHTML = '';
+    document.getElementById('res2').innerHTML = linea('Borrada la clave de prueba.', 'ok');
+}
+</script>
+</body>
+</html>
