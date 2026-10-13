@@ -137,7 +137,17 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   width:100%;max-width:420px;margin:0 auto;
   animation:fadeUp .5s ease both;
 }
-/* ── LA PANTALLA DE ACCESO, CON LOS TONOS DE LA MAQUETA ───────────────────
+/* ── LOS TONOS DE LA MAQUETA, PARA TODO EL HUB ────────────────────────────
+   Nacieron en la tarjeta de acceso y resultaron ser la diferencia que se nota
+   en todas partes: el gris apagado del hub (#4a4844) casi no se lee sobre el
+   fondo oscuro, y los bordes a dos tonos distintos (tarjeta y campo) ensucian
+   más de lo que separan. La maqueta usa UN borde (#403d37) y un apagado que sí
+   se lee (#b1aaa0). Se suben aquí para que la pantalla de sucursales use los
+   mismos, en vez de tener cada vista su propia idea de lo que es un gris. */
+body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
+[data-theme="light"] body{ --ui-borde:var(--b2); --ui-apagado:var(--muted); --ui-campo:var(--s2); }
+
+/* ── LA PANTALLA DE ACCESO ────────────────────────────────────────────────
    Los tokens del sistema ya coincidían en lo importante —el fondo #0f0e0c, el
    verde #3dbe7a, el crema #f0ece4 y hasta el #141210 de la tarjeta—. Lo que
    cambiaba eran los GRISES: el texto apagado del hub es #4a4844, casi invisible
@@ -148,13 +158,11 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
    claro siga teniendo su propia versión: la maqueta es solo oscura, y pegar sus
    colores a mano dejaría la pantalla ilegible con el tema claro puesto. */
 .auth-card{
-  --auth-campo:#1a1916; --auth-borde:#403d37; --auth-apagado:#b1aaa0;
+  --auth-campo:var(--ui-campo); --auth-borde:var(--ui-borde); --auth-apagado:var(--ui-apagado);
   background:var(--s1);border:1px solid var(--auth-borde);border-radius:22px;
   padding:28px;
 }
-[data-theme="light"] .auth-card{
-  --auth-campo:var(--s2); --auth-borde:var(--b2); --auth-apagado:var(--muted);
-}
+/* (el tema claro ya los redefine arriba, en `body`) */
 /* La caja del campo: el icono adentro, a la izquierda, y el input sin borde
    propio. Es una clase NUEVA y no `.auth-field` a propósito — esa la usa
    también el alta con asesor, con la etiqueta dentro, y volverla una fila
@@ -738,28 +746,33 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
       <!-- Nivel NEGOCIO (independiente de sucursales): Catálogos Globales | Financiero Global -->
       <div style="max-width:960px;margin:0 auto 28px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <!-- NEUTRAS EN REPOSO. Tenían fondo y borde de color permanente, y dos
+             colores fuertes al lado del color del negocio ensucian la pantalla
+             en vez de ordenarla. El azul y el morado siguen siendo su
+             identidad, pero solo aparecen cuando el cursor se posa: ahí el
+             color dice «esto se puede tocar», que es para lo que sirve. -->
         <button onclick="abrirCatalogosGlobalesNeg()"
           style="display:flex;align-items:center;gap:12px;
-                 background:rgba(122,184,245,.08);border:1px solid rgba(122,184,245,.35);
+                 background:var(--s1);border:1px solid var(--ui-borde);
                  border-radius:14px;padding:16px 18px;cursor:pointer;font-family:inherit;transition:all .18s"
-          onmouseover="this.style.background='rgba(122,184,245,.14)';this.style.borderColor='#7ab8f5'"
-          onmouseout="this.style.background='rgba(122,184,245,.08)';this.style.borderColor='rgba(122,184,245,.35)'">
+          onmouseover="this.style.background='rgba(122,184,245,.10)';this.style.borderColor='#7ab8f5'"
+          onmouseout="this.style.background='var(--s1)';this.style.borderColor='var(--ui-borde)'">
           <span id="icCatGlobal" style="display:inline-flex"></span>
           <div style="text-align:left">
-            <div style="font-size:15px;font-weight:600;color:#7ab8f5;letter-spacing:.3px">Catálogos Globales</div>
-            <div style="font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4">Insumos, recetas, proveedores, clientes y colaboradores de todo el negocio</div>
+            <div style="font-size:15px;font-weight:600;color:var(--text);letter-spacing:.3px">Catálogos globales</div>
+            <div style="font-size:11.5px;color:var(--ui-apagado);margin-top:2px;line-height:1.4">Insumos, recetas, proveedores, clientes y colaboradores de todo el negocio</div>
           </div>
         </button>
         <button onclick="abrirFinancieroGlobal()"
           style="display:flex;align-items:center;gap:12px;
-                 background:rgba(155,141,232,.08);border:1px solid rgba(155,141,232,.35);
+                 background:var(--s1);border:1px solid var(--ui-borde);
                  border-radius:14px;padding:16px 18px;cursor:pointer;font-family:inherit;transition:all .18s"
-          onmouseover="this.style.background='rgba(155,141,232,.15)';this.style.borderColor='#9b8de8'"
-          onmouseout="this.style.background='rgba(155,141,232,.08)';this.style.borderColor='rgba(155,141,232,.35)'">
+          onmouseover="this.style.background='rgba(155,141,232,.11)';this.style.borderColor='#9b8de8'"
+          onmouseout="this.style.background='var(--s1)';this.style.borderColor='var(--ui-borde)'">
           <span id="icFinGlobal" style="display:inline-flex"></span>
           <div style="text-align:left">
-            <div style="font-size:15px;font-weight:600;color:#9b8de8;letter-spacing:.3px">Financiero Global</div>
-            <div style="font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4">Ventas, gastos y P&amp;L consolidados de todas las sucursales o por sucursal</div>
+            <div style="font-size:15px;font-weight:600;color:var(--text);letter-spacing:.3px">Financiero global</div>
+            <div style="font-size:11.5px;color:var(--ui-apagado);margin-top:2px;line-height:1.4">Ventas, gastos y P&amp;L consolidados de todas las sucursales o por sucursal</div>
           </div>
         </button>
       </div>
@@ -2496,7 +2509,10 @@ function _renderBrandBar(neg) {
     if (!bar) return;
     var t = TIPOS[neg.tipo] || TIPOS.otro;
     var color = neg.color || '#3dbe7a';
-    bar.style.borderColor = color + '44';
+    /* El marco, neutro: el color del negocio ya se ve en su etiqueta y en su
+       logo. Teñir además el contorno hacía que la barra compitiera con las
+       tarjetas de abajo en vez de encabezarlas. */
+    bar.style.borderColor = 'var(--ui-borde)';
     // Logo base de la marca en lugar del emoji (si el negocio lo tiene cargado).
     var _logoBar = _getNegLogo(neg.id);
     bar.innerHTML =
@@ -2516,9 +2532,9 @@ function _renderBrandBar(neg) {
             'cuáles se guardan y cómo ejercer tus derechos">' +
             _ic('privacidad', 14) + 'Aviso de privacidad</a>' +
         '<button onclick="abrirConfig(\'' + neg.id + '\',event)" ' +
-            'style="font-size:11px;padding:5px 14px;border:1px solid var(--b2);border-radius:6px;letter-spacing:.3px;background:var(--s2);color:var(--muted);cursor:pointer;font-family:\'DM Sans\',sans-serif;transition:all .2s" ' +
-            'onmouseover="this.style.borderColor=\''+( neg.color||'#3dbe7a' )+'\';this.style.color=\''+( neg.color||'#3dbe7a' )+'\'" ' +
-            'onmouseout="this.style.borderColor=\'var(--b2)\';this.style.color=\'var(--muted)\'" class="ic-fila">' +
+            'style="font-size:11.5px;padding:7px 14px;border:1px solid var(--ui-borde);border-radius:8px;letter-spacing:.3px;background:transparent;color:var(--text);cursor:pointer;font-family:\'DM Sans\',sans-serif;transition:all .2s" ' +
+            'onmouseover="this.style.borderColor=\'var(--green)\';this.style.color=\'var(--green)\'" ' +
+            'onmouseout="this.style.borderColor=\'var(--ui-borde)\';this.style.color=\'var(--text)\'" class="ic-fila">' +
             _ic('ajustes', 14) + 'Configurar negocio</button>' +
         // Eliminar negocio ya NO vive aquí: se movió al fondo del modal
         // "⚙️ Configurar negocio" (zona de peligro), fuera del clic accidental.
@@ -2561,26 +2577,34 @@ function _renderSucursales(neg) {
             var sucCfg   = _getSucCfg(suc.id, neg.id);
             var sucColor = sucCfg.color || color;
             var cardOp   = inactiva ? 'opacity:.45;' : '';
+            /* EL VERDE ES EL ACENTO DEL SISTEMA; el color del negocio es su
+               DISTINTIVO. Antes el botón de administrar, el borde del icono y
+               el recuadro se pintaban todos del color elegido al crear el
+               negocio: con tres sucursales en fila, la pantalla era un muestrario
+               y ya no se distinguía qué era un botón y qué era identidad.
+               Ahora el color del negocio vive solo en su etiqueta —MATRIZ,
+               Sucursal— y todo lo que se pulsa habla el idioma del sistema. */
             var adminBtn = inactiva
-                ? '<button disabled style="background:var(--s2);border:1px solid var(--b1);color:var(--dim);' +
+                ? '<button disabled style="background:var(--s2);border:1px solid var(--ui-borde);color:var(--ui-apagado);' +
                       'font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;padding:10px;' +
                       'border-radius:8px;cursor:not-allowed;letter-spacing:.5px;opacity:.5">' +
                       'Inactiva' +
                   '</button>'
                 : '<button onclick="entrarSucursal(\'' + suc.id + '\',\'' + neg.id + '\')" ' +
-                      'style="background:' + sucColor + '0d;border:1px solid ' + sucColor + '55;color:' + sucColor + ';' +
+                      'class="ic-fila" ' +
+                      'style="justify-content:center;background:transparent;border:1px solid rgba(61,190,122,.45);color:var(--green);' +
                       'font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;padding:10px;' +
-                      'border-radius:8px;cursor:pointer;letter-spacing:.5px;transition:background .2s"' +
-                      'onmouseover="this.style.background=\'' + sucColor + '1f\'" onmouseout="this.style.background=\'' + sucColor + '0d\'" class="ic-fila" style="justify-content:center">' +
-                      'Administrar negocio' + _ic('administrar', 15, sucColor) +
+                      'border-radius:8px;cursor:pointer;letter-spacing:.3px;transition:background .2s"' +
+                      'onmouseover="this.style.background=\'rgba(61,190,122,.12)\'" onmouseout="this.style.background=\'transparent\'">' +
+                      'Administrar negocio' + _ic('administrar', 15, 'var(--green)') +
                   '</button>';
             // Jerarquía de marca: logo PROPIO de la sucursal (corporativo multi-marca)
             // → si no, el del negocio (hereda) → caja de color. Marco = color de sucursal.
             var _logoCard = _getSucLogo(suc.id, neg.id) || _getNegLogo(neg.id);
             var iconHtml = _logoCard
                 ? '<img src="' + _logoCard + '" style="width:40px;height:40px;object-fit:contain;background:#fff;border-radius:8px;flex-shrink:0;border:2px solid ' + sucColor + '66">'
-                : '<div class="neg-card-emoji" style="background:' + sucColor + '1a;border:1px solid ' + sucColor + '33;display:flex;align-items:center;justify-content:center">' +
-                      _ic(esMat ? 'matriz' : 'sucursal', 22, sucColor) + '</div>';
+                : '<div class="neg-card-emoji" style="background:var(--s2);border:1px solid var(--ui-borde);display:flex;align-items:center;justify-content:center">' +
+                      _ic(esMat ? 'matriz' : 'sucursal', 22) + '</div>';
             return '<div style="display:flex;flex-direction:column;gap:6px;animation:fadeUp .5s ' + (i * .06) + 's ease both">' +
                 '<div class="neg-card suc-card" style="margin:0;' + cardOp + '">' +
                     iconHtml +
@@ -2594,11 +2618,11 @@ function _renderSucursales(neg) {
                 '</div>' +
                 '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px">' +
                     '<button onclick="abrirAjustesSucursal(\'' + suc.id + '\',\'' + neg.id + '\',event)" ' +
-                        'style="background:var(--s2);border:1px solid var(--b2);color:var(--muted);' +
+                        'style="background:transparent;border:1px solid var(--ui-borde);color:var(--ui-apagado);' +
                         'font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:500;padding:10px 14px;' +
                         'border-radius:8px;cursor:pointer;letter-spacing:.3px;transition:all .2s;white-space:nowrap" class="ic-fila"' +
-                        'onmouseover="this.style.borderColor=\'' + sucColor + '\';this.style.color=\'' + sucColor + '\'" ' +
-                        'onmouseout="this.style.borderColor=\'var(--b2)\';this.style.color=\'var(--muted)\'">' +
+                        'onmouseover="this.style.borderColor=\'var(--green)\';this.style.color=\'var(--green)\'" ' +
+                        'onmouseout="this.style.borderColor=\'var(--ui-borde)\';this.style.color=\'var(--ui-apagado)\'">' +
                         _ic('ajustes', 14) + 'Ajustes' +
                     '</button>' +
                     adminBtn +

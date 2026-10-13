@@ -26117,6 +26117,45 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         return eq(puestos <= 1, true, 'se pintó ' + puestos + ' veces');
     });
 
+    /* ── UN SOLO ACENTO, Y EL COLOR DEL NEGOCIO DONDE IDENTIFICA ─────────
+       El color que el dueño elige al crear su negocio se pintaba en TODO: el
+       borde de la barra, el recuadro del icono, el botón de administrar, el de
+       ajustes. Con tres sucursales en fila la pantalla era un muestrario, y ya
+       no se distinguía qué era un botón y qué era identidad. El verde es el
+       acento del sistema —lo que se pulsa— y el color del negocio es su
+       distintivo: vive en su etiqueta y en su logo. */
+    {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        const i = h.indexOf('var adminBtn = inactiva');
+        const tarjeta = h.slice(i, h.indexOf('}).join', i));
+        /* Se mira SOLO el botón, no la tarjeta entera: la etiqueta MATRIZ sí
+           lleva el color del negocio y buscarlo en todo el bloque lo acusaba
+           a él. La prueba tiene que apuntar a lo que juzga. */
+        const btnAdmin = h.slice(i, h.indexOf('var _logoCard', i));
+        test('el botón de administrar habla el idioma del sistema, no el del negocio', () => {
+            eq(/var\(--green\)/.test(btnAdmin), true, 'no usa el verde del sistema');
+            return eq(/sucColor/.test(btnAdmin), false, 'sigue pintándose del color del negocio');
+        });
+        test('…y el recuadro del icono de la sucursal también es neutro', () =>
+            eq(/neg-card-emoji[^']*' \+ sucColor/.test(tarjeta), false, 'lo tiñe con el color del negocio'));
+        /* Pero el distintivo SÍ lo conserva: es lo único que distingue una
+           sucursal de otra de un vistazo. */
+        test('…mientras que la etiqueta MATRIZ sí lleva el color del negocio', () =>
+            eq(/Matriz<\/span>/.test(tarjeta) && /background:' \+ sucColor \+ '22/.test(tarjeta), true,
+               'se perdió el distintivo'));
+        /* Y las dos tarjetas globales: neutras en reposo, con su color solo al
+           pasar el cursor. Dos colores fuertes permanentes al lado del color
+           del negocio ensucian la pantalla en vez de ordenarla. */
+        test('las tarjetas globales son neutras en reposo', () => {
+            const j = h.indexOf("abrirCatalogosGlobalesNeg()");
+            const bloque = h.slice(j, j + 1400);
+            eq(/background:var\(--s1\);border:1px solid var\(--ui-borde\)/.test(bloque), true,
+               'siguen con fondo y borde de color fijo');
+            return eq(/onmouseover="this\.style\.background='rgba\(122,184,245/.test(bloque), true,
+                      'perdieron su color al pasar el cursor, que es cuando sirve');
+        });
+    }
+
     /* ── EL RELLENO AUTOMÁTICO NO PUEDE PINTAR SU PROPIO FONDO ───────────
        Cuando el navegador rellena el correo, pinta encima su fondo blancuzco y
        su color de letra. No es un estilo nuestro y no se quita con
