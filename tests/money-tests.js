@@ -26156,6 +26156,71 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         });
     }
 
+    /* ── UNA SUCURSAL, UNA CAJA ──────────────────────────────────────────
+       La tarjeta y sus dos botones eran dos bloques sueltos con su propio
+       contorno cada uno: con tres sucursales en fila, seis recuadros para tres
+       cosas. El contorno ahora envuelve el icono, el nombre y los botones. */
+    {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        test('cada sucursal va dentro de un solo recuadro', () => {
+            eq(/\.suc-caja\{[^}]*border:1px solid var\(--ui-borde\)/.test(h), true,
+               'la caja no tiene contorno propio');
+            /* Y la tarjeta de dentro deja de ser una caja, o se ven dos. */
+            return eq(/\.suc-caja \.neg-card\{[^}]*border:none/.test(h), true,
+                      'quedan dos contornos, uno dentro del otro');
+        });
+        test('…y los botones van DENTRO de ese recuadro', () => {
+            const i = h.indexOf("return '<div class=\"suc-caja\"");
+            const bloque = h.slice(i, h.indexOf('}).join', i));
+            const iAjustes = bloque.indexOf('abrirAjustesSucursal');
+            const iCierre = bloque.lastIndexOf("'</div>'");
+            return eq(iAjustes > -1 && iAjustes < iCierre, true,
+                      'los botones quedaron fuera de la caja');
+        });
+        /* Y lo mismo, CORRIENDO el pintado: lo anterior mira el código, esto
+           mira lo que acaba en pantalla con dos sucursales de verdad. */
+        {
+            const V = crearContexto();
+            cargarJS(V, 'etaax-iconos.js');
+            cargarJS(V, 'precios.js');          // el pie de las tarjetas lo usa
+            cargarInline(V, 'hub.html');
+            V._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', tipo:'otro', color:'#f5c842' }]);
+            V._storage['etaax_n1_sucursales'] = JSON.stringify([
+                { id:'suc_principal', nombre:'Matriz', activa:true, fechaCreado:'2026-08-07' },
+                { id:'s2', nombre:'La Cevicheria', activa:true, fechaCreado:'2026-08-07' }]);
+            setVar(V, '_sesion', { usuarioId:'u1', nombre:'EGMx', email:'a@b.com', plan:'pyme' });
+            V._pintarIconosLogin();
+            let err = null;
+            try { V._renderSucursales(V._getNegocios()[0]); } catch (e) { err = e; }
+            const html = (V.document.getElementById('listSucursales') || {}).innerHTML || '';
+            test('pintadas de verdad: una caja por sucursal', () => {
+                eq(err, null, 'reventó al pintar: ' + (err && err.message));
+                return eq((html.match(/class="suc-caja"/g) || []).length, 2, 'cajas');
+            });
+            test('…cada una con su icono (matriz vs sucursal)', () =>
+                eq((html.match(/#etx-(matriz|sucursal)/g) || []).join(' '), '#etx-matriz #etx-sucursal',
+                   (html.match(/#etx-[a-z-]+/g) || []).join(' ')));
+            /* La prueba que de verdad cuida el criterio: el color del negocio
+               aparece SOLO en el distintivo. Si alguien vuelve a teñir botones
+               o bordes con él, este número sube y la prueba lo dice. */
+            test('…y el color del negocio sale solo en su distintivo', () => {
+                const veces = (html.match(/#f5c842/g) || []).length;
+                return eq(veces, 2, 'aparece ' + veces + ' veces: el distintivo son 2 (fondo y letra)');
+            });
+            test('…mientras lo que se pulsa habla en verde', () =>
+                eq((html.match(/61,190,122/g) || []).length >= 2, true, 'no quedó verde en los botones'));
+        }
+
+        /* La barra de sesión es la única con contorno verde: encabeza la
+           pantalla, no es una tarjeta más. */
+        test('la barra de sesión se distingue con su contorno verde', () =>
+            eq(/\.neg-activo-bar\{[^}]*border:1px solid rgba\(61,190,122/.test(h), true,
+               'comparte el gris de todo lo demás'));
+        test('…y «cerrar sesión» no parece deshabilitado', () =>
+            eq(/\.btn-logout\{[^}]*color:var\(--text\)/.test(h), true,
+               'sigue en gris apagado, que se lee como botón apagado'));
+    }
+
     /* ── EL RELLENO AUTOMÁTICO NO PUEDE PINTAR SU PROPIO FONDO ───────────
        Cuando el navegador rellena el correo, pinta encima su fondo blancuzco y
        su color de letra. No es un estilo nuestro y no se quita con

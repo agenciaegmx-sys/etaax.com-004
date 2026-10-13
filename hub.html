@@ -113,10 +113,13 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .ctx-pres-av:first-of-type{margin-left:0}
 .ctx-pres-av:hover{transform:translateY(-2px) scale(1.08);z-index:2}
 .ctx-pres-mas{background:var(--s2,#1c1a17);color:var(--muted,#a8a29a);font-size:10px}
+/* Salir no es una acción escondida: se escribe en claro, como el resto. En
+   gris apagado parecía deshabilitado — y en la captura de Edwin se veía
+   exactamente así. */
 .btn-logout{
-  background:transparent;border:1px solid var(--b2);color:var(--dim);
-  font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 12px;
-  border-radius:6px;cursor:pointer;transition:all .2s;letter-spacing:.5px;
+  background:transparent;border:1px solid var(--ui-borde);color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 14px;
+  border-radius:8px;cursor:pointer;transition:all .2s;letter-spacing:.3px;
 }
 .btn-logout:hover{border-color:var(--red);color:var(--red);}
 
@@ -380,10 +383,13 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 .btn-crear-neg:hover{background:var(--green2);transform:translateY(-1px);}
 
 /* Negocio activo bar */
+/* La barra de sesión encabeza la pantalla: es la que dice quién eres y es la
+   única con contorno verde. Antes compartía el gris de todo lo demás y se leía
+   como una tarjeta más, en vez de como el encabezado que es. */
 .neg-activo-bar{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  background:var(--s1);border:1px solid var(--b1);border-radius:12px;
-  padding:12px 18px;width:100%;max-width:1120px;margin:0 auto 40px;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:var(--s1);border:1px solid rgba(61,190,122,.32);border-radius:14px;
+  padding:14px 18px;width:100%;max-width:1120px;margin:0 auto 40px;
   transition:border-color .3s;
 }
 .neg-activo-emoji-wrap{
@@ -393,8 +399,8 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
   font-size:20px;flex-shrink:0;transition:background .3s;
 }
 .neg-activo-id{flex-shrink:0;min-width:0;}
-.neg-activo-nombre{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;}
-.neg-activo-tipo{font-size:10px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-top:2px;white-space:nowrap;}
+.neg-activo-nombre{font-size:16px;font-weight:600;color:var(--text);white-space:nowrap;}
+.neg-activo-tipo{font-size:11px;color:var(--ui-apagado);letter-spacing:1.4px;text-transform:uppercase;margin-top:3px;white-space:nowrap;}
 .chip-sucursal-hub{
   flex-shrink:0;white-space:nowrap;font-size:11px;font-weight:600;
   padding:4px 11px;border-radius:20px;letter-spacing:.4px;
@@ -496,6 +502,22 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 
 /* SUCURSAL CARD */
 .suc-card{border-radius:14px;}
+/* ── UNA SOLA CAJA POR SUCURSAL ───────────────────────────────────────────
+   Antes la tarjeta y sus dos botones eran dos bloques sueltos, uno debajo del
+   otro, cada uno con su propio contorno. Con tres sucursales en fila eso son
+   seis recuadros para tres cosas, y la vista no sabe dónde empieza una y
+   termina la otra. Ahora el recuadro envuelve el icono, el nombre y los dos
+   botones: una sucursal, una caja. */
+.suc-caja{
+  background:var(--s1);border:1px solid var(--ui-borde);border-radius:16px;
+  padding:16px;display:flex;flex-direction:column;gap:14px;
+  transition:border-color .2s, transform .2s, box-shadow .2s;
+  animation:fadeUp .5s ease both;
+}
+.suc-caja:hover{border-color:rgba(61,190,122,.5);transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,0,0,.3);}
+/* La tarjeta de adentro ya no es una caja: es el renglón de identidad. */
+.suc-caja .neg-card{background:transparent;border:none;border-radius:0;padding:0;animation:none;}
+.suc-caja .neg-card:hover{transform:none;box-shadow:none;}
 
 .hub-footer{text-align:center;margin-top:56px;animation:fadeUp .7s .5s ease both;}
 .hub-footer-text{font-size:12px;color:var(--dim);}
@@ -754,25 +776,25 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
         <button onclick="abrirCatalogosGlobalesNeg()"
           style="display:flex;align-items:center;gap:12px;
                  background:var(--s1);border:1px solid var(--ui-borde);
-                 border-radius:14px;padding:16px 18px;cursor:pointer;font-family:inherit;transition:all .18s"
+                 border-radius:14px;padding:20px 22px;min-height:92px;cursor:pointer;font-family:inherit;transition:all .18s"
           onmouseover="this.style.background='rgba(122,184,245,.10)';this.style.borderColor='#7ab8f5'"
           onmouseout="this.style.background='var(--s1)';this.style.borderColor='var(--ui-borde)'">
           <span id="icCatGlobal" style="display:inline-flex"></span>
           <div style="text-align:left">
             <div style="font-size:15px;font-weight:600;color:var(--text);letter-spacing:.3px">Catálogos globales</div>
-            <div style="font-size:11.5px;color:var(--ui-apagado);margin-top:2px;line-height:1.4">Insumos, recetas, proveedores, clientes y colaboradores de todo el negocio</div>
+            <div style="font-size:11.5px;color:var(--ui-apagado);margin-top:7px;line-height:1.5">Insumos, recetas, proveedores, clientes y colaboradores de todo el negocio</div>
           </div>
         </button>
         <button onclick="abrirFinancieroGlobal()"
           style="display:flex;align-items:center;gap:12px;
                  background:var(--s1);border:1px solid var(--ui-borde);
-                 border-radius:14px;padding:16px 18px;cursor:pointer;font-family:inherit;transition:all .18s"
+                 border-radius:14px;padding:20px 22px;min-height:92px;cursor:pointer;font-family:inherit;transition:all .18s"
           onmouseover="this.style.background='rgba(155,141,232,.11)';this.style.borderColor='#9b8de8'"
           onmouseout="this.style.background='var(--s1)';this.style.borderColor='var(--ui-borde)'">
           <span id="icFinGlobal" style="display:inline-flex"></span>
           <div style="text-align:left">
             <div style="font-size:15px;font-weight:600;color:var(--text);letter-spacing:.3px">Financiero global</div>
-            <div style="font-size:11.5px;color:var(--ui-apagado);margin-top:2px;line-height:1.4">Ventas, gastos y P&amp;L consolidados de todas las sucursales o por sucursal</div>
+            <div style="font-size:11.5px;color:var(--ui-apagado);margin-top:7px;line-height:1.5">Ventas, gastos y P&amp;L consolidados de todas las sucursales o por sucursal</div>
           </div>
         </button>
       </div>
@@ -2605,8 +2627,8 @@ function _renderSucursales(neg) {
                 ? '<img src="' + _logoCard + '" style="width:40px;height:40px;object-fit:contain;background:#fff;border-radius:8px;flex-shrink:0;border:2px solid ' + sucColor + '66">'
                 : '<div class="neg-card-emoji" style="background:var(--s2);border:1px solid var(--ui-borde);display:flex;align-items:center;justify-content:center">' +
                       _ic(esMat ? 'matriz' : 'sucursal', 22) + '</div>';
-            return '<div style="display:flex;flex-direction:column;gap:6px;animation:fadeUp .5s ' + (i * .06) + 's ease both">' +
-                '<div class="neg-card suc-card" style="margin:0;' + cardOp + '">' +
+            return '<div class="suc-caja" style="' + cardOp + 'animation-delay:' + (i * .06) + 's">' +
+                '<div class="neg-card suc-card" style="margin:0">' +
                     iconHtml +
                     '<div style="flex:1;min-width:0">' +
                         '<div class="neg-card-nombre">' + _esc(suc.nombre) +
@@ -2616,7 +2638,7 @@ function _renderSucursales(neg) {
                         '<div class="neg-card-meta">Sucursal · ' + fecha + '</div>' +
                     '</div>' +
                 '</div>' +
-                '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px">' +
+                '<div style="display:grid;grid-template-columns:auto 1fr;gap:8px">' +
                     '<button onclick="abrirAjustesSucursal(\'' + suc.id + '\',\'' + neg.id + '\',event)" ' +
                         'style="background:transparent;border:1px solid var(--ui-borde);color:var(--ui-apagado);' +
                         'font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:500;padding:10px 14px;' +
