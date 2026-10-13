@@ -1620,17 +1620,31 @@ function _setSucursales(negId, arr) {
 }
 
 // Converters: formato app ↔ formato Supabase
+/* ⚠️ LA LISTA DE CAMPOS ES FIJA, Y ESO TIENE UN PRECIO: lo que no esté aquí no
+   sube a la nube, y el siguiente sync —que trae la fila de allá y pisa la de
+   aquí— lo borra. Se guarda bien en el equipo, se ve bien un rato, y al
+   recargar no está. Pasó con la ORGANIZACIÓN del negocio recién estrenada y ya
+   había pasado antes con los horarios.
+
+   AL AGREGAR UN CAMPO AL NEGOCIO, AGRÉGALO EN LAS DOS FUNCIONES. El candado lo
+   comprueba dando una vuelta completa —ida y vuelta— con un negocio que trae
+   todos los campos, así que si alguien agrega uno y se olvida, falla.
+
+   Lo que NO debe viajar: el logo en base64. La fila se queda con la URL del
+   almacén, para no engordar cada lectura del negocio con una imagen. */
 function _negToDb(neg) {
     return {
         id:         neg.id,
         usuario_id: neg.usuarioId,
-        datos:      { nombre: neg.nombre, tipo: neg.tipo, emoji: neg.emoji, color: neg.color, fechaCreado: neg.fechaCreado,
-                      logo: neg.logo || '' }   // URL de Storage, nunca base64 (mantiene la fila ligera)
+        datos:      { nombre: neg.nombre, tipo: neg.tipo, emoji: neg.emoji, color: neg.color,
+                      organizacion: neg.organizacion || '', fechaCreado: neg.fechaCreado,
+                      logo: neg.logo || '' }
     };
 }
 function _negFromDb(row) {
     var d = row.datos || {};
-    return { id: row.id, usuarioId: row.usuario_id, nombre: d.nombre, tipo: d.tipo, emoji: d.emoji, color: d.color, fechaCreado: d.fechaCreado, logo: d.logo || '' };
+    return { id: row.id, usuarioId: row.usuario_id, nombre: d.nombre, tipo: d.tipo, emoji: d.emoji,
+             color: d.color, organizacion: d.organizacion || '', fechaCreado: d.fechaCreado, logo: d.logo || '' };
 }
 
 // Sync Supabase → localStorage (se llama al iniciar sesión y al cargar)
@@ -2563,19 +2577,23 @@ function _renderBrandBar(neg) {
     bar.style.borderColor = 'var(--ui-borde)';
     // Logo base de la marca en lugar del emoji (si el negocio lo tiene cargado).
     var _logoBar = _getNegLogo(neg.id);
+    var _org = neg.organizacion ? EtaaxNegocio.org(neg.organizacion) : null;
     bar.innerHTML =
+        /* SI HAY LOGO, MANDA EL LOGO; si no, el icono hace de foto de perfil.
+           Nunca los dos en el mismo círculo —serían dos cosas peleando por el
+           mismo lugar— y nunca el icono dos veces: cuando el círculo ya lo
+           lleva, el renglón de abajo no lo repite. */
         (_logoBar
-            ? '<div class="neg-activo-emoji-wrap" style="background:#fff;border:1px solid ' + color + '33;overflow:hidden;padding:0"><img src="' + _esc(_logoBar) + '" alt="" style="width:100%;height:100%;object-fit:contain"></div>'
-            : '<div class="neg-activo-emoji-wrap" style="background:' + color + '1a;border:1px solid ' + color + '33">' + (neg.emoji || t.emoji) + '</div>') +
+            ? '<div class="neg-activo-emoji-wrap" style="background:#fff;border:1px solid var(--ui-borde);overflow:hidden;padding:0;border-radius:50%"><img src="' + _esc(_logoBar) + '" alt="" style="width:100%;height:100%;object-fit:cover"></div>'
+            : '<div class="neg-activo-emoji-wrap" style="background:var(--s2);border:1px solid var(--ui-borde);border-radius:50%">' +
+                  (_org ? _ic(_org.ic, 22) : (neg.emoji || t.emoji)) + '</div>') +
         /* Lo que identifica al negocio es cómo está armado — PYME, cadena,
            franquicia—, no a qué se dedica: eso es de cada sucursal. Mientras
            nadie lo haya elegido, no se inventa: se queda en blanco y el dueño
            lo pone al configurar. */
         '<div><div class="neg-activo-nombre">' + _esc(neg.nombre) + '</div>' +
-        '<div class="neg-activo-tipo ic-fila">' +
-            (neg.organizacion
-                ? _ic(EtaaxNegocio.org(neg.organizacion).ic, 14) + _esc(EtaaxNegocio.org(neg.organizacion).nom)
-                : _esc(t.label)) +
+        '<div class="neg-activo-tipo' + (_logoBar ? ' ic-fila' : '') + '">' +
+            (_org ? ((_logoBar ? _ic(_org.ic, 14) : '') + _esc(_org.nom)) : _esc(t.label)) +
         '</div></div>' +
         '<div class="brand-info-bar-btns">' +
         /* El aviso de privacidad, a la mano. Estaba solo en el pie de la landing
@@ -2674,8 +2692,12 @@ function _renderSucursales(neg) {
                         '</div>' +
                         /* Lo que ESTA sucursal es, antes que cuándo se creó:
                            el giro se consulta; la fecha casi nunca. */
-                        '<div class="neg-card-meta ic-fila">' +
-                            (_g ? _ic(_g.ic, 13) + _esc(_g.nom) + ' · ' : 'Sucursal · ') + fecha +
+                        /* El dibujo del giro va aquí SOLO si el círculo de al
+                           lado está ocupado por el logo. Si no hay logo, el
+                           círculo ya es el icono del giro y repetirlo aquí es
+                           verlo dos veces en el mismo renglón. */
+                        '<div class="neg-card-meta' + (_logoCard ? ' ic-fila' : '') + '">' +
+                            (_g ? ((_logoCard ? _ic(_g.ic, 13) : '') + _esc(_g.nom) + ' · ') : 'Sucursal · ') + fecha +
                         '</div>' +
                     '</div>' +
                 '</div>' +

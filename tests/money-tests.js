@@ -26660,6 +26660,62 @@ console.log('\n══ BE15 · Organización del negocio y giro de la sucursal �
     test('…con el logo redondo, como una foto de perfil', () =>
         eq(/border-radius:50%/.test(tarjetas), true, 'sigue cuadrado'));
 
+    /* ── LO QUE NO VIAJA A LA NUBE, SE PIERDE ────────────────────────────
+       `_negToDb` tiene una lista FIJA de campos: lo que no esté ahí no sube, y
+       el siguiente sync —que trae la fila de la nube y pisa la del equipo— lo
+       borra. Se guarda bien, se ve bien un rato, y al recargar no está. Le pasó
+       a la organización el día que se estrenó. */
+    {
+        const neg = { id:'n9', usuarioId:'u1', nombre:'Prueba', tipo:'restaurante',
+                      emoji:'🍽️', color:'#3dbe7a', organizacion:'franquicia',
+                      fechaCreado:'2026-01-02', logo:'https://x/l.png' };
+        const vuelta = V._negFromDb(V._negToDb(neg));
+        Object.keys(neg).forEach(k => {
+            test('el negocio conserva «' + k + '» al ir y volver de la nube', () =>
+                eq(vuelta[k], neg[k], 'se perdió: ' + k));
+        });
+    }
+
+    /* ── Un círculo, una cosa ────────────────────────────────────────────
+       Si hay logo manda el logo; si no, el icono hace de foto de perfil. Y el
+       dibujo no se repite: cuando el círculo ya lo lleva, el renglón de al lado
+       no lo pone otra vez. */
+    {
+        const conLogo = crearContexto();
+        ['etaax-iconos.js', 'negocio-tipos.js', 'precios.js'].forEach(f => cargarJS(conLogo, f));
+        cargarInline(conLogo, 'hub.html');
+        conLogo._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', organizacion:'cadena', color:'#3dbe7a' }]);
+        conLogo._storage['etaax_n1_sucursales'] = JSON.stringify([{ id:'s1', nombre:'Centro', activa:true, fechaCreado:'2026-08-07' }]);
+        conLogo._storage['etaax_n1_suc_s1'] = JSON.stringify({ giroK:'taqueria' });
+        /* El logo de la sucursal vive en SU PROPIA clave, no dentro de la
+           configuración: así una configuración pesada no arrastra la imagen. */
+        conLogo._storage['etaax_n1_suc_s1_logo'] = 'https://x/suc.png';
+        setVar(conLogo, '_sesion', { usuarioId:'u1', nombre:'EGMx', plan:'pyme' });
+        conLogo._pintarIconosLogin();
+        conLogo._renderSucursales(conLogo._getNegocios()[0]);
+        const conL = conLogo.document.getElementById('listSucursales').innerHTML || '';
+        test('con logo: el círculo lleva el logo y el giro va al lado', () => {
+            eq(conL.indexOf('https://x/suc.png') > -1, true, 'no salió el logo');
+            return eq((conL.match(/#etx-giro-taqueria/g) || []).length, 1, 'el dibujo del giro no está, o está de más');
+        });
+
+        const sinLogo = crearContexto();
+        ['etaax-iconos.js', 'negocio-tipos.js', 'precios.js'].forEach(f => cargarJS(sinLogo, f));
+        cargarInline(sinLogo, 'hub.html');
+        sinLogo._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', organizacion:'cadena', color:'#3dbe7a' }]);
+        sinLogo._storage['etaax_n1_sucursales'] = JSON.stringify([{ id:'s1', nombre:'Centro', activa:true, fechaCreado:'2026-08-07' }]);
+        sinLogo._storage['etaax_n1_suc_s1'] = JSON.stringify({ giroK:'taqueria' });
+        setVar(sinLogo, '_sesion', { usuarioId:'u1', nombre:'EGMx', plan:'pyme' });
+        sinLogo._pintarIconosLogin();
+        sinLogo._renderSucursales(sinLogo._getNegocios()[0]);
+        const sinL = sinLogo.document.getElementById('listSucursales').innerHTML || '';
+        test('sin logo: el icono hace de foto de perfil y NO se repite', () =>
+            eq((sinL.match(/#etx-giro-taqueria/g) || []).length, 1,
+               'aparece ' + (sinL.match(/#etx-giro-taqueria/g) || []).length + ' veces en el mismo renglón'));
+        test('…y sigue diciendo de qué es la sucursal', () =>
+            eq(/Taquería/.test(sinL), true, 'se quedó sin nombre del giro'));
+    }
+
     /* ── El negocio dice cómo está armado, no a qué se dedica ───────────── */
     let barra = '';
     try {
