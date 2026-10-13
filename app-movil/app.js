@@ -276,7 +276,13 @@ async function entrar() {
     try {
         var h = await hashNip(NIP);
         var rv = await _supabase.rpc('entrada_validar_nip', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
-        if (rv.error) { $('nipMsg').textContent = 'No se pudo comprobar: ' + rv.error.message; _entrando = false; return; }
+        if (rv.error) {
+            /* Frenado por intentos (v78): se dice cuánto falta, no el error
+               crudo. En un celular, el error crudo no se puede ni leer. */
+            var _esp = (typeof etaaxNipEsperaMsg === 'function') ? etaaxNipEsperaMsg(rv) : '';
+            $('nipMsg').textContent = _esp || ('No se pudo comprobar: ' + rv.error.message);
+            NIP = ''; pintarPuntos(); _entrando = false; return;
+        }
         if (!rv.data) {
             $('nipMsg').innerHTML = 'NIP no reconocido.<br>Pídele a tu encargado tu NIP de 5 dígitos.';
             NIP = ''; pintarPuntos(); _entrando = false; return;

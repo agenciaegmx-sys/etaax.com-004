@@ -244,8 +244,13 @@ async function entrar(){
         var h = await _hashNip(pin);
         var rv = await _supabase.rpc('entrada_validar_nip', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
         if (rv.error) {
+            /* FRENADO POR INTENTOS (v78): se dice cuánto falta, no el error
+               crudo del servidor. Quien está frenado ve esto antes que nada. */
+            var _esp = (typeof etaaxNipEsperaMsg === 'function') ? etaaxNipEsperaMsg(rv) : '';
             btn.disabled = false; msg.className = 'cap-msg err';
-            msg.innerHTML = 'No se pudo validar.<br><span style="font-size:11px;color:var(--text-dim)">' + etx(rv.error.message) + ' — ¿se corrió la migración v27 en Supabase?</span>';
+            msg.innerHTML = _esp
+                ? etx(_esp) + '<br><span style="font-size:11px;color:var(--text-dim)">Vuelve a intentarlo cuando pase ese rato; no hace falta recargar.</span>'
+                : 'No se pudo validar.<br><span style="font-size:11px;color:var(--text-dim)">' + etx(rv.error.message) + ' — ¿se corrió la migración v27 en Supabase?</span>';
             return;
         }
         if (!rv.data) {

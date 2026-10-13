@@ -593,8 +593,13 @@ async function entrar(){
         // 1) Validar token + NIP en el SERVIDOR (sin sesión, login efímero por RPC).
         var rv = await _supabase.rpc('entrada_validar_nip', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
         if (rv.error) {
+            /* FRENADO POR INTENTOS (v78): se dice cuánto falta, no el error
+               crudo del servidor. Quien está frenado ve esto antes que nada. */
+            var _esp = (typeof etaaxNipEsperaMsg === 'function') ? etaaxNipEsperaMsg(rv) : '';
             btn.disabled = false; msg.className = 'cap-msg err';
-            msg.innerHTML = 'No se pudo validar.<br><span style="font-size:11px;color:var(--text-dim)">' + etx(rv.error.message) + ' — ¿se corrió la migración v27 en Supabase?</span>';
+            msg.innerHTML = _esp
+                ? etx(_esp) + '<br><span style="font-size:11px;color:var(--text-dim)">Vuelve a intentarlo cuando pase ese rato; no hace falta recargar.</span>'
+                : 'No se pudo validar.<br><span style="font-size:11px;color:var(--text-dim)">' + etx(rv.error.message) + ' — ¿se corrió la migración v27 en Supabase?</span>';
             return;
         }
         if (!rv.data) {
@@ -1248,6 +1253,11 @@ async function _registrarBatch(flujo){
         _cartMsg(flujo,'Registrando '+(ok+1)+' de '+total+'…','');
         try {
             var r = await _supabase.rpc('entrada_registrar', { p_neg:NEG, p_token:TOKEN, p_niphash:_NIPHASH, p_datos:_buildEntry(flujo, it) });
+            /* Si OTRO aparato de este mismo lugar se puso a probar NIP, el
+               freno alcanza también a quien ya estaba dentro. Que lo entienda
+               y no crea que perdió lo capturado. */
+            var _espE = (typeof etaaxNipEsperaMsg === 'function') ? etaaxNipEsperaMsg(r) : '';
+            if (_espE) { r = { error: { message: _espE } }; }
             if (r.error) fallidos.push(it); else ok++;
         } catch(e){ fallidos.push(it); }
     }

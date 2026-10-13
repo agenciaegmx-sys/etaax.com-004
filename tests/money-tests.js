@@ -25135,6 +25135,223 @@ console.log('\n══ BE7 · La baja de un colaborador cierra las dos puertas (v
            true, 'quedó llamable'));
 }
 
+/* ═══════════ SUITE BE11 · EL FRENO DE LOS NIP (v78) ═════════════════════════
+   Un NIP son cinco dígitos: cien mil combinaciones. El token del QR no protege
+   de eso —lo tiene cualquiera que haya visto el código pegado en la pared— y
+   el inventario encontró DIEZ funciones públicas que aceptan un NIP, de las
+   cuales una sola tenía freno… y era el equivocado: contaba por negocio SIN
+   IP, así que un teléfono desde la calle dejaba sin QR al local entero.
+
+   Lo que esta suite cuida, que es distinto de lo que cuida la migración:
+     · que no aparezca una puerta ONCE sin guardia;
+     · que el guardia siga contando por negocio+IP y no por NIP ni por función
+       (si contara por cualquiera de esas dos, cambiarla reiniciaría el
+       contador, que es exactamente lo que hace quien adivina);
+     · que al meter el guardia no se haya perdido NI UNA LÍNEA de los cuerpos
+       anteriores — así perdió la v63 el freno de staff_login;
+     · y que las tres pantallas que hablan por NIP digan lo mismo y en cristiano.
+
+   Lo que esta suite NO puede: comprobar que el freno FRENA. Eso necesita correr
+   SQL, y está en tests/probar-sql-v78.mjs, contra un Postgres de verdad.       */
+function suiteFrenoNip() {
+console.log('\n══ BE11 · El freno de los NIP (v78) ══');
+
+    const v78 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v78.sql'), 'utf8');
+    const migraciones = fs.readdirSync(RAIZ)
+        .filter(f => /^supabase-migration-v\d+\.sql$/.test(f))
+        .sort((a, b) => Number(a.match(/v(\d+)/)[1]) - Number(b.match(/v(\d+)/)[1]));
+
+    /* La ÚLTIMA definición de cada función en todo el repo, y la última ANTES
+       de la v78 — que es contra la que hay que comparar lo que se tocó. */
+    function definiciones(hasta) {
+        const ult = {};
+        for (const f of migraciones) {
+            if (hasta && Number(f.match(/v(\d+)/)[1]) >= hasta) continue;
+            const s = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+            const re = /CREATE (?:OR REPLACE )?FUNCTION\s+([a-z_0-9]+)\s*\(/g;
+            let m;
+            while ((m = re.exec(s))) {
+                const j = s.indexOf('$$;', m.index);
+                if (j > 0) ult[m[1]] = { archivo: f, texto: s.slice(m.index, j + 3) };
+            }
+        }
+        return ult;
+    }
+    const ahora = definiciones(null);
+    const antes = definiciones(78);
+
+    /* ── 1. Ninguna puerta sin guardia ──────────────────────────────────── */
+    /* Las internas (`_nip_guardia`, las sondas) no son puertas: no las puede
+       llamar nadie de fuera. Puerta es lo que el QR puede marcar. */
+    const puertas = Object.keys(ahora).filter(n =>
+        /p_niphash\s+TEXT/i.test(ahora[n].texto) && n.charAt(0) !== '_');
+    test('se encontraron las puertas que reciben un NIP', () =>
+        eq(puertas.length >= 10, true, 'solo ' + puertas.length + ': ' + puertas.join(', ')));
+    /* O llama al guardia, o delega en una que lo haga. Las dos cosas a la vez
+       contarían DOS fallos por un solo intento. */
+    /* OJO: una función NO delega en sí misma. Su propia firma lleva su nombre,
+       así que buscarlo a secas daba por bueno que entrada_validar_nip delegara
+       en entrada_validar_nip — y la prueba de "no cuenta dos veces" la acusaba
+       sola. Se mira el cuerpo, sin la cabecera. */
+    const delegaEn = (n) => {
+        const t = ahora[n].texto;
+        const cuerpo = t.slice(t.indexOf('AS $$'));
+        return ['entrada_validar_nip(', 'portal_perfil('].some(
+            d => d.slice(0, -1) !== n && cuerpo.indexOf(d) > -1);
+    };
+    const sinGuardia = puertas.filter(n =>
+        ahora[n].texto.indexOf('_nip_guardia') === -1 && !delegaEn(n));
+    test('toda puerta de NIP llama al guardia o delega en una que lo hace', () =>
+        eq(sinGuardia.length, 0, 'sin freno: ' + sinGuardia.join(', ')));
+    const dobles = puertas.filter(n => ahora[n].texto.indexOf('_nip_guardia') > -1 && delegaEn(n));
+    test('…y ninguna lo cuenta dos veces (guardia propio + delegación)', () =>
+        eq(dobles.length, 0, 'cuentan doble: ' + dobles.join(', ')));
+    /* La prueba de que la prueba mira de verdad: si el filtro se quedara vacío,
+       los dos tests de arriba pasarían celebrando una lista sin nadie. */
+    test('la revisión mira de verdad las cuatro que comprueban el NIP', () => {
+        const conGuardia = puertas.filter(n => ahora[n].texto.indexOf('_nip_guardia') > -1).sort();
+        return eq(conGuardia.join(','),
+            'entrada_historial,entrada_sucursal_de_nip,entrada_validar_nip,portal_perfil',
+            conGuardia.join(','));
+    });
+
+    /* ── 2. El contador no se reinicia cambiando de NIP ni de función ───── */
+    const guardia = ahora['_nip_guardia'].texto;
+    const clave   = ahora['_nip_clave'].texto;
+    test('la llave del contador es negocio + IP', () =>
+        eq(/'nip\|'[\s\S]{0,80}p_neg[\s\S]{0,80}_login_ip\(\)/.test(clave), true, clave.slice(0, 200)));
+    /* Si el NIP probado entrara en la llave, bastaría cambiarlo para empezar de
+       cero — y cambiar el NIP es LITERALMENTE lo que hace quien adivina. */
+    test('…y NO lleva el NIP probado (si no, cambiarlo reiniciaría el contador)', () =>
+        eq(/p_niphash/.test(clave), false, clave.slice(0, 200)));
+    test('…ni el nombre de la función (cambiar de puerta tampoco reinicia)', () =>
+        eq(/TG_|proname|p_funcion/.test(clave), false, clave.slice(0, 200)));
+    test('solo se cuentan los FALLOS: acertar borra el contador', () =>
+        eq(/IS TRUE[\s\S]{0,200}DELETE FROM login_intentos/.test(guardia), true, 'no limpia al acertar'));
+    test('el guardia aplica el candado de baja de la v63', () =>
+        eq(/estado[\s\S]{0,80}'Activo'/.test(guardia), true, 'deja pasar al dado de baja'));
+    test('el mensaje de freno lleva los segundos que faltan', () =>
+        eq(/RAISE EXCEPTION 'nip_espera:%'/.test(guardia), true, 'sin segundos no hay qué decirle a nadie'));
+
+    /* La escalera documentada arriba y la escrita abajo tienen que ser la
+       misma: un comentario que miente es peor que no tenerlo. */
+    const escalera = ahora['_nip_espera'].texto.replace(/[ \t]+/g, ' ');
+    [[12, 60], [15, 300], [18, 900], [24, 3600]].forEach(par => {
+        test('con ' + par[0] + ' fallos, esperar ' + par[1] + ' s', () =>
+            eq(escalera.indexOf('p_fallos >= ' + par[0] + ' THEN ' + par[1]) > -1, true, 'escalera'));
+    });
+
+    /* ── 3. No se perdió ni una línea al meter el guardia ───────────────── */
+    /* Es LA comprobación de este bloque. La v63 no rompió nada visible: solo
+       dejó de contar. Lo que se compara son las líneas del cuerpo ANTERIOR
+       contra el nuevo; si falta una, se nombra. */
+    const salidasAProposito = {
+        // El freno viejo de entrada_validar_nip: contaba por negocio y SIN IP.
+        entrada_validar_nip: ['IF NOT _login_golpe(v_clave) THEN', "RAISE EXCEPTION 'rate_limited';",
+                              "DECLARE v_clave TEXT := 'nip|' || coalesce(p_neg, '');",
+                              'IF v_nombre IS NOT NULL THEN PERFORM _login_exito(v_clave); END IF;'],
+    };
+    ['entrada_validar_nip', 'portal_perfil', 'entrada_sucursal_de_nip', 'entrada_historial'].forEach(n => {
+        test('v78 · ' + n + ' no perdió ni una línea de su definición anterior', () => {
+            /* Se compara SIN espacios y por contenido, no línea contra línea
+               idéntica: envolver una consulta en plpgsql la indenta y le pone
+               un `v_r := (` delante, y eso no es perder nada. La cabecera va
+               aparte —cambia a propósito— y se comprueba abajo, con nombre. */
+            const limpia = (t) => t.replace(/\s+/g, '');
+            const viejo = antes[n].texto.split('\n').map(l => l.trim().replace(/;$/, ''))
+                .filter(l => l && l !== 'BEGIN' && l !== 'END' && l !== '$$'
+                          && l.indexOf('--') !== 0 && l.indexOf('LANGUAGE ') !== 0);
+            const nuevoTexto = (ahora[n].archivo === 'supabase-migration-v78.sql') ? ahora[n].texto : '';
+            eq(nuevoTexto.length > 0, true, 'la v78 no redefine ' + n);
+            const nuevo = limpia(nuevoTexto);
+            const fuera = (salidasAProposito[n] || []).map(x => limpia(x.replace(/;$/, '')));
+            const perdidas = viejo.filter(l => {
+                const L = limpia(l);
+                return fuera.indexOf(L) === -1 && nuevo.indexOf(L) === -1;
+            });
+            return eq(perdidas.length, 0, 'se perdieron: ' + JSON.stringify(perdidas.slice(0, 3)));
+        });
+    });
+    /* Lo que cambia de la cabecera, a propósito y por una razón cada uno. */
+    ['portal_perfil', 'entrada_sucursal_de_nip'].forEach(n => {
+        test('v78 · ' + n + ' pasa de LANGUAGE sql a plpgsql (el guardia va ANTES)', () => {
+            eq(/LANGUAGE sql/.test(antes[n].texto), true, 'antes ya era plpgsql');
+            return eq(/LANGUAGE plpgsql/.test(ahora[n].texto), true, 'sigue siendo sql');
+        });
+    });
+    ['entrada_validar_nip', 'portal_perfil', 'entrada_sucursal_de_nip', 'entrada_historial'].forEach(n => {
+        test('v78 · ' + n + ' queda VOLATILE (el guardia escribe el contador)', () =>
+            eq(/VOLATILE/.test(ahora[n].texto), true, 'quedó STABLE: el planificador puede no ejecutarla'));
+    });
+    test('v78 · y el freno viejo de entrada_validar_nip SÍ salió (era el malo)', () => {
+        const t = ahora['entrada_validar_nip'].texto;
+        return eq(t.indexOf('_login_golpe') === -1 && t.indexOf('_nip_guardia') > -1, true,
+                  'quedó el freno por negocio sin IP');
+    });
+    /* Y el contrato de entrada_historial: su "no" no es NULL, es un motivo —
+       entrada.html lo lee para decir «Tu NIP ya no es válido». */
+    test('v78 · entrada_historial sigue diciendo POR QUÉ cuando el NIP no vale', () =>
+        eq(/_nip_guardia[\s\S]{0,120}'motivo', 'nip'/.test(ahora['entrada_historial'].texto), true,
+           'el guardia le cambió el contrato a NULL'));
+
+    /* ── 4. El QR no se queda sin permisos ──────────────────────────────── */
+    ['entrada_validar_nip', 'portal_perfil', 'entrada_sucursal_de_nip'].forEach(n => {
+        test('v78 · ' + n + ' sigue abierta a anon (el QR no tiene sesión)', () =>
+            eq(new RegExp('GRANT EXECUTE ON FUNCTION ' + n + '\\([^)]*\\)\\s*TO anon').test(v78), true, 'se cerró el QR'));
+    });
+    test('v78 · el guardia NO se le concede a nadie de fuera', () =>
+        eq(/REVOKE ALL ON FUNCTION _nip_guardia\(TEXT, TEXT\)\s*FROM PUBLIC, anon, authenticated/.test(v78),
+           true, 'quedó llamable desde fuera'));
+    test('v78 · lo último del archivo es la tabla de comprobación, no un DROP', () => {
+        const sin = v78.split('\n').filter(l => l.trim().indexOf('--') !== 0).join('\n');
+        const sts = sin.split(';').map(x => x.trim()).filter(x => x.length > 0);
+        return eq(/^(WITH|SELECT)\b/i.test(sts[sts.length - 1] || ''), true, 'última: ' + (sts[sts.length - 1] || '').slice(0, 40));
+    });
+
+    /* ── 5. Lo que ve la persona ────────────────────────────────────────── */
+    const ctxA = crearContexto();
+    cargarJS(ctxA, 'staff-area.js');
+    const seg = ctxA.window.etaaxNipEspera;
+    const msg = ctxA.window.etaaxNipEsperaMsg;
+    test('se entiende la respuesta del servidor (trae los segundos)', () =>
+        eq(seg({ error: { message: 'nip_espera:47' } }), 47));
+    test('…y un error cualquiera NO se confunde con un freno', () =>
+        eq(seg({ error: { message: 'relation does not exist' } }), 0));
+    test('…ni una respuesta buena', () => eq(seg({ data: 'Ana', error: null }), 0));
+    test('el aviso dice qué pasó y que hay que esperar', () => {
+        const t = msg({ error: { message: 'nip_espera:120' } });
+        eq(/intentos/i.test(t), true, t);
+        return eq(/2 minutos/.test(t), true, t);
+    });
+    test('…y cuando no hay freno, no inventa aviso', () =>
+        eq(msg({ error: { message: 'otra cosa' } }), ''));
+    /* El hub tiene su propia copia del redondeo porque no comparte archivo con
+       las pantallas del QR. Que no se separen se comprueba CORRIENDO las dos. */
+    const ctxB = crearContexto();
+    cargarInline(ctxB, 'hub.html');
+    test('el hub y el QR redondean el tiempo igual (no se separaron)', () => {
+        const a = ctxA.window.etaaxNipEsperaTexto, b = ctxB.window._esperaTexto;
+        eq(typeof b, 'function', 'no se encontró _esperaTexto en el hub');
+        const distintos = [5, 30, 45, 46, 60, 89, 90, 120, 300, 900, 3600]
+            .filter(s => a(s) !== b(s));
+        return eq(distintos.length, 0, 'difieren en: ' + distintos.join(', '));
+    });
+    /* Y que las tres pantallas lo USEN: el ayudante solo sirve si se llama. */
+    ['entrada.html', 'checklist.html', 'app-movil/app.js'].forEach(f => {
+        const src = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+        test(f + ' avisa del freno en vez de enseñar el error crudo', () =>
+            eq(src.indexOf('etaaxNipEsperaMsg') > -1, true, 'sin aviso'));
+    });
+    /* Las tres cargan el archivo donde vive el ayudante. Sin esto, el `typeof`
+       de guardia se las traga calladas y nadie ve nunca el aviso. */
+    [['entrada.html', 'staff-area.js'], ['checklist.html', 'staff-area.js'],
+     ['app-movil/index.html', 'staff-area.js']].forEach(par => {
+        const src = fs.readFileSync(path.join(RAIZ, par[0]), 'utf8');
+        test(par[0] + ' carga ' + par[1] + ' (si no, el aviso no existe)', () =>
+            eq(src.indexOf(par[1]) > -1, true, 'no lo carga'));
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -25151,4 +25368,5 @@ suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
-    .then(suiteCartaGuardado).then(suiteBajaColaborador).then(resumen);
+    .then(suiteCartaGuardado).then(suiteBajaColaborador)
+    .then(suiteFrenoNip).then(resumen);

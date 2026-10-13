@@ -185,3 +185,40 @@
         areaDeInsumo: areaDeInsumo
     };
 })();
+
+/* ============================================================
+   EL FRENO DE LOS NIP, DICHO EN CRISTIANO
+
+   Un NIP son cinco dígitos. Sin freno, un programa los prueba todos; con freno
+   (v78), el servidor contesta `nip_espera:<segundos>` y lo que la persona ve
+   depende de esto. Sin esto vería «No se pudo validar. nip_espera:47 — ¿se
+   corrió la migración v27?», que no le dice nada y además miente.
+
+   Vive aquí porque este archivo ya lo cargan las TRES pantallas que hablan por
+   NIP —entrada.html, checklist.html y la app móvil— y las tres tienen que
+   decir lo mismo. Una copia por pantalla es una pantalla que un día dirá otra
+   cosa, y será la que nadie abrió en meses.
+   ============================================================ */
+/* Segundos que faltan, o 0 si el error no era este. Acepta la respuesta entera
+   de supabase-js (`{error:{message}}`) o un error pelón. */
+window.etaaxNipEspera = function (r) {
+    var m = (r && r.error && r.error.message) || (r && r.message) || r || '';
+    var g = /nip_espera:(\d+)/.exec(String(m));
+    return g ? Math.max(1, parseInt(g[1], 10)) : 0;
+};
+/* El mismo redondeo que usa el hub en su pantalla de entrada: «un minuto» se
+   entiende, «60 segundos» se lee como un error. (El hub tiene su propia copia
+   porque no comparte ningún archivo con las pantallas del QR; el candado
+   compara las dos corriéndolas, para que no se separen.) */
+window.etaaxNipEsperaTexto = function (seg) {
+    if (seg >= 90) return 'unos ' + Math.ceil(seg / 60) + ' minutos';
+    if (seg > 45)  return 'un minuto';
+    return seg + ' segundos';
+};
+/* La frase completa, o '' si no estaba frenado. Un solo renglón por pantalla. */
+window.etaaxNipEsperaMsg = function (r) {
+    var s = window.etaaxNipEspera(r);
+    if (!s) return '';
+    return 'Demasiados intentos con NIP equivocado. Espera ' +
+           window.etaaxNipEsperaTexto(s) + ' e inténtalo de nuevo.';
+};
