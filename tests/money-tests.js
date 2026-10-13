@@ -26274,6 +26274,7 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
             cargarJS(V, 'etaax-iconos.js');
             cargarJS(V, 'negocio-tipos.js');    // la organización y el giro
             cargarJS(V, 'precios.js');          // el pie de las tarjetas lo usa
+            cargarJS(V, 'datos-pago.js');        // contacto compartido del hub
             cargarInline(V, 'hub.html');
             V._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', tipo:'otro', color:'#f5c842' }]);
             V._storage['etaax_n1_sucursales'] = JSON.stringify([
@@ -26409,19 +26410,31 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
                    'quedó: ' + (dentro(par[0]) || '(vacío)')));
         });
         /* ── Y la pantalla de sucursales, que es la que más iconos lleva ──
-           Nueve sitios: el perfil de la sesión, los dos globales, el ＋ de
-           nueva sucursal, el salir, y los que se arman al pintar cada tarjeta
+           Los dos globales, el ＋ de nueva sucursal y los que se arman al pintar cada tarjeta
            (privacidad, ajustes, matriz/sucursal, administrar). */
-        [['icSesionPerfil', 'perfil'], ['icCatGlobal', 'catalogos'],
+        [['icCatGlobal', 'catalogos'],
          ['icFinGlobal', 'finanzas'], ['icNuevaSuc', 'anadir-sucursal']].forEach(par => {
             test('sucursales pinta el icono «' + par[1] + '»', () =>
                 eq(dentro(par[0]).indexOf('#etx-' + par[1]) > -1, true,
                    'quedó: ' + (dentro(par[0]) || '(vacío)')));
         });
-        test('…y «cerrar sesión» en las DOS vistas que lo llevan', () => {
-            const n = (fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8')
-                .match(/class="ic-salir"/g) || []).length;
-            return eq(n >= 2, true, 'solo ' + n + ': una de las dos vistas se quedó sin icono');
+        /* Salir ya no vive en el hub: está en el menú de la cuenta, en la barra
+           de arriba, que es fija y por lo tanto siempre está a la vista.
+           Tenerlo además en cada vista era ofrecer la misma salida dos veces en
+           la misma pantalla. Lo que se cuida ahora es que SIGA EXISTIENDO una
+           salida y que lleve a la de verdad. */
+        test('«cerrar sesión» vive en el menú de la cuenta, y una sola vez', () => {
+            const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+            eq((h.match(/class="btn-logout/g) || []).length, 0, 'el hub conserva su propio botón');
+            const hd = fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8');
+            return eq(/etxHdSalirOp/.test(hd) && /cerrar-sesion/.test(hd), true,
+                      'y el menú tampoco lo tiene: no quedaría por dónde salir');
+        });
+        test('…y el hub le pasa SU forma de salir a la barra', () => {
+            const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+            const i = h.indexOf('etaaxHeader({');
+            return eq(/cerrarSesion:\s*function \(\) \{ logout\(\); \}/.test(h.slice(i, i + 900)), true,
+                      'la barra caería a su salida genérica y no a la del hub');
         });
         /* Los de las tarjetas se arman al vuelo, así que se le pide al propio
            ayudante de la página que los produzca. */
@@ -26662,7 +26675,7 @@ console.log('\n══ BE15 · Organización del negocio y giro de la sucursal �
 
     /* ── Y que llegue hasta la tarjeta ───────────────────────────────────── */
     const V = crearContexto();
-    ['etaax-iconos.js', 'negocio-tipos.js', 'precios.js'].forEach(f => cargarJS(V, f));
+    ['etaax-iconos.js', 'negocio-tipos.js', 'precios.js', 'datos-pago.js'].forEach(f => cargarJS(V, f));
     cargarInline(V, 'hub.html');
     V._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', tipo:'restaurante', organizacion:'cadena', color:'#f5c842' }]);
     V._storage['etaax_n1_sucursales'] = JSON.stringify([
@@ -26711,7 +26724,7 @@ console.log('\n══ BE15 · Organización del negocio y giro de la sucursal �
        no lo pone otra vez. */
     {
         const conLogo = crearContexto();
-        ['etaax-iconos.js', 'negocio-tipos.js', 'precios.js'].forEach(f => cargarJS(conLogo, f));
+        ['etaax-iconos.js', 'negocio-tipos.js', 'precios.js', 'datos-pago.js'].forEach(f => cargarJS(conLogo, f));
         cargarInline(conLogo, 'hub.html');
         conLogo._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', organizacion:'cadena', color:'#3dbe7a' }]);
         conLogo._storage['etaax_n1_sucursales'] = JSON.stringify([{ id:'s1', nombre:'Centro', activa:true, fechaCreado:'2026-08-07' }]);
@@ -26729,7 +26742,7 @@ console.log('\n══ BE15 · Organización del negocio y giro de la sucursal �
         });
 
         const sinLogo = crearContexto();
-        ['etaax-iconos.js', 'negocio-tipos.js', 'precios.js'].forEach(f => cargarJS(sinLogo, f));
+        ['etaax-iconos.js', 'negocio-tipos.js', 'precios.js', 'datos-pago.js'].forEach(f => cargarJS(sinLogo, f));
         cargarInline(sinLogo, 'hub.html');
         sinLogo._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', organizacion:'cadena', color:'#3dbe7a' }]);
         sinLogo._storage['etaax_n1_sucursales'] = JSON.stringify([{ id:'s1', nombre:'Centro', activa:true, fechaCreado:'2026-08-07' }]);

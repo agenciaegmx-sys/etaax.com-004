@@ -1,0 +1,73 @@
+/* Cuenta y cobro comparten estructura, paleta e iconos con el resto de ETAAX. */
+body.cuenta-page{padding:0;background:var(--bg);}
+.cuenta-shell{width:100%;max-width:1168px;margin:0 auto;padding:24px 24px 64px;}
+.cuenta-volver{display:inline-flex;align-items:center;gap:8px;margin-bottom:24px;color:var(--text-muted);font-size:13px;text-decoration:none;}
+.cuenta-volver:hover{color:var(--green);}
+.cuenta-intro{margin-bottom:26px;}
+.cuenta-eyebrow{color:var(--green);font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:600;margin-bottom:8px;}
+.cuenta-intro h1{font-family:'Bebas Neue',sans-serif;font-size:42px;font-weight:400;line-height:1.1;letter-spacing:1px;}
+.cuenta-lead{color:var(--text-muted);font-size:14px;line-height:1.6;margin-top:8px;}
+.cuenta-tabs{display:flex;gap:24px;border-bottom:1px solid var(--border);margin-bottom:28px;}
+.cuenta-tabs a{padding:0 0 13px;color:var(--text-muted);font-size:13px;text-decoration:none;border-bottom:2px solid transparent;}
+.cuenta-tabs a[aria-current=page]{border-color:var(--green);color:var(--text);font-weight:600;}
+.cuenta-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:22px;align-items:start;}
+.cuenta-stack{display:grid;gap:22px;min-width:0;}
+.cuenta-card{border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:24px;min-width:0;}
+.cuenta-card h2{display:flex;align-items:center;gap:10px;font-size:15px;line-height:1.4;margin-bottom:8px;font-weight:600;}
+.cuenta-card p{font-size:13px;line-height:1.65;color:var(--text-muted);}
+.cuenta-card .etx-ic{flex-shrink:0;}
+.cuenta-card-head{margin-bottom:20px;}
+.cuenta-hero{display:flex;gap:16px;align-items:center;margin-bottom:24px;border-color:rgba(61,190,122,.35);}
+.cuenta-avatar{width:56px;height:56px;border-radius:14px;background:rgba(61,190,122,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--green);}
+.cuenta-hero h2{font-size:20px;margin:0;overflow-wrap:anywhere;}
+.cuenta-hero p{overflow-wrap:anywhere;}
+.cuenta-badge{display:inline-flex;align-items:center;gap:6px;border-radius:20px;padding:5px 10px;margin-top:8px;font-size:11px;background:var(--surface2);color:var(--text-muted);}
+.cuenta-badge.activa{background:rgba(61,190,122,.12);color:var(--green);}
+.cuenta-badge.pendiente,.cuenta-badge.vencida{background:rgba(245,200,66,.12);color:var(--accent-text,var(--gold));}
+.cuenta-badge.cancelada{color:var(--red);background:rgba(224,90,58,.1);}
+.cuenta-form{display:grid;gap:16px;}
+.cuenta-field{display:grid;gap:7px;}
+.cuenta-field label{font-size:12px;font-weight:500;color:var(--text);}
+.cuenta-field input,.cuenta-field select{width:100%;min-width:0;padding:11px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font:inherit;font-size:13px;}
+.cuenta-field input[readonly]{color:var(--text-muted);}
+.cuenta-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.cuenta-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px;}
+.cuenta-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--green);color:var(--bg);--etx-color:var(--bg);padding:11px 16px;border:1px solid transparent;border-radius:8px;font:inherit;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;}
+.cuenta-btn:hover{filter:brightness(1.08);}
+.cuenta-btn.secundario{background:transparent;border-color:var(--border);color:var(--text);--etx-color:var(--text);}
+.cuenta-btn:disabled{opacity:.6;cursor:wait;}
+.cuenta-btn:focus-visible,.cuenta-field input:focus-visible,.cuenta-field select:focus-visible,.cuenta-tabs a:focus-visible,.cuenta-volver:focus-visible{outline:2px solid var(--green);outline-offset:3px;}
+.cuenta-msg{font-size:12px;line-height:1.6;min-height:0;overflow-wrap:anywhere;}
+.cuenta-msg:empty{display:none;}
+.cuenta-msg.error{color:var(--red);}
+.cuenta-msg.exito{color:var(--green);}
+.cuenta-nota{padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:12px;line-height:1.65;color:var(--text-muted);}
+.cuenta-lista{list-style:none;padding:0;margin:12px 0 0;}
+.cuenta-lista li{padding:12px 0;border-bottom:1px solid var(--border);font-size:13px;overflow-wrap:anywhere;}
+.cuenta-lista li:last-child{border-bottom:0;}
+.cuenta-lista li span{display:block;color:var(--text-muted);font-size:12px;margin-top:4px;}
+.cuenta-datos{display:grid;gap:0;margin-top:12px;}
+.cuenta-datos div{display:flex;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.cuenta-datos div:last-child{border-bottom:0;}
+.cuenta-datos dt{color:var(--text-muted);}
+.cuenta-datos dd{text-align:right;overflow-wrap:anywhere;}
+.cuenta-precio{font-family:'Bebas Neue',sans-serif;font-size:44px;line-height:1.2;margin:18px 0 2px;}
+.cuenta-precio small{font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);font-weight:400;}
+.cuenta-divider{height:1px;background:var(--border);margin:20px 0;}
+.cuenta-selector{max-width:380px;margin-bottom:22px;}
+.cuenta-table-wrap{overflow-x:auto;}
+.cuenta-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:16px;}
+.cuenta-table th{font-weight:500;text-align:left;font-size:11px;color:var(--text-muted);}
+.cuenta-table th,.cuenta-table td{padding:12px 0;border-bottom:1px solid var(--border);}
+.cuenta-table th:last-child,.cuenta-table td:last-child{text-align:right;padding-left:16px;white-space:nowrap;}
+.cuenta-loading{color:var(--text-muted);font-size:14px;}
+.cuenta-wide{max-width:640px;}
+.cuenta-empty{padding:34px;text-align:center;}
+.cuenta-empty h2{justify-content:center;}
+.cuenta-empty .cuenta-actions{justify-content:center;margin-top:18px;}
+.cuenta-details{border-top:1px solid var(--border);margin-top:20px;padding-top:18px;}
+.cuenta-details summary{font-size:13px;color:var(--text);cursor:pointer;}
+.cuenta-details .cuenta-form{margin-top:18px;}
+@media(max-width:780px){.cuenta-layout{grid-template-columns:1fr;}.cuenta-shell{padding:20px 16px 40px;}.cuenta-intro h1{font-size:36px;}}
+@media(max-width:440px){.cuenta-fields{grid-template-columns:1fr;}.cuenta-card{padding:20px;}.cuenta-actions .cuenta-btn{flex:1;}.cuenta-tabs{gap:20px;}.cuenta-hero h2{font-size:18px;}}
+@media print{.cuenta-tabs,.cuenta-volver,.cuenta-actions{display:none;}.cuenta-layout{display:block;}.cuenta-card{break-inside:avoid;margin-bottom:16px;}}

@@ -9,7 +9,7 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
 <script src="/precios.js"></script>
-<script src="/datos-pago.js"></script><!-- datos de transferencia: fuente única -->
+<script src="/datos-pago.js?v=cuenta-1"></script><!-- datos de transferencia y contacto: fuente única -->
 <script src="/etaax-core.js"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
 <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
      navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -83,10 +83,13 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   background:radial-gradient(ellipse,rgba(61,190,122,0.07) 0%,transparent 65%);
   pointer-events:none;z-index:0;
 }
+/* La barra reserva su altura real en body; el shell descuenta esa altura del
+   viewport y agrega aire antes de la barra del negocio. */
 .hub-shell{
-  position:relative;z-index:1;min-height:100vh;
-  display:flex;flex-direction:column;padding:0 24px 80px;
+  position:relative;z-index:1;min-height:calc(100vh - var(--etx-header-h,70px));
+  display:flex;flex-direction:column;padding:24px 24px 80px;
 }
+@media(max-width:720px){.hub-shell{padding-top:18px;}}
 
 /* TOPBAR */
 .hub-topbar{
@@ -504,13 +507,30 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 .neg-empty-title{font-size:14px;color:var(--muted);margin-bottom:6px;}
 .neg-empty-sub{font-size:11px;letter-spacing:1px;text-transform:uppercase;}
 
-/* BRAND INFO BAR */
-.brand-info-bar {
-  display:flex;align-items:center;gap:12px;
-  background:var(--s1);border:1px solid var(--b1);border-radius:12px;
-  padding:14px 20px;transition:border-color .3s;
-}
-.brand-info-bar-btns{margin-left:auto;display:flex;gap:8px;align-items:center;}
+/* Identidad del negocio. La cuenta de acceso vive en el header compartido. */
+.hub-negocio-bar{margin-bottom:34px;gap:16px;}
+.hub-negocio-id{display:flex;align-items:center;gap:14px;min-width:0;flex:1 1 240px;}
+.hub-negocio-datos{min-width:0;}
+.hub-negocio-bar .neg-activo-nombre{white-space:normal;overflow-wrap:anywhere;}
+.hub-negocio-bar .neg-activo-tipo{white-space:normal;text-transform:none;letter-spacing:0;line-height:1.6;}
+.hub-negocio-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:12px;}
+.hub-negocio-actions .user-badge{flex-shrink:0;}
+.hub-config-btn{font:500 12px 'DM Sans',sans-serif;padding:10px 14px;min-height:42px;
+  border:1px solid var(--ui-borde);border-radius:8px;background:transparent;
+  color:var(--text);cursor:pointer;transition:border-color .2s,color .2s;}
+.hub-config-btn:hover{border-color:var(--green);color:var(--green);}
+.hub-negocio-actions .aviso-priv-btn{color:var(--ui-apagado);min-height:42px;}
+.hub-negocio-actions :is(a,button):focus-visible,.hub-global-grid button:focus-visible{
+  outline:2px solid var(--green);outline-offset:4px;}
+#viewNegocios .hub-title{font-family:'DM Sans',sans-serif;font-size:clamp(32px,4vw,44px);
+  font-weight:700;letter-spacing:-1.2px;line-height:1.15;}
+#viewNegocios .hub-eyebrow{margin-bottom:14px;}
+#viewNegocios .hub-subtitle{max-width:620px;line-height:1.7;}
+.hub-guide{max-width:700px;margin:0 auto 32px;padding:18px 22px;border-left:3px solid var(--green);
+  border-radius:0 12px 12px 0;background:rgba(61,190,122,.09);}
+.hub-guide strong{display:block;font-size:14px;font-weight:600;}
+.hub-guide p{font-size:12.5px;line-height:1.7;color:var(--ui-apagado);margin:6px 0 0;}
+.hub-global-grid{max-width:960px;margin:0 auto 28px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
 /* Acceso discreto al aviso legal: presente, sin competirle a las acciones
    de todos los días. Se despinta hasta que el cursor lo toca. */
 .aviso-priv-btn{font-size:11px;padding:5px 12px;border:1px solid transparent;border-radius:6px;
@@ -566,6 +586,15 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
   .plan-grid{grid-template-columns:1fr;}
   .auth-card{padding:24px;}
   .neg-activo-btns{flex-direction:column;align-items:flex-end;gap:6px;}
+  .hub-negocio-bar{padding:16px;gap:16px;margin-bottom:28px;}
+  .hub-negocio-id{flex-basis:100%;}
+  .hub-negocio-actions{width:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;}
+  .hub-negocio-actions .user-badge{grid-column:1/-1;justify-self:start;}
+  .hub-negocio-actions :is(a,button){white-space:normal;justify-content:center;text-align:center;padding:10px 8px;}
+  .hub-global-grid{grid-template-columns:1fr;}
+  .hub-guide{padding:16px 18px;margin-bottom:24px;}
+  #viewNegocios .suc-section-head{flex-direction:column;align-items:flex-start;gap:8px;}
+  #viewNegocios .suc-section-sub{line-height:1.6;}
 }
 
 /* ── MODALES ── */
@@ -629,7 +658,6 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
        El chip `topbarUser` se conserva oculto porque varias funciones lo
        escriben; lo que se ve es el header compartido. -->
   <div class="hub-user-top" id="topbarUser" style="display:none"></div>
-  </div>
 
   <!-- ══════════════════════════════════
        VIEW: LOGIN
@@ -728,25 +756,13 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
   ══════════════════════════════════ -->
   <div id="viewNegocios" style="display:none">
 
-    <!-- Barra de sesión -->
-    <div class="neg-activo-bar" style="margin-bottom:24px">
-      <div class="neg-activo-emoji-wrap" id="icSesionPerfil"></div>
-      <div>
-        <div class="neg-activo-nombre" id="negViewUserNombre">—</div>
-        <div class="neg-activo-tipo">Sesión activa</div>
-      </div>
-      <div class="neg-activo-btns">
-        <div class="user-badge">
-          <span class="user-badge-plan" id="negViewUserPlan">—</span>
-        </div>
-        <button class="btn-logout ic-fila" onclick="logout()"><span class="ic-salir"></span>Cerrar sesión</button>
-      </div>
-    </div>
+    <!-- Un solo subheader: identidad del negocio, plan y configuración. -->
+    <div class="neg-activo-bar hub-negocio-bar" id="brandInfoBar"></div>
 
     <div class="hub-hero" style="margin-bottom:28px">
-      <div class="hub-eyebrow" id="negHeroEyebrow">Tu negocio</div>
-      <div class="hub-title" id="negHeroTitle">Selecciona una<br><span class="g">sucursal</span></div>
-      <div class="hub-subtitle" id="negHeroSub">Elige con qué sucursal trabajarás hoy</div>
+      <div class="hub-eyebrow" id="negHeroEyebrow">Centro de operación</div>
+      <div class="hub-title" id="negHeroTitle">Administra tus<br><span class="g">sucursales</span></div>
+      <div class="hub-subtitle" id="negHeroSub">Opera cada sucursal por separado y consulta los resultados de todo tu negocio.</div>
     </div>
 
     <!-- SECCIÓN A: sin marca registrada → formulario centrado -->
@@ -776,11 +792,13 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
     <!-- SECCIÓN B: marca registrada → ver sucursales -->
     <div id="secMarca" style="display:none">
 
-      <!-- Brand info bar -->
-      <div class="brand-info-bar" id="brandInfoBar" style="max-width:960px;margin:0 auto 28px"></div>
+      <aside class="hub-guide" role="note">
+        <strong>Una operación conectada</strong>
+        <p>Comparte catálogos entre sucursales y consulta ventas, gastos y resultados desde un solo lugar. Elige una sucursal para trabajar en su operación diaria.</p>
+      </aside>
 
       <!-- Nivel NEGOCIO (independiente de sucursales): Catálogos Globales | Financiero Global -->
-      <div style="max-width:960px;margin:0 auto 28px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="hub-global-grid">
         <!-- NEUTRAS EN REPOSO. Tenían fondo y borde de color permanente, y dos
              colores fuertes al lado del color del negocio ensucian la pantalla
              en vez de ordenarla. El azul y el morado siguen siendo su
@@ -882,7 +900,10 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
         <button class="btn-cambiar-neg" id="btnCatGlobal" onclick="abrirCatalogosGlobales()" title="Catálogos globales de todas las sucursales" style="display:none">🌐 Catálogos Globales</button>
         <button class="btn-cambiar-neg" id="btnCambiarNeg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
         <button class="btn-cambiar-neg" id="btnVolverAdmin" onclick="volverAlAdmin()" style="display:none;border-color:var(--gold);color:var(--gold)">← Panel Admin</button>
-        <button class="btn-logout ic-fila" onclick="logout()"><span class="ic-salir"></span>Cerrar sesión</button>
+        <!-- Salir ya no vive aquí: está en el menú de la cuenta, arriba. Tenerlo en
+             los dos sitios era ofrecer la misma salida dos veces en la misma
+             pantalla, y la de arriba está siempre a la vista porque la barra es
+             fija. -->
       </div>
     </div>
 
@@ -1205,14 +1226,9 @@ var ADMIN_EMAIL = 'admin@etaax.com';
    El negocio se bloquea hasta que el admin lo activa desde admin.html.
    Estados: pendiente | activa | vencida | cancelada.
 ════════════════════════════════════════════════════════ */
-// ⚠️ EDWIN: pon aquí tus datos de contacto reales (el WhatsApp en formato
-// internacional sin signos: 52 + 10 dígitos). Se muestran en la pantalla de
-// "cuenta en revisión / vencida" para que el cliente te contacte.
-var ETAAX_CONTACTO = {
-    email:    'agencia.egmx@gmail.com',
-    whatsapp: '524435266424',            // 52 (México) + 10 dígitos → para el link de wa.me
-    whatsappMostrar: '+52 443 526 6424'  // cómo se ve en pantalla
-};
+// Transferencias y contacto viven juntos en datos-pago.js. El hub y la vista
+// del plan usan los mismos datos cuando el cliente necesita revisar su pago.
+var ETAAX_CONTACTO = ETAAX_PAGO_DATOS.contacto;
 
 /* ── PAGO CON TARJETA (Stripe) ────────────────────────────────────────────
    El cobro es POR SUCURSAL con precio escalonado, así que el checkout ya no puede
@@ -2006,11 +2022,6 @@ function _pintarHeader() {
                     : (neg ? categoriaNegocio(_getSucursales(neg.id).length || 1).nombre : ''),
         logo:    neg ? _getNegLogo(neg.id) : '',
         inicio:  '/hub.html',
-        /* Desde el hub, «mi cuenta» y «plan» son la configuración del negocio:
-           no hay otra pantalla donde vivan, y mandar a una que no existe es
-           peor que no ofrecerlo. */
-        miCuenta: neg ? function () { abrirConfig(neg.id); } : null,
-        planYFacturacion: neg ? function () { abrirConfig(neg.id); } : null,
         cerrarSesion: function () { logout(); }
     });
 }
@@ -2042,10 +2053,7 @@ function _updateTopbar() {
 
 function _updateNegociosBar() {
     if (!_sesion) return;
-    var p = _categoriaSesion();
-    document.getElementById('negViewUserNombre').textContent = _sesion.nombre.split(' ')[0];
-    document.getElementById('negViewUserPlan').textContent   = p.nombre;
-    document.getElementById('negViewUserPlan').className     = 'user-badge-plan ' + p.planClass;
+    _renderBrandBar(_misNegocios()[0] || null);
 }
 
 /* ════════════════════════════════════════════════════════
@@ -2364,7 +2372,6 @@ function _pintarIconosLogin() {
         var el = document.getElementById(id);
         if (el) el.innerHTML = etaaxIcono(nombre, { tam: tam || 20 });
     };
-    poner('icSesionPerfil', 'perfil', 22);
     poner('icCatGlobal',    'catalogos', 24);
     poner('icFinGlobal',    'finanzas', 24);
     poner('icNuevaSuc',     'anadir-sucursal', 17);
@@ -2538,6 +2545,7 @@ function _renderVistaNegocio() {
     var heroTitle = document.getElementById('negHeroTitle');
     var heroSub   = document.getElementById('negHeroSub');
     if (!marca) {
+        _renderBrandBar(null);
         document.getElementById('secCrearMarca').style.display = '';
         document.getElementById('secMarca').style.display = 'none';
         if (heroTitle) heroTitle.innerHTML = 'Registra tu<br><span class="g">negocio</span>';
@@ -2547,9 +2555,8 @@ function _renderVistaNegocio() {
     }
     document.getElementById('secCrearMarca').style.display = 'none';
     document.getElementById('secMarca').style.display = '';
-    if (heroTitle) heroTitle.innerHTML = _esc(marca.nombre) + '<br><span class="g">Sucursales</span>';
-    if (heroSub)   heroSub.textContent = 'Elige con qué sucursal trabajarás hoy';
-    _renderBrandBar(marca);
+    if (heroTitle) heroTitle.innerHTML = 'Administra tus<br><span class="g">sucursales</span>';
+    if (heroSub)   heroSub.textContent = 'Opera cada sucursal por separado y consulta los resultados de todo tu negocio.';
     _renderSucursales(marca);
     // Sincronizar sucursales desde Supabase y re-renderizar (nombres/config que
     // se editaron en otro dispositivo). Render inmediato con localStorage arriba.
@@ -2585,16 +2592,16 @@ function _subSucRealtime(negId) {
 function _renderBrandBar(neg) {
     var bar = document.getElementById('brandInfoBar');
     if (!bar) return;
-    var t = TIPOS[neg.tipo] || TIPOS.otro;
-    var color = neg.color || '#3dbe7a';
-    /* El marco, neutro: el color del negocio ya se ve en su etiqueta y en su
-       logo. Teñir además el contorno hacía que la barra compitiera con las
-       tarjetas de abajo en vez de encabezarlas. */
-    bar.style.borderColor = 'var(--ui-borde)';
+    var t = TIPOS[neg && neg.tipo] || TIPOS.otro;
+    var sucs = neg ? _getSucursales(neg.id) : [];
+    var cat = categoriaNegocio(sucs.length || 1);
     // Logo base de la marca en lugar del emoji (si el negocio lo tiene cargado).
-    var _logoBar = _getNegLogo(neg.id);
-    var _org = neg.organizacion ? EtaaxNegocio.org(neg.organizacion) : null;
+    var _logoBar = neg ? _getNegLogo(neg.id) : null;
+    var _org = neg && neg.organizacion ? EtaaxNegocio.org(neg.organizacion) : null;
+    var detalle = neg ? (_org ? _org.nom : t.label) + ' · ' + sucs.length +
+        ' sucursal' + (sucs.length === 1 ? '' : 'es') : 'Registra tu negocio para comenzar';
     bar.innerHTML =
+        '<div class="hub-negocio-id">' +
         /* SI HAY LOGO, MANDA EL LOGO; si no, el icono hace de foto de perfil.
            Nunca los dos en el mismo círculo —serían dos cosas peleando por el
            mismo lugar— y nunca el icono dos veces: cuando el círculo ya lo
@@ -2602,16 +2609,17 @@ function _renderBrandBar(neg) {
         (_logoBar
             ? '<div class="neg-activo-emoji-wrap" style="background:#fff;border:1px solid var(--ui-borde);overflow:hidden;padding:0;border-radius:50%"><img src="' + _esc(_logoBar) + '" alt="" style="width:100%;height:100%;object-fit:cover"></div>'
             : '<div class="neg-activo-emoji-wrap" style="background:var(--s2);border:1px solid var(--ui-borde);border-radius:50%">' +
-                  (_org ? _ic(_org.ic, 22) : (neg.emoji || t.emoji)) + '</div>') +
+                  (_org ? _ic(_org.ic, 22) : _ic('matriz', 22)) + '</div>') +
         /* Lo que identifica al negocio es cómo está armado — PYME, cadena,
            franquicia—, no a qué se dedica: eso es de cada sucursal. Mientras
            nadie lo haya elegido, no se inventa: se queda en blanco y el dueño
            lo pone al configurar. */
-        '<div><div class="neg-activo-nombre">' + _esc(neg.nombre) + '</div>' +
+        '<div class="hub-negocio-datos"><div class="neg-activo-nombre">' + _esc(neg ? neg.nombre : 'Tu negocio') + '</div>' +
         '<div class="neg-activo-tipo' + (_logoBar ? ' ic-fila' : '') + '">' +
-            (_org ? ((_logoBar ? _ic(_org.ic, 14) : '') + _esc(_org.nom)) : _esc(t.label)) +
-        '</div></div>' +
-        '<div class="brand-info-bar-btns">' +
+            ((_org && _logoBar ? _ic(_org.ic, 14) : '') + _esc(detalle)) +
+        '</div></div></div>' +
+        '<div class="hub-negocio-actions">' +
+        (neg ? '<div class="user-badge"><span class="user-badge-plan ' + cat.planClass + '" id="negViewUserPlan">' + _esc(cat.nombre) + '</span></div>' : '') +
         /* El aviso de privacidad, a la mano. Estaba solo en el pie de la landing
            y en la palomita del registro: justo donde nadie vuelve a mirarlo. Un
            dueño que quiere leerlo —o enseñárselo a alguien— seis meses después no
@@ -2621,14 +2629,13 @@ function _renderBrandBar(neg) {
             'title="Aviso de Privacidad de ETAAX — quién es responsable de tus datos, ' +
             'cuáles se guardan y cómo ejercer tus derechos">' +
             _ic('privacidad', 14) + 'Aviso de privacidad</a>' +
-        '<button onclick="abrirConfig(\'' + neg.id + '\',event)" ' +
-            'style="font-size:11.5px;padding:7px 14px;border:1px solid var(--ui-borde);border-radius:8px;letter-spacing:.3px;background:transparent;color:var(--text);cursor:pointer;font-family:\'DM Sans\',sans-serif;transition:all .2s" ' +
-            'onmouseover="this.style.borderColor=\'var(--green)\';this.style.color=\'var(--green)\'" ' +
-            'onmouseout="this.style.borderColor=\'var(--ui-borde)\';this.style.color=\'var(--text)\'" class="ic-fila">' +
-            _ic('ajustes', 14) + 'Configurar negocio</button>' +
+        (neg ? '<button type="button" id="hubConfigNeg" class="hub-config-btn ic-fila">' +
+            _ic('ajustes', 14) + 'Configurar negocio</button>' : '') +
         // Eliminar negocio ya NO vive aquí: se movió al fondo del modal
         // "⚙️ Configurar negocio" (zona de peligro), fuera del clic accidental.
         '</div>';
+    var configurar = document.getElementById('hubConfigNeg');
+    if (neg && configurar) configurar.addEventListener('click', function (event) { abrirConfig(neg.id, event); });
 }
 
 function _migrarSucursalesLegacy(neg) {
@@ -2643,6 +2650,7 @@ function _migrarSucursalesLegacy(neg) {
 
 function _renderSucursales(neg) {
     var sucs  = _migrarSucursalesLegacy(neg);
+    _renderBrandBar(neg);
     var lleno = false;   // ya no hay tope: siempre se puede abrir otra sucursal
     var color = neg.color || '#3dbe7a';
 
@@ -4434,7 +4442,7 @@ async function guardarNuevaPassword(){
 <script src="admin-guard.js"></script>
 <script src="/etaax-iconos.js"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
 <script src="/negocio-tipos.js"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
-<script src="/etaax-header.js"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
+<script src="/etaax-header.js?v=cuenta-1"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="security.js"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>

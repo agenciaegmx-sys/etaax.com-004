@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <script src="/negocio-tab.js"></script>
+    <script src="/theme.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <title>Plan y facturación · ETAAX</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/cuenta.css?v=1">
+</head>
+<body class="cuenta-page" data-cuenta-vista="plan">
+    <main class="cuenta-shell">
+        <a class="cuenta-volver" id="cuentaVolver" href="/hub.html">← Volver</a>
+        <div class="cuenta-intro">
+            <div><p class="cuenta-eyebrow">Tu espacio en ETAAX</p><h1>Plan y facturación</h1><p class="cuenta-lead">Tu servicio, el costo de tus sucursales y tus opciones de pago.</p></div>
+        </div>
+        <nav class="cuenta-tabs" aria-label="Configuración de cuenta">
+            <a id="cuentaTab" href="/mi-cuenta.html">Mi cuenta</a>
+            <a id="planTab" href="/plan-facturacion.html" aria-current="page">Plan y facturación</a>
+        </nav>
+        <div id="cuentaContenido" aria-live="polite"><div class="cuenta-card cuenta-loading" role="status">Cargando tu plan…</div></div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script src="/supabase-config.js"></script>
+    <script src="/security.js"></script>
+    <script src="/etaax-iconos.js"></script>
+    <script src="/etaax-header.js?v=cuenta-1"></script>
+    <script src="/etaax-core.js"></script>
+    <script src="/precios.js"></script>
+    <script src="/datos-pago.js?v=cuenta-1"></script>
+    <script src="/etaax-cuenta.js?v=1"></script>
+</body>
+</html>

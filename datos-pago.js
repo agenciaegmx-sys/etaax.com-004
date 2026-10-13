@@ -9,6 +9,11 @@
    API: window.ETAAX_PAGO_DATOS
    ============================================================ */
 window.ETAAX_PAGO_DATOS = {
+    contacto: {
+        email: 'agencia.egmx@gmail.com',
+        whatsapp: '524435266424',
+        whatsappMostrar: '+52 443 526 6424'
+    },
     banco:    'BBVA',
     titular:  'Edwin Eduardo González González',
     cuenta:   '155 287 7511',

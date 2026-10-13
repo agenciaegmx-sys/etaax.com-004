@@ -32,6 +32,8 @@
    ============================================================================ */
 (function () {
     var ID = 'etaax-header';
+    var escuchando = false;
+    var observador = null;
 
     function _ctx() {
         var c = null, s = null;
@@ -39,8 +41,10 @@
         try { s = JSON.parse(sessionStorage.getItem('etaax_sesion_hub') || 'null'); } catch (e) {}
         return { ctx: c || {}, ses: s || {} };
     }
-    function esc(x) { return (typeof etx === 'function') ? etx(String(x == null ? '' : x))
-                                                        : String(x == null ? '' : x); }
+    function esc(x) {
+        return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
     function ic(nombre, tam) {
         return (typeof etaaxIcono === 'function') ? etaaxIcono(nombre, { tam: tam || 18 }) : '';
     }
@@ -58,7 +62,8 @@
             '  background:var(--s1,var(--surface,#141210));',
             '  border-bottom:1px solid var(--ui-borde,var(--border,#2e2c29));',
             "  font-family:'DM Sans',system-ui,sans-serif;}",
-            'body.etx-con-hd{padding-top:64px;}',
+            'body.etx-con-hd{padding-top:var(--etx-header-h,70px);}',
+            'body.etx-con-hd .theme-toggle{display:none;}',
             '.etx-hd-marca{display:flex;align-items:center;gap:12px;flex-shrink:0;}',
             '.etx-hd-marca img{height:19px;display:block;}',
             '.etx-hd-que{font-size:11px;line-height:1.3;color:var(--ui-apagado,var(--text-muted,#9a948b));',
@@ -84,7 +89,8 @@
             '  display:flex;align-items:center;gap:5px;margin-top:2px;}',
             '.etx-hd-punto{width:6px;height:6px;border-radius:50%;background:var(--green,#3dbe7a);}',
             /* El menú ────────────────────────────────────────────────── */
-            '.etx-hd-menu{position:absolute;top:58px;right:18px;min-width:268px;',
+            '.etx-hd-menu{position:absolute;top:calc(100% + 8px);right:18px;min-width:268px;',
+            '  max-width:calc(100vw - 24px);max-height:calc(100dvh - var(--etx-header-h,70px) - 20px);overflow-y:auto;',
             '  background:var(--s1,var(--surface,#141210));',
             '  border:1px solid var(--ui-borde,var(--border,#2e2c29));border-radius:14px;',
             '  box-shadow:0 18px 50px rgba(0,0,0,.45);padding:8px;display:none;}',
@@ -98,11 +104,41 @@
             '  text-decoration:none;}',
             '.etx-hd-op:hover{background:var(--s2,var(--surface2,#232220));}',
             '.etx-hd-op.sale:hover{color:var(--red,#e05a3a);}',
-            '@media (max-width:720px){ .etx-hd-que,.etx-hd-quien,.etx-hd-estado{display:none} ',
-            '  .etx-hd{gap:10px;padding:8px 12px} body.etx-con-hd{padding-top:56px} }',
+            '.etx-hd-btn:focus-visible,.etx-hd-op:focus-visible{outline:2px solid var(--green,#3dbe7a);outline-offset:3px;}',
+            '@media (max-width:720px){ .etx-hd-que,.etx-hd-cuenta .etx-hd-quien,.etx-hd-cuenta .etx-hd-estado{display:none} ',
+            '  .etx-hd{gap:8px;padding:8px 12px}.etx-hd-cuenta{padding:6px;gap:5px}.etx-hd-der{gap:6px}',
+            '  .etx-hd-menu{right:12px} body.etx-con-hd{padding-top:var(--etx-header-h,59px)} }',
+            '@media (max-width:390px){.etx-hd{gap:6px;padding-left:10px;padding-right:10px}',
+            '  .etx-hd-marca img{height:17px}.etx-hd-centro .etx-hd-btn{padding:8px 10px}}',
             '@media print{ .etx-hd{display:none} body.etx-con-hd{padding-top:0} }'
         ].join('');
         (document.head || document.documentElement).appendChild(st);
+    }
+
+    function _alto(el) {
+        // La cuenta, la fuente y el viewport cambian el alto: medir evita que el
+        // primer renglón quede tapado por los antiguos 64px escritos a mano.
+        function medir() {
+            var h = el.getBoundingClientRect ? Math.ceil(el.getBoundingClientRect().height) : 0;
+            if (h && document.documentElement.style) document.documentElement.style.setProperty('--etx-header-h', h + 'px');
+        }
+        medir();
+        if (!observador && typeof ResizeObserver === 'function') {
+            observador = new ResizeObserver(medir);
+            observador.observe(el);
+        }
+        if (!observador && !el._etxMide) {
+            el._etxMide = true;
+            window.addEventListener('resize', medir);
+        }
+    }
+
+    function _destinoCuenta(ruta) {
+        var volver = (window.location.pathname || '/hub.html') + (window.location.search || '');
+        if (/\/(mi-cuenta|plan-facturacion)\.html$/.test(window.location.pathname || '')) {
+            volver = new URLSearchParams(window.location.search || '').get('volver') || '/hub.html';
+        }
+        return ruta + '?volver=' + encodeURIComponent(volver);
     }
 
     /* El icono del tema dice EN QUÉ ESTÁS, no a dónde vas: con tres estados,
@@ -137,7 +173,8 @@
         }
         el.innerHTML =
             '<div class="etx-hd-marca">' +
-                '<img src="' + (opc.base || '') + '/marca/etaax-logo-oscuro.svg" alt="ETAAX">' +
+                '<img src="' + esc(opc.base || '') + '/marca/etaax-logo-' +
+                    ((window.EtaaxTheme && EtaaxTheme.actual() === 'light') ? 'claro' : 'oscuro') + '.svg" alt="ETAAX">' +
                 '<div class="etx-hd-que">ERP para alimentos<br>y bebidas</div>' +
             '</div>' +
             '<div class="etx-hd-centro">' +
@@ -145,7 +182,7 @@
             '</div>' +
             '<div class="etx-hd-der">' +
                 '<button class="etx-hd-btn etx-hd-icon" id="etxHdTema" title="Tema">' + ic(_icTema(), 18) + '</button>' +
-                '<button class="etx-hd-btn etx-hd-cuenta" id="etxHdCuenta">' +
+                '<button class="etx-hd-btn etx-hd-cuenta" id="etxHdCuenta" aria-label="Menú de cuenta" aria-expanded="false" aria-controls="etxHdMenu">' +
                     '<span class="etx-hd-avatar">' +
                         (logo ? '<img src="' + esc(logo) + '" alt="">' : ic('perfil', 18)) +
                     '</span>' +
@@ -163,8 +200,8 @@
                     (negocio ? '<div class="etx-hd-menu-dato">Negocio: <b>' + esc(negocio) + '</b></div>' : '') +
                     (plan ? '<div class="etx-hd-menu-dato">Plan: <b>' + esc(plan) + '</b></div>' : '') +
                 '</div>' +
-                (activa ? '<button class="etx-hd-op" id="etxHdCuentaOp">' + ic('usuario', 18) + 'Mi cuenta</button>' +
-                          '<button class="etx-hd-op" id="etxHdPlanOp">' + ic('org-corporativo', 18) + 'Plan y facturación</button>' : '') +
+                (activa ? '<a class="etx-hd-op" id="etxHdCuentaOp" href="' + esc(_destinoCuenta('/mi-cuenta.html')) + '">' + ic('usuario', 18) + 'Mi cuenta</a>' +
+                          '<a class="etx-hd-op" id="etxHdPlanOp" href="' + esc(_destinoCuenta('/plan-facturacion.html')) + '">' + ic('org-corporativo', 18) + 'Plan y facturación</a>' : '') +
                 '<button class="etx-hd-op" id="etxHdAutoOp">' + ic('hd-sistema', 18) + 'Usar tema del dispositivo</button>' +
                 /* Sin sesión no se ofrece salir ni ver la cuenta: serían dos
                    botones que no llevan a ningún lado. */
@@ -172,15 +209,33 @@
             '</div>';
 
         var menu = document.getElementById('etxHdMenu');
-        var cerrar = function () { menu.classList.remove('abierto'); };
+        var cerrar = function () {
+            var m = document.getElementById('etxHdMenu'), b = document.getElementById('etxHdCuenta');
+            if (m) m.classList.remove('abierto');
+            if (b && b.setAttribute) b.setAttribute('aria-expanded', 'false');
+        };
         document.getElementById('etxHdCuenta').onclick = function (e) {
             e.stopPropagation();
             menu.classList.toggle('abierto');
+            this.setAttribute('aria-expanded', String(menu.classList.contains('abierto')));
         };
         /* Un menú que solo se cierra con su propio botón se queda abierto
            encima de lo que vas a tocar. Se cierra al tocar fuera y con Escape. */
-        document.addEventListener('click', cerrar);
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrar(); });
+        if (!escuchando) {
+            escuchando = true;
+            document.addEventListener('click', cerrar);
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    var abierto = document.getElementById('etxHdMenu').classList.contains('abierto');
+                    cerrar();
+                    if (abierto) document.getElementById('etxHdCuenta').focus();
+                }
+            });
+            document.addEventListener('etaax:theme', function () {
+                var b = document.getElementById('etxHdTema');
+                if (b) b.innerHTML = ic(_icTema(), 18);
+            });
+        }
         menu.onclick = function (e) { e.stopPropagation(); };
 
         document.getElementById('etxHdTema').onclick = function () {
@@ -195,15 +250,17 @@
         var liga = function (id, fn, destino) {
             var b = document.getElementById(id);
             if (!b) return;
-            b.onclick = function () {
+            b.onclick = function (e) {
                 cerrar();
-                if (typeof fn === 'function') { fn(); return; }
+                if (typeof fn === 'function') { if (e) e.preventDefault(); fn(); return; }
+                if (b.tagName === 'A') return;
                 if (destino) window.location.href = destino;
             };
         };
-        liga('etxHdCuentaOp', opc.miCuenta, inicio);
-        liga('etxHdPlanOp',   opc.planYFacturacion, inicio);
+        liga('etxHdCuentaOp', opc.miCuenta, _destinoCuenta('/mi-cuenta.html'));
+        liga('etxHdPlanOp',   opc.planYFacturacion, _destinoCuenta('/plan-facturacion.html'));
         liga('etxHdSalirOp',  opc.cerrarSesion || window.ctxSalir || window.logout);
+        _alto(el);
         return el;
     };
 })();
