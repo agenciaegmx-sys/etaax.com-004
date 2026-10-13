@@ -95,6 +95,7 @@ if (MODO === 'sin') {
 var NEG = 'pruebaR09';
 var CLAVE = 'etaax_' + NEG + '_inv_local';
 var MARCA = 'etaax__respaldo_v1';
+var EVID  = 'etaax_prueba_evidencia';
 
 /* El almacén PARCHEA localStorage.getItem para servir las claves grandes desde
    su memoria. Preguntarle a él si algo se guardó devuelve «sí» aunque no haya
@@ -112,6 +113,39 @@ function crudo(k) {
 
 function linea(txt, clase) { return '<div><b class="' + (clase||'') + '">' + txt + '</b></div>'; }
 
+/* EL AVISO ROJO VIVE EN EL DOM DE LA CARGA EN LA QUE SALIO. Recargar lo borra,
+   asi que preguntar por el DESPUES de recargar es preguntarle a la pagina
+   equivocada: siempre contesta «no salio», y la prueba acusa perdida silenciosa
+   de un almacen que si aviso. Lo encontro Codex provocando un fallo por cuota.
+   Por eso la evidencia se APUNTA en cuanto el aviso aparece, atada a la captura
+   que lo provoco, y despues de recargar se consulta el apunte, no el DOM. */
+function evidencia() {
+    try { return JSON.parse(sessionStorage.getItem(EVID) || 'null'); } catch (e) { return null; }
+}
+
+/* Devuelve si el aviso salio PARA ESTA captura — y lo deja apuntado si acaba de
+   salir. Un apunte de una captura anterior no cuenta: `para` tiene que casar. */
+function apuntarAviso(esperado) {
+    if (!esperado) return false;
+    var e = evidencia();
+    if (!e || e.para !== esperado) e = { para: esperado, aviso: false };
+    if (document.querySelector('[data-etaax-store-fallo]')) {
+        e.aviso = true;
+        try { sessionStorage.setItem(EVID, JSON.stringify(e)); } catch (err) {}
+    }
+    return !!e.aviso;
+}
+
+/* El aviso puede tardar: la bajada es diferida y el almacen reintenta hasta 3
+   veces antes de rendirse. Mirar una sola vez se perderia el que sale tarde, asi
+   que se vigila mientras la pagina este abierta. */
+if (window.MutationObserver) {
+    new MutationObserver(function () {
+        var esp = sessionStorage.getItem('etaax_prueba_esperado');
+        if (esp) apuntarAviso(esp);
+    }).observe(document.body, { childList: true, subtree: true });
+}
+
 document.getElementById('modoAhora').innerHTML =
     linea('Modo actual: ' + ({normal:'normal (control)', sin:'SIN IndexedDB',
                              falla:'IndexedDB que FALLA al abrir'})[MODO],
@@ -121,6 +155,7 @@ function capturar() {
     var valor = JSON.stringify({ capturadoA: new Date().toISOString(),
                                  botellas: Math.floor(Math.random() * 90) + 10 });
     sessionStorage.setItem('etaax_prueba_esperado', valor);
+    try { sessionStorage.setItem(EVID, JSON.stringify({ para: valor, aviso: false })); } catch (e) {}
     var r = etaaxStore.set(CLAVE, valor);
     var h = linea('set() devolvió: ' + r, r ? 'ok' : 'mal');
     h += linea('Lo capturado: ' + valor);
@@ -133,14 +168,14 @@ function verEstado() {
     var esperado = sessionStorage.getItem('etaax_prueba_esperado');
     var enDisco  = crudo(CLAVE);
     var marcas   = crudo(MARCA);
-    var cartel   = !!document.querySelector('[data-etaax-store-fallo]');
+    var cartel   = apuntarAviso(esperado);
     var h = '';
     h += linea('En memoria (lo que ve la app): ' + (etaaxStore.get(CLAVE) ? 'sí' : 'no'));
     h += linea('Respaldo durable en localStorage: ' + (enDisco ? 'sí' : 'no'),
                enDisco ? 'ok' : (MODO === 'normal' ? '' : 'av'));
     h += linea('Índice de respaldos: ' + (marcas || '—'));
     h += linea('Pendientes sin bajar: ' + etaaxStore.pendientes());
-    h += linea('¿Salió el aviso rojo?: ' + (cartel ? 'sí' : 'no'), cartel ? 'av' : '');
+    h += linea('¿Salió el aviso rojo?: ' + (cartel ? 'sí (apuntado)' : 'no'), cartel ? 'av' : '');
     document.getElementById('res1').innerHTML += h;
 }
 
@@ -157,7 +192,10 @@ function verEstado() {
     etaaxStore.ready.then(function () {
         setTimeout(function () {
             var leido = etaaxStore.get(CLAVE);
-            var cartel = !!document.querySelector('[data-etaax-store-fallo]');
+            /* El apunte de la carga anterior, O un aviso que salga en esta. */
+            var ev = evidencia();
+            var cartel = !!(ev && ev.para === esperado && ev.aviso) ||
+                         !!document.querySelector('[data-etaax-store-fallo]');
             var h = '';
             if (leido === esperado) {
                 h += linea('✅ SOBREVIVIÓ a la recarga. Lo capturado sigue completo.', 'ok');
@@ -168,7 +206,7 @@ function verEstado() {
             } else {
                 h += linea('❌ SE PERDIÓ. No quedó nada después de recargar.', 'mal');
                 h += linea(cartel
-                    ? 'Pero el aviso rojo SÍ salió: el sistema avisó que no podía guardar. Eso es lo esperado si el almacenamiento está lleno.'
+                    ? 'Pero el aviso rojo SÍ salió (quedó apuntado antes de recargar): el sistema avisó que no podía guardar. Eso es lo esperado si el almacenamiento está lleno.'
                     : 'Y NO salió ningún aviso. Eso es el bug de R09: se perdió en silencio.',
                     cartel ? 'av' : 'mal');
             }
@@ -180,6 +218,7 @@ function verEstado() {
 function limpiar() {
     etaaxStore.del(CLAVE);
     sessionStorage.removeItem('etaax_prueba_esperado');
+    sessionStorage.removeItem(EVID);
     try { localStorage.removeItem(CLAVE); } catch (e) {}
     document.getElementById('res1').innerHTML = '';
     document.getElementById('res2').innerHTML = linea('Borrada la clave de prueba.', 'ok');
