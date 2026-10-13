@@ -25985,6 +25985,133 @@ console.log('\n══ BE13 · Resumen y KPIs cuadran peso por peso ══');
     });
 }
 
+/* ═══════════ SUITE BE14 · LOS ICONOS DE LA MARCA ════════════════════════════
+   Vienen del repo `iconos-etaax`. Lo que se cuida aquí no es que se vean
+   bonitos —eso lo decide Edwin— sino las tres maneras en que un juego de
+   iconos se echa a perder:
+
+     · QUE SE NOMBREN DE VARIAS MANERAS. Llegaron con TRES nombres para DOS
+       ideas: `.accent` y `.dot` rellenaban de verde, `.g` pintaba el trazo, y
+       además había un `style="stroke:var(--green)"` suelto haciendo lo mismo
+       que `.g`. Así es como el mismo icono acaba verde en una pantalla y gris
+       en otra.
+     · QUE EL AYUDANTE DEJE PASAR TEXTO A UN innerHTML. `etaaxIcono` arma
+       marcado; si el nombre o la clase se concatenaran sin mirar, sería una
+       puerta abierta en cada pantalla que lo use.
+     · QUE LA PÁGINA LO USE SIN CARGARLO. Un `etaaxIcono` que no existe no
+       truena: devuelve `undefined` y deja el hueco, y nadie lo nota hasta que
+       alguien mira esa pantalla.                                             */
+function suiteIconos() {
+console.log('\n══ BE14 · Los iconos de la marca ══');
+
+    const ctx = crearContexto();
+    cargarJS(ctx, 'etaax-iconos.js');
+    const ico = ctx.window.etaaxIcono;
+    const lista = ctx.window.etaaxIconos ? ctx.window.etaaxIconos() : [];
+
+    test('el juego de iconos se carga y se puede preguntar qué hay', () =>
+        eq(typeof ico === 'function' && lista.length >= 15, true,
+           typeof ico + ' · ' + lista.length + ' iconos'));
+    /* Los seis de la pantalla de acceso y los de sucursales, por nombre: si
+       mañana se pierde uno al regenerar el archivo, esto lo dice. */
+    ['user','lock','eye','eye-off','arrow','chat',
+     'branch','main','restaurant','catalog','finance','settings','shield','logout','add']
+        .forEach(n => test('…está el icono «' + n + '»', () => eq(lista.indexOf(n) > -1, true, 'falta')));
+
+    test('cada icono trae su dibujo, no un hueco', () => {
+        const vacios = lista.filter(n => (ico(n) || '').indexOf('#etx-' + n) === -1);
+        return eq(vacios.length, 0, 'sin dibujo: ' + vacios.join(', '));
+    });
+    /* El color del trazo se HEREDA del texto que lo rodea: es lo que hace que
+       la misma flecha se vea sobre el botón verde y sobre el fondo oscuro. */
+    const fuenteCruda = fs.readFileSync(path.join(RAIZ, 'etaax-iconos.js'), 'utf8');
+    /* SIN EL COMENTARIO DE ARRIBA: ahí está escrito, para explicarlo, justo lo
+       que estas pruebas exigen que no exista. Medir el archivo entero es que la
+       prueba se cace a sí misma — van trece veces en este proyecto. */
+    const fuente = fuenteCruda.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    test('el trazo hereda el color de su contexto', () =>
+        eq(/stroke:currentColor/.test(fuente), true, 'con color fijo no sirve en los dos fondos'));
+    test('…y el verde del acento sale del token, no de un color escrito a mano', () =>
+        eq(/var\(--green/.test(fuente), true, 'verde suelto'));
+
+    /* ── Un solo nombre para cada idea ───────────────────────────────────── */
+    test('el acento de relleno tiene UN nombre, no tres', () => {
+        eq(/class="accent"/.test(fuente), false, 'quedó `accent`');
+        eq(/class="dot"/.test(fuente), false, 'quedó `dot`');
+        return eq(/etx-punto/.test(fuente), true, 'no se nombró el relleno');
+    });
+    test('el trazo verde tampoco se escribe de dos maneras', () => {
+        eq(/class="g"/.test(fuente), false, 'quedó la clase `g`, que además ya existe en styles.css');
+        eq(/style="stroke:var\(--green\)"/.test(fuente), false, 'quedó un estilo suelto');
+        return eq(/etx-trazo/.test(fuente), true, 'no se nombró el trazo');
+    });
+    /* `.g` es de styles.css (el texto verde del título del hub). Un juego de
+       iconos que se apropie de una clase de dos letras rompe lo que ya existía. */
+    test('ninguna clase del sprite pisa una de la hoja de estilos', () => {
+        const clases = (fuente.match(/class="([a-z-]+)"/g) || [])
+            .map(x => x.replace(/class="|"/g, ''));
+        const ajenas = clases.filter(c => c.indexOf('etx-') !== 0);
+        return eq(ajenas.length, 0, 'sin prefijo: ' + ajenas.join(', '));
+    });
+
+    /* ── El ayudante no deja pasar nada ──────────────────────────────────── */
+    test('un icono que no existe devuelve vacío, no un hueco con el nombre', () =>
+        eq(ico('no-existe-este'), '', ico('no-existe-este')));
+    test('…ni aunque el nombre venga con código adentro', () => {
+        const veneno = '"><img src=x onerror=alert(1)>';
+        return eq(ico(veneno), '', ico(veneno));
+    });
+    test('la clase se limpia antes de entrar al marcado', () => {
+        const r = ico('user', { clase: 'ok"><script>alert(1)</script>' });
+        eq(r.indexOf('<script') === -1 && r.indexOf('onerror') === -1, true, r);
+        /* Lo que importa es que el atributo no se pueda CERRAR desde dentro:
+           solo letras, números, espacio, guion y guion bajo. (El `"><use` de
+           más adelante es el marcado legítimo, no una fuga.) */
+        const m = r.match(/^<svg class="([^"]*)"/);
+        eq(!!m, true, 'ni siquiera es un svg con clase: ' + r);
+        return eq(/^[A-Za-z0-9 _-]*$/.test(m[1]), true, 'la clase trae de más: ' + m[1]);
+    });
+    test('el tamaño también: solo números, y dentro de lo razonable', () => {
+        eq(/width="24"/.test(ico('user', { tam: 'enorme' })), true, 'un tamaño inventado no cae al default');
+        eq(/width="20"/.test(ico('user', { tam: 20 })), true, 'no respeta el tamaño pedido');
+        return eq(/width="24"/.test(ico('user', { tam: 99999 })), true, 'acepta un tamaño absurdo');
+    });
+    /* Y el caso que de verdad importa: el ayudante sirve para meter marcado en
+       innerHTML, así que lo que devuelve tiene que ser siempre un <svg> y nada
+       más. Se comprueba corriendo, no leyendo. */
+    test('lo que devuelve es siempre un svg y nada más', () => {
+        const malos = ['user', 'lock', 'arrow'].map(n => ico(n, { clase: 'x y z' }))
+            .filter(m => !/^<svg class="etx-ic [a-z ]+" width="\d+" height="\d+" aria-hidden="true"><use href="#etx-[a-z-]+"><\/use><\/svg>$/.test(m));
+        return eq(malos.length, 0, malos[0] || '');
+    });
+
+    /* ── El sprite se pinta una sola vez ─────────────────────────────────── */
+    test('el sprite no se duplica si el archivo se carga dos veces', () => {
+        const c2 = crearContexto();
+        let puestos = 0;
+        c2.document.body = { appendChild(){ puestos++; } };
+        c2.document.getElementById = (id) => (puestos && /sprite/.test(id) ? {} : null);
+        cargarJS(c2, 'etaax-iconos.js');
+        cargarJS(c2, 'etaax-iconos.js');
+        return eq(puestos <= 1, true, 'se pintó ' + puestos + ' veces');
+    });
+
+    /* ── Quien lo usa, lo carga ──────────────────────────────────────────── */
+    test('toda pantalla que usa etaaxIcono carga el archivo', () => {
+        const paginas = [];
+        const mirar = (dir) => fs.readdirSync(path.join(RAIZ, dir), { withFileTypes: true }).forEach(e => {
+            if (e.isDirectory() && ['node_modules','.git','tests','docs'].indexOf(e.name) === -1) mirar(path.join(dir, e.name));
+            else if (e.isFile() && /\.html$/.test(e.name)) paginas.push(path.join(dir, e.name));
+        });
+        mirar('.');
+        const sinCargar = paginas.filter(p => {
+            const t = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+            return t.indexOf('etaaxIcono(') > -1 && t.indexOf('etaax-iconos.js') === -1;
+        });
+        return eq(sinCargar.length, 0, 'lo usan sin cargarlo: ' + sinCargar.join(', '));
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -26002,4 +26129,4 @@ suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
-    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(resumen);
+    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(resumen);
