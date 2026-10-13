@@ -76,9 +76,14 @@
 --       - Y quien se haya guardado la contraseña compartida puede intentar
 --         entrar directo, sin pasar por nuestro login, hasta que se rote.
 --
---     Lo que sí acorta la ventana es bajar la vigencia del token en Supabase.
---     Y cerrar el caso de verdad es rotar la contraseña en cada baja, que
---     necesita la Edge Function de credenciales, todavía sin desplegar.
+--       - Y bajar la vigencia del token NO lo arregla, aunque lo parezca: lo
+--         propuse yo y Codex lo desmintió. Mientras la SESIÓN siga viva se
+--         renueva sola y emite tokens nuevos; acortar el plazo solo estrecha
+--         la ventana de un token cuya sesión YA fue revocada. Lo que corta es
+--         revocar la sesión, y con una identidad compartida eso es rotar la
+--         contraseña — que necesita la Edge Function de credenciales, todavía
+--         sin desplegar.
+--
 --     R03 SIGUE ABIERTO.
 --
 --   · `portal_perfil` y `entrada_sucursal_de_nip` (v65) autentican por NIP y

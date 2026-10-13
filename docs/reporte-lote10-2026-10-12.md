@@ -1,9 +1,9 @@
 # Reporte de bloque · lote 10 — R04 + las bajas de R03
 
 **Fecha:** 12-oct-2026
-**Commits:** `e64c015`, `0b8008a`, `cf7ef4a`, `5ff8c43`, `0d21623`
+**Commits:** `e64c015`, `0b8008a`, `cf7ef4a`, `5ff8c43`, `0d21623`, `6ceadca`
 **Migración:** `supabase-migration-v77.sql` — **CORRIDA en producción**, 5 PASA + 1 DATO
-**Candados:** 4132 fórmulas · 84 del almacén · 0 fallas
+**Candados:** 4147 fórmulas · 84 del almacén · las 4 salidas contra el SDK real · 0 fallas
 
 ---
 
@@ -29,10 +29,15 @@ Codex lo corrigió con razón:
 - Y un equipo que no vuelva a sincronizar la lista de staff tampoco se entera
   de la baja.
 
-Lo que sí acorta la ventana es **bajar la vigencia del token** en Supabase —
-pendiente de revisar ese valor. Y cerrar el caso de verdad es rotar la
-contraseña en cada baja, que necesita la Edge Function de credenciales,
-todavía sin desplegar.
+- Y **bajar la vigencia del token NO lo arregla**, aunque lo parezca: lo
+  propuse yo en la primera versión de este reporte y Codex lo desmintió.
+  Mientras la sesión siga viva se renueva sola y emite tokens nuevos; acortar
+  el plazo solo estrecha la ventana de un token **cuya sesión ya fue
+  revocada**.
+
+Lo que corta es revocar la sesión, y con una identidad compartida eso es rotar
+la contraseña de la cuenta en cada baja — que necesita la Edge Function de
+credenciales, todavía sin desplegar.
 
 **Esta tabla no demuestra el rechazo de una sesión anterior a la baja**, y no
 puede: eso necesita producción y una sesión real. Los pasos están en la
@@ -216,6 +221,57 @@ Commit primero, mutar después, restaurar con copia propia (nunca
 
 ---
 
+## 3 bis. Los dos casos que Codex reprodujo después (y que yo no vi)
+
+Los encontró con el **SDK real de supabase-js y la red retenida**, no con un
+`signOut` de mentira que contesta al instante. Los dos eran reales:
+
+**a) El plazo terminaba la espera, no el signOut.** Vencidos los 2.5 s, el hub
+enseñaba la pantalla de entrada y **la sesión de Supabase seguía guardada** en
+sessionStorage. Se veía como que saliste, y no saliste. Peor: `_clearSesion()`
+del hub borra llaves concretas, no vacía el almacenamiento, así que nada más
+se la llevaba.
+
+Y destapó un supuesto mío que estaba **al revés**: yo asumí que
+`signOut({scope:'local'})` no sale a la red. Sí sale — lo verifiqué en el
+bundle: `_signOut` llama al servidor con **cualquier** scope y solo borra la
+sesión guardada cuando esa petición vuelve. Así que el problema le pasa igual
+al colaborador que al dueño.
+
+Ahora `etaaxCerrarSesion` **garantiza la limpieza local pase lo que pase** y
+devuelve en qué quedó: `'revocada'` (el servidor confirmó), `'solo-local'` (se
+limpió aquí, el servidor pudo no enterarse) o `'sin-cliente'`.
+
+**b) El cierre por inactividad seguía con el camino viejo.** Soltaba el
+`signOut` sin esperarlo, barría las llaves `sb-` de **localStorage** cuando la
+sesión vive en **sessionStorage**, y se dejaba puesta la credencial compartida.
+Es la salida que más importa que limpie bien: nadie está mirando cuando pasa.
+Ahora sale por la misma puerta que las otras tres.
+
+Un matiz sobre su medición: su prueba miraba la credencial a los 40 ms y ahora
+la limpieza ocurre al vencer el plazo. Con la red colgada, el intervalo entre
+«se dispara el cierre» y «el equipo queda limpio» son esos 2.5 s. Correrla
+esperando 3 s da `credencial_compartida_sigue_guardada: false`. No lo acorté a
+propósito: adelantar el borrado le quitaría al SDK la sesión que necesita para
+pedir la revocación, y cambiaría un riesgo de 2.5 s en un equipo que ya llevaba
+30 minutos solo por perder la revocación en el servidor siempre.
+
+**Su arnés se adoptó al repo** como `tests/probar-salidas-sdk-real.cjs`, con sus
+dos casos invertidos: de reproducción del fallo a candado contra su regreso.
+
+```
+curl -sL https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js -o /tmp/supabase-js-2.117.3.js
+SDK_SUPABASE=/tmp/supabase-js-2.117.3.js node tests/probar-salidas-sdk-real.cjs
+```
+
+**Mutaciones de este ajuste: 8 de 8 cazadas por el candado**, 4 de 8 por el
+arnés del SDK (cubre dos caminos a propósito, no los cuatro). Las ocho: el
+plazo vuelve a no limpiar · el barrido mira solo localStorage · siempre dice
+«revocada» · el cierre automático no espera · deja la llave compartida · no
+sabe quién sale · no lee el contexto · el hub no pasa el negocio.
+
+---
+
 ## 5. Pendiente, y por qué no lo puedo hacer yo
 
 **La prueba con una sesión anterior a la baja.** Necesita producción y una
@@ -237,8 +293,7 @@ Si el paso 3 se confirma, R03 queda abierto con la rotación de credencial como
 siguiente paso.
 
 **También pendiente:** el freno de intentos de las dos funciones de NIP (antes
-de ampliar las pruebas de acceso por QR), el rechazo entre negocios de R05, el
-valor de *Settings → API → Max rows* para R10, y revisar la vigencia del token
-en *Auth → Sessions*.
+de ampliar las pruebas de acceso por QR), el rechazo entre negocios de R05 y el
+valor de *Settings → API → Max rows* para R10.
 
 Lo siguiente acordado con Edwin es el **Resumen financiero**.
