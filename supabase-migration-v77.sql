@@ -61,13 +61,25 @@
 --   · Mientras los colaboradores compartan una sola identidad en la nube (la
 --     cuenta `staff.<negocio>@etaax.app` de la v19), dar de baja a UNA persona
 --     no puede demostrarse del lado del servidor: la sesión que ya tiene en la
---     mano es indistinguible de la de sus compañeros. Lo que esta migración
---     logra es que NO PUEDA CONSEGUIR UNA NUEVA. La que ya tenga abierta vive
---     hasta que cierre el navegador (las sesiones viven en sessionStorage) y la
---     credencial cacheada en su equipo se borra al salir (cambio del cliente,
---     en este mismo lote). Cerrar el caso de verdad es rotar la contraseña de
---     la cuenta compartida en cada baja, y eso necesita la Edge Function de
---     credenciales, que todavía no está desplegada. R03 SIGUE ABIERTO.
+--     mano es indistinguible de la de sus compañeros.
+--
+--     ESTA MIGRACIÓN LOGRA QUE NO PUEDA CONSEGUIR UNA NUEVA. Nada más. Lo digo
+--     así de seco porque es fácil escribir de más aquí, y yo lo escribí:
+--
+--       - Cerrar el navegador borra NUESTRA copia de la sesión (vive en
+--         sessionStorage). No invalida un token que alguien ya haya copiado:
+--         un access token de Supabase sigue sirviendo hasta que VENCE, y el
+--         plazo lo fija el proyecto en Auth → Sessions, no nosotros aquí.
+--       - Rotar la contraseña de la cuenta compartida impide EMITIR tokens
+--         nuevos; no mata los que ya salieron. El corte es «ya no vuelve a
+--         entrar», no «se cae ahora mismo».
+--       - Y quien se haya guardado la contraseña compartida puede intentar
+--         entrar directo, sin pasar por nuestro login, hasta que se rote.
+--
+--     Lo que sí acorta la ventana es bajar la vigencia del token en Supabase.
+--     Y cerrar el caso de verdad es rotar la contraseña en cada baja, que
+--     necesita la Edge Function de credenciales, todavía sin desplegar.
+--     R03 SIGUE ABIERTO.
 --
 --   · `portal_perfil` y `entrada_sucursal_de_nip` (v65) autentican por NIP y
 --     NUNCA tuvieron freno de intentos —ni se les quitó: no lo tenían—. Un NIP

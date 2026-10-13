@@ -24846,59 +24846,135 @@ console.log('\n══ BE7 · La baja de un colaborador cierra las dos puertas (v
     await testA('el intento del dado de baja SÍ se cuenta como fallo', async () =>
         eq(baja.rpcs.some(r => r.fn === 'login_fallo'), true, JSON.stringify(baja.rpcs)));
 
-    /* ── 3. Salir de verdad ──────────────────────────────────────────────── */
-    async function salir(sesion) {
+    /* ── 3. Salir de verdad, y EN EL ORDEN CORRECTO ──────────────────────
+       Lo que se rompió aquí no fue que faltara el signOut: fue el ORDEN. La
+       sesión de Supabase vive en sessionStorage, así que vaciarlo primero deja
+       al signOut sin nada que cerrar — la línea existe y no hace nada. Por eso
+       estas pruebas no miran "¿se llamó?" sino "¿se llamó ANTES?". */
+    function contextoDeSalida() {
         const c = crearContexto();
+        const linea = [];
+        c._supabase.auth = {
+            signOut: (o) => { linea.push('cierra sesión:' + ((o && o.scope) || 'global')); return Promise.resolve({}); }
+        };
+        const borrar = c.localStorage.removeItem.bind(c.localStorage);
+        c.localStorage.removeItem = (k) => { linea.push('borra ' + k); borrar(k); };
+        c.sessionStorage.clear = () => { linea.push('vacía sessionStorage'); };
+        c.scrollTo = function () {};
+        c.linea = linea;
+        return c;
+    }
+    const antesDeBorrar = (linea) => {
+        const iCierre = linea.findIndex(x => x.indexOf('cierra sesión') === 0);
+        const iBorra  = linea.findIndex(x => x === 'vacía sessionStorage' || x.indexOf('borra ') === 0);
+        return iCierre > -1 && (iBorra === -1 || iCierre < iBorra);
+    };
+
+    /* ── 3a. El botón del hub ── */
+    async function salir(sesion) {
+        const c = contextoDeSalida();
         cargarInline(c, 'hub.html');
-        let out;
-        c._supabase.auth = { signOut: (o) => { out = o || {}; return Promise.resolve({}); } };
+        cargarJS(c, 'security.js');
         c.localStorage.setItem('etaax_n1_staffcred', JSON.stringify({ email: 'staff.n1@etaax.app', password: 'x' }));
         c._confirmSalir = () => Promise.resolve(true);
-        c.scrollTo = function () {};
         /* El bloque inline de hub se corta antes de asignar VIEWS (depende de
-           cosas del navegador que aquí no están), y logout termina pintando la
+           cosas del navegador que aquí no están) y logout termina pintando la
            pantalla de entrada. Se le pone la lista vacía: lo que se mide pasa
            ANTES, pero un revienta aquí tumbaría la suite entera. */
         setVar(c, 'VIEWS', []);
         setVar(c, '_sesion', sesion);
         let err = null;
         try { await c.window.logout(); } catch (e) { err = e; }
-        return { out: out, cred: c.localStorage.getItem('etaax_n1_staffcred'), err: err };
+        return { linea: c.linea, cred: c.localStorage.getItem('etaax_n1_staffcred'), err: err };
     }
     const sStaff = await salir({ type: 'staff', negocioId: 'n1', nombre: 'Beto', rol: 'chef' });
     await testA('salir de una sesión de colaborador no revienta', async () =>
         eq(sStaff.err === null, true, 'revienta: ' + String(sStaff.err && sStaff.err.message)));
-    await testA('al salir, la sesión del colaborador SÍ se cierra', async () =>
-        eq(sStaff.out !== undefined, true, 'nadie llamó a signOut'));
-    /* `scope:'local'`, no el global: los colaboradores comparten UNA cuenta, y
-       el signOut normal revoca la sesión en TODOS los dispositivos — al salir
-       uno se caían todos. Por eso antes se saltaba el signOut por completo. */
-    await testA('…pero solo en este equipo, no en el de sus compañeros', async () =>
-        eq(sStaff.out && sStaff.out.scope, 'local', JSON.stringify(sStaff.out)));
-    await testA('…y se borra la llave compartida cacheada aquí', async () =>
+    await testA('hub · al salir, la sesión del colaborador SÍ se cierra', async () =>
+        eq(sStaff.linea.some(x => x.indexOf('cierra sesión') === 0), true, JSON.stringify(sStaff.linea)));
+    /* `scope:'local'`, no el global: los colaboradores comparten UNA cuenta y el
+       signOut normal revoca la sesión en TODOS los dispositivos — al salir uno
+       se caían todos. Por eso antes se saltaba el signOut por completo. */
+    await testA('hub · …pero solo en este equipo, no en el de sus compañeros', async () =>
+        eq(sStaff.linea.indexOf('cierra sesión:local') > -1, true, JSON.stringify(sStaff.linea)));
+    await testA('hub · …ANTES de borrar el almacenamiento, no después', async () =>
+        eq(antesDeBorrar(sStaff.linea), true, JSON.stringify(sStaff.linea)));
+    await testA('hub · …y se borra la llave compartida cacheada aquí', async () =>
         eq(sStaff.cred, null, String(sStaff.cred)));
 
     const sDueño = await salir({ usuarioId: 'u1', nombre: 'Edwin', email: 'a@b.com' });
-    await testA('el dueño sigue cerrando sesión como siempre (sin scope)', async () =>
-        eq(sDueño.out && sDueño.out.scope, undefined, JSON.stringify(sDueño.out)));
+    await testA('hub · el dueño cierra con el signOut normal (su sesión es suya)', async () =>
+        eq(sDueño.linea.indexOf('cierra sesión:global') > -1, true, JSON.stringify(sDueño.linea)));
+    await testA('hub · …también antes de borrar nada', async () =>
+        eq(antesDeBorrar(sDueño.linea), true, JSON.stringify(sDueño.linea)));
 
-    /* ── 4. Y salir desde un módulo (ctx-bar), que es por donde se sale ──── */
+    /* ── 3b. La vuelta al hub con ?salir=1 ──
+       Aquí vivía el peor de los tres: borraba todo y DESPUÉS llamaba al
+       signOut, que ya no tenía sesión que cerrar. Y hay un detalle que esta
+       prueba cuida sola: si el tipo de sesión se leyera DESPUÉS de limpiar, ya
+       no se sabría que era colaborador y se cerraría con el scope global —
+       tumbando a todos sus compañeros—. Que aquí salga `local` demuestra que se
+       lee antes. */
+    async function volverDelModulo(sesion) {
+        const c = contextoDeSalida();
+        cargarInline(c, 'hub.html');
+        cargarJS(c, 'security.js');
+        c.sessionStorage.setItem('etaax_sesion_hub', JSON.stringify(sesion));
+        c.localStorage.setItem('etaax_n1_staffcred', '{"email":"staff.n1@etaax.app"}');
+        await c.window._salirDeSubpagina();
+        return { linea: c.linea, cred: c.localStorage.getItem('etaax_n1_staffcred') };
+    }
+    const vStaff = await volverDelModulo({ type: 'staff', negocioId: 'n1', nombre: 'Beto', rol: 'chef' });
+    await testA('?salir=1 · cierra la sesión ANTES de vaciar el almacenamiento', async () =>
+        eq(antesDeBorrar(vStaff.linea), true, JSON.stringify(vStaff.linea)));
+    await testA('?salir=1 · …y sabe que era colaborador (lo lee antes de borrar)', async () =>
+        eq(vStaff.linea.indexOf('cierra sesión:local') > -1, true, JSON.stringify(vStaff.linea)));
+    await testA('?salir=1 · …y se lleva la llave compartida', async () =>
+        eq(vStaff.cred, null, String(vStaff.cred)));
+    const vDueño = await volverDelModulo({ usuarioId: 'u1', email: 'a@b.com' });
+    await testA('?salir=1 · el dueño cierra con el signOut normal', async () =>
+        eq(vDueño.linea.indexOf('cierra sesión:global') > -1, true, JSON.stringify(vDueño.linea)));
+
+    /* ── 3c. El botón de la barra de contexto, que es por donde se sale ── */
     async function salirModulo(ctxGuardado) {
-        const c = crearContexto();
+        const c = contextoDeSalida();
+        cargarJS(c, 'security.js');
         cargarJS(c, 'ctx-bar.js');
-        c.sessionStorage.clear = function () {};
         c.etaaxConfirmSalir = () => Promise.resolve(true);
         c.localStorage.setItem('etaax_ctx', JSON.stringify(ctxGuardado));
         c.localStorage.setItem('etaax_n1_staffcred', '{"email":"staff.n1@etaax.app"}');
         await c.window.ctxSalir();
-        return c.localStorage.getItem('etaax_n1_staffcred');
+        return { linea: c.linea, cred: c.localStorage.getItem('etaax_n1_staffcred') };
     }
-    await testA('salir desde un módulo también borra la llave compartida', async () =>
-        eq(await salirModulo({ ctxType: 'staff', negId: 'n1' }), null, 'sigue ahí'));
-    /* Y al dueño no se le toca: en SU equipo esa credencial es la que reparte a
-       sus colaboradores, y borrarla lo obligaría a aprovisionar otra vez. */
-    await testA('…y al dueño no se le borra la suya', async () =>
-        eq(await salirModulo({ ctxType: 'owner', negId: 'n1' }) !== null, true, 'se la borró'));
+    const mStaff = await salirModulo({ ctxType: 'staff', negId: 'n1' });
+    await testA('ctx-bar · cierra la sesión ANTES de vaciar el almacenamiento', async () =>
+        eq(antesDeBorrar(mStaff.linea), true, JSON.stringify(mStaff.linea)));
+    await testA('ctx-bar · …con scope local, para no tumbar a los compañeros', async () =>
+        eq(mStaff.linea.indexOf('cierra sesión:local') > -1, true, JSON.stringify(mStaff.linea)));
+    await testA('ctx-bar · …y borra la llave compartida', async () =>
+        eq(mStaff.cred, null, String(mStaff.cred)));
+    /* Y al dueño no se le toca la llave: en SU equipo es la que reparte a sus
+       colaboradores, y borrarla lo obligaría a aprovisionar otra vez. */
+    const mDueño = await salirModulo({ ctxType: 'owner', negId: 'n1' });
+    await testA('ctx-bar · al dueño no se le borra la suya', async () =>
+        eq(mDueño.cred !== null, true, 'se la borró'));
+    await testA('ctx-bar · …y él sí cierra con el signOut normal', async () =>
+        eq(mDueño.linea.indexOf('cierra sesión:global') > -1, true, JSON.stringify(mDueño.linea)));
+
+    /* ── 4. La regla de con qué scope se cierra vive en UN solo lugar ────── */
+    /* Tres puertas de salida. Si cada una decide por su cuenta, la que se quede
+       sin actualizar cierra mal — y cerrar mal aquí significa o dejar la sesión
+       viva, o tumbar a todos los compañeros de golpe. */
+    const hubSrc = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    const cbSrc  = fs.readFileSync(path.join(RAIZ, 'ctx-bar.js'), 'utf8');
+    test('la regla del scope no está copiada en cada puerta', () => {
+        const copias = (hubSrc.match(/auth\.signOut\(/g) || []).length
+                     + (cbSrc.match(/auth\.signOut\(/g) || []).length;
+        /* hub conserva DOS signOut propios que no son salidas de sesión: el de
+           admin-guard (cliente efímero) y el de la verificación de contraseña.
+           Lo que no puede haber es uno en cada botón de salir. */
+        return eq(copias <= 2, true, 'quedan ' + copias + ' signOut sueltos');
+    });
 
     /* ── 5. La migración v77, por dentro de cada función ─────────────────── */
     /* Se mira DENTRO del cuerpo de cada una. Buscar el patrón en todo el

@@ -113,6 +113,43 @@ window._etaaxWipeCache = function () {
 };
 
 /* ============================================================
+   CERRAR LA SESIÓN DE SUPABASE — UNA SOLA VEZ, PARA LOS TRES CAMINOS
+
+   Se sale por tres puertas: el botón del hub, el botón de la barra de
+   contexto de cualquier módulo, y la vuelta al hub con `?salir=1`. Las tres
+   tienen que cerrar IGUAL, y hasta hoy ninguna cerraba del todo:
+
+     · el hub se saltaba el signOut del colaborador a propósito, porque los
+       colaboradores comparten UNA cuenta y el signOut normal es GLOBAL —
+       revoca la sesión en todos los dispositivos y al salir uno se caían
+       todos—. La respuesta no era no cerrar: es `scope:'local'`.
+     · ctx-bar y el `?salir=1` del hub borraban el almacenamiento ANTES de
+       llamar al signOut. La sesión vive en sessionStorage, así que para
+       cuando se llamaba ya no quedaba nada que cerrar: el signOut era una
+       línea que no hacía nada. Lo encontró Codex.
+
+   EL ORDEN IMPORTA Y ES ESTE: cerrar primero, borrar después.
+
+   El `race` con el reloj no es adorno: un signOut global sale a la red, y en
+   una tablet con mala señal el `await` se queda colgado. Sin esto, el botón de
+   salir deja de sacar a nadie — se queda abierta la sesión Y la pantalla. Si
+   el reloj gana, igual se sigue y se borra todo aquí, que es lo que de verdad
+   le quita el acceso a quien está enfrente del aparato.
+   ============================================================ */
+window.etaaxCerrarSesion = async function (esStaff) {
+    if (typeof _supabase === 'undefined' || !_supabase || !_supabase.auth) return false;
+    try {
+        /* `scope:'local'` para el colaborador: cierra ESTA y no toca a sus
+           compañeros, que comparten la misma cuenta. Para el dueño, el normal:
+           su sesión es suya y conviene revocarla también del lado del servidor. */
+        var p = esStaff ? _supabase.auth.signOut({ scope: 'local' })
+                        : _supabase.auth.signOut();
+        await Promise.race([p, new Promise(function (r) { setTimeout(r, 2500); })]);
+        return true;
+    } catch (e) { return false; }
+};
+
+/* ============================================================
    ¿ESTE COLABORADOR SIGUE DADO DE ALTA?
 
    LA MISMA REGLA QUE EL SERVIDOR, escrita UNA sola vez. En SQL es

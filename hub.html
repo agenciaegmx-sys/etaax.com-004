@@ -1642,12 +1642,7 @@ async function init() {
     // ── Salir desde sub-páginas ──
     if (params.get('salir') === '1') {
         history.replaceState(null, '', window.location.pathname);
-        localStorage.removeItem('etaax_negocio_activo');
-        localStorage.removeItem('etaax_sucursal_activa');
-        localStorage.removeItem('etaax_ctx');
-        _clearQuickSes();
-        sessionStorage.clear();
-        try { await _supabase.auth.signOut(); } catch(e) {}
+        await _salirDeSubpagina();
         showView('viewLogin');
         return;
     }
@@ -2255,24 +2250,18 @@ async function logout() {
         volverAlAdmin();
         return;
     }
-    if (!_sesion || _sesion.type !== 'staff') {
-        await _supabase.auth.signOut();
-    } else {
-        /* ── LA SESIÓN DEL COLABORADOR TAMBIÉN SE CIERRA ────────────────────
-           Antes este signOut se saltaba, y la razón era buena a medias: los
-           colaboradores de un negocio comparten UNA cuenta de Supabase (v19) y
-           el signOut normal es GLOBAL —revoca la sesión en todos los
-           dispositivos—, así que al salir uno se caían todos. La respuesta no
-           era dejar la sesión abierta: es `scope:'local'`, que cierra solo
-           ESTA y no toca a los compañeros.
-
-           Y se borra la credencial compartida cacheada en este equipo. Es la
-           llave de la nube: mientras siga guardada, el siguiente que entre en
-           esta tablet la usa sin pedirle permiso al servidor. Borrada, hay que
-           volver a pedirla con la contraseña —y a quien está dado de baja ya
-           no se le da (v77)—. Sin red no se pierde nada: sin red tampoco se
-           podría iniciar sesión con ella. */
-        try { await _supabase.auth.signOut({ scope: 'local' }); } catch (e) {}
+    /* Con qué `scope` se cierra cada quien lo decide etaaxCerrarSesion
+       (security.js), una sola vez para las tres puertas de salida. */
+    var _esStaff = !!(_sesion && _sesion.type === 'staff');
+    if (typeof etaaxCerrarSesion === 'function') await etaaxCerrarSesion(_esStaff);
+    else console.warn('[etaax] falta security.js: la sesión solo se borra de este equipo.');
+    if (_esStaff) {
+        /* Y se borra la llave compartida cacheada en este equipo. Es la llave de
+           la nube: mientras siga guardada, el siguiente que entre en esta tablet
+           la usa sin pedirle permiso al servidor. Borrada, hay que volver a
+           pedirla con la contraseña — y a quien está dado de baja ya no se le da
+           (v77). Sin red no se pierde nada: sin red tampoco se podría iniciar
+           sesión con ella. */
         try {
             if (_sesion.negocioId) localStorage.removeItem('etaax_' + _sesion.negocioId + '_staffcred');
         } catch (e) {}
@@ -2283,6 +2272,33 @@ async function logout() {
     document.getElementById('loginPwd').value   = '';
     document.getElementById('loginError').textContent = '';
 }
+/* ── Volver del módulo con ?salir=1 ─────────────────────────────────────────
+   Está en una función aparte, y no suelta dentro del arranque, para que se
+   pueda PROBAR el recorrido: lo que se rompió aquí fue el ORDEN.
+
+   Antes: borrar el almacenamiento y después llamar al signOut. La sesión de
+   Supabase vive en sessionStorage, así que ese signOut llegaba a una sesión
+   que ya no existía y no cerraba nada — y el refresh token del dueño se
+   quedaba sin revocar del lado del servidor. Lo encontró Codex.
+
+   Ahora: leer QUIÉN es ANTES de borrar nada (si no, ya no se sabe si era
+   colaborador y se cerraría con el scope equivocado — el global tumbaría a
+   todos sus compañeros), cerrar, y después limpiar. */
+async function _salirDeSubpagina() {
+    var ses = _getSesion();
+    var esStaff = !!(ses && ses.type === 'staff');
+    if (typeof etaaxCerrarSesion === 'function') await etaaxCerrarSesion(esStaff);
+    else console.warn('[etaax] falta security.js: la sesión solo se borra de este equipo.');
+    if (esStaff && ses.negocioId) {
+        try { localStorage.removeItem('etaax_' + ses.negocioId + '_staffcred'); } catch (e) {}
+    }
+    localStorage.removeItem('etaax_negocio_activo');
+    localStorage.removeItem('etaax_sucursal_activa');
+    localStorage.removeItem('etaax_ctx');
+    _clearQuickSes();
+    sessionStorage.clear();
+}
+
 function _clearSesion() {
     _sesion = null;
     _clearQuickSes();

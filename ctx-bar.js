@@ -182,16 +182,24 @@ async function ctxSalir() {
         window.location.href = '/admin.html';
         return;
     }
+    /* ── CERRAR LA SESIÓN VA PRIMERO ────────────────────────────────────────
+       Abajo se vacía sessionStorage, y ahí es donde vive la sesión de Supabase.
+       Hacerlo al revés —como estaba— deja al signOut del hub sin nada que
+       cerrar: la línea existía y no hacía nada. Lo encontró Codex.
+       La regla de con qué `scope` se cierra vive en security.js, para que las
+       tres puertas de salida cierren igual. */
+    if (typeof etaaxCerrarSesion === 'function') {
+        await etaaxCerrarSesion(!!(ctx && ctx.ctxType === 'staff'));
+    } else {
+        console.warn('[etaax] falta security.js: la sesión solo se borra de este equipo.');
+    }
     if (typeof _etaaxWipeCache === 'function') _etaaxWipeCache();
     /* El colaborador que sale deja de tener la llave de la nube en este equipo.
        Es la credencial de la cuenta COMPARTIDA del negocio (v19): mientras siga
        cacheada, el siguiente que entre en esta tablet la usa sin que el
        servidor tenga que autorizarlo, y una baja no se nota donde la persona ya
        había entrado. Al volver a entrar se pide con la contraseña, y a quien
-       está dado de baja ya no se le entrega (v77).
-       La sesión de Supabase vive en sessionStorage, así que el `clear()` de
-       abajo la cierra en esta pestaña sin tocar a los compañeros que comparten
-       la cuenta. */
+       está dado de baja ya no se le entrega (v77). */
     if (ctx && ctx.ctxType === 'staff' && ctx.negId) {
         try { localStorage.removeItem('etaax_' + ctx.negId + '_staffcred'); } catch (e) {}
     }
