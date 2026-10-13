@@ -5632,8 +5632,10 @@ console.log('\n══ AR · Aviso de privacidad y aceptación ══');
     test('el hub tiene acceso al aviso de privacidad', () =>
         eq(hub.indexOf('href="/aviso-privacidad.html"') > -1, true, 'a la mano'));
     /* Se busca el BOTÓN, no la regla de estilo que lleva el mismo nombre y
-       aparece antes en el archivo. */
-    const botonPriv = hub.indexOf('<a class="aviso-priv-btn"');
+       aparece antes en el archivo. Sin la comilla de cierre: el botón puede
+       llevar más de una clase —desde que tiene icono lleva `ic-fila`— y anclar
+       en la comilla hacía fallar la prueba por un cambio que no le incumbe. */
+    const botonPriv = hub.indexOf('<a class="aviso-priv-btn');
     test('…junto a Configurar negocio, donde se administra el negocio', () =>
         eq(botonPriv > -1 && hub.slice(botonPriv, botonPriv + 900).indexOf('Configurar negocio') > -1,
            true, 'al lado'));
@@ -26163,6 +26165,34 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
                 eq(dentro(par[0]).indexOf('#etx-' + par[1]) > -1, true,
                    'quedó: ' + (dentro(par[0]) || '(vacío)')));
         });
+        /* ── Y la pantalla de sucursales, que es la que más iconos lleva ──
+           Nueve sitios: el perfil de la sesión, los dos globales, el ＋ de
+           nueva sucursal, el salir, y los que se arman al pintar cada tarjeta
+           (privacidad, ajustes, matriz/sucursal, administrar). */
+        [['icSesionPerfil', 'perfil'], ['icCatGlobal', 'catalogos'],
+         ['icFinGlobal', 'finanzas'], ['icNuevaSuc', 'anadir-sucursal']].forEach(par => {
+            test('sucursales pinta el icono «' + par[1] + '»', () =>
+                eq(dentro(par[0]).indexOf('#etx-' + par[1]) > -1, true,
+                   'quedó: ' + (dentro(par[0]) || '(vacío)')));
+        });
+        test('…y «cerrar sesión» en las DOS vistas que lo llevan', () => {
+            const n = (fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8')
+                .match(/class="ic-salir"/g) || []).length;
+            return eq(n >= 2, true, 'solo ' + n + ': una de las dos vistas se quedó sin icono');
+        });
+        /* Los de las tarjetas se arman al vuelo, así que se le pide al propio
+           ayudante de la página que los produzca. */
+        ['privacidad', 'ajustes', 'matriz', 'sucursal', 'administrar'].forEach(n => {
+            test('…y el ayudante de la página sabe armar «' + n + '»', () =>
+                eq(H._ic(n, 14).indexOf('#etx-' + n) > -1, true, H._ic(n, 14) || '(vacío)'));
+        });
+        /* El icono de la sucursal toma el color de SU sucursal, que cada una
+           puede tener distinto. Si se pintara con el color fijo del tema, tres
+           sucursales de tres colores se verían iguales. */
+        test('…y el de cada sucursal se tiñe con el color de esa sucursal', () =>
+            eq(H._ic('sucursal', 22, '#ff8800').indexOf('color:#ff8800') > -1, true,
+               H._ic('sucursal', 22, '#ff8800')));
+
         /* Y si el juego de iconos no cargó, la pantalla sigue sirviendo: un
            icono de menos no puede impedir que alguien entre a trabajar. */
         test('…y sin el archivo de iconos, el acceso no se cae', () => {
