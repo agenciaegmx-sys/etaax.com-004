@@ -26134,8 +26134,22 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
             else if (e.isFile() && /\.html$/.test(e.name)) paginas.push(path.join(dir, e.name));
         });
         mirar('.');
+        /* SIN COMENTARIOS, los de HTML y los de JS. El marcado explica quién
+           pinta cada icono y nombra el archivo ahí mismo, así que medir el
+           texto crudo daba por cargado un archivo que solo estaba mencionado
+           en una explicación. Es la misma trampa de siempre: la prueba se caza
+           a sí misma. Van catorce. */
+        // Solo los comentarios de HTML. Quitar también los de JavaScript
+        // parecía más completo y salió peor: un abre-comentario sin su pareja
+        // —dentro de una cadena o de una expresión regular— arrastra hasta el
+        // siguiente cierre, decenas de líneas abajo, y se lleva por delante el
+        // <script src> que estábamos buscando. La trampa original, la que hizo
+        // falta tapar, era un comentario de HTML.
+        // (Y sí: la primera versión de esta nota llevaba un cierre de
+        //  comentario dentro del ejemplo y rompió el archivo. Por eso va con //.)
+        const limpio = (t) => t.replace(/<!--[\s\S]*?-->/g, ' ');
         const sinCargar = paginas.filter(p => {
-            const t = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+            const t = limpio(fs.readFileSync(path.join(RAIZ, p), 'utf8'));
             return t.indexOf('etaaxIcono(') > -1 && t.indexOf('etaax-iconos.js') === -1;
         });
         return eq(sinCargar.length, 0, 'lo usan sin cargarlo: ' + sinCargar.join(', '));
