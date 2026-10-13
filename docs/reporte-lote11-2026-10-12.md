@@ -2,7 +2,8 @@
 
 **Fecha:** 12-oct-2026
 **Commits:** `97505fd`, `76ac89a`, `c8e58db`, `8c4e475`
-**Migraciones:** `v78` **CORRIDA** (8 PASA + 1 DATO) · `v79` — **PENDIENTE de correr**
+**Migraciones:** `v78` **CORRIDA** (8 PASA + 1 DATO) · `v79` **CORRIDA** (8 PASA)
+**Verificado en pantalla por Edwin**, en producción y desde un teléfono real
 **Candados:** 4206 fórmulas · 84 del almacén · v78+v79 contra Postgres real · 0 fallas
 
 ---
@@ -231,9 +232,19 @@ archivo. La v78 **no toca datos** y es idempotente.
 
 ---
 
-## 8. Pendiente de verificar en pantalla
+## 8. Verificado en pantalla — HECHO
 
-Esto solo se puede comprobar con el QR en la mano, y hace falta:
+Lo que ni PGlite ni el candado podían dar, y Edwin comprobó en producción desde
+un teléfono:
+
+- Con NIP equivocados seguidos, la pantalla muestra **«Demasiados intentos con
+  NIP equivocado. Espera un minuto e inténtalo de nuevo»** más «no hace falta
+  recargar» — no el error crudo del servidor.
+- **Cumplida la espera, el NIP bueno entra a la primera.** Esta es la mitad que
+  importa: un freno que no se levanta deja fuera a quien no debe.
+- **Las entradas se registran bien** después de entrar.
+
+Lo que se comprobó, paso a paso:
 
 1. Entrar con un NIP correcto en `entrada.html` y **capturar una entrada**:
    nombre, sucursal y área deben salir igual que siempre.
@@ -315,6 +326,44 @@ candado por texto. Lo digo en vez de inventarle un escenario.
 
 ---
 
-**Sigue abierto:** R03 (la identidad compartida), el rechazo entre negocios de
-R05, y el valor de *Settings → API → Max rows* para R10. Lo siguiente acordado
-es el **Resumen financiero**.
+---
+
+## 10. Resultado en producción de la v79
+
+Los ocho renglones PASA, y **clavados con lo que había predicho la corrida
+local contra PGlite** — que es lo que le da valor al arnés:
+
+```
+1 · registrar una ENTRADA con NIP malo sí acumula fallos     PASA  frenó en el intento 13
+2 · registrar un CHECK LIST con NIP malo sí acumula fallos   PASA  frenó en el intento 13
+3 · registrar un CONTEO con NIP malo sí acumula fallos       PASA  frenó en el intento 13
+4 · la espera de una hora NO se evapora a los 15 minutos     PASA  sigue frenado, faltan 44 minutos
+5 · …y cumplido el castigo, sí se olvida                     PASA  el contador empieza de nuevo
+6 · ninguna de las tres rechaza ya con una excepción         PASA  las tres devuelven NULL
+7 · el conteo de OTRO negocio se sigue rechazando (R05)      PASA  esa excepción sí se queda
+8 · el QR sigue pudiendo llamar las tres sin sesión (anon)   PASA  entradas/checklists/conteos = true
+```
+
+**R04 queda cerrado completo:** servidor, cliente y pantalla.
+
+---
+
+## 11. Estado y lo que sigue
+
+**Cerrado en este bloque:** R04 (freno de intentos de NIP, diez puertas).
+
+**Sigue abierto:**
+
+- **R03** — la identidad compartida. La v77 logró que un dado de baja no
+  consiga sesión nueva; lo que no se puede, mientras la cuenta sea una sola,
+  es cortar la que ya tiene. Cerrarlo es rotar la contraseña en cada baja, y
+  eso necesita la Edge Function de credenciales, todavía sin desplegar.
+- **R05** — falta probar el rechazo contra un id de otro negocio con un intento
+  deliberado (la ruta legítima ya se probó en el QR real).
+- **R10** — falta el valor de *Settings → API → Max rows*. No es un trámite:
+  mientras no se sepa, no se puede afirmar que un reporte financiero esté
+  leyendo todas sus filas.
+- R07, R08, R11, R14.
+
+**Lo siguiente** es el **Resumen financiero**, pendiente de que Edwin diga qué
+quiere de esa pantalla antes de tocarla.
