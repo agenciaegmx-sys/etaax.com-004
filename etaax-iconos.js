@@ -84,11 +84,27 @@
            Van aquí y no en styles.css para que el archivo sea uno solo: quien
            incluya el script tiene los iconos completos, sin depender de que
            además haya cargado la hoja de estilos correcta. */
+        /* ══ OJO CON EL SELECTOR: TIENE QUE SER SIMPLE ══════════════════════
+           `<use>` no pega el dibujo en la página: hace una COPIA aparte, en una
+           especie de compartimento propio. Lo que SÍ cruza hacia esa copia son
+           las propiedades que se heredan —`fill`, `stroke`, `color`— y por eso
+           el contorno toma el color del texto que lo rodea.
+
+           Lo que NO cruza es un selector con descendencia. La primera versión
+           de esto decía `.etx-ic .etx-punto`, y ese espacio obliga a saltar
+           desde el <svg> de la página hasta dentro de la copia: el salto no
+           existe, la regla nunca aplicó, y el punto verde se quedó sin color
+           heredando el `fill:none` del contorno. En pantalla: un aro hueco en
+           vez de un punto verde. Se veía como «sigue el icono viejo».
+
+           Por eso `.etx-punto` y `.etx-trazo` van SOLOS. El prefijo ya evita
+           que choquen con nada; no hacía falta anidarlos, y anidarlos los
+           apagaba. */
         st.textContent =
             '.etx-ic{width:24px;height:24px;flex-shrink:0;fill:none;stroke:currentColor;' +
             'stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}' +
-            '.etx-ic .etx-punto{fill:var(--green,#3DBE7A);stroke:none}' +
-            '.etx-ic .etx-trazo{stroke:var(--green,#3DBE7A)}';
+            '.etx-punto{fill:var(--green,#3DBE7A);stroke:none}' +
+            '.etx-trazo{stroke:var(--green,#3DBE7A)}';
         (document.head || document.documentElement).appendChild(st);
     }
 

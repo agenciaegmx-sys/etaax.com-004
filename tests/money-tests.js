@@ -26034,6 +26034,25 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
     test('…y el verde del acento sale del token, no de un color escrito a mano', () =>
         eq(/var\(--green/.test(fuente), true, 'verde suelto'));
 
+    /* ── EL SELECTOR DEL ACENTO TIENE QUE SER SIMPLE ─────────────────────
+       `<use>` no pega el dibujo en la página: hace una copia en un
+       compartimento propio. Lo heredable cruza (por eso el contorno toma el
+       color del texto), pero un selector con descendencia NO. La primera
+       versión decía `.etx-ic .etx-punto`, el salto no existe, y el punto verde
+       salió hueco —un aro— heredando el `fill:none` del contorno. Edwin lo vio
+       como «sigue el icono viejo», que es exactamente como se ve.
+
+       Esto no se puede comprobar leyendo si la clase existe: hay que mirar que
+       la regla NO tenga descendencia. */
+    test('el verde del acento se pinta con un selector simple, no anidado', () => {
+        const reglas = (fuente.match(/'\.etx-(punto|trazo)[^']*'/g) || []);
+        eq(reglas.length >= 2, true, 'no se encontraron las reglas del acento');
+        const anidadas = (fuente.match(/'\.etx-ic\s+\.etx-(punto|trazo)/g) || []);
+        return eq(anidadas.length, 0,
+            'anidar la regla la apaga: `<use>` copia el dibujo a un compartimento ' +
+            'propio y un selector con descendencia no entra ahí');
+    });
+
     /* ── Un solo nombre para cada idea ───────────────────────────────────── */
     test('el acento de relleno tiene UN nombre, no tres', () => {
         eq(/class="accent"/.test(fuente), false, 'quedó `accent`');
