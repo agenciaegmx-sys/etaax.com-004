@@ -50,6 +50,7 @@ function nombreDe(archivo) {
         .normalize('NFD').replace(/[̀-ͯ]/g, '')   // sin acentos
         .toLowerCase()
         .replace(/^icono[ _-]*/, '')                        // "Icono asesor" → "asesor"
+        .replace(/^etaax[ _-]*/, '')                        // "etaax-usuario" → "usuario"
         .trim()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
@@ -138,6 +139,15 @@ function pilaCompleta(crudo) {
     return { abre, cierra };
 }
 
+/* EL GROSOR NO ES UNO SOLO, Y ES A PROPÓSITO. Los iconos de la pantalla de
+   acceso van a 2.3 y los de sucursales a 2: a tamaño chico el trazo grueso se
+   empasta, y esas pantallas los usan a 18-20 px. Si se perdiera, media docena
+   de iconos engordarían de golpe sin que nadie supiera por qué. */
+function grosorRaiz(crudo) {
+    const m = crudo.match(/<svg[^>]*stroke-width="([\d.]+)"/);
+    return m ? m[1] : null;
+}
+
 function normalizar(archivo) {
     const crudo = fs.readFileSync(archivo, 'utf8');
     const nombre = nombreDe(archivo);
@@ -155,6 +165,28 @@ function normalizar(archivo) {
         dibujables.push({ tag, attrs, cadena: pila.join(' ') + ' ' + tr, bruto: m[0], cerrado });
     }
     if (!dibujables.length) throw new Error('no tiene ningún trazo');
+
+    /* ── EL CASO FÁCIL, Y EL MÁS COMÚN ──────────────────────────────────
+       El archivo ya viene en 24×24 y sin envolturas: no hay nada que analizar
+       ni que desenvolver. Se toma tal cual.
+
+       Esto no es un atajo: la comprobación de abajo —«¿las coordenadas caen en
+       el grid?»— suma los NÚMEROS de los trazos, y en un trazo relativo esos
+       números son desplazamientos, no posiciones. Un `h18m-7-7` tiene un −7 que
+       no está fuera de ningún lienzo: es «muévete siete a la izquierda». Por
+       eso casi todos los iconos limpios caían al camino largo y perdían su
+       grosor propio. */
+    const vbArchivo = (crudo.match(/viewBox="([^"]+)"/) || [])[1] || '';
+    const sinEnvoltura = !/<g\b[^>]*transform=/.test(crudo) && !/transform=/.test(crudo);
+    if (vbArchivo.replace(/\s+/g, ' ').trim() === '0 0 ' + GRID + ' ' + GRID && sinEnvoltura) {
+        const cuerpo = dibujables.map(d => {
+            let el = d.bruto;
+            if (!d.cerrado) el = el.replace(/>$/, '/>');
+            return limpiarEstilo(el);
+        }).join('');
+        return { nombre, viewBox: '0 0 ' + GRID + ' ' + GRID, cuerpo, limpio: true,
+                 grosor: grosorRaiz(crudo) };
+    }
 
     /* ¿Se pueden tirar las envolturas sin mover el dibujo? Solo si todas las
        piezas comparten la misma escala y el mismo origen, y sin girar ni
@@ -198,7 +230,8 @@ function normalizar(archivo) {
             if (!d.cerrado) el = el.replace(/>$/, '/>');
             return limpiarEstilo(el);
         }).join('');
-        return { nombre, viewBox: '0 0 ' + GRID + ' ' + GRID, cuerpo, limpio: true };
+        return { nombre, viewBox: '0 0 ' + GRID + ' ' + GRID, cuerpo, limpio: true,
+                 grosor: grosorRaiz(crudo) };
     }
 
     /* El camino de respeto: su lienzo, sus transformaciones, solo sin colores
@@ -214,17 +247,34 @@ function normalizar(archivo) {
     /* Hay que volver a abrir los grupos que envolvían: sin ellos las
        transformaciones de los padres se pierden y el dibujo se va de sitio. */
     const envoltura = pilaCompleta(crudo);
-    return { nombre, viewBox: vb, cuerpo: envoltura.abre + cuerpo + envoltura.cierra, limpio: false };
+    return { nombre, viewBox: vb, cuerpo: envoltura.abre + cuerpo + envoltura.cierra,
+             limpio: false, grosor: grosorRaiz(crudo) };
 }
 
 /* ── Se reescribe el bloque de símbolos del sprite ───────────────────────── */
-const archivos = fs.readdirSync(AQUI).filter(f => /\.svg$/i.test(f)).sort();
+/* Recursivo: Edwin los organiza por pantalla (acceso/, sucursales/) y esa
+   separación significa algo —el mismo perfil tiene dos variantes de trazo—,
+   así que se respeta la carpeta y se toma el nombre del archivo. */
+function svgsDe(dir) {
+    let out = [];
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) out = out.concat(svgsDe(full));
+        else if (/\.svg$/i.test(e.name)) out.push(full);
+    }
+    return out.sort();
+}
+const archivos = svgsDe(AQUI).map(f => path.relative(AQUI, f));
 if (!archivos.length) { console.log('No hay .svg en iconos/. Nada que hacer.'); process.exit(0); }
 
 const nuevos = {};
 const problemas = [];
 for (const f of archivos) {
-    try { const r = normalizar(path.join(AQUI, f)); nuevos[r.nombre] = r; }
+    try {
+        const r = normalizar(path.join(AQUI, f));
+        if (nuevos[r.nombre]) { problemas.push('  ✗ ' + f + ' → ya hay otro icono llamado «' + r.nombre + '»'); continue; }
+        nuevos[r.nombre] = r;
+    }
     catch (e) { problemas.push('  ✗ ' + f + ' → ' + e.message); }
 }
 if (problemas.length) {
@@ -236,7 +286,12 @@ if (problemas.length) {
 let js = fs.readFileSync(DESTINO, 'utf8');
 for (const nombre in nuevos) {
     const r = nuevos[nombre];
-    const linea = "        '" + nombre + "': ['" + r.viewBox + "', '" + r.cuerpo.replace(/'/g, "\\'") + "'],";
+    /* El grosor propio viaja PEGADO al dibujo, en un envoltorio: así no depende
+       de que la pantalla se acuerde de pedirlo. */
+    const cuerpo = (r.grosor && r.grosor !== '2.3')
+        ? '<g stroke-width="' + r.grosor + '">' + r.cuerpo + '</g>'
+        : r.cuerpo;
+    const linea = "        '" + nombre + "': ['" + r.viewBox + "', '" + cuerpo.replace(/'/g, "\\'") + "'],";
     const re = new RegExp("^ {8}'" + nombre + "': \\[.*$", 'm');
     if (re.test(js)) js = js.replace(re, linea);
     else js = js.replace(/(\n    };\n\n    var ID)/, '\n' + linea + '$1');

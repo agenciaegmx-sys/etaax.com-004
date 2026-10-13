@@ -26014,8 +26014,8 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
            typeof ico + ' · ' + lista.length + ' iconos'));
     /* Los seis de la pantalla de acceso y los de sucursales, por nombre: si
        mañana se pierde uno al regenerar el archivo, esto lo dice. */
-    ['user','lock','eye','eye-off','arrow','asesor',
-     'branch','main','restaurant','catalog','finance','settings','shield','logout','add']
+    ['usuario','candado','ojo','ojo-oculto','flecha','asesor',
+     'sucursal','matriz','restaurante','catalogos','finanzas','ajustes','privacidad','cerrar-sesion','anadir-sucursal','administrar','perfil']
         .forEach(n => test('…está el icono «' + n + '»', () => eq(lista.indexOf(n) > -1, true, 'falta')));
 
     test('cada icono trae su dibujo, no un hueco', () => {
@@ -26081,7 +26081,7 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         return eq(ico(veneno), '', ico(veneno));
     });
     test('la clase se limpia antes de entrar al marcado', () => {
-        const r = ico('user', { clase: 'ok"><script>alert(1)</script>' });
+        const r = ico('usuario', { clase: 'ok"><script>alert(1)</script>' });
         eq(r.indexOf('<script') === -1 && r.indexOf('onerror') === -1, true, r);
         /* Lo que importa es que el atributo no se pueda CERRAR desde dentro:
            solo letras, números, espacio, guion y guion bajo. (El `"><use` de
@@ -26091,15 +26091,15 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         return eq(/^[A-Za-z0-9 _-]*$/.test(m[1]), true, 'la clase trae de más: ' + m[1]);
     });
     test('el tamaño también: solo números, y dentro de lo razonable', () => {
-        eq(/width="24"/.test(ico('user', { tam: 'enorme' })), true, 'un tamaño inventado no cae al default');
-        eq(/width="20"/.test(ico('user', { tam: 20 })), true, 'no respeta el tamaño pedido');
-        return eq(/width="24"/.test(ico('user', { tam: 99999 })), true, 'acepta un tamaño absurdo');
+        eq(/width="24"/.test(ico('usuario', { tam: 'enorme' })), true, 'un tamaño inventado no cae al default');
+        eq(/width="20"/.test(ico('usuario', { tam: 20 })), true, 'no respeta el tamaño pedido');
+        return eq(/width="24"/.test(ico('usuario', { tam: 99999 })), true, 'acepta un tamaño absurdo');
     });
     /* Y el caso que de verdad importa: el ayudante sirve para meter marcado en
        innerHTML, así que lo que devuelve tiene que ser siempre un <svg> y nada
        más. Se comprueba corriendo, no leyendo. */
     test('lo que devuelve es siempre un svg y nada más', () => {
-        const malos = ['user', 'lock', 'arrow'].map(n => ico(n, { clase: 'x y z' }))
+        const malos = ['usuario', 'candado', 'flecha'].map(n => ico(n, { clase: 'x y z' }))
             .filter(m => !/^<svg class="etx-ic [a-z ]+" width="\d+" height="\d+" aria-hidden="true"><use href="#etx-[a-z-]+"><\/use><\/svg>$/.test(m));
         return eq(malos.length, 0, malos[0] || '');
     });
@@ -26128,7 +26128,7 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
     [['hub.html', 'loginPwdIcon'], ['administrativo/staff.html', 'fPwdOjo']].forEach(par => {
         test(par[0] + ' pide el ojo al juego de iconos y lo pinta al arrancar', () => {
             const t = fs.readFileSync(path.join(RAIZ, par[0]), 'utf8');
-            eq(t.indexOf("etaaxIcono('eye-off'") > -1 || /etaaxIcono\(\s*abierto/.test(t), true,
+            eq(t.indexOf("etaaxIcono('ojo-oculto'") > -1 || /etaaxIcono\(\s*abierto/.test(t), true,
                'no usa el icono compartido');
             /* Y que lo pinte al arrancar: si solo lo pintara al pulsar, el
                botón nacería vacío y nadie sabría que se puede pulsar. */
@@ -26141,7 +26141,7 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
     test('…y el estado del ojo no está invertido', () => {
         const t = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
         const i = t.indexOf('function _pintarOjo(');
-        return eq(/abierto \? 'eye-off' : 'eye'/.test(t.slice(i, i + 300)), true,
+        return eq(/abierto \? 'ojo-oculto' : 'ojo'/.test(t.slice(i, i + 300)), true,
                   'enseña el ojo abierto cuando la contraseña ya se ve');
     });
 
@@ -26156,9 +26156,9 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         cargarInline(H, 'hub.html');
         H._pintarIconosLogin();
         const dentro = (id) => (H.document.getElementById(id).innerHTML || '');
-        [['icLoginUsuario', 'user'], ['icLoginCandado', 'lock'],
-         ['icLoginFlecha', 'arrow'], ['icLoginChat', 'asesor'],
-         ['loginPwdIcon', 'eye']].forEach(par => {
+        [['icLoginUsuario', 'usuario'], ['icLoginCandado', 'candado'],
+         ['icLoginFlecha', 'flecha'], ['icLoginChat', 'asesor'],
+         ['loginPwdIcon', 'ojo']].forEach(par => {
             test('el acceso pinta el icono «' + par[1] + '»', () =>
                 eq(dentro(par[0]).indexOf('#etx-' + par[1]) > -1, true,
                    'quedó: ' + (dentro(par[0]) || '(vacío)')));
@@ -26182,7 +26182,13 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
        alguien compara a ojo. Esto corre el generador en seco y compara. */
     {
         const dir = path.join(RAIZ, 'iconos');
-        const svgs = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => /\.svg$/i.test(f)) : [];
+        /* Recursivo: Edwin los organiza por pantalla (acceso/, sucursales/), y
+           esa separación significa algo — el mismo perfil tiene dos variantes
+           de trazo según dónde se use. */
+        const svgsDe = (d) => fs.readdirSync(d, { withFileTypes: true }).reduce((acc, e) =>
+            acc.concat(e.isDirectory() ? svgsDe(path.join(d, e.name))
+                                       : (/\.svg$/i.test(e.name) ? [path.join(d, e.name)] : [])), []);
+        const svgs = fs.existsSync(dir) ? svgsDe(dir) : [];
         test('la carpeta de iconos existe y tiene al menos uno', () =>
             eq(svgs.length > 0, true, 'no hay .svg en iconos/'));
         test('…y cada .svg está en el sprite, igualito', () => {

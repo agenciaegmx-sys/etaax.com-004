@@ -2226,9 +2226,9 @@ function _pintarIconosLogin() {
         var el = document.getElementById(id);
         if (el) el.innerHTML = etaaxIcono(nombre, { tam: tam || 20 });
     };
-    poner('icLoginUsuario', 'user');
-    poner('icLoginCandado', 'lock');
-    poner('icLoginFlecha',  'arrow');
+    poner('icLoginUsuario', 'usuario');
+    poner('icLoginCandado', 'candado');
+    poner('icLoginFlecha',  'flecha');
     poner('icLoginChat',    'asesor');
     _pintarOjo(document.getElementById('loginPwdIcon'), false);
 }
@@ -2236,7 +2236,7 @@ function _pintarIconosLogin() {
 /* `abierto` = la contraseña se está viendo, así que toca el ojo tachado. */
 function _pintarOjo(cont, abierto) {
     if (!cont || typeof etaaxIcono !== 'function') return;
-    cont.innerHTML = etaaxIcono(abierto ? 'eye-off' : 'eye', { tam: 18 });
+    cont.innerHTML = etaaxIcono(abierto ? 'ojo-oculto' : 'ojo', { tam: 18 });
 }
 
 function selectPlan(key) {
