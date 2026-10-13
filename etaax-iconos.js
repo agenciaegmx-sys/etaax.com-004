@@ -43,7 +43,6 @@
         'arrow': ['0 0 24 24', '<path d="M3 12h18m-7-7 7 7-7 7"/>'],
         'branch': ['0 0 24 24', '<path d="M4 10v11h16V10M2 10l3-7h14l3 7H2M8 3l-1 7m9-7 1 7M4 15h4"/><path class="etx-trazo" d="M12 21v-7h5v7"/>'],
         'catalog': ['0 0 24 24', '<path d="M5 18H3V3h14v2M8 21H6V6h14v2"/><rect x="9" y="9" width="13" height="13" rx="2"/><path class="etx-trazo" d="M13 13h5"/><path d="M13 17h5"/>'],
-        'chat': ['0 0 24 24', '<path d="M7 3h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H9l-5 3v-4a4 4 0 0 1-1-3V7a4 4 0 0 1 4-4Z"/><circle class="etx-punto" cx="15" cy="9" r="2.3"/>'],
         'eye': ['0 0 24 24', '<path d="M2 12s3.7-7 10-7 10 7 10 7-3.7 7-10 7S2 12 2 12Z"/><circle class="etx-punto" cx="12" cy="12" r="3"/>'],
         'eye-off': ['0 0 24 24', '<path d="M8 5.8A10 10 0 0 1 12 5c6.3 0 10 7 10 7a19 19 0 0 1-3.3 4.2M15.8 18.2A10 10 0 0 1 12 19c-6.3 0-10-7-10-7a19 19 0 0 1 3.3-4.2"/><circle class="etx-punto" cx="12" cy="12" r="3"/><path d="m3 3 18 18"/>'],
         'finance': ['0 0 24 24', '<path d="M3 3v18h19M7 17v-5m5 5V8"/><path class="etx-trazo" d="M17 17V4" style="stroke-width:3.4"/><circle class="etx-punto" cx="17" cy="4" r="1.7"/>'],
@@ -54,6 +53,7 @@
         'settings': ['0 0 24 24', '<path d="m9 3 1-1h4l1 3 2 1 3-1 2 4-2 2v2l2 2-2 4-3-1-2 1-1 3h-4l-1-3-2-1-3 1-2-4 2-2v-2L2 9l2-4 3 1 2-1Z"/><circle class="etx-punto" cx="12" cy="12" r="3"/>'],
         'shield': ['0 0 24 24', '<path d="m12 2 8 3v6c0 5-4 9-8 11-4-2-8-6-8-11V5Z"/><rect class="etx-trazo" x="9" y="10" width="6" height="6" rx="1.4"/><path class="etx-trazo" d="M10 10V8a2 2 0 0 1 4 0v2"/>'],
         'user': ['0 0 24 24', '<circle class="etx-punto" cx="12" cy="6" r="3.2"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/>'],
+        'asesor': ['0 0 24 24', '<path d="M7,3L17,3C19.194,3 21,4.806 21,7L21,15C21,17.194 19.194,19 17,19L9,19L4,22L4,18C3.269,17.18 2.907,16.094 3,15L3,7C3,4.806 4.806,3 7,3Z"/><circle class="etx-punto" cx="15" cy="9" r="2.3"/>'],
     };
 
     var ID = 'etaax-sprite-iconos';

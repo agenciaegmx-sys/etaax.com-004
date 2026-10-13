@@ -26014,7 +26014,7 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
            typeof ico + ' · ' + lista.length + ' iconos'));
     /* Los seis de la pantalla de acceso y los de sucursales, por nombre: si
        mañana se pierde uno al regenerar el archivo, esto lo dice. */
-    ['user','lock','eye','eye-off','arrow','chat',
+    ['user','lock','eye','eye-off','arrow','asesor',
      'branch','main','restaurant','catalog','finance','settings','shield','logout','add']
         .forEach(n => test('…está el icono «' + n + '»', () => eq(lista.indexOf(n) > -1, true, 'falta')));
 
@@ -26138,7 +26138,7 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         H._pintarIconosLogin();
         const dentro = (id) => (H.document.getElementById(id).innerHTML || '');
         [['icLoginUsuario', 'user'], ['icLoginCandado', 'lock'],
-         ['icLoginFlecha', 'arrow'], ['icLoginChat', 'chat'],
+         ['icLoginFlecha', 'arrow'], ['icLoginChat', 'asesor'],
          ['loginPwdIcon', 'eye']].forEach(par => {
             test('el acceso pinta el icono «' + par[1] + '»', () =>
                 eq(dentro(par[0]).indexOf('#etx-' + par[1]) > -1, true,
@@ -26152,6 +26152,94 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
             let reventó = null;
             try { H2._pintarIconosLogin(); } catch (e) { reventó = e; }
             return eq(reventó, null, String(reventó && reventó.message));
+        });
+    }
+
+    /* ── LA CARPETA `iconos/` MANDA ──────────────────────────────────────
+       Edwin dibuja un icono y lo suelta ahí como `nombre.svg`; el generador lo
+       normaliza y lo mete en el sprite. El riesgo de ese flujo es uno solo y es
+       silencioso: cambiar el .svg y olvidarse de regenerar. El icono viejo
+       sigue en la app, el archivo dice otra cosa, y nadie se entera hasta que
+       alguien compara a ojo. Esto corre el generador en seco y compara. */
+    {
+        const dir = path.join(RAIZ, 'iconos');
+        const svgs = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => /\.svg$/i.test(f)) : [];
+        test('la carpeta de iconos existe y tiene al menos uno', () =>
+            eq(svgs.length > 0, true, 'no hay .svg en iconos/'));
+        test('…y cada .svg está en el sprite, igualito', () => {
+            const { execFileSync } = require('child_process');
+            /* Se regenera en una copia y se compara con lo que está guardado:
+               si difieren, es que alguien tocó un .svg y no regeneró. */
+            const antes = fs.readFileSync(path.join(RAIZ, 'etaax-iconos.js'), 'utf8');
+            execFileSync('node', [path.join(RAIZ, 'iconos/generar.js')], { cwd: RAIZ });
+            const despues = fs.readFileSync(path.join(RAIZ, 'etaax-iconos.js'), 'utf8');
+            if (antes !== despues) fs.writeFileSync(path.join(RAIZ, 'etaax-iconos.js'), antes);
+            return eq(antes === despues, true,
+                      'hay un .svg cambiado sin regenerar: corre `node iconos/generar.js`');
+        });
+        /* Y que lo que salió de la carpeta no traiga colores escritos: un icono
+           con su crema fijo no se puede poner sobre el botón verde. */
+        test('…sin un solo color escrito a mano', () => {
+            const sp = fs.readFileSync(path.join(RAIZ, 'etaax-iconos.js'), 'utf8')
+                .replace(/\/\*[\s\S]*?\*\//g, ' ');
+            const sucios = (sp.match(/(fill|stroke)\s*[:=]\s*["']?(#[0-9a-fA-F]{3,8}|rgb\()/g) || []);
+            return eq(sucios.length, 0, 'quedó: ' + sucios.join(', '));
+        });
+    }
+
+    /* ── El generador se NIEGA con lo que no puede normalizar ────────────
+       Más vale no generar que generar un icono torcido: si el dibujo viene
+       rotado, estirado o en un lienzo que no es el de 24, tirar las envolturas
+       lo movería de sitio y nadie lo notaría hasta verlo en pantalla. */
+    {
+        const { execFileSync } = require('child_process');
+        const tmp = fs.mkdtempSync(require('os').tmpdir() + '/etaax-ic-');
+        const probar = (svg) => {
+            fs.writeFileSync(path.join(tmp, 'prueba.svg'), svg);
+            try {
+                execFileSync('node', [path.join(RAIZ, 'iconos/generar.js')],
+                             { cwd: RAIZ, env: Object.assign({}, process.env, { ICONOS_DIR: tmp }) });
+            } catch (e) { return String(e.stdout || '') + String(e.stderr || ''); }
+            return '';
+        };
+        /* El generador lee su propia carpeta, así que la prueba se hace con la
+           función de normalizar directamente: se carga el archivo y se le pide
+           que trague cada caso malo. */
+        const gen = fs.readFileSync(path.join(RAIZ, 'iconos/generar.js'), 'utf8');
+        const ctxG = { require, module: { exports: {} }, console: { log(){} }, __dirname: path.join(RAIZ, 'iconos'), process: { exit(){}, argv: [] } };
+        ctxG.exports = ctxG.module.exports;
+        /* Se corta antes del bloque que escribe archivos: aquí solo interesa
+           `normalizar`, que es donde viven las reglas. */
+        const soloFunciones = gen.slice(0, gen.indexOf('/* ── Se reescribe el bloque'));
+        vm.createContext(ctxG);
+        vm.runInContext(soloFunciones + '\nglobalThis.normalizar = normalizar;', ctxG);
+        const norm = ctxG.normalizar;
+        const archivo = (txt) => { const f = path.join(tmp, 'x.svg'); fs.writeFileSync(f, txt); return f; };
+        const falla = (txt) => { try { norm(archivo(txt)); return ''; } catch (e) { return e.message; } };
+
+        test('el generador acepta un icono bien hecho', () => {
+            const r = norm(archivo('<svg viewBox="0 0 24 24"><path d="M3 12h18"/></svg>'));
+            eq(r.viewBox, '0 0 24 24', r.viewBox);
+            return eq(r.cuerpo.indexOf('<path') > -1, true, r.cuerpo);
+        });
+        test('…se niega si viene rotado', () =>
+            eq(/rotado|deformado/.test(falla('<svg viewBox="0 0 24 24"><g transform="matrix(1,0.5,-0.5,1,0,0)"><path d="M3 12h18"/></g></svg>')), true, 'lo tragó'));
+        test('…se niega si viene estirado', () =>
+            eq(/estirado/.test(falla('<svg viewBox="0 0 24 24"><g transform="matrix(2,0,0,3,0,0)"><path d="M3 12h18"/></g></svg>')), true, 'lo tragó'));
+        test('…se niega si el dibujo no está en el lienzo de 24', () =>
+            eq(/lienzo/.test(falla('<svg viewBox="0 0 720 720"><path d="M300 400h200"/></svg>')), true, 'lo tragó'));
+        test('…y se niega si no trae ningún trazo', () =>
+            eq(/trazo/.test(falla('<svg viewBox="0 0 24 24"></svg>')), true, 'lo tragó'));
+        /* Lo que SÍ tiene que tragar: el envoltorio del exportador de diseño,
+           que es justo lo que llega en la práctica. */
+        test('…pero sí traga el envoltorio de un exportador (escala + mover)', () => {
+            const r = norm(archivo('<svg viewBox="0 0 720 720"><g transform="matrix(27.68,0,0,27.68,-9607.5,-9618.2)">' +
+                '<g transform="matrix(1,0,0,1,348,348)"><path d="M7,3L17,3" style="stroke:rgb(240,236,228);stroke-width:2.3px;fill:none"/></g>' +
+                '<g transform="matrix(1,0,0,1,348,348)"><circle cx="15" cy="9" r="2.3" style="fill:rgb(61,190,122)"/></g></g></svg>'));
+            eq(r.viewBox, '0 0 24 24', 'no lo dejó en el grid de 24: ' + r.viewBox);
+            eq(/rgb\(|#f0ece4|#3dbe7a/i.test(r.cuerpo), false, 'dejó colores escritos: ' + r.cuerpo);
+            return eq(r.cuerpo.indexOf('class="etx-punto"') > -1, true,
+                      'no marcó el detalle verde: ' + r.cuerpo);
         });
     }
 
