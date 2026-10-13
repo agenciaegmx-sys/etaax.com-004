@@ -760,7 +760,10 @@ async function registrarCumplimiento(){
     };
     try {
         var r = await _supabase.rpc('checklist_registrar', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH, p_datos: entry });
-        if (r.error) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+r.error.message; return; }
+        /* Rechazo por NIP = id vacío, no error (v79). Ver etaaxRegistroFallo. */
+        var _falloK = (typeof etaaxRegistroFallo === 'function')
+            ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar: '+r.error.message : '');
+        if (_falloK) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent=_falloK; return; }
         btn.disabled=false;
         var col = pct>=90?'var(--green)':pct>=70?'#e0a52e':'#e05a3a';
         var d = document.getElementById('donedPct'); d.textContent = pct+'%'; d.style.color = col;

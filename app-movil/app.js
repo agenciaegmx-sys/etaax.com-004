@@ -541,7 +541,10 @@ async function enviarRun() {
     try {
         var r = await _supabase.rpc('checklist_registrar',
             { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH, p_datos: entry });
-        if (r.error) { $('btnEnviar').disabled = false; barraMsg('No se pudo guardar: ' + r.error.message, 'err'); return; }
+        /* Rechazo por NIP = id vacío, no error (v79). Ver etaaxRegistroFallo. */
+        var _falloK = (typeof etaaxRegistroFallo === 'function')
+            ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar: ' + r.error.message : '');
+        if (_falloK) { $('btnEnviar').disabled = false; barraMsg(_falloK, 'err'); return; }
         RUN = null;
         toast('✓ Check list enviado · ' + c.pct + '% cumplido', 'ok');
         irMenu();
@@ -956,7 +959,7 @@ async function enviarLote() {
     }
     _enviando = true;
     $('btnEnviar').disabled = true;
-    var total = LOTE.length, ok = 0, fallidos = [];
+    var total = LOTE.length, ok = 0, fallidos = [], _motivoL = '';
     for (var i = 0; i < LOTE.length; i++) {
         barraMsg('Mandando ' + (ok + 1) + ' de ' + total + '…');
         try {
@@ -964,7 +967,11 @@ async function enviarLote() {
             var r = await _supabase.rpc(fn, {
                 p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH, p_datos: armarRegistro(LOTE[i])
             });
-            if (r.error) fallidos.push(LOTE[i]); else ok++;
+            /* Rechazo por NIP = id vacío, no error (v79): si solo se mirara el
+               error, la captura se borraría de la lista dándola por guardada. */
+            var _falloL = (typeof etaaxRegistroFallo === 'function')
+                ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar.' : '');
+            if (_falloL) { fallidos.push(LOTE[i]); _motivoL = _motivoL || _falloL; } else ok++;
         } catch (e) { fallidos.push(LOTE[i]); }
     }
     LOTE = fallidos; pintarLote();
@@ -975,7 +982,10 @@ async function enviarLote() {
         barraMsg('');
         toast('✓ ' + ok + ' registro' + (ok === 1 ? '' : 's') + ' guardado' + (ok === 1 ? '' : 's') + '.', 'ok');
     } else {
-        barraMsg(ok + ' guardados · ' + fallidos.length + ' fallaron. Siguen en la lista: vuelve a tocar Registrar.', 'err');
+        /* Y se dice POR QUÉ. Sin el motivo, quien está frenado vuelve a tocar
+           Registrar una y otra vez, sumando intentos y alargando su espera. */
+        barraMsg(ok + ' guardados · ' + fallidos.length + ' fallaron. Siguen en la lista. ' +
+                 (_motivoL || 'Vuelve a tocar Registrar.'), 'err');
     }
 }
 

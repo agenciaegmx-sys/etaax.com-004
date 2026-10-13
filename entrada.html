@@ -987,7 +987,10 @@ async function enviarConteo(){
             aplicado: false
         };
         var r = await _supabase.rpc('inventario_conteo_registrar', { p_neg:NEG, p_token:TOKEN, p_niphash:_NIPHASH, p_datos:entry });
-        if (r.error){ msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+r.error.message; return; }
+        /* Rechazo por NIP = id vacío, no error (v79). Ver etaaxRegistroFallo. */
+        var _falloC = (typeof etaaxRegistroFallo === 'function')
+            ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar: '+r.error.message : '');
+        if (_falloC){ msg.className='cap-msg err'; msg.textContent=_falloC; return; }
         /* Se APILA, no se reemplaza: la lista de la sesión debe reflejar lo mismo
            que la tabla — un renglón por conteo enviado. */
         CNT_HECHOS.unshift(entry);
@@ -1247,18 +1250,18 @@ async function _registrarBatch(flujo){
     // (Sin corte por tiempo: el NIP se revalida en la RPC, que es lo que autoriza.)
     if (!st.items.length){ _cartMsg(flujo,'Agrega al menos un insumo a la lista.','err'); return; }
     var btn = document.getElementById(flujo+'SubmitBtn'); if (btn) btn.disabled=true;
-    var total = st.items.length, ok=0, fallidos=[];
+    var total = st.items.length, ok=0, fallidos=[], _motivo='';
     for (var i=0;i<st.items.length;i++){
         var it = st.items[i];
         _cartMsg(flujo,'Registrando '+(ok+1)+' de '+total+'…','');
         try {
             var r = await _supabase.rpc('entrada_registrar', { p_neg:NEG, p_token:TOKEN, p_niphash:_NIPHASH, p_datos:_buildEntry(flujo, it) });
-            /* Si OTRO aparato de este mismo lugar se puso a probar NIP, el
-               freno alcanza también a quien ya estaba dentro. Que lo entienda
-               y no crea que perdió lo capturado. */
-            var _espE = (typeof etaaxNipEsperaMsg === 'function') ? etaaxNipEsperaMsg(r) : '';
-            if (_espE) { r = { error: { message: _espE } }; }
-            if (r.error) fallidos.push(it); else ok++;
+            /* OJO: el rechazo por NIP ya NO es un error, es un id vacío (v79).
+               Mirar solo `r.error` daría por guardado lo que no se guardó, y la
+               captura se borraría de la lista. Lo decide etaaxRegistroFallo. */
+            var _falloE = (typeof etaaxRegistroFallo === 'function')
+                ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar.' : '');
+            if (_falloE) { fallidos.push(it); _motivo = _motivo || _falloE; } else ok++;
         } catch(e){ fallidos.push(it); }
     }
     if (btn) btn.disabled=false;
@@ -1268,7 +1271,10 @@ async function _registrarBatch(flujo){
         document.getElementById(flujo+'Nota').value='';
         _cartMsg(flujo,'✓ '+ok+' registro(s) guardados. Puedes armar otro lote.','ok');
     } else {
-        _cartMsg(flujo, ok+' guardados · '+fallidos.length+' fallaron (quedan en la lista, reintenta).','err');
+        /* Y se dice POR QUÉ fallaron. Sin esto, quien está frenado veía
+           «fallaron, reintenta» y reintentaba en vano, sumando intentos. */
+        _cartMsg(flujo, ok+' guardados · '+fallidos.length+' fallaron (quedan en la lista).' +
+                        (_motivo ? ' ' + _motivo : ' Reintenta.'),'err');
     }
 }
 

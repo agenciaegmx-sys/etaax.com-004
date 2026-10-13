@@ -222,3 +222,27 @@ window.etaaxNipEsperaMsg = function (r) {
     return 'Demasiados intentos con NIP equivocado. Espera ' +
            window.etaaxNipEsperaTexto(s) + ' e inténtalo de nuevo.';
 };
+
+/* ── ¿SE GUARDÓ O NO? ───────────────────────────────────────────────────────
+   Las tres puertas que escriben por QR (entradas, check lists y conteos)
+   devuelven el id de lo guardado… o NULL si rechazaron el NIP.
+
+   Antes lanzaban una excepción, y el cliente miraba solo `r.error`. Pero una
+   excepción en PostgreSQL revierte la transacción ENTERA, y ahí se iba también
+   el fallo que el guardia acababa de anotar: por esas tres puertas se podían
+   probar NIP toda la noche sin que el contador subiera (lo encontró Codex). La
+   v79 cambia el rechazo a NULL para que el apunte sobreviva — y por eso ahora
+   el cliente TIENE que mirar también `r.data`. Si solo mirara el error, un
+   rechazo se vería como «guardado» y la captura se borraría de la lista: el
+   usuario perdería su trabajo creyendo que lo mandó.
+
+   Devuelve el aviso que hay que enseñar, o '' si de verdad se guardó.         */
+window.etaaxRegistroFallo = function (r) {
+    var esperando = window.etaaxNipEsperaMsg(r);
+    if (esperando) return esperando;
+    if (r && r.error) return 'No se pudo guardar: ' + (r.error.message || 'error del servidor');
+    if (!r || r.data === null || r.data === undefined || r.data === '') {
+        return 'No se guardó: tu NIP ya no es válido. Vuelve a entrar con tu NIP.';
+    }
+    return '';
+};

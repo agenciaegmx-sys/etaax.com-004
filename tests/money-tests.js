@@ -24692,7 +24692,17 @@ console.log('\n══ BH54 · El nombre de una carpeta no es una llave ══');
     test('…y el celular le enseña ese error a quien contó', () => {
         const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
         const i = ent.indexOf("rpc('inventario_conteo_registrar'");
-        return eq(ent.slice(i, i + 260).indexOf('No se pudo guardar') > -1, true, 'lo dice en pantalla');
+        /* El texto ya no está escrito aquí: lo arma la regla compartida
+           (etaaxRegistroFallo, v79), que es la que sabe distinguir un error del
+           servidor de un rechazo por NIP —que ahora llega como id vacío, no
+           como excepción—. Se comprueba que el sitio la use Y que la regla de
+           verdad produzca el mensaje: lo segundo CORRIENDO el archivo. */
+        eq(/etaaxRegistroFallo|No se pudo guardar/.test(ent.slice(i, i + 700)), true,
+           'el sitio no enseña nada');
+        const c = crearContexto();
+        cargarJS(c, 'staff-area.js');
+        const m = c.window.etaaxRegistroFallo({ error: { message: 'No se pudo registrar el conteo' } });
+        return eq(/No se pudo registrar el conteo/.test(m), true, m);
     });
     /* BH21: la función se reescribió entera. Lo que ya protegía va igual. */
     test('…sin perder nada de lo que ya hacía (BH21)', () => {
@@ -25355,6 +25365,89 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
             return eq(tramo.indexOf('etaaxNipEsperaMsg') > -1, true, 'la puerta no avisa');
         });
     });
+    /* ── 6. La v79: lo que encontró Codex supervisando ──────────────────────
+       Dos agujeros que la comprobación de la v78 no vio, y un tercero de
+       pantalla. El más feo: las tres puertas que ESCRIBEN rechazaban con
+       `RAISE EXCEPTION`, y una excepción revierte la transacción entera —
+       incluido el fallo que el guardia acababa de anotar—. Por esas tres se
+       podían probar NIP toda la noche sin que el contador subiera jamás. */
+    const v79 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v79.sql'), 'utf8');
+    const cuerpoDe = (txt, nombre) => {
+        const i = txt.indexOf('FUNCTION ' + nombre + '(');
+        if (i < 0) return '';
+        const j = txt.indexOf('$$;', i);
+        return j < 0 ? '' : txt.slice(i, j);
+    };
+    ['entrada_registrar', 'checklist_registrar', 'inventario_conteo_registrar'].forEach(n => {
+        test('v79 · ' + n + ' rechaza el NIP SIN excepción (si no, borra el apunte)', () => {
+            const b = cuerpoDe(v79, n);
+            eq(b.length > 0, true, 'la v79 no redefine ' + n);
+            eq(/IF v_nombre IS NULL THEN[\s\S]{0,420}RETURN NULL;/.test(b), true, 'sigue lanzando');
+            return eq(/no autorizado/.test(b), false, 'quedó el RAISE');
+        });
+    });
+    /* La otra excepción de conteos —pisar el renglón de otro negocio, R05— SÍ
+       se queda: ahí no hay ningún apunte escrito que perder. */
+    test('v79 · el rechazo entre negocios de R05 sigue siendo excepción', () =>
+        eq(/No se pudo registrar el conteo/.test(cuerpoDe(v79, 'inventario_conteo_registrar')), true,
+           'se perdió el candado de R05'));
+
+    /* El segundo agujero: un solo plazo hacía dos trabajos, y el castigo de una
+       hora se evaporaba a los quince minutos. */
+    test('v79 · el bloqueo y el olvido son DOS plazos distintos', () => {
+        eq(/FUNCTION _nip_olvidado/.test(v79), true, 'no hay plazo de olvido aparte');
+        return eq(/GREATEST\(900, _nip_espera\(p_fallos\)\)/.test(v79), true,
+                  'el olvido puede llegar antes que el castigo');
+    });
+    test('v79 · …y el bloqueo ya no depende de la ventana de olvido', () => {
+        const g = cuerpoDe(v79, '_nip_guardia');
+        eq(g.length > 0, true, 'la v79 no redefine el guardia');
+        /* Antes: el `IF` de la espera vivía DENTRO de un `IF ultimo > ahora-15min`.
+           Ahora la espera se mira siempre que haya fila. */
+        return eq(/IF v_espera > v_pasado THEN[\s\S]{0,120}RAISE EXCEPTION 'nip_espera/.test(g), true,
+                  'el bloqueo sigue atado a los 15 minutos');
+    });
+
+    /* ── 7. Lo que NO se puede romper: que un rechazo parezca «guardado» ──
+       El SQL ahora devuelve NULL donde antes lanzaba. Un cliente que solo mire
+       `r.error` daría el registro por bueno y BORRARÍA la captura de la lista:
+       el usuario pierde su trabajo creyendo que lo mandó. */
+    const falloDe = ctxA.window.etaaxRegistroFallo;
+    test('un id de vuelta significa guardado', () => eq(falloDe({ data: 'e123', error: null }), ''));
+    test('…un id vacío NO significa guardado', () => {
+        const m = falloDe({ data: null, error: null });
+        return eq(/NIP/.test(m), true, m);
+    });
+    test('…un error del servidor tampoco', () =>
+        eq(/No se pudo guardar/.test(falloDe({ data: null, error: { message: 'boom' } })), true));
+    test('…y si está frenado, manda el aviso de espera', () =>
+        eq(/Espera/.test(falloDe({ data: null, error: { message: 'nip_espera:120' } })), true));
+    /* Y que los CINCO sitios que escriben por NIP lo usen. Este es el test que
+       evita que mañana alguien agregue un sexto mirando solo `r.error`. */
+    const sitios = [
+        ['entrada.html', "rpc('entrada_registrar'"],
+        ['entrada.html', "rpc('inventario_conteo_registrar'"],
+        ['checklist.html', "rpc('checklist_registrar'"],
+        ['app-movil/app.js', "rpc('checklist_registrar'"],
+        ['app-movil/app.js', '_supabase.rpc(fn, {'],
+    ];
+    sitios.forEach(par => {
+        const src = fs.readFileSync(path.join(RAIZ, par[0]), 'utf8');
+        test(par[0] + ' · ' + par[1].slice(0, 34) + ' distingue guardado de rechazado', () => {
+            const i = src.indexOf(par[1]);
+            eq(i > -1, true, 'no se encontró la llamada');
+            return eq(src.slice(i, i + 800).indexOf('etaaxRegistroFallo') > -1, true,
+                      'mira solo r.error: daría por guardado un rechazo');
+        });
+    });
+    /* Y el tercer hallazgo: el aviso de espera se preparaba y se tiraba. */
+    test('al guardar un lote se dice POR QUÉ falló, no solo que falló', () => {
+        const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+        const i = ent.indexOf('fallaron (quedan en la lista');
+        eq(i > -1, true, 'no se encontró el mensaje del lote');
+        return eq(ent.slice(i - 200, i + 200).indexOf('_motivo') > -1, true, 'el motivo se descarta');
+    });
+
     /* Las tres cargan el archivo donde vive el ayudante. Sin esto, el `typeof`
        de guardia se las traga calladas y nadie ve nunca el aviso. */
     [['entrada.html', 'staff-area.js'], ['checklist.html', 'staff-area.js'],

@@ -45,6 +45,7 @@ CREATE TABLE insumos (id TEXT PRIMARY KEY, negocio_id TEXT, datos JSONB);
 CREATE TABLE inventarios (id TEXT PRIMARY KEY, negocio_id TEXT, datos JSONB);
 CREATE TABLE inventario_conteos (id TEXT PRIMARY KEY, negocio_id TEXT, datos JSONB,
                                  created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE checklist_ejecuciones (id TEXT PRIMARY KEY, negocio_id TEXT, datos JSONB);
 
 -- La IP, como la ve PostgREST. Aquí se maneja con un ajuste de sesión para
 -- poder simular DOS dispositivos distintos.
@@ -112,6 +113,32 @@ BEGIN
     v_id := 'e' || floor(random()*1e9)::text;
     INSERT INTO entradas_log (id, negocio_id, datos)
     VALUES (v_id, p_neg, p_datos || jsonb_build_object('registradoPor', v_nombre));
+    RETURN v_id;
+END; $$;
+
+CREATE FUNCTION checklist_registrar(p_neg TEXT, p_token TEXT, p_niphash TEXT, p_datos JSONB)
+RETURNS TEXT LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_nombre TEXT; v_id TEXT;
+BEGIN
+    v_nombre := entrada_validar_nip(p_neg, p_token, p_niphash);
+    IF v_nombre IS NULL THEN RAISE EXCEPTION 'no autorizado'; END IF;
+    v_id := 'c' || floor(random()*1e9)::text;
+    INSERT INTO checklist_ejecuciones (id, negocio_id, datos) VALUES (v_id, p_neg, p_datos);
+    RETURN v_id;
+END; $$;
+
+CREATE FUNCTION inventario_conteo_registrar(p_neg TEXT, p_token TEXT, p_niphash TEXT, p_datos JSONB)
+RETURNS TEXT LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_nombre TEXT; v_id TEXT; v_filas INT;
+BEGIN
+    v_nombre := entrada_validar_nip(p_neg, p_token, p_niphash);
+    IF v_nombre IS NULL THEN RAISE EXCEPTION 'no autorizado'; END IF;
+    v_id := COALESCE(NULLIF(p_datos->>'id',''), 'k' || floor(random()*1e9)::text);
+    INSERT INTO inventario_conteos (id, negocio_id, datos) VALUES (v_id, p_neg, p_datos)
+    ON CONFLICT (id) DO UPDATE SET datos = EXCLUDED.datos
+      WHERE inventario_conteos.negocio_id = p_neg;
+    GET DIAGNOSTICS v_filas = ROW_COUNT;
+    IF v_filas = 0 THEN RAISE EXCEPTION 'No se pudo registrar el conteo'; END IF;
     RETURN v_id;
 END; $$;
 
@@ -264,5 +291,120 @@ const limpiar = () => db.exec(`DELETE FROM login_intentos`);
     ok(g[0].v === true && g[0].p === true, '…pero sí las puertas del QR (si no, se cae el QR)');
 }
 
-console.log(fallas ? '\n🚨 ' + fallas + ' falla(s)' : '\n🔒 v78 OK — el freno de los NIP, verificado contra Postgres de verdad');
+/* ══ LO QUE ENCONTRÓ CODEX SUPERVISANDO, Y QUE LA v79 ARREGLA ══════════════
+   Dos agujeros que la comprobación de la v78 no vio. El segundo bloque de
+   abajo prueba cada puerta DESDE EL CONTADOR EN CERO, que es exactamente lo
+   que faltaba: probarlas cuando ya estaban bloqueadas desde otra función
+   demuestra que OBEDECEN un bloqueo, no que lo PROVOQUEN.                    */
+console.log('\n══ ANTES de la v79 — los dos agujeros, provocados ══');
+{
+    for (const fn of ['entrada_registrar', 'checklist_registrar', 'inventario_conteo_registrar']) {
+        await limpiar();
+        let bloqueos = 0;
+        for (let i = 1; i <= 30; i++) {
+            const r = await intentar(`SELECT ${fn}('neg1','tok-bueno', $1, '{}'::jsonb)`, ['nip$x' + i]);
+            if (r.error && /nip_espera/.test(r.error)) { bloqueos++; break; }
+        }
+        const q = await filas(`SELECT count(*)::int AS n FROM login_intentos`);
+        ok(bloqueos === 0 && q[0].n === 0,
+           fn + ': 30 NIP malos, 0 bloqueos y el contador VACÍO (la excepción se lo llevaba)');
+    }
+    await limpiar();
+    await db.exec(`INSERT INTO login_intentos (clave, intentos, ventana_inicio, ultimo)
+                   VALUES (_nip_clave('neg1'), 24, now() - interval '40 minutes', now() - interval '16 minutes')`);
+    const r = await intentar(`SELECT entrada_validar_nip('neg1','tok-bueno','nip$malo')`);
+    ok(!r.error, 'la espera de UNA HORA se evaporó a los 16 minutos (dejó intentar otra vez)');
+}
+
+/* ══ La v79 ═══════════════════════════════════════════════════════════════ */
+console.log('\n══ Corriendo supabase-migration-v79.sql ══');
+{
+    const sql79 = fs.readFileSync(RAIZ + 'supabase-migration-v79.sql', 'utf8');
+    let t79 = null;
+    try {
+        const res = await db.exec(sql79);
+        t79 = res[res.length - 1];
+        ok(true, 'la v79 corre sin errores de sintaxis');
+    } catch (e) {
+        ok(false, 'la v79 FALLÓ: ' + e.message);
+    }
+    if (t79) {
+        console.log('\n  Tabla de comprobación de la v79:');
+        for (const r of (t79.rows || [])) console.log('   ', JSON.stringify(r));
+        ok((t79.rows || []).every(r => r.resultado !== 'FALLA'), 'ningún renglón de la v79 dice FALLA');
+    }
+}
+
+console.log('\n══ DESPUÉS de la v79 ══');
+{
+    /* 1 · cada puerta que escribe acumula sus PROPIOS fallos, desde cero */
+    for (const fn of ['entrada_registrar', 'checklist_registrar', 'inventario_conteo_registrar']) {
+        await limpiar();
+        let frenó = 0;
+        for (let i = 1; i <= 30; i++) {
+            const r = await intentar(`SELECT ${fn}('neg1','tok-bueno', $1, '{}'::jsonb)`, ['nip$y' + i]);
+            if (r.error && /nip_espera/.test(r.error)) { frenó = i; break; }
+        }
+        ok(frenó === 13, fn + ': frena en el intento 13 por sí sola — fue el ' + frenó);
+    }
+
+    /* 2 · y rechazan SIN excepción, para no llevarse el apunte */
+    await limpiar();
+    const rr = await filas(`SELECT entrada_registrar('neg1','tok-bueno','nip$nadie','{}'::jsonb) AS id`);
+    ok(rr[0].id === null, 'el rechazo por NIP ya no es excepción: devuelve NULL');
+    const q1 = await filas(`SELECT intentos FROM login_intentos`);
+    ok(q1.length === 1 && q1[0].intentos === 1, '…y el fallo SÍ queda anotado (1 intento)');
+    const e1 = await filas(`SELECT count(*)::int AS n FROM entradas_log WHERE datos->>'x' IS NOT NULL`);
+    ok(e1[0].n === 0, '…sin guardar nada, que es lo que importa');
+
+    /* 3 · el castigo de una hora dura una hora */
+    await limpiar();
+    await db.exec(`INSERT INTO login_intentos (clave, intentos, ventana_inicio, ultimo)
+                   VALUES (_nip_clave('neg1'), 24, now() - interval '40 minutes', now() - interval '16 minutes')`);
+    const r16 = await intentar(`SELECT entrada_validar_nip('neg1','tok-bueno','nip$malo')`);
+    ok(/nip_espera/.test(r16.error || ''), 'a los 16 minutos de 24 fallos, SIGUE frenado');
+    const faltan = Number((r16.error || '').match(/nip_espera:(\d+)/)[1]);
+    ok(faltan > 2400 && faltan < 2700, '…y faltan unos 44 minutos: ' + Math.round(faltan / 60) + ' min');
+
+    /* …y los cuatro escalones, en su límite */
+    for (const [fallos, esperaMin] of [[12, 1], [15, 5], [18, 15], [24, 60]]) {
+        await limpiar();
+        await db.exec(`INSERT INTO login_intentos (clave, intentos, ventana_inicio, ultimo)
+                       VALUES (_nip_clave('neg1'), ${fallos}, now(), now() - interval '${esperaMin} minutes' + interval '10 seconds')`);
+        const a = await intentar(`SELECT entrada_validar_nip('neg1','tok-bueno','nip$malo')`);
+        ok(/nip_espera/.test(a.error || ''), `con ${fallos} fallos sigue frenado a falta de 10 s`);
+        await db.exec(`UPDATE login_intentos SET ultimo = now() - interval '${esperaMin} minutes' - interval '10 seconds'`);
+        const b = await intentar(`SELECT entrada_validar_nip('neg1','tok-bueno','nip$ana')`);
+        ok(!b.error && b.rows[0].entrada_validar_nip === 'Ana',
+           `…y cumplidos los ${esperaMin} min, el NIP bueno entra`);
+    }
+
+    /* 4 · cumplido el castigo se olvida: nadie queda marcado de por vida */
+    await limpiar();
+    await db.exec(`INSERT INTO login_intentos (clave, intentos, ventana_inicio, ultimo)
+                   VALUES (_nip_clave('neg1'), 24, now() - interval '3 hours', now() - interval '2 hours')`);
+    await filas(`SELECT entrada_validar_nip('neg1','tok-bueno','nip$malo')`);
+    const q2 = await filas(`SELECT intentos FROM login_intentos`);
+    ok(q2.length === 1 && q2[0].intentos === 1, 'cumplido el castigo, el contador empieza de nuevo');
+
+    /* 5 · y lo legítimo, otra vez: las tres siguen guardando */
+    await limpiar();
+    const g1 = await filas(`SELECT entrada_registrar('neg1','tok-bueno','nip$ana','{"insumo":"Tomate"}'::jsonb) AS id`);
+    ok(!!g1[0].id, 'con el NIP bueno se sigue registrando una entrada');
+    const g2 = await filas(`SELECT checklist_registrar('neg1','tok-bueno','nip$ana','{"a":1}'::jsonb) AS id`);
+    ok(!!g2[0].id, '…y un check list');
+    const g3 = await filas(`SELECT inventario_conteo_registrar('neg1','tok-bueno','nip$ana','{"a":1}'::jsonb) AS id`);
+    ok(!!g3[0].id, '…y un conteo');
+    const q3 = await filas(`SELECT count(*)::int AS n FROM login_intentos`);
+    ok(q3[0].n === 0, '…sin dejar un solo intento anotado');
+
+    /* 6 · el rechazo de R05 (conteo de otro negocio) SÍ sigue siendo excepción */
+    await db.exec(`INSERT INTO negocios (id, datos) VALUES ('neg2','{"entradaToken":"tok2"}') ON CONFLICT DO NOTHING;
+                   INSERT INTO inventario_conteos (id, negocio_id, datos) VALUES ('ajeno','neg2','{}') ON CONFLICT DO NOTHING;`);
+    const aj = await intentar(`SELECT inventario_conteo_registrar('neg1','tok-bueno','nip$ana','{"id":"ajeno"}'::jsonb)`);
+    ok(/No se pudo registrar el conteo/.test(aj.error || ''),
+       'pisar el conteo de otro negocio sigue rechazándose (R05): ' + (aj.error || 'NO RECHAZÓ'));
+}
+
+console.log(fallas ? '\n🚨 ' + fallas + ' falla(s)' : '\n🔒 v78 + v79 OK — el freno de los NIP, verificado contra Postgres de verdad');
 process.exit(fallas ? 1 : 0);
