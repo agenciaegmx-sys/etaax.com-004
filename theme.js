@@ -32,9 +32,30 @@
 (function () {
     var CLAVE = 'etaax_theme';
 
+    /* TRES ESTADOS, NO DOS: claro, oscuro y «el del dispositivo». El tercero no
+       es un capricho — un sistema que se usa de día en la barra y de noche en
+       la oficina sigue al teléfono sin que nadie toque nada.
+
+       OJO con el valor por defecto: sin nada guardado se arranca OSCURO, no en
+       automático. Cambiar eso haría que a quien nunca eligió se le moviera el
+       tema solo, y lo leería como un error de la app. El automático es una
+       decisión que se toma a propósito. */
+    function _guardado() {
+        try {
+            var v = localStorage.getItem(CLAVE);
+            return (v === 'light' || v === 'dark' || v === 'auto') ? v : 'dark';
+        } catch (e) { return 'dark'; }
+    }
+    function _delDispositivo() {
+        try {
+            return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+                ? 'light' : 'dark';
+        } catch (e) { return 'dark'; }
+    }
+    /* Lo que se PINTA. El `auto` se resuelve aquí y en ningún otro lado. */
     function _leer() {
-        try { return localStorage.getItem(CLAVE) === 'light' ? 'light' : 'dark'; }
-        catch (e) { return 'dark'; }
+        var v = _guardado();
+        return v === 'auto' ? _delDispositivo() : v;
     }
     function _actual() {
         return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
@@ -133,16 +154,40 @@
     }
 
     function _poner(tema) {
-        var t = tema === 'light' ? 'light' : 'dark';
-        try { localStorage.setItem(CLAVE, t); } catch (e) {}
+        /* Se GUARDA lo elegido —incluido 'auto'— y se PINTA lo resuelto: son
+           dos cosas distintas y confundirlas es lo que hace que «seguir al
+           dispositivo» se pierda en la siguiente carga. */
+        var elegido = (tema === 'light' || tema === 'auto') ? tema : 'dark';
+        try { localStorage.setItem(CLAVE, elegido); } catch (e) {}
+        var t = elegido === 'auto' ? _delDispositivo() : elegido;
         /* Se aplica aunque no cambie el atributo (p. ej. si ya venía puesto),
            porque quien llama espera que el aviso salga. */
         if (_actual() !== t) { _aplicar(t); }
-        else { _sincronizarBoton(); }
+        else { _sincronizarBoton(); _logoDelTema(); }
     }
 
     window.toggleTheme = function () { _poner(_actual() === 'dark' ? 'light' : 'dark'); };
-    window.EtaaxTheme = { actual: _actual, set: _poner, toggle: window.toggleTheme, CLAVE: CLAVE };
+    window.EtaaxTheme = {
+        actual: _actual,              // lo que se está viendo: 'light' | 'dark'
+        elegido: _guardado,           // lo que la persona eligió: + 'auto'
+        set: _poner, toggle: window.toggleTheme, CLAVE: CLAVE,
+        /* Seguir al dispositivo. Se guarda 'auto' y se pinta lo que diga el
+           sistema EN ESE MOMENTO; si el teléfono cambia después, el oyente de
+           abajo lo repinta solo. */
+        auto: function () { _poner('auto'); }
+    };
+
+    /* El dispositivo cambia de tema (anochece, o el usuario lo cambia en su
+       sistema): solo se sigue a quien eligió «auto». A quien decidió claro u
+       oscuro no se le mueve nada. */
+    try {
+        if (window.matchMedia) {
+            var mq = window.matchMedia('(prefers-color-scheme: light)');
+            var seguir = function () { if (_guardado() === 'auto') _aplicar(_delDispositivo()); };
+            if (mq.addEventListener) mq.addEventListener('change', seguir);
+            else if (mq.addListener) mq.addListener(seguir);
+        }
+    } catch (e) {}
 
     /* 4) El cambio hecho en otro lado llega aquí. El navegador dispara `storage`
           en todos los documentos del mismo origen MENOS en el que lo escribió:
@@ -150,7 +195,8 @@
           ventana flotante, y una pestaña a otra. */
     window.addEventListener('storage', function (e) {
         if (!e || e.key !== CLAVE) return;
-        _aplicar(e.newValue === 'light' ? 'light' : 'dark');
+        _aplicar(e.newValue === 'auto' ? _delDispositivo()
+                 : (e.newValue === 'light' ? 'light' : 'dark'));
     });
 
     /* 5) Al cargar: sincronizar el botón y, si la página no trae uno, ponerlo.

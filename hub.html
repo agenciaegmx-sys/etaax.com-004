@@ -624,24 +624,11 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 
 <div class="hub-shell">
 
-  <!-- TOP BAR -->
-  <div class="hub-topbar">
-    <div style="display:flex;align-items:center;gap:10px;">
-      <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:16px;display:block">
-      <span style="color:#2a2825;font-size:16px;line-height:1">|</span>
-      <span style="font-size:11px;color:#7a7570;letter-spacing:.3px">Hub Principal</span>
-    </div>
-    <!-- Estado inicial: TODAVÍA NO HAY SESIÓN.
-         Aquí decía «Modo local» con el punto verde pulsando, herencia de cuando
-         el hub funcionaba sin Supabase. Ya no significaba nada y engañaba: un
-         punto verde activo junto a esas palabras se lee como «estás trabajando
-         sin conexión, tus datos están solo en este equipo» — y es falso.
-         Se usa la MISMA etiqueta que al cerrar sesión, que es la honesta: no
-         hay dos estados distintos, hay uno solo con dos caminos para llegar. -->
-    <div class="hub-user-top" id="topbarUser">
-      <div class="hub-user-dot" style="background:var(--dim);animation:none"></div>
-      <span>Sin sesión</span>
-    </div>
+  <!-- La barra de arriba ya NO vive aquí: la pinta /etaax-header.js, que es la
+       misma para todo el sistema y va FIJA. El hub solo le dice quién entró.
+       El chip `topbarUser` se conserva oculto porque varias funciones lo
+       escriben; lo que se ve es el header compartido. -->
+  <div class="hub-user-top" id="topbarUser" style="display:none"></div>
   </div>
 
   <!-- ══════════════════════════════════
@@ -1800,6 +1787,7 @@ async function init() {
        marcado porque el sprite lo inyecta el script del final del body: para
        cuando corre init(), ya está puesto. */
     _pintarIconosLogin();
+    _pintarHeader();
     _renderPlanGrid();
     _pintarContactoAlta();
     var params     = new URLSearchParams(window.location.search);
@@ -2001,7 +1989,34 @@ function _pintarPresenciaHub() {
             : '');
 }
 
+/* La barra compartida, con lo que este hub sabe de la sesión. Se repinta cada
+   vez que cambia algo —entrar, salir, cambiar de negocio— porque lo que enseña
+   es justo eso. */
+function _pintarHeader() {
+    if (typeof etaaxHeader !== 'function') return;
+    var neg = _sesion && _sesion.negocioId
+        ? _getNegocios().find(function (n) { return n.id === _sesion.negocioId; })
+        : (_misNegocios()[0] || null);
+    etaaxHeader({
+        activa:  !!_sesion,
+        usuario: (_sesion && _sesion.nombre) || 'Sin sesión',
+        negocio: neg ? neg.nombre : '',
+        plan:    (_sesion && _sesion.type === 'staff')
+                    ? (ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro).label
+                    : (neg ? categoriaNegocio(_getSucursales(neg.id).length || 1).nombre : ''),
+        logo:    neg ? _getNegLogo(neg.id) : '',
+        inicio:  '/hub.html',
+        /* Desde el hub, «mi cuenta» y «plan» son la configuración del negocio:
+           no hay otra pantalla donde vivan, y mandar a una que no existe es
+           peor que no ofrecerlo. */
+        miCuenta: neg ? function () { abrirConfig(neg.id); } : null,
+        planYFacturacion: neg ? function () { abrirConfig(neg.id); } : null,
+        cerrarSesion: function () { logout(); }
+    });
+}
+
 function _updateTopbar() {
+    _pintarHeader();
     if (!_sesion) return;
     /* EL COLABORADOR TAMBIÉN TIENE SESIÓN. Antes este chip solo sabía de dueños:
        un colaborador entraba, trabajaba, y arriba seguía diciendo que no había
@@ -2507,6 +2522,7 @@ function _clearSesion() {
     localStorage.removeItem('etaax_ctx');
     document.getElementById('topbarUser').innerHTML =
         '<div class="hub-user-dot" style="background:var(--dim);animation:none"></div><span>Sin sesión</span>';
+    _pintarHeader();
 }
 
 /* ════════════════════════════════════════════════════════
@@ -4418,6 +4434,7 @@ async function guardarNuevaPassword(){
 <script src="admin-guard.js"></script>
 <script src="/etaax-iconos.js"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
 <script src="/negocio-tipos.js"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
+<script src="/etaax-header.js"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="security.js"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>

@@ -82,6 +82,11 @@
         'org-franquicia': ['0 0 24 24', '<g stroke-width="1.8"><circle class="etx-trazo" cx="12" cy="5" r="3"/><path d="M12 8v4H4m8 0h8M4 12v4m8-4v4m8-4v4"/><rect x="2" y="16" width="4" height="5" rx="1"/><rect x="10" y="16" width="4" height="5" rx="1"/><rect x="18" y="16" width="4" height="5" rx="1"/></g>'],
         'org-mixto': ['0 0 24 24', '<g stroke-width="1.8"><circle class="etx-trazo" cx="12" cy="12" r="3"/><path d="m10 10-5-5m9 5 5-5m-9 9-5 5m9-5 5 5"/><circle cx="4" cy="4" r="2"/><rect x="18" y="2" width="4" height="4" rx="1"/><path d="m2 22 2-5 2 5H2"/><rect x="18" y="18" width="4" height="4" rx="1"/></g>'],
         'org-pyme': ['0 0 24 24', '<g stroke-width="1.8"><circle cx="12" cy="10" r="5"/><path d="M5 21v-2l4-5m10 7v-2l-4-5"/><circle class="etx-punto" stroke="none" cx="12" cy="10" r="2"/></g>'],
+        'hd-desplegar': ['0 0 24 24', '<g stroke-width="2"><path d="m6 9 6 6 6-6"/></g>'],
+        'hd-inicio': ['0 0 24 24', '<g stroke-width="2"><path d="m3 10 9-7 9 7v11H3V10Z"/><path class="etx-trazo" d="M9 21v-7h6v7"/></g>'],
+        'hd-luna': ['0 0 24 24', '<g stroke-width="2"><path d="M18 16A8 8 0 0 1 8 4a9 9 0 1 0 10 12Z"/><circle class="etx-punto" stroke="none" cx="17" cy="5" r="2"/></g>'],
+        'hd-sistema': ['0 0 24 24', '<g stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="3"/><path d="M12 17v4m-5 1h10"/><circle class="etx-punto" stroke="none" cx="17" cy="7" r="1.5"/></g>'],
+        'hd-sol': ['0 0 24 24', '<g stroke-width="2"><circle class="etx-punto" stroke="none" cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></g>'],
     };
 
     var ID = 'etaax-sprite-iconos';

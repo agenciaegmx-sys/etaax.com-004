@@ -59,7 +59,7 @@ const VERDE = ['rgb(61,190,122)', '#3dbe7a', '#3DBE7A'];
    Y de las dos familias se lee solo `oscuro/`: el archivo claro es el MISMO
    dibujo con otro color de línea, y aquí el color se normaliza igual. Tomar los
    dos sería tener cada icono dos veces, con el riesgo de que un día difieran. */
-var FAMILIAS = { 'modelos-negocio': 'giro', 'organizacion': 'org' };
+var FAMILIAS = { 'modelos-negocio': 'giro', 'organizacion': 'org', 'header': 'hd' };
 
 function clasificar(rel) {
     var partes = rel.split(path.sep);

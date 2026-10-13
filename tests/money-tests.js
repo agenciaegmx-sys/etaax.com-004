@@ -14491,9 +14491,38 @@ console.log('\n══ BH4 · El rótulo que mentía ══');
            hub.indexOf("<span>Sin sesión</span>'") > -1, true, 'una sola etiqueta'));
     /* El punto verde pulsando es el que contaba la mentira: sin sesión no hay
        nada latiendo. */
-    test('…y sin sesión el punto no late ni va en verde', () =>
-        eq((hub.match(/background:var\(--dim\);animation:none/g) || []).length >= 2,
-           true, 'apagado en los dos caminos'));
+    /* La barra de arriba ya no vive en el hub: la pinta /etaax-header.js, la
+       misma para todo el sistema. Así que la mentira se vigila DONDE AHORA SE
+       PODRÍA CONTAR — y se comprueba CORRIENDO el header, no leyendo su código. */
+    function headerCon(opc) {
+        const H = crearContexto();
+        cargarJS(H, 'etaax-iconos.js');
+        cargarJS(H, 'etaax-header.js');
+        H.document.body.insertBefore = function () {};
+        H.document.body.firstChild = null;
+        H.document.body.classList = { add(){} };
+        const el = H.window.etaaxHeader(opc);
+        return (el && el.innerHTML) || '';
+    }
+    test('…y sin sesión el punto no late ni va en verde', () => {
+        eq(/background:var\(--dim\);animation:none/.test(hub), true, 'el chip apagado del hub');
+        /* `etaaxHeader` DEVUELVE su elemento: se le pregunta a él en vez de
+           montar un DOM de mentira que acabe midiendo otra cosa. */
+        return eq(/Sesión activa/.test(headerCon({ activa: false, usuario: 'Sin sesión' })), false,
+                  'dice que hay sesión cuando no la hay');
+    });
+    test('…y sin sesión tampoco ofrece salir ni ver la cuenta', () => {
+        const h = headerCon({ activa: false, usuario: 'Sin sesión' });
+        eq(/Sin sesión/.test(h), true, 'ni siquiera lo dice');
+        return eq(/Cerrar sesión/.test(h), false, 'ofrece cerrar una sesión que no existe');
+    });
+    test('…y con sesión sí lo dice, que ahí es verdad', () => {
+        const h = headerCon({ activa: true, usuario: 'Edwin', negocio: 'EGMx', plan: 'Pequeña Pyme' });
+        eq(/Sesión activa/.test(h), true, 'no lo dice');
+        eq(/Cerrar sesión/.test(h), true, 'sin salida');
+        return eq(/EGMx/.test(h) && /Pequeña Pyme/.test(h), true, 'no dice en qué negocio ni con qué plan');
+    });
+
     /* Con sesión SÍ late y SÍ va en verde: ahí el indicador dice algo real. */
     test('con sesión sí late, porque ahí sí indica algo', () =>
         eq((hub.match(/'<div class="hub-user-dot"><\/div><span>' \+ nombre/g) || []).length, 2,
@@ -26734,6 +26763,79 @@ console.log('\n══ BE15 · Organización del negocio y giro de la sucursal �
         eq(/#etx-org-/.test(barra2), false, 'inventó una organización que nadie eligió'));
 }
 
+/* ═══════════ SUITE BE16 · LA BARRA DE ARRIBA, UNA SOLA Y FIJA ═══════════════
+   Cada pantalla traía la suya. Se nota al navegar —la barra brinca de pantalla
+   en pantalla— y se paga al cambiar algo: media docena de archivos por un
+   botón. Esta suite cuida lo que hace que una pieza compartida siga siéndolo.  */
+function suiteHeader() {
+console.log('\n══ BE16 · La barra de arriba, una sola y fija ══');
+
+    const pintar = (opc) => {
+        const H = crearContexto();
+        cargarJS(H, 'etaax-iconos.js');
+        cargarJS(H, 'etaax-header.js');
+        H.document.body.insertBefore = function () {};
+        H.document.body.classList = { add(){} };
+        const el = H.window.etaaxHeader(opc || {});
+        return { html: (el && el.innerHTML) || '', ctx: H };
+    };
+    const fuente = fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8');
+
+    /* VA FIJA. Al bajar por un inventario de doscientos renglones la barra se
+       quedaba arriba, fuera de la vista, y volver al hub pedía subir hasta el
+       principio. En una tablet, donde no hay atajos de teclado, eso es la
+       diferencia entre volver y recargar. */
+    test('la barra queda fija al hacer scroll', () =>
+        eq(/\.etx-hd\{position:fixed/.test(fuente), true, 'se va con el scroll'));
+    /* Y la trampa clásica de una barra fija: se come el primer renglón de la
+       página si nadie reserva su espacio. */
+    test('…y el cuerpo reserva su espacio, no se le come el primer renglón', () =>
+        eq(/body\.etx-con-hd\{padding-top:/.test(fuente), true, 'tapa el contenido'));
+    test('…y en el papel no sale', () =>
+        eq(/@media print\{[^}]*\.etx-hd\{display:none/.test(fuente), true, 'se imprime una barra de navegación'));
+
+    const r = pintar({ activa: true, usuario: 'Edwin González', negocio: 'EGMx', plan: 'Pequeña Pyme' });
+    test('trae la salida de emergencia: Inicio', () =>
+        eq(/#etx-hd-inicio/.test(r.html) && /Inicio/.test(r.html), true, 'sin vuelta al hub'));
+    test('…el interruptor del tema', () =>
+        eq(/id="etxHdTema"/.test(r.html), true, 'sin tema'));
+    test('…y quién eres, en qué negocio y con qué plan', () => {
+        eq(/Edwin González/.test(r.html), true, 'sin nombre');
+        eq(/EGMx/.test(r.html), true, 'sin negocio');
+        return eq(/Pequeña Pyme/.test(r.html), true, 'sin plan');
+    });
+    /* El menú se cierra al tocar fuera y con Escape: uno que solo se cierra con
+       su propio botón se queda abierto encima de lo que vas a tocar. */
+    test('el menú se cierra al tocar fuera y con Escape', () => {
+        eq(/addEventListener\('click', cerrar\)/.test(fuente), true, 'no se cierra al tocar fuera');
+        return eq(/e\.key === 'Escape'/.test(fuente), true, 'no se cierra con Escape');
+    });
+
+    /* El icono del tema dice EN QUÉ ESTÁS. Con tres estados —claro, oscuro y el
+       del dispositivo— «a dónde vas» ya no se puede adivinar de un vistazo. */
+    test('el tema tiene tres estados, no dos', () => {
+        const t = fs.readFileSync(path.join(RAIZ, 'theme.js'), 'utf8');
+        eq(/'auto'/.test(t), true, 'no existe el del dispositivo');
+        return eq(/prefers-color-scheme/.test(t), true, 'no sabe qué prefiere el dispositivo');
+    });
+    test('…y sin nada guardado sigue arrancando en oscuro, no en automático', () => {
+        const t = fs.readFileSync(path.join(RAIZ, 'theme.js'), 'utf8');
+        const i = t.indexOf('function _guardado()');
+        return eq(/return 'dark'/.test(t.slice(i, i + 420)), true,
+                  'a quien nunca eligió se le movería el tema solo');
+    });
+    test('…y si el dispositivo cambia, solo sigue a quien eligió «auto»', () =>
+        eq(/if \(_guardado\(\) === 'auto'\)/.test(fs.readFileSync(path.join(RAIZ, 'theme.js'), 'utf8')), true,
+           'le movería el tema a quien decidió claro u oscuro'));
+
+    /* Y que el hub la use de verdad, en vez de conservar la suya. */
+    test('el hub ya no pinta su propia barra', () => {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        eq(h.indexOf('etaax-header.js') > -1, true, 'no la carga');
+        return eq(h.indexOf('<div class="hub-topbar">') === -1, true, 'conserva la suya');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -26751,4 +26853,4 @@ suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
-    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(resumen);
+    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(resumen);
