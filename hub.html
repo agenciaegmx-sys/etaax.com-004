@@ -2252,20 +2252,16 @@ async function logout() {
     }
     /* Con qué `scope` se cierra cada quien lo decide etaaxCerrarSesion
        (security.js), una sola vez para las tres puertas de salida. */
+    /* Cerrar la sesión y llevarse la llave compartida de este equipo es UNA
+       sola operación, y vive en security.js para las cuatro puertas de salida
+       (este botón, el de la barra de contexto, el ?salir=1 y la media hora sin
+       tocar nada). La llave es la de la cuenta compartida: mientras siga
+       guardada, el siguiente que entre en esta tablet la usa sin pedirle
+       permiso al servidor — y una baja no se nota donde la persona ya había
+       entrado. */
     var _esStaff = !!(_sesion && _sesion.type === 'staff');
-    if (typeof etaaxCerrarSesion === 'function') await etaaxCerrarSesion(_esStaff);
+    if (typeof etaaxCerrarSesion === 'function') await etaaxCerrarSesion(_esStaff, _sesion && _sesion.negocioId);
     else console.warn('[etaax] falta security.js: la sesión solo se borra de este equipo.');
-    if (_esStaff) {
-        /* Y se borra la llave compartida cacheada en este equipo. Es la llave de
-           la nube: mientras siga guardada, el siguiente que entre en esta tablet
-           la usa sin pedirle permiso al servidor. Borrada, hay que volver a
-           pedirla con la contraseña — y a quien está dado de baja ya no se le da
-           (v77). Sin red no se pierde nada: sin red tampoco se podría iniciar
-           sesión con ella. */
-        try {
-            if (_sesion.negocioId) localStorage.removeItem('etaax_' + _sesion.negocioId + '_staffcred');
-        } catch (e) {}
-    }
     _clearSesion();
     showView('viewLogin');
     document.getElementById('loginEmail').value = '';
@@ -2287,11 +2283,8 @@ async function logout() {
 async function _salirDeSubpagina() {
     var ses = _getSesion();
     var esStaff = !!(ses && ses.type === 'staff');
-    if (typeof etaaxCerrarSesion === 'function') await etaaxCerrarSesion(esStaff);
+    if (typeof etaaxCerrarSesion === 'function') await etaaxCerrarSesion(esStaff, ses && ses.negocioId);
     else console.warn('[etaax] falta security.js: la sesión solo se borra de este equipo.');
-    if (esStaff && ses.negocioId) {
-        try { localStorage.removeItem('etaax_' + ses.negocioId + '_staffcred'); } catch (e) {}
-    }
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_sucursal_activa');
     localStorage.removeItem('etaax_ctx');

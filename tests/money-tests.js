@@ -77,10 +77,17 @@ function crearContexto() {
            pestaña —la gracia del catálogo de staff— y con un stub que olvida al
            instante, un test podría celebrar que "no vuelve a pedir la clave"
            cuando en realidad la pide siempre. */
+        /* …y con `key`/`length`, como el de verdad. Sin ellos, un barrido que
+           recorre el almacenamiento —el que se lleva la sesión de Supabase
+           cuando la red no contesta— reventaba en silencio dentro de su
+           try/catch, y el candado no podía ni ejercitarlo. */
         sessionStorage: (function () {
             const m = {};
             return { _m: m, getItem(k){ return k in m ? m[k] : null; },
-                     setItem(k, v){ m[k] = String(v); }, removeItem(k){ delete m[k]; } };
+                     setItem(k, v){ m[k] = String(v); }, removeItem(k){ delete m[k]; },
+                     key(i){ return Object.keys(m)[i] || null; },
+                     get length(){ return Object.keys(m).length; },
+                     clear(){ Object.keys(m).forEach(k => delete m[k]); } };
         })(),
         alert(){}, confirm(){ return true; }, prompt(){ return ''; },
         setTimeout(){ return 0; }, setInterval(){ return 0; }, clearTimeout(){}, clearInterval(){},
@@ -24851,12 +24858,26 @@ console.log('\n══ BE7 · La baja de un colaborador cierra las dos puertas (v
        sesión de Supabase vive en sessionStorage, así que vaciarlo primero deja
        al signOut sin nada que cerrar — la línea existe y no hace nada. Por eso
        estas pruebas no miran "¿se llamó?" sino "¿se llamó ANTES?". */
-    function contextoDeSalida() {
+    function contextoDeSalida(opc) {
+        opc = opc || {};
         const c = crearContexto();
         const linea = [];
         c._supabase.auth = {
-            signOut: (o) => { linea.push('cierra sesión:' + ((o && o.scope) || 'global')); return Promise.resolve({}); }
+            signOut: (o) => {
+                linea.push('cierra sesión:' + ((o && o.scope) || 'global'));
+                /* La red colgada NO es un rechazo: es una promesa que nunca
+                   contesta. Un `reject` se atrapa y sigue; esto se queda ahí,
+                   que es lo que pasa en una tablet con mala señal. */
+                return opc.colgada ? new Promise(function () {}) : Promise.resolve({});
+            }
         };
+        /* El reloj del plazo, de verdad pero rápido. Los demás temporizadores
+           siguen apagados: si dejara correr el de los 30 minutos, el cierre por
+           inactividad se dispararía solo en medio de otra prueba. */
+        c.setTimeout = (fn, ms) => (ms === 2500 ? setTimeout(fn, 5) : 0);
+        /* La sesión del SDK, tal como la guarda en el navegador. */
+        c.sessionStorage.setItem('sb-byjuocnkyuxxudondciz-auth-token',
+            JSON.stringify({ access_token: 'jwt-de-prueba', refresh_token: 'r' }));
         const borrar = c.localStorage.removeItem.bind(c.localStorage);
         c.localStorage.removeItem = (k) => { linea.push('borra ' + k); borrar(k); };
         c.sessionStorage.clear = () => { linea.push('vacía sessionStorage'); };
@@ -24871,8 +24892,8 @@ console.log('\n══ BE7 · La baja de un colaborador cierra las dos puertas (v
     };
 
     /* ── 3a. El botón del hub ── */
-    async function salir(sesion) {
-        const c = contextoDeSalida();
+    async function salir(sesion, opc) {
+        const c = contextoDeSalida(opc);
         cargarInline(c, 'hub.html');
         cargarJS(c, 'security.js');
         c.localStorage.setItem('etaax_n1_staffcred', JSON.stringify({ email: 'staff.n1@etaax.app', password: 'x' }));
@@ -24885,7 +24906,8 @@ console.log('\n══ BE7 · La baja de un colaborador cierra las dos puertas (v
         setVar(c, '_sesion', sesion);
         let err = null;
         try { await c.window.logout(); } catch (e) { err = e; }
-        return { linea: c.linea, cred: c.localStorage.getItem('etaax_n1_staffcred'), err: err };
+        return { linea: c.linea, cred: c.localStorage.getItem('etaax_n1_staffcred'), err: err,
+                 sdk: c.sessionStorage.getItem('sb-byjuocnkyuxxudondciz-auth-token') };
     }
     const sStaff = await salir({ type: 'staff', negocioId: 'n1', nombre: 'Beto', rol: 'chef' });
     await testA('salir de una sesión de colaborador no revienta', async () =>
@@ -24960,6 +24982,80 @@ console.log('\n══ BE7 · La baja de un colaborador cierra las dos puertas (v
         eq(mDueño.cred !== null, true, 'se la borró'));
     await testA('ctx-bar · …y él sí cierra con el signOut normal', async () =>
         eq(mDueño.linea.indexOf('cierra sesión:global') > -1, true, JSON.stringify(mDueño.linea)));
+
+    /* ── 3d. CUANDO LA RED NO CONTESTA ───────────────────────────────────
+       El plazo de 2.5 s termina la ESPERA, no el signOut. Sin lo de abajo, la
+       pantalla enseñaba el login y la sesión de Supabase seguía guardada: se
+       veía como que saliste, y no saliste. Lo encontró Codex reproduciéndolo
+       con el SDK de verdad y la red retenida.
+       Y ojo con el detalle que destapó: `scope:'local'` TAMBIÉN sale a la red
+       —el SDK llama al servidor con cualquier scope y solo borra la sesión
+       guardada cuando esa petición vuelve—, así que esto le pasa igual al
+       colaborador que al dueño. */
+    const colgadoStaff = await salir({ type: 'staff', negocioId: 'n1', nombre: 'Beto', rol: 'chef' },
+                                     { colgada: true });
+    await testA('red colgada · la sesión de Supabase NO se queda guardada', async () =>
+        eq(colgadoStaff.sdk, null, 'sigue dentro: ' + String(colgadoStaff.sdk)));
+    await testA('red colgada · …y la llave compartida tampoco', async () =>
+        eq(colgadoStaff.cred, null, String(colgadoStaff.cred)));
+    await testA('red colgada · …y no deja a nadie atrapado en la pantalla', async () =>
+        eq(colgadoStaff.err === null, true, String(colgadoStaff.err && colgadoStaff.err.message)));
+
+    const colgadoDueño = await salir({ usuarioId: 'u1', email: 'a@b.com' }, { colgada: true });
+    await testA('red colgada · al dueño tampoco se le queda la sesión guardada', async () =>
+        eq(colgadoDueño.sdk, null, String(colgadoDueño.sdk)));
+
+    /* Y se distingue una cosa de la otra: borrado aquí no es revocado allá. */
+    async function estadoDeCierre(opc) {
+        const c = contextoDeSalida(opc);
+        cargarJS(c, 'security.js');
+        return await c.window.etaaxCerrarSesion(false, null);
+    }
+    await testA('se dice si el servidor confirmó la revocación…', async () =>
+        eq(await estadoDeCierre({}), 'revocada'));
+    await testA('…o si solo se pudo limpiar este equipo', async () =>
+        eq(await estadoDeCierre({ colgada: true }), 'solo-local'));
+    await testA('…y sin cliente de Supabase se dice también', async () => {
+        const c = contextoDeSalida();
+        cargarJS(c, 'security.js');
+        c._supabase = null;
+        return eq(await c.window.etaaxCerrarSesion(false, null), 'sin-cliente');
+    });
+
+    /* ── 3e. LA CUARTA PUERTA: media hora sin tocar nada ──────────────────
+       Es la que más importa que limpie bien, porque nadie está mirando cuando
+       pasa — y era la que seguía con el camino viejo: soltaba el signOut sin
+       esperarlo, barría las llaves de localStorage cuando la sesión vive en
+       sessionStorage, y se dejaba puesta la credencial compartida. */
+    async function porInactividad(ctxGuardado, opc) {
+        const c = contextoDeSalida(opc);
+        cargarJS(c, 'security.js');
+        c.localStorage.setItem('etaax_ctx', JSON.stringify(ctxGuardado));
+        c.localStorage.setItem('etaax_n1_staffcred', '{"email":"staff.n1@etaax.app"}');
+        await c.window._etaaxLogoutInactividad();
+        return { linea: c.linea, cred: c.localStorage.getItem('etaax_n1_staffcred'),
+                 sdk: c.sessionStorage.getItem('sb-byjuocnkyuxxudondciz-auth-token'),
+                 destino: c.location.href };
+    }
+    const inacStaff = await porInactividad({ ctxType: 'staff', negId: 'n1' });
+    await testA('inactividad · cierra la sesión del colaborador', async () =>
+        eq(inacStaff.linea.indexOf('cierra sesión:local') > -1, true, JSON.stringify(inacStaff.linea)));
+    await testA('inactividad · …ANTES de borrar el almacenamiento', async () =>
+        eq(antesDeBorrar(inacStaff.linea), true, JSON.stringify(inacStaff.linea)));
+    await testA('inactividad · …se lleva la llave compartida', async () =>
+        eq(inacStaff.cred, null, String(inacStaff.cred)));
+    await testA('inactividad · …y manda al hub diciendo por qué', async () =>
+        eq(/razon=inactividad/.test(inacStaff.destino), true, inacStaff.destino));
+    const inacColgado = await porInactividad({ ctxType: 'staff', negId: 'n1' }, { colgada: true });
+    await testA('inactividad · con la red colgada, la sesión tampoco se queda', async () =>
+        eq(inacColgado.sdk, null, String(inacColgado.sdk)));
+    await testA('inactividad · …ni la llave compartida', async () =>
+        eq(inacColgado.cred, null, String(inacColgado.cred)));
+    const inacDueño = await porInactividad({ ctxType: 'owner', negId: 'n1' });
+    await testA('inactividad · al dueño se le cierra con el signOut normal', async () =>
+        eq(inacDueño.linea.indexOf('cierra sesión:global') > -1, true, JSON.stringify(inacDueño.linea)));
+    await testA('inactividad · …y no se le borra su llave', async () =>
+        eq(inacDueño.cred !== null, true, 'se la borró'));
 
     /* ── 4. La regla de con qué scope se cierra vive en UN solo lugar ────── */
     /* Tres puertas de salida. Si cada una decide por su cuenta, la que se quede

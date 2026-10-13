@@ -189,20 +189,11 @@ async function ctxSalir() {
        La regla de con qué `scope` se cierra vive en security.js, para que las
        tres puertas de salida cierren igual. */
     if (typeof etaaxCerrarSesion === 'function') {
-        await etaaxCerrarSesion(!!(ctx && ctx.ctxType === 'staff'));
+        await etaaxCerrarSesion(!!(ctx && ctx.ctxType === 'staff'), ctx && ctx.negId);
     } else {
         console.warn('[etaax] falta security.js: la sesión solo se borra de este equipo.');
     }
     if (typeof _etaaxWipeCache === 'function') _etaaxWipeCache();
-    /* El colaborador que sale deja de tener la llave de la nube en este equipo.
-       Es la credencial de la cuenta COMPARTIDA del negocio (v19): mientras siga
-       cacheada, el siguiente que entre en esta tablet la usa sin que el
-       servidor tenga que autorizarlo, y una baja no se nota donde la persona ya
-       había entrado. Al volver a entrar se pide con la contraseña, y a quien
-       está dado de baja ya no se le entrega (v77). */
-    if (ctx && ctx.ctxType === 'staff' && ctx.negId) {
-        try { localStorage.removeItem('etaax_' + ctx.negId + '_staffcred'); } catch (e) {}
-    }
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_ctx');
     sessionStorage.clear();

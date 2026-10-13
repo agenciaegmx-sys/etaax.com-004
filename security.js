@@ -11,21 +11,27 @@
     var _warnTimer  = null;
     var _toastEl    = null;
 
-    function _logout() {
+    /* LA CUARTA PUERTA DE SALIDA, y la que se quedó atrás: media hora sin tocar
+       nada y el sistema cierra solo. Iba por su propio camino —soltaba el
+       signOut sin esperarlo, barría las llaves `sb-` de localStorage cuando la
+       sesión vive en sessionStorage, y se dejaba puesta la credencial
+       compartida del negocio—. Lo encontró Codex con el SDK de verdad.
+
+       Ahora sale por donde salen las otras tres. Y es la que más importa que
+       limpie bien: nadie está mirando cuando pasa. */
+    async function _logout() {
+        var quien = _quienSale();          // ANTES de borrar: después ya no se sabe
+        await window.etaaxCerrarSesion(quien.esStaff, quien.negId);
         _etaaxWipeCache();
         localStorage.removeItem('etaax_negocio_activo');
         localStorage.removeItem('etaax_ctx');
-        // La sesión de Supabase vive en localStorage: cerrarla de verdad.
-        try { if (window._supabase) _supabase.auth.signOut(); } catch (e) {}
-        try {
-            for (var i = localStorage.length - 1; i >= 0; i--) {
-                var k = localStorage.key(i);
-                if (k && k.indexOf('sb-') === 0) localStorage.removeItem(k);
-            }
-        } catch (e) {}
         sessionStorage.clear();
         window.location.href = '/hub.html?salir=1&razon=inactividad';
     }
+    /* Expuesto para poder PROBAR el cierre automático: lo que se rompió aquí no
+       se ve en ninguna pantalla, y un candado que no lo puede llamar no lo
+       puede cuidar. */
+    window._etaaxLogoutInactividad = _logout;
 
     function _dismissToast() {
         if (_toastEl && _toastEl.parentNode) _toastEl.parentNode.removeChild(_toastEl);
@@ -130,23 +136,76 @@ window._etaaxWipeCache = function () {
 
    EL ORDEN IMPORTA Y ES ESTE: cerrar primero, borrar después.
 
-   El `race` con el reloj no es adorno: un signOut global sale a la red, y en
-   una tablet con mala señal el `await` se queda colgado. Sin esto, el botón de
-   salir deja de sacar a nadie — se queda abierta la sesión Y la pantalla. Si
-   el reloj gana, igual se sigue y se borra todo aquí, que es lo que de verdad
-   le quita el acceso a quien está enfrente del aparato.
+   El `race` con el reloj no es adorno: el signOut sale a la red —con CUALQUIER
+   scope, también el `local`— y en una tablet con mala señal el `await` se queda
+   colgado. Sin el reloj, el botón de salir deja de sacar a nadie.
+
+   Pero el reloj termina la ESPERA, no el signOut. Por eso, vencido el plazo,
+   esta función borra la sesión guardada a mano: si no, la pantalla enseña el
+   login y la sesión sigue ahí — se ve como que saliste y no saliste.
    ============================================================ */
-window.etaaxCerrarSesion = async function (esStaff) {
-    if (typeof _supabase === 'undefined' || !_supabase || !_supabase.auth) return false;
-    try {
-        /* `scope:'local'` para el colaborador: cierra ESTA y no toca a sus
-           compañeros, que comparten la misma cuenta. Para el dueño, el normal:
-           su sesión es suya y conviene revocarla también del lado del servidor. */
-        var p = esStaff ? _supabase.auth.signOut({ scope: 'local' })
-                        : _supabase.auth.signOut();
-        await Promise.race([p, new Promise(function (r) { setTimeout(r, 2500); })]);
-        return true;
-    } catch (e) { return false; }
+/* Barre la sesión guardada por el SDK (`sb-<proyecto>-auth-token`). Esto NO
+   sustituye al signOut —no le avisa al servidor— pero es lo único que de verdad
+   le quita el acceso a quien está enfrente de este aparato, y es lo que faltaba
+   cuando la red no contesta. */
+function _borrarSesionGuardada() {
+    [window.sessionStorage, window.localStorage].forEach(function (almacen) {
+        try {
+            for (var i = almacen.length - 1; i >= 0; i--) {
+                var k = almacen.key(i);
+                if (k && k.indexOf('sb-') === 0) almacen.removeItem(k);
+            }
+        } catch (e) {}
+    });
+}
+
+/* ¿Quién se está yendo? Se pregunta ANTES de borrar nada: después ya no se
+   sabe, y sin saberlo se cierra con el scope equivocado y no se borra la llave
+   compartida de nadie. */
+function _quienSale() {
+    var ctx = null, ses = null;
+    try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
+    if (ctx && ctx.ctxType) return { esStaff: ctx.ctxType === 'staff', negId: ctx.negId || null };
+    try { ses = JSON.parse(sessionStorage.getItem('etaax_sesion_hub') || 'null'); } catch (e) {}
+    if (ses) return { esStaff: ses.type === 'staff', negId: ses.negocioId || null };
+    return { esStaff: false, negId: null };
+}
+window.etaaxQuienSale = _quienSale;
+
+window.etaaxCerrarSesion = async function (esStaff, negId) {
+    var estado = 'sin-cliente';
+    if (typeof _supabase !== 'undefined' && _supabase && _supabase.auth) {
+        var VENCIDO = {};
+        try {
+            /* `scope:'local'` para el colaborador: invalida ESTA sesión y no
+               toca a sus compañeros, que comparten la misma cuenta. Para el
+               dueño, el normal.
+               OJO, y lo comprobó Codex contra el bundle real del SDK: `local`
+               TAMBIÉN sale a la red —`_signOut` llama al servidor con cualquier
+               scope y solo borra la sesión guardada DESPUÉS de que esa petición
+               vuelve—. Así que el plazo de abajo aplica a los dos caminos. */
+            var p = esStaff ? _supabase.auth.signOut({ scope: 'local' })
+                            : _supabase.auth.signOut();
+            var r = await Promise.race([
+                Promise.resolve(p).then(function () { return 'hecho'; },
+                                        function () { return 'falló'; }),
+                new Promise(function (res) { setTimeout(function () { res(VENCIDO); }, 2500); })
+            ]);
+            estado = (r === 'hecho') ? 'revocada' : 'solo-local';
+        } catch (e) { estado = 'solo-local'; }
+    }
+    /* PASE LO QUE PASE, aquí no queda sesión. El `race` de arriba termina la
+       ESPERA, no el signOut: cuando vencía el plazo, la pantalla mostraba el
+       login y la sesión seguía guardada —seguías dentro—. Lo encontró Codex. */
+    _borrarSesionGuardada();
+    if (esStaff && negId) {
+        try { localStorage.removeItem('etaax_' + negId + '_staffcred'); } catch (e) {}
+    }
+    if (estado === 'solo-local') {
+        console.warn('[etaax] salida local: en este equipo ya no hay sesión, ' +
+                     'pero no se pudo confirmar con el servidor.');
+    }
+    return estado;   // 'revocada' | 'solo-local' | 'sin-cliente'
 };
 
 /* ============================================================
