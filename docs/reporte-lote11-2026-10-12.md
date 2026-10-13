@@ -1,9 +1,9 @@
 # Reporte de bloque · lote 11 — El freno de los NIP
 
 **Fecha:** 12-oct-2026
-**Commits:** `97505fd`, `76ac89a`
-**Migración:** `supabase-migration-v78.sql` — **PENDIENTE de correr en Supabase**
-**Candados:** 4190 fórmulas · 84 del almacén · v78 contra Postgres real · 0 fallas
+**Commits:** `97505fd`, `76ac89a`, `c8e58db`, `8c4e475`
+**Migraciones:** `v78` **CORRIDA** (8 PASA + 1 DATO) · `v79` — **PENDIENTE de correr**
+**Candados:** 4206 fórmulas · 84 del almacén · v78+v79 contra Postgres real · 0 fallas
 
 ---
 
@@ -237,13 +237,83 @@ Esto solo se puede comprobar con el QR en la mano, y hace falta:
 
 1. Entrar con un NIP correcto en `entrada.html` y **capturar una entrada**:
    nombre, sucursal y área deben salir igual que siempre.
-2. Teclear doce NIP equivocados seguidos y confirmar que aparece el aviso de
-   espera **con minutos**, no el error crudo.
+2. Teclear NIP equivocados seguidos: **el aviso de espera sale en el intento
+   13**, no en el 12 — el 12 todavía devuelve el rechazo normal. (Lo corrigió
+   Codex: yo había escrito «doce».)
 3. Esperar el minuto y volver a entrar con el NIP bueno: debe pasar a la
    primera.
 4. Lo mismo en `checklist.html` y en la **beta móvil**.
-5. Con dos aparatos en el mismo local: comprobar que el que se equivoca no
-   saca al otro mientras el otro siga entrando bien.
+5. **Hacer estas pruebas fuera de la operación**, con un negocio de prueba o en
+   el arnés. Dos aparatos en el mismo Wi-Fi **comparten contador**, y alcanzado
+   el límite el guardia rechaza también el NIP correcto hasta que venza la
+   espera. Mi instrucción anterior —«el que se equivoca no saca al otro»— era
+   incorrecta y describía un diseño que no es el que se construyó. Que el
+   bloqueo alcance también al NIP correcto es a propósito: si el correcto
+   pasara durante el bloqueo, el freno se convertiría en un detector perfecto
+   —el que adivina sabría cuál acertó por la respuesta— y no serviría de nada.
+
+---
+
+## 9. Lo que Codex encontró supervisando, y que la v79 arregla
+
+Las 4190 comprobaciones pasaban y la tabla de la v78 salió 8 PASA. **Aun así
+había dos agujeros**, y los dos dejaban seguir adivinando.
+
+### 9.1 Una excepción se lleva por delante el fallo que acabas de anotar
+
+Las tres puertas que **escriben** —entradas, check lists y conteos— rechazaban
+con `RAISE EXCEPTION 'no autorizado'` después de que el guardia ya había
+anotado el intento. En PostgreSQL **una excepción revierte la transacción
+entera**, y el apunte iba dentro. Resultado medido por Codex: 30 NIP distintos
+por cada una, **30 rechazos, 0 bloqueos, contador vacío**.
+
+El arreglo son tres líneas —`RETURN NULL` en vez del `RAISE`— pero **obligaba a
+tocar el cliente en el mismo lote**: las cinco llamadas miraban solo `r.error`,
+así que un rechazo se habría visto como «guardado» y la captura se habría
+borrado de la lista. El usuario habría perdido su trabajo creyendo que lo
+mandó. La regla vive ahora en `etaaxRegistroFallo` (staff-area.js).
+
+**Por qué mi prueba no lo vio, que es lo que más vale de este hallazgo:**
+probaba esas tres puertas **cuando el contador ya estaba bloqueado desde otra
+función**. Eso demuestra que *obedecen* un bloqueo, no que lo *provoquen*.
+Regla nueva: **toda puerta se prueba desde el contador en cero.**
+
+### 9.2 La espera de una hora se evaporaba a los quince minutos
+
+Un solo plazo hacía dos trabajos distintos: cuánto hay que esperar y cuándo se
+olvidan los fallos. Como los fallos se olvidaban a los 15 minutos, un castigo
+de 60 no llegaba vivo al minuto 16. Ahora son dos plazos: el bloqueo dura lo
+que dice la escalera, y el olvido nunca llega antes que el castigo.
+
+### 9.3 El aviso de espera se preparaba y se tiraba
+
+Al guardar un lote, `entrada.html` calculaba el mensaje amigable y luego
+mostraba solo «fallaron, reintenta». Quien estaba frenado reintentaba, y cada
+reintento alargaba su propia espera. Ahora dice por qué.
+
+### Lo que se probó
+
+Contra Postgres de verdad: los dos agujeros **provocados antes** (30 NIP por
+puerta sin un solo bloqueo; la hora evaporándose al minuto 16) y **cerrados
+después** — cada puerta frenando en el intento 13 **por sí sola**, los cuatro
+escalones comprobados a 10 segundos de su límite por los dos lados, el olvido
+tras cumplir el castigo, y el rechazo de R05 intacto.
+
+**Batería: 9 mutaciones.** Dos se escaparon en la primera vuelta:
+
+- **P6** pasó porque el comentario que explica el arreglo **nombra al
+  ayudante**: quitar la llamada y dejar el comentario dejaba la prueba verde.
+  La prueba se cazaba a sí misma — van doce veces con ese patrón aquí. Ahora se
+  mide sin comentarios.
+- **P4** pasó porque la prueba de «acertar no deja intentos» corría sobre un
+  contador **vacío**. Ahora arranca sucio, con siete fallos puestos a mano.
+
+Y una honesta: **P2 no es observable**. Mutar el plazo de olvido a un valor
+fijo no cambia nada hoy, porque el bloqueo se comprueba antes de llegar al
+apunte. El `GREATEST` es defensa en profundidad, no un bug vivo, y lo cuida el
+candado por texto. Lo digo en vez de inventarle un escenario.
+
+---
 
 **Sigue abierto:** R03 (la identidad compartida), el rechazo entre negocios de
 R05, y el valor de *Settings → API → Max rows* para R10. Lo siguiente acordado
