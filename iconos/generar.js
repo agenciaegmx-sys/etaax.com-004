@@ -45,8 +45,35 @@ const GRID = 24;
 const CREMA = ['rgb(240,236,228)', '#f0ece4', '#F0ECE4', 'white', '#fff', '#ffffff'];
 const VERDE = ['rgb(61,190,122)', '#3dbe7a', '#3DBE7A'];
 
+/* ── DOS FAMILIAS CON PREFIJO ──────────────────────────────────────────────
+   `acceso/` y `sucursales/` agrupan por PANTALLA: sus nombres son únicos y van
+   tal cual. Las dos de abajo agrupan por CONCEPTO, y sus nombres chocan —cedis
+   está en las dos— así que llevan prefijo:
+
+       modelos-negocio/  → el GIRO de una sucursal   (giro-bar, giro-cafeteria…)
+       organizacion/     → el TIPO de negocio        (org-pyme, org-corporativo…)
+
+   De `organizacion` se usa la variante 2, que es la que eligió Edwin; las 1 y 3
+   son propuestas alternativas del mismo concepto y se ignoran.
+
+   Y de las dos familias se lee solo `oscuro/`: el archivo claro es el MISMO
+   dibujo con otro color de línea, y aquí el color se normaliza igual. Tomar los
+   dos sería tener cada icono dos veces, con el riesgo de que un día difieran. */
+var FAMILIAS = { 'modelos-negocio': 'giro', 'organizacion': 'org' };
+
+function clasificar(rel) {
+    var partes = rel.split(path.sep);
+    var fam = FAMILIAS[partes[0]];
+    if (!fam) return { usar: true, prefijo: '' };              // acceso/, sucursales/
+    if (partes.indexOf('claro') > -1) return { usar: false };  // el mismo dibujo, otro color
+    var base = path.basename(rel, '.svg');
+    if (fam === 'org' && !/^etaax-2-/.test(base)) return { usar: false };   // solo la variante 2
+    return { usar: true, prefijo: fam + '-' };
+}
+
 function nombreDe(archivo) {
     return path.basename(archivo, '.svg')
+        .replace(/^etaax[ _-]*\d+[ _-]/, 'etaax-')     // "etaax-2-pyme" → "etaax-pyme"
         .normalize('NFD').replace(/[̀-ͯ]/g, '')   // sin acentos
         .toLowerCase()
         .replace(/^icono[ _-]*/, '')                        // "Icono asesor" → "asesor"
@@ -270,8 +297,11 @@ if (!archivos.length) { console.log('No hay .svg en iconos/. Nada que hacer.'); 
 const nuevos = {};
 const problemas = [];
 for (const f of archivos) {
+    const cl = clasificar(f);
+    if (!cl.usar) continue;
     try {
         const r = normalizar(path.join(AQUI, f));
+        r.nombre = cl.prefijo + r.nombre;
         if (nuevos[r.nombre]) { problemas.push('  ✗ ' + f + ' → ya hay otro icono llamado «' + r.nombre + '»'); continue; }
         nuevos[r.nombre] = r;
     }

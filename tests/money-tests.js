@@ -26243,6 +26243,7 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         {
             const V = crearContexto();
             cargarJS(V, 'etaax-iconos.js');
+            cargarJS(V, 'negocio-tipos.js');    // la organización y el giro
             cargarJS(V, 'precios.js');          // el pie de las tarjetas lo usa
             cargarInline(V, 'hub.html');
             V._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', tipo:'otro', color:'#f5c842' }]);
@@ -26562,6 +26563,121 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
     });
 }
 
+/* ═══════════ SUITE BE15 · ORGANIZACIÓN DEL NEGOCIO Y GIRO DE LA SUCURSAL ════
+   Dos cosas que estaban mezcladas en una. El NEGOCIO guardaba un `tipo` que en
+   realidad era un giro (Bar, Restaurante, Café), así que su tarjeta decía
+   «RESTAURANTE» cuando lo que lo identifica es que son cuatro sucursales. Y la
+   SUCURSAL tenía su giro en un campo de texto libre: nadie lo escribía igual,
+   no se podía comparar entre sucursales, y no se podía dibujar.
+
+   Ahora son dos listas cerradas, con su icono, y viven en un solo archivo. Lo
+   que esta suite cuida es que no vuelvan a separarse: que cada entrada tenga
+   dibujo de verdad, que lo ya capturado a mano no se pierda, y que lo elegido
+   llegue hasta la tarjeta.                                                    */
+function suiteOrgYGiro() {
+console.log('\n══ BE15 · Organización del negocio y giro de la sucursal ══');
+
+    const N = crearContexto();
+    cargarJS(N, 'etaax-iconos.js');
+    cargarJS(N, 'negocio-tipos.js');
+    const E = N.window.EtaaxNegocio;
+
+    test('las dos listas existen y están completas', () => {
+        eq(E.ORGANIZACIONES.length, 6, 'organizaciones');
+        return eq(E.GIROS.length, 20, 'giros');
+    });
+    /* LA COMPROBACIÓN CRUZADA: cada entrada nombra un icono, y ese icono tiene
+       que existir en el sprite. Una lista que apunta a un dibujo que no está
+       deja un hueco en la pantalla, y el hueco no se ve hasta que alguien abre
+       justo esa opción. */
+    test('cada opción apunta a un icono que de verdad existe', () => {
+        const hay = N.window.etaaxIconos();
+        const faltan = E.ORGANIZACIONES.concat(E.GIROS)
+            .filter(o => hay.indexOf(o.ic) === -1).map(o => o.k + '→' + o.ic);
+        return eq(faltan.length, 0, 'sin dibujo: ' + faltan.join(', '));
+    });
+    test('…y ninguna clave se repite entre las dos listas', () => {
+        const orgs = E.ORGANIZACIONES.map(o => o.ic);
+        const giros = E.GIROS.map(g => g.ic);
+        const chocan = orgs.filter(i => giros.indexOf(i) > -1);
+        /* `cedis` está en las dos como concepto, pero su DIBUJO tiene que ser
+           distinto: una operación con centro de distribución no es lo mismo que
+           una sucursal que es el almacén. */
+        return eq(chocan.length, 0, 'comparten dibujo: ' + chocan.join(', '));
+    });
+
+    /* ── Lo que ya estaba escrito a mano no se pierde ─────────────────────
+       El giro era texto libre. Reconocerlo es lo que evita que al abrir los
+       ajustes todo el mundo encuentre su campo vacío y crea que se borró. */
+    [['Restaurante de mariscos', 'marisqueria'], ['cafe de especialidad', 'cafeteria'],
+     ['Taqueria', 'taqueria'], ['comida corrida', 'fonda'], ['BAR', 'bar']].forEach(par => {
+        test('reconoce «' + par[0] + '» como ' + par[1], () =>
+            eq(E.adivinarGiro(par[0]), par[1], E.adivinarGiro(par[0])));
+    });
+    test('…y lo que no reconoce lo deja sin elegir, no inventa', () =>
+        eq(E.adivinarGiro('xyz nada que ver'), '', E.adivinarGiro('xyz nada que ver')));
+
+    /* ── La rejilla ──────────────────────────────────────────────────────── */
+    const html = E.rejilla(E.ORGANIZACIONES, 'cadena', '_elegirOrgNeg');
+    test('la rejilla pinta una opción por entrada, con su dibujo', () => {
+        /* Sin la comilla, el patrón casa también con `etx-opcion-ic` y
+           `etx-opcion-nom`: contaba tres por opción. */
+        eq((html.match(/class="etx-opcion[ "]/g) || []).length, 6, 'opciones');
+        return eq(html.indexOf('#etx-org-cadena') > -1, true, 'sin dibujo');
+    });
+    test('…marca la elegida, y solo esa', () =>
+        eq((html.match(/class="etx-opcion on"/g) || []).length, 1, 'marcadas'));
+    test('…y avisa con la CLAVE, no con la posición', () =>
+        eq(html.indexOf("_elegirOrgNeg('cadena')") > -1, true,
+           'con la posición, reordenar la lista cambia lo que guarda'));
+
+    /* ── Y que llegue hasta la tarjeta ───────────────────────────────────── */
+    const V = crearContexto();
+    ['etaax-iconos.js', 'negocio-tipos.js', 'precios.js'].forEach(f => cargarJS(V, f));
+    cargarInline(V, 'hub.html');
+    V._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', tipo:'restaurante', organizacion:'cadena', color:'#f5c842' }]);
+    V._storage['etaax_n1_sucursales'] = JSON.stringify([
+        { id:'suc_principal', nombre:'Matriz', activa:true, fechaCreado:'2026-08-07' },
+        { id:'s2', nombre:'La Cevicheria', activa:true, fechaCreado:'2026-08-07' }]);
+    V._storage['etaax_n1_suc_suc_principal'] = JSON.stringify({ giroK:'cafeteria' });
+    V._storage['etaax_n1_suc_s2'] = JSON.stringify({ giro:'Restaurante de mariscos' });   // el texto viejo
+    setVar(V, '_sesion', { usuarioId:'u1', nombre:'EGMx', email:'a@b.com', plan:'pyme' });
+    V._pintarIconosLogin();
+    let errR = null;
+    try { V._renderSucursales(V._getNegocios()[0]); } catch (e) { errR = e; }
+    const tarjetas = (V.document.getElementById('listSucursales') || {}).innerHTML || '';
+
+    test('la tarjeta de la sucursal enseña su giro elegido', () => {
+        eq(errR, null, 'reventó: ' + (errR && errR.message));
+        eq(/#etx-giro-cafeteria/.test(tarjetas), true, 'sin el dibujo del giro');
+        return eq(/Cafetería/.test(tarjetas), true, 'sin el nombre del giro');
+    });
+    /* La que más vale: una sucursal que NUNCA eligió giro, con su texto viejo,
+       aparece ya reconocida — sin que nadie haya tocado nada. */
+    test('…y la que solo tenía texto libre aparece reconocida', () =>
+        eq(/#etx-giro-marisqueria/.test(tarjetas) && /Marisquería/.test(tarjetas), true,
+           'el texto viejo se perdió'));
+    test('…con el logo redondo, como una foto de perfil', () =>
+        eq(/border-radius:50%/.test(tarjetas), true, 'sigue cuadrado'));
+
+    /* ── El negocio dice cómo está armado, no a qué se dedica ───────────── */
+    let barra = '';
+    try {
+        V._renderBrandBar(V._getNegocios()[0]);
+        barra = (V.document.getElementById('brandInfoBar') || {}).innerHTML || '';
+    } catch (e) { barra = 'ERROR: ' + e.message; }
+    test('la barra del negocio enseña su ORGANIZACIÓN', () => {
+        eq(/#etx-org-cadena/.test(barra), true, 'sin el dibujo: ' + barra.slice(0, 80));
+        return eq(/Cadena/.test(barra), true, 'sin el nombre');
+    });
+    /* Y mientras nadie la haya elegido, no se inventa: se queda lo de antes. */
+    V._storage['etaax_negocios'] = JSON.stringify([{ id:'n1', nombre:'EGMx', tipo:'restaurante', color:'#f5c842' }]);
+    let barra2 = '';
+    try { V._renderBrandBar(V._getNegocios()[0]); barra2 = V.document.getElementById('brandInfoBar').innerHTML || ''; } catch (e) {}
+    test('…y si todavía no se eligió, no se inventa una', () =>
+        eq(/#etx-org-/.test(barra2), false, 'inventó una organización que nadie eligió'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -26579,4 +26695,4 @@ suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
-    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(resumen);
+    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(resumen);

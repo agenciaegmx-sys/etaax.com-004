@@ -271,6 +271,29 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 /* Un botón que lleva icono y texto se vuelve una fila: el icono centrado con
    la letra, no colgando de la línea base. */
 .ic-fila{display:inline-flex;align-items:center;gap:7px;}
+
+/* ── ELEGIR ENTRE VARIOS, CON SU DIBUJO ───────────────────────────────────
+   Una lista desplegable obliga a leer veinte nombres para encontrar el tuyo.
+   Con el dibujo al lado se reconoce de un vistazo, que es justo lo que hace
+   falta cuando se configura una vez y no se vuelve a entrar en meses.
+   La misma rejilla sirve para la organización del negocio (6) y para el giro
+   de la sucursal (20): si fueran dos, un día dirían cosas distintas. */
+.etx-rejilla{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));
+  gap:8px;margin-top:4px;
+}
+.etx-opcion{
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  background:var(--s2);border:1px solid var(--ui-borde);border-radius:12px;
+  padding:12px 8px;cursor:pointer;font-family:'DM Sans',sans-serif;
+  color:var(--ui-apagado);transition:border-color .18s,color .18s,background .18s;
+}
+.etx-opcion:hover{border-color:var(--green);color:var(--text);}
+.etx-opcion.on{border-color:var(--green);background:rgba(61,190,122,.10);color:var(--text);}
+.etx-opcion-nom{font-size:11px;line-height:1.25;text-align:center;letter-spacing:.2px;}
+.etx-opcion-ic{display:flex;line-height:0;}
+/* Lo elegido se nota también en el dibujo, no solo en el marco. */
+.etx-opcion.on .etx-opcion-ic{--etx-color:var(--green);}
 .auth-switch a{color:var(--text);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--auth-borde);transition:color .2s;}
 .auth-switch a:hover{color:var(--green);}
 .auth-divider{height:1px;background:var(--ui-borde);margin:24px 0;}
@@ -2544,8 +2567,16 @@ function _renderBrandBar(neg) {
         (_logoBar
             ? '<div class="neg-activo-emoji-wrap" style="background:#fff;border:1px solid ' + color + '33;overflow:hidden;padding:0"><img src="' + _esc(_logoBar) + '" alt="" style="width:100%;height:100%;object-fit:contain"></div>'
             : '<div class="neg-activo-emoji-wrap" style="background:' + color + '1a;border:1px solid ' + color + '33">' + (neg.emoji || t.emoji) + '</div>') +
+        /* Lo que identifica al negocio es cómo está armado — PYME, cadena,
+           franquicia—, no a qué se dedica: eso es de cada sucursal. Mientras
+           nadie lo haya elegido, no se inventa: se queda en blanco y el dueño
+           lo pone al configurar. */
         '<div><div class="neg-activo-nombre">' + _esc(neg.nombre) + '</div>' +
-        '<div class="neg-activo-tipo">' + t.label + '</div></div>' +
+        '<div class="neg-activo-tipo ic-fila">' +
+            (neg.organizacion
+                ? _ic(EtaaxNegocio.org(neg.organizacion).ic, 14) + _esc(EtaaxNegocio.org(neg.organizacion).nom)
+                : _esc(t.label)) +
+        '</div></div>' +
         '<div class="brand-info-bar-btns">' +
         /* El aviso de privacidad, a la mano. Estaba solo en el pie de la landing
            y en la palomita del registro: justo donde nadie vuelve a mirarlo. Un
@@ -2626,10 +2657,13 @@ function _renderSucursales(neg) {
             // Jerarquía de marca: logo PROPIO de la sucursal (corporativo multi-marca)
             // → si no, el del negocio (hereda) → caja de color. Marco = color de sucursal.
             var _logoCard = _getSucLogo(suc.id, neg.id) || _getNegLogo(neg.id);
+            /* El giro de ESTA sucursal: la clave nueva o, si todavía no se ha
+               configurado, lo que se pueda reconocer del texto libre viejo. */
+            var _g = EtaaxNegocio.giro(sucCfg.giroK || EtaaxNegocio.adivinarGiro(sucCfg.giro || ''));
             var iconHtml = _logoCard
-                ? '<img src="' + _logoCard + '" style="width:40px;height:40px;object-fit:contain;background:#fff;border-radius:8px;flex-shrink:0;border:2px solid ' + sucColor + '66">'
-                : '<div class="neg-card-emoji" style="background:var(--s2);border:1px solid var(--ui-borde);display:flex;align-items:center;justify-content:center">' +
-                      _ic(esMat ? 'matriz' : 'sucursal', 22) + '</div>';
+                ? '<img src="' + _logoCard + '" style="width:44px;height:44px;object-fit:cover;background:#fff;border-radius:50%;flex-shrink:0;border:1px solid var(--ui-borde)">'
+                : '<div class="neg-card-emoji" style="background:var(--s2);border:1px solid var(--ui-borde);border-radius:50%;display:flex;align-items:center;justify-content:center">' +
+                      _ic(_g ? _g.ic : (esMat ? 'matriz' : 'sucursal'), 22) + '</div>';
             return '<div class="suc-caja" style="' + cardOp + 'animation-delay:' + (i * .06) + 's">' +
                 '<div class="neg-card suc-card" style="margin:0">' +
                     iconHtml +
@@ -2638,7 +2672,11 @@ function _renderSucursales(neg) {
                             (esMat ? ' <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;background:' + sucColor + '22;color:' + sucColor + ';padding:2px 7px;border-radius:20px;margin-left:6px">Matriz</span>' : '') +
                             (inactiva ? ' <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;background:var(--s2);color:var(--dim);padding:2px 7px;border-radius:20px;margin-left:6px;border:1px solid var(--b1)">Inactiva</span>' : '') +
                         '</div>' +
-                        '<div class="neg-card-meta">Sucursal · ' + fecha + '</div>' +
+                        /* Lo que ESTA sucursal es, antes que cuándo se creó:
+                           el giro se consulta; la fecha casi nunca. */
+                        '<div class="neg-card-meta ic-fila">' +
+                            (_g ? _ic(_g.ic, 13) + _esc(_g.nom) + ' · ' : 'Sucursal · ') + fecha +
+                        '</div>' +
                     '</div>' +
                 '</div>' +
                 '<div style="display:grid;grid-template-columns:auto 1fr;gap:8px">' +
@@ -2754,17 +2792,27 @@ function _selAjColor(c) { _ajColor = c; _renderAjColores(); }
 
 // Preview: logo PROPIO de la sucursal; si no tiene, el del negocio atenuado
 // (indica que HEREDA) o el placeholder.
+var _ajGiro = '';
+function _elegirGiroSuc(k) { _ajGiro = (k === _ajGiro) ? '' : k; _renderAjGiro(); _renderAjLogo(); }
+function _renderAjGiro() {
+    var c = document.getElementById('ajSucGiroRejilla');
+    if (c) c.innerHTML = EtaaxNegocio.rejilla(EtaaxNegocio.GIROS, _ajGiro, '_elegirGiroSuc');
+}
+
 function _renderAjLogo() {
     var prev = document.getElementById('ajSucLogoPrev');
     if (!prev) return;
     var propio = _getSucLogo(_ajSucId, _ajNegId);
     var negL   = _getNegLogo(_ajNegId);
+    /* Redondo, igual que el del negocio. Y `cover` en vez de `contain`: un logo
+       dentro de un círculo con `contain` deja dos lunas vacías a los lados. */
     if (propio) {
-        prev.innerHTML = '<img src="' + propio + '" style="width:72px;height:72px;object-fit:contain;background:#fff;border-radius:10px;border:1px solid var(--b2)">';
+        prev.innerHTML = '<img src="' + propio + '" style="width:72px;height:72px;object-fit:cover;background:#fff;border-radius:50%;border:1px solid var(--ui-borde)">';
     } else if (negL) {
-        prev.innerHTML = '<div style="text-align:center"><img src="' + negL + '" style="width:72px;height:72px;object-fit:contain;background:#fff;border-radius:10px;border:1px dashed var(--b2);opacity:.55"><div style="font-size:9px;color:var(--dim);margin-top:3px">hereda del negocio</div></div>';
+        prev.innerHTML = '<div style="text-align:center"><img src="' + negL + '" style="width:72px;height:72px;object-fit:cover;background:#fff;border-radius:50%;border:1px dashed var(--ui-borde);opacity:.55"><div style="font-size:9px;color:var(--ui-apagado);margin-top:4px">hereda del negocio</div></div>';
     } else {
-        prev.innerHTML = '<div style="width:72px;height:72px;border-radius:10px;border:2px dashed var(--b2);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:22px">🏪</div>';
+        prev.innerHTML = '<div style="width:72px;height:72px;border-radius:50%;border:2px dashed var(--ui-borde);display:flex;align-items:center;justify-content:center;background:var(--s2)">' +
+            _ic(_ajGiro ? (EtaaxNegocio.giro(_ajGiro) || {}).ic : 'sucursal', 26) + '</div>';
     }
 }
 async function ajSucLogoChange(input) {
@@ -2797,7 +2845,11 @@ function _abrirAjustesSucursal(sucId, negId) {
     document.getElementById('ajSucTitulo').textContent = suc ? suc.nombre : 'Sucursal';
     // Identidad
     document.getElementById('ajSucNombre').value   = suc ? suc.nombre : '';
-    document.getElementById('ajSucGiro').value     = cfg.giro    || '';
+    /* `giroK` es la clave nueva; `giro` era el texto libre de antes. Si no hay
+       clave, se intenta reconocer el texto — y si no se reconoce, se queda sin
+       elegir, que es honesto: nadie decidió nunca ese dato. */
+    _ajGiro = cfg.giroK || EtaaxNegocio.adivinarGiro(cfg.giro || '');
+    _renderAjGiro();
     document.getElementById('ajSucRFC').value      = cfg.rfc     || '';
     _ajColor = cfg.color || '#3dbe7a';
     _renderAjColores();
@@ -2847,9 +2899,15 @@ function guardarAjustesSucursal() {
             }
         } catch (e) {}
     }
+    /* La configuración anterior, para conservar lo que esta pantalla no edita
+       (el texto libre del giro de antes, entre otras cosas). */
+    var cfg = _getSucCfg(_ajSucId, _ajNegId);
     _setSucCfg(_ajSucId, _ajNegId, {
         color:          _ajColor,
-        giro:           document.getElementById('ajSucGiro').value.trim(),
+        /* Se guarda la CLAVE y se conserva el texto viejo tal cual: si alguien
+           había escrito un matiz que la lista no cubre, no se le borra. */
+        giroK:          _ajGiro,
+        giro:           cfg.giro || '',
         rfc:            document.getElementById('ajSucRFC').value.trim(),
         telNegocio:     document.getElementById('ajSucTelNeg').value.trim(),
         whatsNegocio:   document.getElementById('ajSucWhatsNeg').value.trim(),
@@ -2892,13 +2950,25 @@ function _setNegLogo(negId, url) {
 function _getNegExtra(negId) { try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_config_extra') || '{}'); } catch { return {}; } }
 function _setNegExtra(negId, data) { localStorage.setItem('etaax_' + negId + '_config_extra', JSON.stringify(data)); }
 
+var _cfgOrg = '';
+function _elegirOrgNeg(k) { _cfgOrg = (k === _cfgOrg) ? '' : k; _renderCfgNegOrg(); _renderCfgNegLogo(); }
+function _renderCfgNegOrg() {
+    var c = document.getElementById('cfgNegOrgRejilla');
+    if (c) c.innerHTML = EtaaxNegocio.rejilla(EtaaxNegocio.ORGANIZACIONES, _cfgOrg, '_elegirOrgNeg');
+}
+
 function _renderCfgNegLogo() {
     var prev = document.getElementById('cfgNegLogoPrev');
     if (!prev) return;
     var b64 = _getNegLogo(_cfgNegId);
+    /* REDONDO, como una foto de perfil: es la cara de la marca y así se lee en
+       cualquier tamaño sin competir con los recuadros de alrededor, que son
+       todos cuadrados. `object-fit:cover` para que un logo rectangular no salga
+       aplastado — se recorta, que es lo que hace cualquier foto de perfil. */
     prev.innerHTML = b64
-        ? '<img src="' + b64 + '" style="width:80px;height:80px;object-fit:cover;border-radius:12px;border:1px solid var(--b2)">'
-        : '<div style="width:80px;height:80px;border-radius:12px;border:2px dashed var(--b2);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:26px;background:var(--s2)">🏢</div>';
+        ? '<img src="' + b64 + '" style="width:80px;height:80px;object-fit:cover;border-radius:50%;border:1px solid var(--ui-borde)">'
+        : '<div style="width:80px;height:80px;border-radius:50%;border:2px dashed var(--ui-borde);display:flex;align-items:center;justify-content:center;background:var(--s2)">' +
+          _ic('org-pyme', 28) + '</div>';
 }
 async function cfgNegLogoChange(input) {
     if (!input.files || !input.files[0]) return;
@@ -2966,6 +3036,8 @@ function _abrirConfigNeg(id) {
     var neg = _misNegocios().find(function(n){ return n.id === id; }) || _getNegocios().find(function(n){ return n.id === id; });
     if (!neg) return;
     document.getElementById('cfgNegTitulo').textContent = neg.nombre;
+    _cfgOrg = neg.organizacion || '';
+    _renderCfgNegOrg();
     _renderCfgNegLogo();
     var ex = _getNegExtra(id);
     document.getElementById('cfgNegNombre').value  = neg.nombre         || '';
@@ -3080,7 +3152,11 @@ function guardarConfigNeg() {
     if (btn) { btn.textContent = '✓ Cambios guardados'; btn.style.background = '#2a9960'; btn.disabled = true; }
     var negs = _getNegocios();
     var idx  = negs.findIndex(function(n){ return n.id === _cfgNegId; });
-    if (idx !== -1) { negs[idx].nombre = nombre; _setNegocios(negs); _negocios = _misNegocios(); }
+    /* La organización viaja en el registro del negocio, no en sus «extras»:
+       la tarjeta del selector de sucursales la necesita, y ahí solo se tiene el
+       negocio. Un dato que hay que ir a buscar a otro lado para pintarlo
+       termina sin pintarse. */
+    if (idx !== -1) { negs[idx].nombre = nombre; negs[idx].organizacion = _cfgOrg; _setNegocios(negs); _negocios = _misNegocios(); }
     _setNegExtra(_cfgNegId, {
         fechaApertura: document.getElementById('cfgNegFecha').value,
         descripcion:   document.getElementById('cfgNegDesc').value.trim(),
@@ -3784,6 +3860,16 @@ window.onload = function() {
           </div>
         </div>
 
+        <!-- CÓMO ESTÁ ARMADO EL NEGOCIO. No es lo mismo que el giro: el giro
+             es de cada sucursal (una cafetería, una cantina) y esto es del
+             negocio entero (una PYME, una cadena, una franquicia). Hasta hoy el
+             negocio guardaba un giro, y por eso su tarjeta decía «RESTAURANTE»
+             cuando lo que lo identifica es que son cuatro sucursales. -->
+        <div style="margin-bottom:16px">
+          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--ui-apagado);margin-bottom:6px">Tipo de organización</div>
+          <div id="cfgNegOrgRejilla"></div>
+        </div>
+
         <!-- Nombre + Fecha -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
           <div>
@@ -3983,11 +4069,14 @@ window.onload = function() {
                    style="width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;padding:11px 14px;border-radius:8px;outline:none;transition:border-color .2s;box-sizing:border-box"
                    onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--b2)'">
           </div>
-          <div>
-            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Giro de negocio</div>
-            <input id="ajSucGiro" type="text" placeholder="Ej. Restaurante de mariscos"
-                   style="width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;padding:11px 14px;border-radius:8px;outline:none;transition:border-color .2s;box-sizing:border-box"
-                   onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--b2)'">
+          <!-- El giro era texto libre («Restaurante de mariscos», «cafetería
+               pequeña»…): nadie lo escribía igual y no se podía comparar entre
+               sucursales ni dibujar. Ahora se elige de una lista con su icono.
+               Lo que ya estaba escrito NO se pierde: se intenta reconocer para
+               dejarlo preseleccionado, y el texto original se conserva. -->
+          <div style="grid-column:1/-1">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--ui-apagado);margin-bottom:6px">Giro de la sucursal</div>
+            <div id="ajSucGiroRejilla"></div>
           </div>
         </div>
 
@@ -4306,6 +4395,7 @@ async function guardarNuevaPassword(){
 </script>
 <script src="admin-guard.js"></script>
 <script src="/etaax-iconos.js"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
+<script src="/negocio-tipos.js"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
 <script src="security.js"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
