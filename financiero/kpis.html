@@ -231,6 +231,13 @@
 
         <div class="wrap">
 
+            <!-- Igual que en Resumen: si una colección no se pudo leer ENTERA,
+                 se dice arriba y en rojo. Un tablero con cifras recortadas no
+                 avisa de nada por su cuenta — se ve idéntico a uno correcto. -->
+            <div id="kpiFalla" style="display:none;background:rgba(232,90,90,.10);
+                 border:1px solid rgba(232,90,90,.45);color:#e85a5a;border-radius:10px;
+                 padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.6"></div>
+
             <!-- KPI Summary Cards -->
             <div class="kpi-grid">
                 <div class="kpi-card g">
@@ -403,7 +410,8 @@ function toggleNav(){
 var _kCache = {
     cortes: null, otros: null, gastos: null,
     fijos: null, nominas: null, prevs: null, targets: null,
-    deps: null          // movimientos; los APARTADOS de previsiones viven aquí
+    deps: null,         // movimientos; los APARTADOS de previsiones viven aquí
+    falló: []           // lo que no se pudo leer ENTERO, para decirlo arriba
 };
 var _KPI_DEFAULTS = {fijos:15,variables:30,nomOp:22,nomAdm:8,prev:5,util:20};
 
@@ -412,30 +420,72 @@ function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo')
 async function _sbInit() {
     var negId = getNegocioActivo();
     if (!negId) return;
+    /* ══ LEER ENTERO, Y DECIRLO CUANDO NO SE PUDO ════════════════════════
+       Antes cada colección se pedía de un tirón y, de paso, un fallo se
+       TRAGABA en silencio: `if (!r[0].error)` dejaba la caché en null y el
+       tablero enseñaba ceros como si fueran reales. Dos problemas distintos
+       con el mismo síntoma —una cifra que parece buena y no lo es— y los dos se
+       cierran aquí: el lector compartido pagina hasta el final, compara con el
+       total esperado, y lo que no se pudo leer entero lo NOMBRA. */
+    var TABLAS = [
+        {tabla:'cortes',           nombre:'ventas'},
+        {tabla:'sf_otros',         nombre:'otros ingresos'},
+        {tabla:'gastos',           nombre:'gastos'},
+        {tabla:'gf_fijos',         nombre:'gastos fijos'},
+        {tabla:'previsiones',      nombre:'previsiones'},
+        {tabla:'staff',            nombre:'nómina'},
+        {tabla:'tarjetas_credito', nombre:'cuentas'},
+        {tabla:'depositos',        nombre:'depósitos'}
+    ];
+    /* Documento por negocio (una sola fila): no hay nada que paginar. */
+    /* Si el módulo de datos no cargó (red a medias, caché rara), la pantalla NO
+       se cae: lo dice y enseña lo que haya. Una pantalla en blanco no explica
+       nada; un aviso rojo sí. */
+    if (typeof etaaxLeerVarias !== 'function') {
+        _kCache.falló = ['todo (no cargó el módulo de datos — recarga la página)'];
+        _kAviso(); renderAll();
+        return;
+    }
     var r = await Promise.all([
-        _supabase.from('cortes').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
-        _supabase.from('sf_otros').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
-        _supabase.from('gastos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
-        _supabase.from('gf_fijos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        etaaxLeerVarias(TABLAS, negId),
         _supabase.from('gf_nominas').select('datos').eq('negocio_id', negId).maybeSingle(),
-        _supabase.from('previsiones').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
-        _supabase.from('kpi_targets').select('datos').eq('negocio_id', negId).maybeSingle(),
-        _supabase.from('staff').select('datos').eq('negocio_id', negId),
-        _supabase.from('tarjetas_credito').select('datos').eq('negocio_id', negId),
-        _supabase.from('depositos').select('datos').eq('negocio_id', negId),
+        _supabase.from('kpi_targets').select('datos').eq('negocio_id', negId).maybeSingle()
     ]);
-    if (!r[0].error) _kCache.cortes  = (r[0].data||[]).map(function(x){return x.datos;});
-    if (!r[1].error) _kCache.otros   = (r[1].data||[]).map(function(x){return x.datos;});
-    if (!r[2].error) _kCache.gastos  = (r[2].data||[]).map(function(x){return x.datos;});
-    if (!r[3].error) _kCache.fijos   = (r[3].data||[]).map(function(x){return x.datos;});
-    if (!r[4].error && r[4].data) _kCache.nominas = r[4].data.datos || {};
-    if (!r[5].error) _kCache.prevs   = (r[5].data||[]).map(function(x){return x.datos;});
-    if (!r[6].error && r[6].data) _kCache.targets = r[6].data.datos || _KPI_DEFAULTS;
-    if (!r[7].error) _kCache.staff = (r[7].data||[]).map(function(x){return x.datos;});
-    if (!r[8].error) _kCache.ctas  = (r[8].data||[]).map(function(x){return x.datos;});
-    if (!r[9].error) _kCache.deps  = (r[9].data||[]).map(function(x){return x.datos;});
+    var col = r[0];
+    _kCache.cortes = col.datos.cortes;           _kCache.otros = col.datos.sf_otros;
+    _kCache.gastos = col.datos.gastos;           _kCache.fijos = col.datos.gf_fijos;
+    _kCache.prevs  = col.datos.previsiones;      _kCache.staff = col.datos.staff;
+    _kCache.ctas   = col.datos.tarjetas_credito; _kCache.deps  = col.datos.depositos;
+
+    var falló = col.incompletas.slice();
+    if (!r[1].error && r[1].data) _kCache.nominas = r[1].data.datos || {};
+    else if (r[1].error) falló.push('nóminas');
+    if (!r[2].error && r[2].data) _kCache.targets = r[2].data.datos || _KPI_DEFAULTS;
+    else if (r[2].error) falló.push('objetivos');
+    _kCache.falló = falló;
+
+    _kAviso();
     renderAll();
 }
+
+/* El aviso, arriba del tablero y en rojo. No se esconde nada de lo que sí se
+   pudo leer: sirve para trabajar. Lo que no se puede es dejar que pase por
+   completo. Mismo texto y mismo botón que en Resumen, a propósito: las dos
+   pantallas enseñan los mismos números y tienen que fallar igual. */
+function _kAviso(){
+    var f = (_kCache.falló||[]);
+    var box = document.getElementById('kpiFalla');
+    if(!box) return;
+    if(!f.length){ box.style.display='none'; box.innerHTML=''; return; }
+    box.style.display='block';
+    box.innerHTML = '<b>Este tablero está incompleto.</b> No se pudo leer: ' +
+        _esc(f.join(', ')) + '. Las cifras de abajo NO incluyen esa información — ' +
+        'no son ceros reales. Revisa tu conexión y vuelve a cargar.' +
+        ' <button onclick="_kRecargar()" style="background:none;border:1px solid currentColor;' +
+        'color:inherit;border-radius:7px;padding:3px 11px;font:inherit;font-size:12px;' +
+        'cursor:pointer;margin-left:6px">Reintentar</button>';
+}
+async function _kRecargar(){ await _sbInit(); }
 
 /* ── Helpers ── */
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -615,8 +665,11 @@ function getPeriodoData(desde,hasta){
     // Clasificación ÚNICA desde el núcleo (misma verdad que Gastos Totales y Estadísticas):
     //  FIJO = pagos de fijos + naturaleza fija · NÓMINA = nómina/personal + IMSS ·
     //  VARIABLE = resto (incl. impuestos/contabilidad) + comisión bancaria · Propina fuera.
-    var ctasDeb=(_kCache.ctas||[]).filter(function(c){return c&&c.tipo==='debito';})
-        .sort(function(a,b){return (b.predeterminada?1:0)-(a.predeterminada?1:0);});
+    /* Esta copia filtraba y ordenaba bien, pero NO marcaba la cuenta `esBase`
+       —la más antigua, dueña de lo que no dice de qué cuenta es— que sí marca
+       el núcleo. Dos listas parecidas y no iguales: por ahí se separaron las
+       cifras de las dos pantallas. Ahora las dos piden la misma. */
+    var ctasDeb=EtaaxCore.cuentasDebito(_kCache.ctas||[]);
     /* Con los abonos a la mano, la comisión de un corte ya conciliado es la REAL
        (la que se corrigió al conciliar) y no la proyectada con la tasa. */
     var _depsK=_kCache.deps||[];
@@ -748,7 +801,25 @@ function imprimirKPIs(){
     var mesTxt=periodoTxt();
     var fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
     var derecha='<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:1px;color:#1a1916">KPIs financieros</div><div>'+mesTxt+'</div><div>'+rg.from+' → '+rg.to+'</div><div>Generado: '+fecha+'</div>';
-    var html=etaaxReporteDoc({ titulo:'KPIs — '+mesTxt, subtitulo:'Reporte de KPIs financieros', derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · KPIs' });
+    /* EL AVISO TAMBIÉN EN PAPEL. Un tablero incompleto que se imprime completo
+       es peor que el de pantalla: el papel se guarda, se enseña y se firma, y
+       nadie recuerda que ese día la mitad de los gastos no se pudo leer.
+       Va en negro sobre gris y con marco grueso —no en rojo claro—: en una
+       impresora en blanco y negro un recuadro tenue desaparece, y el aviso que
+       no se ve es el que no existe. Mismo trato que en Resumen. */
+    var _f = (_kCache.falló||[]);
+    var _aviso = _f.length
+        ? '<div style="border:2.5px solid #1a1916;background:#ececec;border-radius:8px;' +
+          'padding:12px 14px;margin:0 0 16px;font-size:12px;line-height:1.6;color:#1a1916">' +
+          '<b style="font-size:13px">⚠ ESTE TABLERO ESTÁ INCOMPLETO</b><br>' +
+          'No se pudo leer: <b>' + _esc(_f.join(', ')) + '</b>. Las cifras de abajo ' +
+          '<b>no incluyen esa información</b> y los ceros que veas ahí no son ceros ' +
+          'reales. Vuelve a cargar en pantalla antes de tomar una decisión con ' +
+          'estos números.</div>'
+        : '';
+    var html=etaaxReporteDoc({ titulo:'KPIs — '+mesTxt,
+        subtitulo:'Reporte de KPIs financieros' + (_f.length ? ' · INCOMPLETO' : ''),
+        derecha:derecha, cuerpo:_aviso+cuerpo, pie:'Salud Financiera · KPIs' });
     var w=window.open('','_blank'); if(!w){ alert('Permite las ventanas emergentes para imprimir el reporte.'); return; }
     w.document.write(html); w.document.close();
 }

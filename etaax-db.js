@@ -1133,4 +1133,119 @@
             return true;
         } catch (e) { return false; }
     };
+
+    /* ══════════════════════════════════════════════════════════════════════
+       LEER UNA COLECCIÓN ENTERA, Y SABER SI DE VERDAD SE LEYÓ ENTERA
+
+       El patrón de siempre —`select('datos').eq('negocio_id', neg)`— tiene un
+       techo que no se ve: la API de Supabase trae COMO MUCHO el número de filas
+       configurado en el proyecto (Settings → API → Max rows). Pasado ese techo
+       no hay error, no hay aviso, no hay nada: llegan las primeras N filas y la
+       página calcula tan contenta. En un reporte financiero eso es una utilidad
+       equivocada con cara de dato bueno — y nadie sospecha de un número.
+
+       Cómo se lee entero sin saltarse ni repetir nada:
+
+       · POR CURSOR, NO POR PÁGINA NUMERADA. `range(1000,1999)` se salta filas y
+         repite otras si alguien captura un gasto mientras se está leyendo. Aquí
+         se pide «lo que venga DESPUÉS del último id que vi», con el id como
+         orden — que es único y no cambia. Ordenar por `created_at` no sirve:
+         dos registros del mismo segundo no tienen desempate.
+       · SE PREGUNTA EL TOTAL (`count: 'exact'`) en el primer viaje y al final se
+         compara contra lo leído. Una página corta NO demuestra que se acabó: el
+         servidor pudo recortarla por su propio límite.
+       · SE VIGILA QUE AVANCE. Si un viaje devuelve filas que ya se tenían, o el
+         cursor no se mueve, se corta y se declara incompleta. Mejor decir «esto
+         está incompleto» que girar en falso para siempre.
+       · Y UN FALLO A MEDIO CAMINO NO SE TRAGA. Se devuelve lo que se alcanzó a
+         leer, marcado como incompleto y con el motivo, para que la pantalla lo
+         diga. Lo que NO se hace nunca es devolver una lista corta en silencio.
+
+       Devuelve: { filas, completa, total, leidas, motivo }
+       ══════════════════════════════════════════════════════════════════════ */
+    var _PAGINA = 500;        // filas por viaje
+    var _MAX_VIAJES = 200;    // 100 mil filas; más que eso es que algo gira mal
+
+    window.etaaxLeerTodo = async function (tabla, negId, opc) {
+        opc = opc || {};
+        var limite = opc.pagina || _PAGINA;
+        var cli = opc.cliente || (typeof _supabase !== 'undefined' ? _supabase : null);
+        var res = { filas: [], completa: false, total: null, leidas: 0, motivo: '' };
+        if (!cli)   { res.motivo = 'sin cliente de Supabase'; return res; }
+        if (!negId) { res.motivo = 'sin negocio activo';      return res; }
+
+        var vistos = Object.create(null), cursor = null, viajes = 0;
+        res.completa = true;
+        while (true) {
+            if (++viajes > (opc.maxViajes || _MAX_VIAJES)) {
+                res.completa = false; res.motivo = 'demasiados viajes'; break;
+            }
+            var q = cli.from(tabla)
+                .select('id,datos', res.total === null ? { count: 'exact' } : undefined)
+                .eq('negocio_id', negId)
+                .order('id', { ascending: true })
+                .limit(limite);
+            if (cursor !== null) q = q.gt('id', cursor);
+
+            var r;
+            try { r = await q; } catch (e) { r = { error: { message: String((e && e.message) || e) } }; }
+            if (!r || r.error) {
+                res.completa = false;
+                res.motivo = (r && r.error && r.error.message) || 'sin respuesta';
+                break;
+            }
+            if (res.total === null && typeof r.count === 'number') res.total = r.count;
+
+            var lote = r.data || [];
+            if (!lote.length) break;                    // se acabó de verdad
+
+            var nuevas = 0, ultimo = null;
+            for (var i = 0; i < lote.length; i++) {
+                var f = lote[i];
+                if (!f || f.id === null || f.id === undefined) continue;
+                ultimo = f.id;
+                if (vistos[f.id]) continue;             // repetida: no se cuenta dos veces
+                vistos[f.id] = 1;
+                nuevas++;
+                if (f.datos) res.filas.push(f.datos);
+            }
+            /* Ni una fila nueva, o el cursor que no se mueve hacia adelante: la
+               lectura dejó de avanzar y seguir sería girar en falso. */
+            if (!nuevas || ultimo === null ||
+                (cursor !== null && String(ultimo) <= String(cursor))) {
+                res.completa = false; res.motivo = 'la lectura dejó de avanzar'; break;
+            }
+            cursor = ultimo;
+            /* Solo se corta cuando el TOTAL dice que ya están todas. Una página
+               más corta de lo pedido no prueba nada: pudo recortarla el límite
+               del servidor. */
+            if (res.total !== null && Object.keys(vistos).length >= res.total) break;
+        }
+        res.leidas = Object.keys(vistos).length;
+        if (res.completa && res.total !== null && res.leidas < res.total) {
+            res.completa = false;
+            res.motivo = 'faltaron ' + (res.total - res.leidas) + ' de ' + res.total;
+        }
+        return res;
+    };
+
+    /* Varias colecciones de un golpe. Devuelve { datos:{tabla:[...]},
+       incompletas:['gastos (faltaron 240 de 1240)'] } — la lista es lo que la
+       pantalla tiene que enseñar en su aviso, tal cual. */
+    window.etaaxLeerVarias = async function (tablas, negId, opc) {
+        var out = { datos: {}, incompletas: [] };
+        var nombres = {};
+        var lista = tablas.map(function (t) {
+            if (typeof t === 'string') { nombres[t] = t; return t; }
+            nombres[t.tabla] = t.nombre || t.tabla; return t.tabla;
+        });
+        var rs = await Promise.all(lista.map(function (t) { return window.etaaxLeerTodo(t, negId, opc); }));
+        lista.forEach(function (t, i) {
+            out.datos[t] = rs[i].filas;
+            if (!rs[i].completa) {
+                out.incompletas.push(nombres[t] + (rs[i].motivo ? ' (' + rs[i].motivo + ')' : ''));
+            }
+        });
+        return out;
+    };
 })();

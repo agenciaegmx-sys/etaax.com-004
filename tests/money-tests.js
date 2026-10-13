@@ -24170,14 +24170,30 @@ console.log('\n══ BH51 · Un corte viejo no puede sumar dos veces ══');
     const resumenCon = (porTabla) => {
         const R = crearContexto();
         cargarJS(R, 'etaax-core.js');
+        /* Las colecciones ya no se piden de un tirón: pasan por el lector
+           compartido (R10). Hay que cargarlo, como lo carga la pantalla. */
+        cargarJS(R, 'etaax-db.js');
         cargarInline(R, 'financiero/resumen.html');
         R._storage['etaax_negocio_activo'] = 'negT';
         R._supabase.from = function (tabla) {
             const resp = porTabla[tabla] || { data: [], error: null };
             const q = {
+                /* La cadena completa que arma el lector: select/eq/order/limit/gt.
+                   Un doble al que le falte un eslabón revienta la página y el
+                   test falla por el andamio, no por el código. */
                 select(){ return this; }, eq(){ return this; },
+                order(){ return this; }, limit(){ return this; }, gt(){ return this; },
                 maybeSingle(){ return Promise.resolve(resp); },
-                then(res){ return Promise.resolve(resp).then(res); }
+                then(res){
+                    /* El lector pide `id,datos` y compara contra el total. El
+                       doble devuelve filas con id para que la lectura avance y
+                       termine igual que contra el servidor de verdad. */
+                    const filas = (resp.data || []).map((d, i) => ({ id: 'x' + i, datos: d.datos || d }));
+                    return Promise.resolve(
+                        resp.error ? { data: null, error: resp.error }
+                                   : { data: filas, error: null, count: filas.length }
+                    ).then(res);
+                }
             };
             return q;
         };
@@ -24197,7 +24213,9 @@ console.log('\n══ BH51 · Un corte viejo no puede sumar dos veces ══');
         await R.cargar();
         const falló = getVar(R, '_c').falló;
         eq(falló.length > 0, true, 'queda registrado que falló');
-        return eq(falló.indexOf('gastos') > -1, true, 'y se sabe cuál');
+        /* El renglón ya no es solo el nombre: trae el motivo pegado
+           —«gastos (Failed to fetch)»— para que el aviso diga qué pasó. */
+        return eq(falló.some(x => /gastos/.test(x)), true, 'y se sabe cuál: ' + JSON.stringify(falló));
     }]);
     testAsyncCola.push(['…y se avisa ARRIBA del reporte, no en la consola', async () => {
         const R = resumenCon(TODO_MAL());
@@ -24267,14 +24285,20 @@ console.log('\n══ BH51 · Un corte viejo no puede sumar dos veces ══');
     /* Un cero LEGÍTIMO —la consulta respondió y no hay filas— tiene que
        seguir viéndose como cero. Si el aviso saltara también ahí, en dos días
        nadie lo leería. */
-    test('un cero de verdad sigue siendo un cero', () => {
-        const src = fs.readFileSync(path.join(RAIZ, 'financiero/resumen.html'), 'utf8');
-        const i = src.indexOf('var fila = function(x, que)');
-        const cuerpo = src.slice(i, src.indexOf('\n    };', i));
-        /* Solo `x.error` dispara el aviso; una lista vacía sin error no. */
-        eq(/if \(x && x\.error\)/.test(cuerpo), true, 'solo el error avisa');
-        return eq(cuerpo.indexOf('x.data.length') < 0, true, 'no confunde vacío con fallo');
-    });
+    /* La regla ya no vive en esta pantalla sino en el lector compartido
+       (etaax-db.js), así que se comprueba donde está y CORRIÉNDOLA: un negocio
+       sin movimientos es una lectura completa de cero filas, no un fallo. */
+    testAsyncCola.push(['un cero de verdad sigue siendo un cero', async () => {
+        const c = crearContexto();
+        cargarJS(c, 'etaax-db.js');
+        const vacio = { from: () => { const q = {}; ['select','eq','order','limit','gt']
+            .forEach(m => q[m] = () => q);
+            q.then = (res) => Promise.resolve({ data: [], error: null, count: 0 }).then(res);
+            return q; } };
+        const r = await c.window.etaaxLeerTodo('gastos', 'n1', { cliente: vacio });
+        eq(r.completa, true, 'un vacío legítimo se tomó por fallo: ' + r.motivo);
+        return eq(r.filas.length, 0, 'inventó filas');
+    }]);
 }
 
 /* ═══════════ SUITE BH52 · SABER QUÉ HAY PUESTO ══════════════════════════
@@ -25538,6 +25562,365 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
     });
 }
 
+/* ═══════════ SUITE BE12 · LEER UNA COLECCIÓN ENTERA (R10) ═══════════════════
+   El patrón de siempre —`select('datos').eq('negocio_id', neg)`— tiene un techo
+   invisible: la API trae como mucho las filas que diga Max rows del proyecto.
+   Pasado ese techo no hay error ni aviso: llegan las primeras N y la página
+   calcula tan contenta. En un reporte financiero eso es una utilidad
+   equivocada con cara de dato bueno.
+
+   Aquí se levanta un SERVIDOR DE MENTIRA que se porta como el de verdad —
+   recorta a su límite, puede fallar a media lectura, puede repetir una página—
+   y se corre el lector REAL de etaax-db.js contra él. Lo que se mide no son las
+   llamadas: son las filas que salieron, que no haya duplicados, y que cuando no
+   se pudo leer todo lo DIGA en vez de devolver una lista corta en silencio.   */
+async function suiteLeerTodo() {
+console.log('\n══ BE12 · Leer una colección entera (R10) ══');
+
+    /* Los bloques de abajo leen de verdad (con await), así que se registran y
+       se corren en orden al final. Las comprobaciones de dentro son síncronas
+       —comparan lo ya leído—, así que usan el runner normal. */
+    const bloques = [];
+    const await0 = (fn) => bloques.push(fn);
+    const await1 = test;
+
+    /* ── El servidor de mentira ──────────────────────────────────────────
+       Respeta su propio `maxRows` aunque le pidan más —que es justo lo que
+       hace Supabase— y guarda cada consulta para poder revisarla. */
+    function servidor(filas, opc) {
+        opc = opc || {};
+        const viajes = [];
+        return {
+            viajes,
+            from(tabla) {
+                const q = { tabla, _neg: null, _gt: null, _limit: null, _count: false, _orden: null };
+                q.select = (cols, o) => { q._cols = cols; q._count = !!(o && o.count === 'exact'); return q; };
+                q.eq = (c, v) => { if (c === 'negocio_id') q._neg = v; return q; };
+                q.order = (c, o) => { q._orden = c + (o && o.ascending === false ? ' desc' : ' asc'); return q; };
+                q.limit = (n) => { q._limit = n; return q; };
+                q.gt = (c, v) => { q._gt = v; return q; };
+                /* `then` para que el `await` lo dispare, igual que supabase-js. */
+                q.then = (resolver) => {
+                    viajes.push({ tabla: q.tabla, gt: q._gt, limit: q._limit, orden: q._orden, count: q._count });
+                    if (opc.fallaEnViaje && viajes.length === opc.fallaEnViaje) {
+                        return Promise.resolve({ data: null, error: { message: 'se cayó la red' } }).then(resolver);
+                    }
+                    let cand = filas.filter(f => f.negocio_id === q._neg);
+                    const total = cand.length;
+                    cand = cand.slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
+                    if (q._gt !== null) cand = cand.filter(f => String(f.id) > String(q._gt));
+                    /* EL TECHO: devuelve lo que diga su límite, aunque le pidan más. */
+                    const tope = Math.min(q._limit || 1e9, opc.maxRows || 1e9);
+                    let pagina = cand.slice(0, tope);
+                    if (opc.repiteViaje && viajes.length === opc.repiteViaje) {
+                        pagina = filas.filter(f => f.negocio_id === q._neg)
+                            .slice().sort((a, b) => String(a.id).localeCompare(String(b.id)))
+                            .slice(0, tope);                    // la MISMA página de antes
+                    }
+                    const r = { data: pagina.map(f => ({ id: f.id, datos: f.datos })), error: null };
+                    if (q._count) r.count = opc.cuentaMentirosa || total;
+                    return Promise.resolve(r).then(resolver);
+                };
+                return q;
+            }
+        };
+    }
+    const hacerFilas = (neg, n, desde) => Array.from({ length: n }, (_, i) => ({
+        id: 'g' + String((desde || 0) + i).padStart(6, '0'),
+        negocio_id: neg,
+        datos: { monto: 10, i: (desde || 0) + i }
+    }));
+
+    const ctx = crearContexto();
+    cargarJS(ctx, 'etaax-db.js');
+    const leer = ctx.window.etaaxLeerTodo;
+    test('el lector compartido existe y es uno solo', () => eq(typeof leer, 'function', typeof leer));
+
+    /* ── 1. Más filas que el techo del servidor ──────────────────────── */
+    await0(async () => {
+        const sv = servidor(hacerFilas('n1', 2350), { maxRows: 1000 });
+        const r = await leer('gastos', 'n1', { cliente: sv, pagina: 500 });
+        await1('con 2350 filas y techo de 1000, se leen las 2350', () => eq(r.filas.length, 2350));
+        await1('…y se declara COMPLETA', () => eq(r.completa, true, r.motivo));
+        await1('…sin una sola repetida', () => {
+            const vistos = new Set(r.filas.map(f => f.i));
+            return eq(vistos.size, 2350, 'repetidas: ' + (2350 - vistos.size));
+        });
+        /* Si pidiera por página numerada (range), un insert a media lectura
+           correría las filas y se saltaría una. Por cursor eso no puede pasar:
+           se comprueba que CADA viaje pida «lo que viene después del último». */
+        await1('pide por cursor, no por página numerada', () => {
+            const conGt = sv.viajes.filter(v => v.gt !== null).length;
+            return eq(conGt >= 4, true, 'viajes con cursor: ' + conGt + ' de ' + sv.viajes.length);
+        });
+        await1('…y ordena por el id, que es único y no cambia', () =>
+            eq(sv.viajes.every(v => v.orden === 'id asc'), true, JSON.stringify(sv.viajes[0])));
+        await1('…preguntando el total UNA sola vez', () =>
+            eq(sv.viajes.filter(v => v.count).length, 1, 'lo pidió ' + sv.viajes.filter(v => v.count).length + ' veces'));
+    });
+
+    /* ── 2. El servidor recorta MÁS de lo pedido ─────────────────────── */
+    await0(async () => {
+        /* Se piden 500 por viaje y el servidor da 120: es el caso de un
+           proyecto con Max rows bajo. Tiene que seguir leyendo, no creerse que
+           una página corta significa «ya no hay más». */
+        const sv = servidor(hacerFilas('n1', 900), { maxRows: 120 });
+        const r = await leer('gastos', 'n1', { cliente: sv, pagina: 500 });
+        await1('si el servidor da menos filas de las pedidas, NO se da por terminado', () =>
+            eq(r.filas.length, 900, 'leyó ' + r.filas.length));
+        await1('…y queda completa', () => eq(r.completa, true, r.motivo));
+    });
+
+    /* ── 3. Se cae a media lectura ───────────────────────────────────── */
+    await0(async () => {
+        const sv = servidor(hacerFilas('n1', 2000), { maxRows: 500, fallaEnViaje: 3 });
+        const r = await leer('gastos', 'n1', { cliente: sv, pagina: 500 });
+        await1('un fallo en la SEGUNDA página también deja la carga incompleta', () =>
+            eq(r.completa, false, 'se dio por completa'));
+        await1('…y dice por qué', () => eq(/red/.test(r.motivo), true, r.motivo));
+        await1('…devolviendo lo que sí se alcanzó a leer', () =>
+            eq(r.filas.length, 1000, 'trajo ' + r.filas.length));
+    });
+
+    /* ── 4. El servidor repite una página ────────────────────────────── */
+    await0(async () => {
+        const sv = servidor(hacerFilas('n1', 1500), { maxRows: 500, repiteViaje: 2 });
+        const r = await leer('gastos', 'n1', { cliente: sv, pagina: 500 });
+        await1('si una página se repite, se corta y se declara incompleta', () =>
+            eq(r.completa, false, 'siguió como si nada'));
+        await1('…y no se cuenta ni una fila dos veces', () => {
+            const vistos = new Set(r.filas.map(f => f.i));
+            return eq(vistos.size, r.filas.length, 'duplicadas: ' + (r.filas.length - vistos.size));
+        });
+    });
+
+    /* ── 5. El total dice una cosa y llegan menos ────────────────────── */
+    await0(async () => {
+        const sv = servidor(hacerFilas('n1', 300), { maxRows: 500, cuentaMentirosa: 450 });
+        const r = await leer('gastos', 'n1', { cliente: sv, pagina: 500 });
+        await1('si llegan menos filas que el total esperado, se declara incompleta', () =>
+            eq(r.completa, false, 'se dio por completa con ' + r.leidas + ' de ' + r.total));
+        await1('…diciendo cuántas faltaron', () => eq(/faltaron 150 de 450/.test(r.motivo), true, r.motivo));
+    });
+
+    /* ── 6. Aislamiento entre negocios ───────────────────────────────── */
+    await0(async () => {
+        const sv = servidor(hacerFilas('n1', 700).concat(hacerFilas('n2', 700, 900000)), { maxRows: 300 });
+        const r = await leer('gastos', 'n1', { cliente: sv, pagina: 300 });
+        await1('solo trae las filas de SU negocio', () => eq(r.filas.length, 700, 'trajo ' + r.filas.length));
+        await1('…ni una del otro', () =>
+            eq(r.filas.every(f => f.i < 900000), true, 'se coló una ajena'));
+    });
+
+    /* ── 7. Reintentar después de un fallo ───────────────────────────── */
+    await0(async () => {
+        const malo = servidor(hacerFilas('n1', 1200), { maxRows: 500, fallaEnViaje: 2 });
+        const r1 = await leer('gastos', 'n1', { cliente: malo, pagina: 500 });
+        await1('primero falla…', () => eq(r1.completa, false, 'no falló'));
+        const bueno = servidor(hacerFilas('n1', 1200), { maxRows: 500 });
+        const r2 = await leer('gastos', 'n1', { cliente: bueno, pagina: 500 });
+        await1('…y al reintentar se lee entero', () =>
+            eq(r2.completa === true && r2.filas.length === 1200, true,
+               r2.filas.length + ' filas, completa=' + r2.completa));
+    });
+
+    /* ── 8. Nada que leer ────────────────────────────────────────────── */
+    await0(async () => {
+        const sv = servidor([], { maxRows: 500 });
+        const r = await leer('gastos', 'n1', { cliente: sv, pagina: 500 });
+        await1('un negocio sin datos es una lectura COMPLETA de cero filas', () =>
+            eq(r.completa === true && r.filas.length === 0, true, JSON.stringify(r)));
+    });
+
+    /* ── 9. Varias colecciones de un golpe ───────────────────────────── */
+    await0(async () => {
+        const sv = servidor(hacerFilas('n1', 1100), { maxRows: 400 });
+        const varias = await ctx.window.etaaxLeerVarias(
+            [{ tabla: 'gastos', nombre: 'gastos' }, { tabla: 'cortes', nombre: 'ventas' }],
+            'n1', { cliente: sv, pagina: 400 });
+        await1('lee varias colecciones y las entrega por nombre', () =>
+            eq(varias.datos.gastos.length, 1100, JSON.stringify(Object.keys(varias.datos))));
+        await1('…y cuando todo salió bien, no hay nada que avisar', () =>
+            eq(varias.incompletas.length, 0, JSON.stringify(varias.incompletas)));
+    });
+    await0(async () => {
+        const sv = servidor(hacerFilas('n1', 1100), { maxRows: 400, fallaEnViaje: 2 });
+        const varias = await ctx.window.etaaxLeerVarias([{ tabla: 'gastos', nombre: 'gastos' }], 'n1',
+            { cliente: sv, pagina: 400 });
+        await1('…y si una quedó a medias, la NOMBRA para que la pantalla lo diga', () =>
+            eq(/gastos/.test(varias.incompletas[0] || ''), true, JSON.stringify(varias.incompletas)));
+    });
+
+    for (const b of bloques) await b();
+}
+
+/* ═══════════ SUITE BE13 · RESUMEN Y KPIs TIENEN QUE CUADRAR ════════════════
+   Las dos pantallas enseñan los mismos números del mismo negocio con palabras
+   distintas: una como P&L y la otra como tablero. Si no cuadran, el dueño tiene
+   dos utilidades para el mismo mes y ninguna forma de saber cuál creer — y lo
+   descubre delante de su contador.
+
+   Esto no compara fórmulas leyendo el código: le da a las DOS pantallas el
+   MISMO negocio, la MISMA sucursal y el MISMO periodo, corre sus cargas de
+   verdad y compara peso por peso.                                            */
+async function suiteConciliar() {
+console.log('\n══ BE13 · Resumen y KPIs cuadran peso por peso ══');
+
+    /* Un mes con de todo: dos sucursales, ventas con tarjeta, gastos de las
+       cuatro familias, un apartado y un gasto PENDIENTE (que no debe contar). */
+    const FIX = {
+        cortes: [
+            { id:'c1', fecha:'2026-09-03', sucursalId:'', efectivo:5000, tarjeta:3000, comensales:40 },
+            { id:'c2', fecha:'2026-09-14', sucursalId:'sucA', efectivo:8000, tarjeta:4000, comensales:70 },
+            { id:'c3', fecha:'2026-08-30', sucursalId:'', efectivo:9999, tarjeta:0 }   // fuera del mes
+        ],
+        sf_otros: [{ id:'o1', fecha:'2026-09-10', monto:1200, concepto:'Renta de salón' }],
+        gastos: [
+            { id:'g1', fecha:'2026-09-04', monto:2500, categoria:'Carnes',      concepto:'Res',     estatus:'pagado' },
+            { id:'g2', fecha:'2026-09-06', monto:900,  categoria:'Cervezas',    concepto:'Barra',   estatus:'pagado' },
+            { id:'g3', fecha:'2026-09-08', monto:4000, categoria:'Renta',       concepto:'Local',   estatus:'pagado' },
+            { id:'g4', fecha:'2026-09-09', monto:3000, categoria:'Nómina',      concepto:'Semana',  estatus:'pagado' },
+            { id:'g5', fecha:'2026-09-11', monto:700,  categoria:'Papelería',   concepto:'Varios',  estatus:'pagado' },
+            { id:'g6', fecha:'2026-09-12', monto:5000, categoria:'Carnes',      concepto:'NO pagado', estatus:'pendiente' }
+        ],
+        depositos: [{ id:'d1', fecha:'2026-09-15', monto:1500, tipo:'apartado', prevId:'_general' }],
+        tarjetas_credito: [
+            { id:'ctaB', tipo:'debito', nombre:'Banco B', comisionTD:3.5, comisionTC:3.5 },
+            { id:'ctaA', tipo:'debito', nombre:'Banco A', comisionTD:1.0, comisionTC:1.0, predeterminada:true }
+        ],
+        gf_fijos: [], staff: [], previsiones: []
+    };
+    /* El núcleo, cargado en su propio contexto: aquí fuera no existe. */
+    const _nucleo = crearContexto(); cargarJS(_nucleo, 'etaax-core.js');
+    const RANGO = _nucleo.EtaaxCore.getRange('mes', '2026-09');
+
+    /* El doble del servidor: entrega las mismas filas a las dos pantallas, con
+       la cadena completa que usa el lector compartido. */
+    function clienteCon(fix) {
+        return { from(tabla) {
+            const filas = (fix[tabla] || []).map((d, i) => ({ id: (d.id || ('x' + i)), datos: d }));
+            const q = {};
+            ['select','eq','order','limit','gt'].forEach(m => q[m] = () => q);
+            q.maybeSingle = () => Promise.resolve({ data: null, error: null });
+            q.then = (res) => Promise.resolve({ data: filas, error: null, count: filas.length }).then(res);
+            return q;
+        } };
+    }
+    function pantalla(archivo, suc) {
+        const W = crearContexto();
+        /* EL CONTEXTO VA ANTES DE CARGAR LA PÁGINA, y no es un detalle del
+           arnés: KPIs fija la sucursal al ARRANCAR (`var _SUC_LOCK =
+           _sucBloqueada()`), mientras que Resumen la lee en cada cálculo.
+           Ponerlo después dejaba a KPIs en vista global comparándose contra un
+           Resumen filtrado — y la prueba acusaba un descuadre que no existía.
+           La diferencia de momento es real y queda documentada en el reporte. */
+        W._storage['etaax_negocio_activo'] = 'negC';
+        if (suc) W._storage['etaax_sucursal_activa'] = suc;
+        cargarJS(W, 'etaax-core.js');
+        cargarJS(W, 'etaax-db.js');
+        cargarInline(W, archivo);
+        W._supabase.from = clienteCon(FIX).from;
+        return W;
+    }
+
+    async function cifras(suc) {
+        const R = pantalla('financiero/resumen.html', suc);
+        await R.cargar();
+        R.document.getElementById('pickerInput').value = '2026-09';
+        setVar(R, 'periodoTipo', 'mes');
+        const pl = R.plDelPeriodo();
+
+        const K = pantalla('financiero/kpis.html', suc);
+        await K._sbInit();
+        const d = K.getPeriodoData(RANGO.from, RANGO.to);
+
+        const linea = (k) => (pl.lineas.find(x => x.k === k) || {}).monto || 0;
+        return {
+            resumen: { ingresos: pl.ventas, egresos: pl.egresos, prevs: pl.prevs, util: pl.utilidad,
+                       nom: linea('nom'), fijos: linea('fijos'),
+                       variables: linea('food') + linea('otros') },
+            kpis:    { ingresos: d.ingresos, egresos: d.egresos, prevs: d.prevs, util: d.util,
+                       nom: d.nomOp + d.nomAdm, fijos: d.fijos, variables: d.variables },
+            comision: { resumen: null, kpis: d.comisionBanco }
+        };
+    }
+
+    /* ── Todo el negocio ─────────────────────────────────────────────────── */
+    const todo = await cifras('');
+    ['ingresos','egresos','prevs','util','nom','fijos','variables'].forEach(k => {
+        test('negocio completo · ' + k + ' cuadra entre las dos pantallas', () =>
+            eq(Math.round(todo.resumen[k] * 100) / 100, Math.round(todo.kpis[k] * 100) / 100,
+               'Resumen=' + todo.resumen[k] + ' KPIs=' + todo.kpis[k]));
+    });
+    /* Y que no cuadren en CERO: dos pantallas vacías cuadran perfecto y no
+       prueban nada. Es el fixture degenerado de siempre. */
+    test('…y las cifras no son cero (si no, cuadrar no significa nada)', () => {
+        eq(todo.kpis.ingresos > 0, true, 'ingresos=' + todo.kpis.ingresos);
+        eq(todo.kpis.egresos > 0, true, 'egresos=' + todo.kpis.egresos);
+        return eq(todo.kpis.prevs > 0, true, 'apartados=' + todo.kpis.prevs);
+    });
+    /* El gasto PENDIENTE no salió de la caja: ninguna de las dos lo cuenta. */
+    test('…y el gasto pendiente no entró en ninguna', () =>
+        eq(todo.kpis.egresos < 15000, true, 'egresos=' + todo.kpis.egresos + ' (los pagados suman 11,100)'));
+
+    /* ── Una sola sucursal ───────────────────────────────────────────────── */
+    const soloA = await cifras('sucA');
+    ['ingresos','egresos','prevs','util','nom','fijos','variables'].forEach(k => {
+        test('solo sucA · ' + k + ' cuadra entre las dos pantallas', () =>
+            eq(Math.round(soloA.resumen[k] * 100) / 100, Math.round(soloA.kpis[k] * 100) / 100,
+               'Resumen=' + soloA.resumen[k] + ' KPIs=' + soloA.kpis[k]));
+    });
+    test('…y filtrar por sucursal CAMBIA las cifras (si no, el filtro no filtra)', () =>
+        eq(soloA.kpis.ingresos < todo.kpis.ingresos, true,
+           'sucA=' + soloA.kpis.ingresos + ' todo=' + todo.kpis.ingresos));
+
+    /* ── La comisión bancaria, que es donde más fácil se separan ─────────── */
+    /* KPIs ordena las cuentas de débito poniendo la predeterminada primero;
+       Resumen las toma como vengan. Cuando un corte no dice de qué cuenta es, la
+       tasa sale de la PRIMERA del arreglo — así que ese orden decide el importe.
+       Aquí las dos cuentas tienen tasas distintas a propósito. */
+    /* EL ORDEN DE LAS CUENTAS NO ES COSMÉTICO, y por eso lo decide el núcleo.
+       Cuando un corte no dice de qué cuenta es, la comisión sale de la PRIMERA
+       de la lista. Resumen filtraba a mano y sin ordenar; KPIs ordenaba a su
+       manera y sin marcar `esBase`. Resultado: el MISMO corte pagaba 3.5% en
+       una pantalla y 1.0% en la otra — $175 de diferencia en un mes de juguete.
+       Esta prueba demuestra las dos mitades: que el orden cambia el importe (si
+       no, la delegación daría igual) y que las dos pantallas ya delegan. */
+    /* LA DIFERENCIA QUE HABÍA, con números. Cada pantalla armaba su propia lista
+       de cuentas de débito y la comisión de un corte que no dice de qué cuenta
+       es sale de la PRIMERA de esa lista. Aquí se reconstruyen las dos maneras
+       viejas para dejar constancia de que no era un detalle: el mismo corte
+       pagaba el triple en una pantalla que en la otra. */
+    test('las dos maneras VIEJAS de armar la lista daban comisiones distintas', () => {
+        const C = _nucleo.EtaaxCore;
+        const soloFiltrar = FIX.tarjetas_credito.filter(c => c.tipo === 'debito');          // como Resumen
+        const filtrarYOrdenar = soloFiltrar.slice()
+            .sort((a, b) => (b.predeterminada ? 1 : 0) - (a.predeterminada ? 1 : 0));       // como KPIs
+        const a = C.comisionBancoCorte(FIX.cortes[0], soloFiltrar, []);
+        const b = C.comisionBancoCorte(FIX.cortes[0], filtrarYOrdenar, []);
+        return eq(a !== b, true, 'hoy darían igual (' + a + ' vs ' + b + ') y la prueba no probaría nada');
+    });
+    /* Y la lista del núcleo manda `esBase` puesta —la cuenta más antigua, dueña
+       de lo no atribuido—, que es lo que ninguna de las dos copias hacía. Sin
+       esa marca, la elección depende de en qué orden llegaron las filas. */
+    test('la lista del núcleo marca la cuenta dueña de lo no atribuido', () => {
+        const C = _nucleo.EtaaxCore;
+        const lista = C.cuentasDebito(FIX.tarjetas_credito);
+        return eq(lista.filter(c => c.esBase).length, 1, 'marcadas: ' + lista.filter(c => c.esBase).length);
+    });
+    test('…y las dos pantallas piden la lista al núcleo, no la arman', () => {
+        [['financiero/resumen.html', '_c.ctas'], ['financiero/kpis.html', '_kCache.ctas']].forEach(par => {
+            const src = fs.readFileSync(path.join(RAIZ, par[0]), 'utf8');
+            eq(src.indexOf('EtaaxCore.cuentasDebito(' + par[1]) > -1, true, par[0] + ' la arma por su cuenta');
+            /* Y que no quede la copia vieja: filtrar `tipo==='debito'` a mano
+               es exactamente lo que las separó. */
+            const i = src.indexOf("tipo==='debito'");
+            eq(i, -1, par[0] + ' todavía filtra a mano en la posición ' + i);
+        });
+        return true;
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -25555,4 +25938,4 @@ suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
-    .then(suiteFrenoNip).then(resumen);
+    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(resumen);

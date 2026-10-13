@@ -197,45 +197,59 @@ var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[],
 
 async function cargar(){
     var negId = getNegocioActivo(); if(!negId) return;
+    /* ══ UN REPORTE NO PUEDE LEER A MEDIAS Y NO DECIRLO ═══════════════════
+       Antes esto pedía cada colección de un tirón: `select('datos')` y ya. Eso
+       tiene un techo que no se ve —la API trae como mucho las filas que diga
+       Max rows del proyecto— y pasado ese techo no hay error ni aviso: llegan
+       las primeras N y el P&L se calcula con ellas. Una utilidad equivocada con
+       cara de dato bueno, que es peor que una pantalla en blanco.
+
+       `etaaxLeerVarias` (etaax-db.js) lee por cursor hasta el final, pregunta
+       cuántas filas debería haber y compara. Lo que no pudo leer entero lo
+       NOMBRA, y ese nombre es el que acaba en el aviso rojo de arriba. */
+    var TABLAS = [
+        {tabla:'cortes',           nombre:'ventas'},
+        {tabla:'sf_otros',         nombre:'otros ingresos'},
+        {tabla:'gastos',           nombre:'gastos'},
+        {tabla:'depositos',        nombre:'depósitos'},
+        {tabla:'tarjetas_credito', nombre:'cuentas'},
+        {tabla:'gf_fijos',         nombre:'gastos fijos'},
+        {tabla:'staff',            nombre:'nómina'}
+    ];
+    /* Las dos de abajo son DOCUMENTO por negocio (una sola fila), no colección:
+       no hay nada que paginar y se siguen pidiendo igual. */
+    /* Si el módulo de datos no cargó (red a medias, caché rara), la pantalla NO
+       se cae: lo dice y enseña lo que haya. Una pantalla en blanco no explica
+       nada; un aviso rojo sí. */
+    if (typeof etaaxLeerVarias !== 'function') {
+        _c.falló = ['todo (no cargó el módulo de datos — recarga la página)'];
+        return;
+    }
     var r = await Promise.all([
-        _supabase.from('cortes').select('datos').eq('negocio_id',negId),
-        _supabase.from('sf_otros').select('datos').eq('negocio_id',negId),
-        _supabase.from('gastos').select('datos').eq('negocio_id',negId),
-        _supabase.from('depositos').select('datos').eq('negocio_id',negId),
-        _supabase.from('tarjetas_credito').select('datos').eq('negocio_id',negId),
-        _supabase.from('gf_fijos').select('datos').eq('negocio_id',negId),
-        _supabase.from('staff').select('datos').eq('negocio_id',negId),
+        etaaxLeerVarias(TABLAS, negId),
         _supabase.from('kpi_targets').select('datos').eq('negocio_id',negId).maybeSingle(),
         _supabase.from('sf_metas').select('datos').eq('negocio_id',negId).maybeSingle()
     ]);
-    /* ══ UN ERROR NO ES UN CERO ══════════════════════════════════════════
-       `(x.data||[])` convertía una consulta FALLIDA en una lista vacía, y de
-       ahí salía un P&L con ingresos en cero y utilidad negativa — presentado
-       con la misma cara que una cifra real. Sesión vencida, red caída o un
-       permiso denegado se leían como «este mes no vendiste nada».
+    var col = r[0];
+    _c.cortes = col.datos.cortes;           _c.otros  = col.datos.sf_otros;
+    _c.gastos = col.datos.gastos;           _c.deps   = col.datos.depositos;
+    _c.ctas   = col.datos.tarjetas_credito; _c.fijos  = col.datos.gf_fijos;
+    _c.staff  = col.datos.staff;
 
-       Un cero verdadero y un cero por no haber podido preguntar son cosas
+    /* Un cero verdadero y un cero por no haber podido preguntar son cosas
        distintas, y la que más daño hace es la segunda: nadie sospecha de un
-       número, se sospecha de un error. */
-    var falló = [];
-    var fila = function(x, que){
-        if (x && x.error) { falló.push(que); return []; }
-        return (x.data||[]).map(function(y){return y.datos;}).filter(Boolean);
-    };
-    _c.cortes=fila(r[0],'ventas');  _c.otros=fila(r[1],'otros ingresos');
-    _c.gastos=fila(r[2],'gastos');  _c.deps=fila(r[3],'depósitos');
-    _c.ctas=fila(r[4],'cuentas');   _c.fijos=fila(r[5],'gastos fijos');
-    _c.staff=fila(r[6],'nómina');
-    _c.targets=(r[7].data&&r[7].data.datos)||null;
+       número, se sospecha de un error. Lo mismo vale para una lista recortada. */
+    var falló = col.incompletas.slice();
+    _c.targets=(r[1].data&&r[1].data.datos)||null;
     /* La meta de VENTA es otra cosa que las metas de porcentaje: vive en
        sf_metas por mes y la pone el encargado desde Ventas Totales. Se lee aquí
        para poder decir «vas al 86% de tu meta» sin que haya que cambiar de
        pantalla a averiguarlo. */
-    _c.metas=(r[8].data&&r[8].data.datos)||{};
-    /* Las dos de abajo (metas y objetivos) no hacen cero el P&L si fallan:
+    _c.metas=(r[2].data&&r[2].data.datos)||{};
+    /* Las dos de arriba (objetivos y metas) no hacen cero el P&L si fallan:
        solo quitan la línea de comparación. Se avisan igual, pero aparte. */
-    if (r[7] && r[7].error) falló.push('objetivos');
-    if (r[8] && r[8].error) falló.push('metas de venta');
+    if (r[1] && r[1].error) falló.push('objetivos');
+    if (r[2] && r[2].error) falló.push('metas de venta');
     _c.falló = falló;
 }
 
@@ -297,7 +311,14 @@ function plDelPeriodo(){
     var otrosT=otros.reduce(function(s,o){return s+n(o.monto);},0);
     var ingresos=ventas+otrosT;
 
-    var ctasDeb=(_c.ctas||[]).filter(function(c){return c&&c.tipo==='debito';});
+    /* LA LISTA DE CUENTAS LA ORDENA EL NÚCLEO, no cada pantalla. No es cosmética:
+       cuando un corte no dice de qué cuenta es, la comisión sale de la PRIMERA
+       de la lista, así que el orden decide el importe. Aquí se filtraba a mano y
+       sin ordenar —y KPIs ordenaba a su manera—, de modo que el MISMO corte
+       pagaba 3.5% en esta pantalla y 1.0% en la otra. Lo destapó la prueba que
+       concilia las dos. `cuentasDebito` además marca la cuenta `esBase` (la más
+       antigua), que es a la que pertenece lo no atribuido. */
+    var ctasDeb=EtaaxCore.cuentasDebito(_c.ctas||[]);
     var comision=cortes.reduce(function(s,c){return s+EtaaxCore.comisionBancoCorte(c,ctasDeb,_c.deps);},0);
     var cl=EtaaxCore.clasificarGastos(gastos,{fijos:_c.fijos,staff:_c.staff,comisionBanco:comision});
     /* OJO: clasificarGastos recibe su propio objeto porque lo MUTA (memoiza las
