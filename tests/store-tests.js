@@ -920,6 +920,104 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
             const nt = fs.readFileSync(path.join(RAIZ, 'netlify.toml'), 'utf8');
             return eq(/from = "\/docs\/\*"[\s\S]{0,120}status = 404/.test(nt), true);
         });
+
+        /* ── Y lo que de verdad importa: que su VEREDICTO sea correcto ──
+           Una herramienta de diagnóstico que miente es peor que no tenerla, y
+           esta mintió exactamente una vez: preguntaba por el aviso rojo DESPUÉS
+           de recargar. El aviso vive en el DOM de la carga en la que salió, así
+           que el DOM nuevo contestaba «no salió» y la página acusaba pérdida
+           silenciosa de un almacén que SÍ había avisado (lo encontró Codex
+           provocando un fallo por cuota).
+           Lo de abajo no lee el archivo: le SACA sus propias funciones y las
+           CORRE con un sessionStorage que sobrevive la recarga y un DOM de
+           mentira. No hay copia del código bajo prueba — si la hubiera, mutar
+           la página no movería nada aquí, que es el error que más se repite en
+           este proyecto. */
+        const trozo = (nombre) => {
+            const i = html.indexOf('function ' + nombre + '(');
+            if (i < 0) throw new Error('no se encontró ' + nombre + ' en la página');
+            let d = 0;
+            for (let k = html.indexOf('{', i); k < html.length; k++) {
+                if (html[k] === '{') d++;
+                else if (html[k] === '}' && --d === 0) return html.slice(i, k + 1);
+            }
+            throw new Error('llaves sin cerrar en ' + nombre);
+        };
+
+        /* capturas: [{ v, aviso, avisoTarde, resetea }].
+           `resetea` es lo que hace capturar(); false simula un sessionStorage
+           lleno, donde ese reset se traga el error y el apunte viejo sobrevive. */
+        const veredicto = (capturas) => {
+            const mCartel = html.match(/var cartel = ([\s\S]*?);\n/);
+            if (!mCartel) throw new Error('no se encontró la expresión de cartel');
+            const iObs = html.indexOf('if (window.MutationObserver) {');
+            if (iObs < 0) throw new Error('no se encontró el cableado del observer');
+            const obs = html.slice(iObs, html.indexOf('\n}\n', iObs) + 3);
+
+            const ss = {};
+            const ctx = {
+                sessionStorage: {
+                    getItem: k => (k in ss ? ss[k] : null),
+                    setItem: (k, v) => { ss[k] = String(v); },
+                    removeItem: k => { delete ss[k]; }
+                },
+                document: { body: {}, querySelector: () => (ctx.__aviso ? {} : null) },
+                EVID: 'etaax_prueba_evidencia',
+                JSON, __aviso: false, __cb: null
+            };
+            /* El observer de mentira solo entrega su función si de verdad se
+               CONECTÓ al DOM: uno cableado y nunca conectado no se enteraría de
+               nada en el navegador, y así se ve. En el navegador
+               `MutationObserver` y `window.MutationObserver` son el MISMO
+               global; aquí hay que poner los dos. */
+            const MO = function (cb) { this.observe = () => { ctx.__cb = cb; }; };
+            ctx.MutationObserver = MO;
+            ctx.window = { MutationObserver: MO };
+            vm.createContext(ctx);
+            vm.runInContext(trozo('evidencia') + '\n' + trozo('apuntarAviso') + '\n' + obs, ctx);
+
+            const pinta = () => { if (typeof ctx.__cb === 'function') ctx.__cb(); };
+            let esperado = null, paso2 = null;
+            for (const c of capturas) {
+                esperado = c.v;
+                ss['etaax_prueba_esperado'] = c.v;
+                if (c.resetea !== false) ss[ctx.EVID] = JSON.stringify({ para: c.v, aviso: false });
+                /* El observer corre en CADA cambio del DOM, salga el aviso o
+                   no. Dispararlo solo cuando sale sería un arnés complaciente:
+                   «marca el aviso aunque no haya salido» no se ejecutaría. */
+                ctx.__aviso = !!c.aviso;
+                pinta();
+                paso2 = vm.runInContext('apuntarAviso(' + JSON.stringify(c.v) + ')', ctx);
+                /* El aviso TARDÍO es el único motivo de que exista el observer:
+                   la bajada reintenta hasta tres veces, así que puede salir
+                   después de que el paso 2 ya miró. Aquí no se vuelve a llamar
+                   a apuntarAviso — si el observer no apunta, nadie lo hace. */
+                if (c.avisoTarde) { ctx.__aviso = true; pinta(); }
+                ctx.__aviso = false;
+            }
+            ctx.__aviso = false;        // RECARGA: DOM nuevo y limpio
+            ctx.esperado = esperado;
+            vm.runInContext('var ev = evidencia(); var cartel = ' + mCartel[1] + ';', ctx);
+            return { cartel: ctx.cartel, paso2: paso2 };
+        };
+
+        test('el aviso que salió al capturar se sabe después de recargar', () =>
+            eq(veredicto([{ v: 'V1', aviso: true }]).cartel, true));
+        test('…y si nunca salió, la página lo dice (ese es el bug de R09)', () => {
+            const r = veredicto([{ v: 'V1', aviso: false }]);
+            eq(r.cartel, false, 'el veredicto taparía el bug');
+            return eq(r.paso2, false, 'el paso 2 anunciaría un aviso que no salió');
+        });
+        test('…el apunte de una captura anterior no vale para la nueva', () => {
+            const r = veredicto([{ v: 'V1', aviso: true },
+                                 { v: 'V2', aviso: false, resetea: false }]);
+            eq(r.cartel, false, 'el apunte viejo se coló en el veredicto');
+            return eq(r.paso2, false, 'el paso 2 heredó el aviso anterior');
+        });
+        test('…un apunte viejo encima no borra el aviso de la captura buena', () =>
+            eq(veredicto([{ v: 'V1', aviso: false }, { v: 'V2', aviso: true }]).cartel, true));
+        test('…y un aviso que sale TARDE lo apunta el observer', () =>
+            eq(veredicto([{ v: 'V1', aviso: false, avisoTarde: true }]).cartel, true));
     }
 
     console.log('\n════════════════════════════════════');
