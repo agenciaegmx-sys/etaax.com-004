@@ -25315,8 +25315,14 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
     const msg = ctxA.window.etaaxNipEsperaMsg;
     test('se entiende la respuesta del servidor (trae los segundos)', () =>
         eq(seg({ error: { message: 'nip_espera:47' } }), 47));
-    test('…y un error cualquiera NO se confunde con un freno', () =>
-        eq(seg({ error: { message: 'relation does not exist' } }), 0));
+    /* El error de control TIENE que llevar números: con uno sin dígitos, un
+       ayudante que buscara cualquier número pasaría la prueba igual. Es el
+       error de fixture degenerado, y aquí se evita a propósito. */
+    test('…y un error cualquiera NO se confunde con un freno', () => {
+        eq(seg({ error: { message: 'duplicate key violates constraint 23505' } }), 0, 'con dígitos');
+        eq(seg({ error: { message: 'Failed to fetch (500)' } }), 0, 'con código');
+        return eq(seg({ error: { message: 'rate_limited: 15' } }), 0, 'otro freno distinto');
+    });
     test('…ni una respuesta buena', () => eq(seg({ data: 'Ana', error: null }), 0));
     test('el aviso dice qué pasó y que hay que esperar', () => {
         const t = msg({ error: { message: 'nip_espera:120' } });
@@ -25337,10 +25343,17 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
         return eq(distintos.length, 0, 'difieren en: ' + distintos.join(', '));
     });
     /* Y que las tres pantallas lo USEN: el ayudante solo sirve si se llama. */
+    /* Y que el aviso esté DONDE se entra, no en cualquier parte del archivo:
+       buscarlo en todo el texto daba por bueno que entrada.html lo usara en
+       otro sitio mientras la puerta seguía enseñando el error crudo. */
     ['entrada.html', 'checklist.html', 'app-movil/app.js'].forEach(f => {
         const src = fs.readFileSync(path.join(RAIZ, f), 'utf8');
-        test(f + ' avisa del freno en vez de enseñar el error crudo', () =>
-            eq(src.indexOf('etaaxNipEsperaMsg') > -1, true, 'sin aviso'));
+        test(f + ' avisa del freno EN LA PUERTA, no en cualquier parte', () => {
+            const i = src.indexOf("rpc('entrada_validar_nip'");
+            eq(i > -1, true, 'no se encontró la llamada de entrada');
+            const tramo = src.slice(i, i + 1400);
+            return eq(tramo.indexOf('etaaxNipEsperaMsg') > -1, true, 'la puerta no avisa');
+        });
     });
     /* Las tres cargan el archivo donde vive el ayudante. Sin esto, el `typeof`
        de guardia se las traga calladas y nadie ve nunca el aviso. */
