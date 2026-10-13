@@ -102,8 +102,25 @@
            Por eso `.etx-punto` y `.etx-trazo` van SOLOS. El prefijo ya evita
            que choquen con nada; no hacía falta anidarlos, y anidarlos los
            apagaba. */
+        /* ══ EL COLOR DEL TRAZO LO DECIDE EL ICONO, NO EL BOTÓN ════════════
+           `stroke:currentColor` solo no alcanza: el icono heredaba el color del
+           texto que lo rodeara, y media pantalla usa gris apagado a propósito
+           para sus botones. Resultado: iconos en gris oscuro sobre fondo
+           oscuro, invisibles — y en el tema claro, al revés.
+
+           La referencia de Edwin es clara: trazo CREMA sobre oscuro, con el
+           verde solo en el acento. O sea, el color del TEXTO principal, que ya
+           cambia solo entre los dos temas (#f0ece4 ↔ #1a1916). Eso es lo que se
+           pone aquí, y gana sobre lo que herede del botón.
+
+           Y donde el icono SÍ debe tomar otro color —la flecha sobre el botón
+           verde, el icono de una sucursal con su color propio— se le dice con
+           `--etx-color`, que es una variable y por lo tanto SÍ se hereda hacia
+           dentro de la copia que hace `<use>`. Un color escrito en el botón no
+           entraría; una variable sí. */
         st.textContent =
-            '.etx-ic{width:24px;height:24px;flex-shrink:0;fill:none;stroke:currentColor;' +
+            '.etx-ic{width:24px;height:24px;flex-shrink:0;fill:none;' +
+            'color:var(--etx-color, var(--text, #f0ece4));stroke:currentColor;' +
             'stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}' +
             '.etx-punto{fill:var(--green,#3DBE7A);stroke:none}' +
             '.etx-trazo{stroke:var(--green,#3DBE7A)}';

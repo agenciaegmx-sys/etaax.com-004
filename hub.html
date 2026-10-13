@@ -170,7 +170,11 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .auth-caja .auth-input:focus{border-color:transparent;}
 .auth-caja .auth-input::placeholder{color:var(--auth-apagado);}
 /* El icono toma el gris del texto apagado; su punto verde sale del sprite. */
-.auth-ic{display:flex;align-items:center;color:var(--auth-apagado);line-height:0;}
+/* EL ICONO VA EN CREMA, NO EN EL GRIS DE LA ETIQUETA. Primero los dejé con el
+   gris apagado del rótulo, y al lado del ojo —que sí iba en crema— se notaba de
+   inmediato cuál se veía y cuál no. El texto de ayuda puede ser tenue; el icono
+   es una señal, y una señal que no se ve no es una señal. */
+.auth-ic{display:flex;align-items:center;line-height:0;}
 .auth-ic .etx-ic{width:20px;height:20px;}
 .auth-caja .pwd-toggle{
   position:static;transform:none;color:var(--text);padding:6px;
@@ -191,6 +195,34 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   padding:11px 14px;border-radius:8px;outline:none;transition:border-color .2s;
 }
 .auth-input::placeholder{color:var(--dim);}
+/* ══ EL RECTÁNGULO BLANCO DEL RELLENO AUTOMÁTICO ═══════════════════════════
+   Cuando el navegador rellena el correo por ti, le pinta ENCIMA su propio
+   fondo —ese azul blancuzco— y su propio color de letra. No es un estilo
+   nuestro y no se quita con `background`: el navegador lo pinta por fuera de
+   la cascada normal.
+
+   El único modo de taparlo es una sombra interior gigante del color del campo
+   —rellena la caja entera— y decirle aparte de qué color va el texto con
+   `-webkit-text-fill-color`, que es lo que de verdad usa en ese estado.
+
+   Va en las dos formas de campo: el del acceso (con su caja e icono) y el del
+   alta, que no la tiene. */
+.auth-input:-webkit-autofill,
+.auth-input:-webkit-autofill:hover,
+.auth-input:-webkit-autofill:focus,
+.auth-input:-webkit-autofill:active{
+  -webkit-text-fill-color:var(--text);
+  -webkit-box-shadow:0 0 0 1000px var(--s2) inset;
+  box-shadow:0 0 0 1000px var(--s2) inset;
+  caret-color:var(--text);
+}
+.auth-caja .auth-input:-webkit-autofill,
+.auth-caja .auth-input:-webkit-autofill:hover,
+.auth-caja .auth-input:-webkit-autofill:focus,
+.auth-caja .auth-input:-webkit-autofill:active{
+  -webkit-box-shadow:0 0 0 1000px var(--auth-campo) inset;
+  box-shadow:0 0 0 1000px var(--auth-campo) inset;
+}
 .auth-input:focus{border-color:var(--green);}
 .auth-input.error{border-color:var(--salmon);}
 .auth-error{font-size:11px;color:var(--salmon);margin-top:12px;text-align:center;min-height:16px;}
@@ -214,11 +246,14 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   font-size:14px;font-weight:700;padding:14px;border-radius:10px;border:none;
   cursor:pointer;transition:background .2s,transform .15s;margin-top:22px;
 }
+/* Sobre una superficie verde el trazo crema desaparece: va del color del
+   fondo. Lo dice el README de sus iconos y es lo que se ve en su maqueta. */
+.btn-auth{--etx-color:var(--bg);}
 .btn-auth .etx-ic{width:20px;height:20px;}
 .btn-auth:hover{background:var(--green2);transform:translateY(-1px);}
 .auth-switch{display:flex;align-items:center;justify-content:center;gap:9px;
   margin-top:20px;font-size:12.5px;color:var(--auth-apagado);}
-.auth-switch .etx-ic{width:20px;height:20px;color:var(--auth-apagado);}
+.auth-switch .etx-ic{width:20px;height:20px;}
 /* Un botón que lleva icono y texto se vuelve una fila: el icono centrado con
    la letra, no colgando de la línea base. */
 .ic-fila{display:inline-flex;align-items:center;gap:7px;}
@@ -2228,7 +2263,9 @@ function togglePwd(inputId, btn) {
 function _ic(nombre, tam, color) {
     if (typeof etaaxIcono !== 'function') return '';
     var sv = etaaxIcono(nombre, { tam: tam || 16 });
-    return color ? '<span style="color:' + color + ';display:inline-flex">' + sv + '</span>' : sv;
+    /* Con `--etx-color`, que es variable y sí entra en la copia de `<use>`.
+       Un `color:` suelto en el envoltorio lo pisaría la regla del propio svg. */
+    return color ? '<span style="--etx-color:' + color + ';display:inline-flex">' + sv + '</span>' : sv;
 }
 
 function _pintarIconosLogin() {
@@ -2535,7 +2572,7 @@ function _renderSucursales(neg) {
                       'font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;padding:10px;' +
                       'border-radius:8px;cursor:pointer;letter-spacing:.5px;transition:background .2s"' +
                       'onmouseover="this.style.background=\'' + sucColor + '1f\'" onmouseout="this.style.background=\'' + sucColor + '0d\'" class="ic-fila" style="justify-content:center">' +
-                      'Administrar negocio' + _ic('administrar', 15) +
+                      'Administrar negocio' + _ic('administrar', 15, sucColor) +
                   '</button>';
             // Jerarquía de marca: logo PROPIO de la sucursal (corporativo multi-marca)
             // → si no, el del negocio (hereda) → caja de color. Marco = color de sucursal.

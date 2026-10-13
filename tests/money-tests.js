@@ -26117,6 +26117,54 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         return eq(puestos <= 1, true, 'se pintó ' + puestos + ' veces');
     });
 
+    /* ── EL RELLENO AUTOMÁTICO NO PUEDE PINTAR SU PROPIO FONDO ───────────
+       Cuando el navegador rellena el correo, pinta encima su fondo blancuzco y
+       su color de letra. No es un estilo nuestro y no se quita con
+       `background`: solo lo tapa una sombra interior del color del campo, y el
+       texto solo obedece a `-webkit-text-fill-color`. Sin las dos cosas, el
+       campo queda como un parche blanco en una pantalla oscura. */
+    {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        test('el relleno automático no deja su recuadro blanco', () => {
+            eq(/:-webkit-autofill/.test(h), true, 'no se trata el relleno automático');
+            return eq(/-webkit-box-shadow:0 0 0 1000px var\(--/.test(h), true,
+                      'sin la sombra interior, el fondo del navegador se ve igual');
+        });
+        test('…y la letra rellenada se lee (no basta el color normal)', () =>
+            eq(/-webkit-text-fill-color:var\(--text\)/.test(h), true,
+               'en ese estado el navegador ignora `color`'));
+        /* El campo del acceso tiene su propio fondo —más oscuro que el del
+           alta—, así que su tapa va de ese color o se nota el parche. */
+        test('…con el color de CADA campo, que no es el mismo', () =>
+            eq(/\.auth-caja \.auth-input:-webkit-autofill[\s\S]{0,400}var\(--auth-campo\) inset/.test(h), true,
+               'tapa los dos con el mismo color y uno de los dos se nota'));
+    }
+
+    /* ── EL TRAZO SE VE EN LOS DOS TEMAS ─────────────────────────────────
+       `stroke:currentColor` a secas no alcanza: el icono heredaba el color del
+       botón, y media pantalla usa gris apagado a propósito. Quedaban iconos
+       grises sobre fondo oscuro. La referencia de Edwin es crema sobre oscuro,
+       o sea el color del TEXTO principal, que ya cambia solo entre temas. */
+    test('el icono se pinta con el color del texto, que cambia con el tema', () =>
+        eq(/color:var\(--etx-color, var\(--text/.test(fuente), true,
+           'hereda el gris del botón y desaparece'));
+    /* Y el desvío se hace con una VARIABLE, no con `color`: una variable sí
+       entra en la copia que hace `<use>`; un color escrito en el envoltorio lo
+       pisaría la regla del propio svg. */
+    test('…y teñirlo de otro color se hace con una variable, que sí entra', () => {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        const i = h.indexOf('function _ic(');
+        return eq(h.slice(i, i + 500).indexOf('--etx-color:') > -1, true,
+                  'usa `color:` y la regla del svg lo pisa');
+    });
+    /* Sobre el botón verde el crema desaparece: ahí va del color del fondo, y
+       lo dice el propio README de los iconos. */
+    test('…pero sobre el botón verde va oscuro, no crema', () => {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        return eq(/\.btn-auth\{--etx-color:var\(--bg\)/.test(h), true,
+                  'queda crema sobre verde y se pierde');
+    });
+
     /* ── El ojo de la contraseña: uno, no cuatro ─────────────────────────
        Estaba escrito a mano cuatro veces: en el marcado del hub, en su
        interruptor, y lo mismo otra vez en staff.html. Cuatro copias del mismo
