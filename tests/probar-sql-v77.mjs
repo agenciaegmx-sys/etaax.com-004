@@ -22,12 +22,31 @@
 
        mkdir -p /tmp/pglite && cd /tmp/pglite && npm init -y
        npm install @electric-sql/pglite
-       NODE_PATH=/tmp/pglite/node_modules node <ruta>/tests/probar-sql-v77.mjs
+       PGLITE_DIR=/tmp/pglite node tests/probar-sql-v77.mjs
+
+   OJO con la forma de cargarla: NODE_PATH **no sirve** aquí. Lo ignoran los
+   `import` de ESM —solo lo mira el `require` de CommonJS—, así que la primera
+   versión de este archivo documentaba un comando que no arrancaba, y al
+   revisarlo "no cazaba ninguna mutación": no es que no cazara, es que no
+   corría. Por eso la dependencia se resuelve con createRequire desde
+   PGLITE_DIR, y si no está, se dice en una línea y se sale con error.
 
    La RAIZ está fija abajo: cámbiela si el repo vive en otro lugar.
    ============================================================================ */
-import { PGlite } from '@electric-sql/pglite';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+
+const DIR = process.env.PGLITE_DIR || '/tmp/pglite';
+let PGlite;
+try {
+    PGlite = createRequire(DIR + '/nada.js')('@electric-sql/pglite').PGlite;
+} catch (e) {
+    console.log('No se encontró @electric-sql/pglite en ' + DIR + '.\n' +
+        'Instálalo así y vuelve a correr:\n' +
+        '  mkdir -p ' + DIR + ' && cd ' + DIR + ' && npm init -y && npm install @electric-sql/pglite\n' +
+        '  PGLITE_DIR=' + DIR + ' node tests/probar-sql-v77.mjs');
+    process.exit(2);
+}
 
 const RAIZ = '/Users/macbookpro/Proyectos/etaax.com-004-2/';
 const db = new PGlite();
