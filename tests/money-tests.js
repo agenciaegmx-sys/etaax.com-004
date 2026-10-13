@@ -26126,6 +26126,35 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
                   'enseña el ojo abierto cuando la contraseña ya se ve');
     });
 
+    /* ── LA PANTALLA DE ACCESO, ICONO POR ICONO ──────────────────────────
+       Es la primera pantalla que ve cualquiera, y la única que ve quien todavía
+       no puede entrar. Un hueco vacío ahí no se reporta: se interpreta como que
+       el sistema está roto. Esto no lee el marcado: CORRE el pintado y mira qué
+       quedó en cada hueco. */
+    {
+        const H = crearContexto();
+        cargarJS(H, 'etaax-iconos.js');
+        cargarInline(H, 'hub.html');
+        H._pintarIconosLogin();
+        const dentro = (id) => (H.document.getElementById(id).innerHTML || '');
+        [['icLoginUsuario', 'user'], ['icLoginCandado', 'lock'],
+         ['icLoginFlecha', 'arrow'], ['icLoginChat', 'chat'],
+         ['loginPwdIcon', 'eye']].forEach(par => {
+            test('el acceso pinta el icono «' + par[1] + '»', () =>
+                eq(dentro(par[0]).indexOf('#etx-' + par[1]) > -1, true,
+                   'quedó: ' + (dentro(par[0]) || '(vacío)')));
+        });
+        /* Y si el juego de iconos no cargó, la pantalla sigue sirviendo: un
+           icono de menos no puede impedir que alguien entre a trabajar. */
+        test('…y sin el archivo de iconos, el acceso no se cae', () => {
+            const H2 = crearContexto();
+            cargarInline(H2, 'hub.html');          // sin etaax-iconos.js
+            let reventó = null;
+            try { H2._pintarIconosLogin(); } catch (e) { reventó = e; }
+            return eq(reventó, null, String(reventó && reventó.message));
+        });
+    }
+
     /* ── Quien lo usa, lo carga ──────────────────────────────────────────── */
     test('toda pantalla que usa etaaxIcono carga el archivo', () => {
         const paginas = [];

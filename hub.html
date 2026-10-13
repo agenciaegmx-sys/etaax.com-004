@@ -137,17 +137,54 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   width:100%;max-width:420px;margin:0 auto;
   animation:fadeUp .5s ease both;
 }
+/* ── LA PANTALLA DE ACCESO, CON LOS TONOS DE LA MAQUETA ───────────────────
+   Los tokens del sistema ya coincidían en lo importante —el fondo #0f0e0c, el
+   verde #3dbe7a, el crema #f0ece4 y hasta el #141210 de la tarjeta—. Lo que
+   cambiaba eran los GRISES: el texto apagado del hub es #4a4844, casi invisible
+   sobre el fondo oscuro, y la maqueta usa #b1aaa0, que sí se lee. Y el borde,
+   que ahí es uno solo (#403d37) para la tarjeta y para los campos.
+
+   Van como variables de la tarjeta y no sueltas en cada regla, para que el modo
+   claro siga teniendo su propia versión: la maqueta es solo oscura, y pegar sus
+   colores a mano dejaría la pantalla ilegible con el tema claro puesto. */
 .auth-card{
-  background:var(--s1);border:1px solid var(--b1);border-radius:20px;
-  padding:36px;
+  --auth-campo:#1a1916; --auth-borde:#403d37; --auth-apagado:#b1aaa0;
+  background:var(--s1);border:1px solid var(--auth-borde);border-radius:22px;
+  padding:28px;
 }
+[data-theme="light"] .auth-card{
+  --auth-campo:var(--s2); --auth-borde:var(--b2); --auth-apagado:var(--muted);
+}
+/* La caja del campo: el icono adentro, a la izquierda, y el input sin borde
+   propio. Es una clase NUEVA y no `.auth-field` a propósito — esa la usa
+   también el alta con asesor, con la etiqueta dentro, y volverla una fila
+   dejaría el rótulo pegado al lado del campo. */
+.auth-caja{
+  display:flex;align-items:center;gap:12px;
+  background:var(--auth-campo);border:1px solid var(--auth-borde);
+  border-radius:10px;padding:0 12px;min-height:50px;
+  transition:border-color .2s, box-shadow .2s;
+}
+.auth-caja:focus-within{border-color:var(--green);box-shadow:0 0 0 3px rgba(61,190,122,.13);}
+.auth-caja .auth-input{background:none;border:none;border-radius:0;padding:14px 0;}
+.auth-caja .auth-input:focus{border-color:transparent;}
+.auth-caja .auth-input::placeholder{color:var(--auth-apagado);}
+/* El icono toma el gris del texto apagado; su punto verde sale del sprite. */
+.auth-ic{display:flex;align-items:center;color:var(--auth-apagado);line-height:0;}
+.auth-ic .etx-ic{width:20px;height:20px;}
+.auth-caja .pwd-toggle{
+  position:static;transform:none;color:var(--text);padding:6px;
+  min-width:36px;min-height:40px;display:flex;align-items:center;
+  justify-content:center;border-radius:6px;
+}
+.auth-caja .pwd-toggle:hover{background:rgba(255,255,255,.05);color:var(--text);}
 .auth-title{
   font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;
   color:var(--text);margin-bottom:4px;
 }
-.auth-sub{font-size:12px;color:var(--dim);margin-bottom:28px;letter-spacing:.5px;}
-.auth-field{margin-bottom:14px;}
-.auth-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;display:block;}
+.auth-sub{font-size:14px;color:var(--auth-apagado);margin-bottom:24px;letter-spacing:.2px;}
+.auth-field{margin-bottom:18px;}
+.auth-label{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--auth-apagado);margin-bottom:9px;display:block;}
 .auth-input{
   width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--text);
   font-family:'DM Sans',sans-serif;font-size:14px;
@@ -172,13 +209,17 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   letter-spacing:.3px;
 }
 .btn-auth{
-  width:100%;background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
-  font-size:14px;font-weight:600;padding:13px;border-radius:8px;border:none;
-  cursor:pointer;transition:background .2s,transform .15s;margin-top:20px;
+  width:100%;display:flex;align-items:center;justify-content:center;gap:12px;
+  background:var(--green);color:var(--bg);font-family:'DM Sans',sans-serif;
+  font-size:14px;font-weight:700;padding:14px;border-radius:10px;border:none;
+  cursor:pointer;transition:background .2s,transform .15s;margin-top:22px;
 }
+.btn-auth .etx-ic{width:20px;height:20px;}
 .btn-auth:hover{background:var(--green2);transform:translateY(-1px);}
-.auth-switch{text-align:center;margin-top:20px;font-size:12px;color:var(--dim);}
-.auth-switch a{color:var(--muted);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--b2);transition:color .2s;}
+.auth-switch{display:flex;align-items:center;justify-content:center;gap:9px;
+  margin-top:20px;font-size:12.5px;color:var(--auth-apagado);}
+.auth-switch .etx-ic{width:20px;height:20px;color:var(--auth-apagado);}
+.auth-switch a{color:var(--text);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--auth-borde);transition:color .2s;}
 .auth-switch a:hover{color:var(--green);}
 .auth-divider{height:1px;background:var(--b1);margin:24px 0;}
 
@@ -520,23 +561,26 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     </div>
     <div class="auth-wrap">
       <div class="auth-card">
-        <div class="auth-title">Acceder</div>
+        <!-- Sin «Acceder» arriba: la maqueta entra directo a los campos, y el
+             título grande ya está afuera de la tarjeta («Inicia sesión»). -->
         <div class="auth-sub">Ingresa tus datos de cuenta</div>
         <div class="auth-field">
           <label class="auth-label">Correo o usuario</label>
-          <input class="auth-input" id="loginEmail" type="text" placeholder="tu@correo.com o tu_usuario" autocomplete="username" onkeydown="if(event.key==='Enter')loginSubmit()">
+          <!-- Los iconos NO se dibujan aquí: los pone /etaax-iconos.js al
+               arrancar. Un `<use href="#etx-user">` escrito en el marcado
+               apuntaría a un sprite que todavía no existe cuando el navegador
+               lee esta línea. Por eso se piden, no se dibujan. -->
+          <div class="auth-caja">
+            <span class="auth-ic" id="icLoginUsuario"></span>
+            <input class="auth-input" id="loginEmail" type="text" placeholder="tu@correo.com o tu_usuario" autocomplete="username" onkeydown="if(event.key==='Enter')loginSubmit()">
+          </div>
         </div>
         <div class="auth-field">
           <label class="auth-label">Contraseña</label>
-          <div class="pwd-wrap">
-            <input class="auth-input" id="loginPwd" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')loginSubmit()">
-            <button type="button" class="pwd-toggle" onclick="togglePwd('loginPwd',this)" tabindex="-1" aria-label="Mostrar contraseña">
-              <!-- El dibujo NO se escribe aquí: lo pone /etaax-iconos.js al
-                   arrancar. Un `<use href="#etx-eye">` escrito en el marcado
-                   apuntaría a un sprite que todavía no existe cuando el
-                   navegador lee esta línea. Por eso se pide, no se dibuja. -->
-              <span id="loginPwdIcon"></span>
-            </button>
+          <div class="auth-caja">
+            <span class="auth-ic" id="icLoginCandado"></span>
+            <input class="auth-input" id="loginPwd" type="password" placeholder="Tu contraseña" onkeydown="if(event.key==='Enter')loginSubmit()">
+            <button type="button" class="pwd-toggle" id="loginPwdIcon" onclick="togglePwd('loginPwd',this)" tabindex="-1" aria-label="Mostrar contraseña"></button>
           </div>
         </div>
         <div class="auth-error" id="loginError"></div>
@@ -544,9 +588,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <div id="loginForgot" style="display:none;margin:-2px 0 14px">
           <a onclick="abrirResetPassword()" style="font-size:12px;color:var(--green);cursor:pointer;text-decoration:none">¿Olvidaste tu contraseña?</a>
         </div>
-        <button class="btn-auth" onclick="loginSubmit()">Iniciar sesión →</button>
+        <button class="btn-auth" onclick="loginSubmit()"><span>Iniciar sesión</span><span id="icLoginFlecha"></span></button>
         <div class="auth-switch">
-          ¿Primera vez? <a onclick="showView('viewRegistro')">Habla con un asesor</a>
+          <span id="icLoginChat"></span>
+          <span>¿Primera vez? <a onclick="showView('viewRegistro')">Habla con un asesor</a></span>
         </div>
       </div>
     </div>
@@ -1641,7 +1686,7 @@ async function init() {
     /* El ojo de la contraseña, del juego de iconos. Se pinta aquí y no en el
        marcado porque el sprite lo inyecta el script del final del body: para
        cuando corre init(), ya está puesto. */
-    _pintarOjo(document.getElementById('loginPwdIcon'), false);
+    _pintarIconosLogin();
     _renderPlanGrid();
     _pintarContactoAlta();
     var params     = new URLSearchParams(window.location.search);
@@ -2170,6 +2215,24 @@ function togglePwd(inputId, btn) {
     _pintarOjo(btn, !showing);
     btn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
 }
+/* Los iconos de la pantalla de acceso. Se piden al arrancar —no se escriben en
+   el marcado— porque el sprite lo inyecta el script del final del body: para
+   cuando corre init(), ya está puesto. Si el archivo no cargó, los huecos se
+   quedan vacíos y la pantalla sigue sirviendo: un icono de menos no puede
+   impedir que alguien entre a trabajar. */
+function _pintarIconosLogin() {
+    if (typeof etaaxIcono !== 'function') return;
+    var poner = function (id, nombre, tam) {
+        var el = document.getElementById(id);
+        if (el) el.innerHTML = etaaxIcono(nombre, { tam: tam || 20 });
+    };
+    poner('icLoginUsuario', 'user');
+    poner('icLoginCandado', 'lock');
+    poner('icLoginFlecha',  'arrow');
+    poner('icLoginChat',    'chat');
+    _pintarOjo(document.getElementById('loginPwdIcon'), false);
+}
+
 /* `abierto` = la contraseña se está viendo, así que toca el ojo tachado. */
 function _pintarOjo(cont, abierto) {
     if (!cont || typeof etaaxIcono !== 'function') return;
