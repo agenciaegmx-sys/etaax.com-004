@@ -387,6 +387,18 @@ console.log('\n══ DESPUÉS de la v79 ══');
     const q2 = await filas(`SELECT intentos FROM login_intentos`);
     ok(q2.length === 1 && q2[0].intentos === 1, 'cumplido el castigo, el contador empieza de nuevo');
 
+    /* 4 bis · acertar limpia un contador YA SUCIO. Sin esto, la prueba de
+       «no deja intentos anotados» se hace sobre un contador vacío, y una
+       versión que nunca limpiara pasaría igual: fixture degenerado. */
+    await limpiar();
+    await db.exec(`INSERT INTO login_intentos (clave, intentos, ventana_inicio, ultimo)
+                   VALUES (_nip_clave('neg1'), 7, now(), now())`);
+    const antesOk = await filas(`SELECT count(*)::int AS n FROM login_intentos`);
+    ok(antesOk[0].n === 1, 'el contador arranca sucio (7 fallos), como debe ser para esta prueba');
+    await filas(`SELECT entrada_validar_nip('neg1','tok-bueno','nip$ana')`);
+    const despuesOk = await filas(`SELECT count(*)::int AS n FROM login_intentos`);
+    ok(despuesOk[0].n === 0, 'y un acierto lo deja en cero (el uso legítimo limpia lo anterior)');
+
     /* 5 · y lo legítimo, otra vez: las tres siguen guardando */
     await limpiar();
     const g1 = await filas(`SELECT entrada_registrar('neg1','tok-bueno','nip$ana','{"insumo":"Tomate"}'::jsonb) AS id`);

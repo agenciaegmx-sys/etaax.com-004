@@ -25431,12 +25431,17 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
         ['app-movil/app.js', "rpc('checklist_registrar'"],
         ['app-movil/app.js', '_supabase.rpc(fn, {'],
     ];
+    /* SIN COMENTARIOS. El comentario que explica el arreglo nombra al ayudante,
+       así que la prueba se cazaba a sí misma: quitar la llamada y dejar el
+       comentario la dejaba verde. Van doce veces con este patrón aquí. */
+    const sinComentariosJs = (t) => t.replace(/\/\*[\s\S]*?\*\//g, ' ')
+                                     .split('\n').filter(l => l.trim().indexOf('//') !== 0).join('\n');
     sitios.forEach(par => {
         const src = fs.readFileSync(path.join(RAIZ, par[0]), 'utf8');
         test(par[0] + ' · ' + par[1].slice(0, 34) + ' distingue guardado de rechazado', () => {
             const i = src.indexOf(par[1]);
             eq(i > -1, true, 'no se encontró la llamada');
-            return eq(src.slice(i, i + 800).indexOf('etaaxRegistroFallo') > -1, true,
+            return eq(sinComentariosJs(src.slice(i, i + 900)).indexOf('etaaxRegistroFallo') > -1, true,
                       'mira solo r.error: daría por guardado un rechazo');
         });
     });
