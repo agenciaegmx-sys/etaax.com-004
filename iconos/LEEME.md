@@ -10,22 +10,34 @@ node iconos/generar.js
 Eso normaliza lo que haya aquí y lo mete en `/etaax-iconos.js`, que es lo que
 cargan las pantallas. Agregar un icono es soltar el archivo y correr esa línea.
 
-## Las reglas
+## El tamaño de tu mesa de trabajo da igual
 
-1. **Lienzo de 24×24.** El dibujo tiene que estar sobre ese grid. Si tu
-   exportador lo envuelve en un lienzo de 720 con una escala encima, no pasa
-   nada: el generador lo entiende y lo desenvuelve, siempre que las coordenadas
-   de dentro sean las del grid de 24.
-2. **Sin colores escritos.** El trazo se hereda del texto que lo rodea — por eso
+720 × 720, 24 × 24, lo que te acomode. Un SVG es vectorial: **ese número nunca
+llega al CSS**. El icono se escala al tamaño que pida cada pantalla
+(`etaaxIcono('asesor', { tam: 20 })`), y el archivo solo aporta el dibujo.
+
+Lo que sí conviene, por estética y no por técnica: **dejar el mismo margen en
+todos**. Si uno llena la mesa de trabajo hasta el borde y otro deja aire
+alrededor, al ponerlos juntos uno se verá más grande, aunque los dos midan 20
+píxeles.
+
+## Las dos únicas reglas
+
+1. **Sin colores escritos.** El trazo se hereda del texto que lo rodea — por eso
    la misma flecha se ve sobre el botón verde y sobre el fondo oscuro. Si tu
    exportador escribe el crema `#f0ece4`, el generador lo quita.
-3. **El detalle verde, marcado.** Si lo exportas con el verde de la marca
-   (`#3dbe7a`), el generador lo reconoce y lo marca solo: `etx-punto` cuando es
-   relleno (el punto del usuario, la pupila) y `etx-trazo` cuando es una línea.
-4. **Sin rotar ni estirar.** Si el icono viene girado o con escalas distintas en
-   X y Y, el generador **se niega** y te dice por qué. Más vale no generar que
-   generar un icono torcido: desenvolverlo lo movería de sitio y nadie lo
-   notaría hasta verlo en pantalla.
+2. **El detalle verde, con el verde de la marca** (`#3dbe7a`). El generador lo
+   reconoce y lo marca solo: `etx-punto` cuando es relleno (el punto del
+   usuario, la pupila) y `etx-trazo` cuando es una línea. Así, el día que cambie
+   el verde, cambian todos.
+
+Lo demás lo resuelve el generador: si tu dibujo está sobre un grid de 24 lo deja
+como símbolo limpio; si no, conserva tu lienzo y tus transformaciones **tal
+cual**, y el icono se ve exactamente como lo dibujaste — girado, con margen, lo
+que sea.
+
+Solo hay dos cosas que no puede usar: un archivo **sin un solo trazo**, y uno
+**sin `viewBox`** (sin eso no hay manera de saber de qué tamaño es su lienzo).
 
 ## Cómo se usan
 

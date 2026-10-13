@@ -80,7 +80,7 @@ function matrizNeta(cadena) {
     return { s, tx, ty };
 }
 
-function limpiarEstilo(el) {
+function limpiarEstilo(el, conservarGrosor) {
     /* `style="..."` y los atributos sueltos se tratan igual: lo que importa es
        el color que acabe aplicándose. */
     let clase = '';
@@ -107,15 +107,35 @@ function limpiarEstilo(el) {
     /* `fill:none` y el grosor ya los pone la hoja del sprite: dejarlos aquí
        sería una segunda verdad sobre el mismo trazo. */
     out = out.replace(/fill:\s*none;?/g, '')
-             .replace(/fill="none"/g, '')
-             .replace(/stroke-width:\s*[\d.]+px?;?/g, '')
-             .replace(/stroke-width="[\d.]+"/g, '')
+             .replace(/fill="none"/g, '');
+    /* El grosor normalmente sobra —lo pone la hoja del sprite— salvo cuando el
+       dibujo viaja escalado: ahí el 2.3 del archivo ya está en las unidades de
+       su propio lienzo y quitarlo lo dejaría finísimo. */
+    if (!conservarGrosor) {
+        out = out.replace(/stroke-width:\s*[\d.]+px?;?/g, '')
+                 .replace(/stroke-width="[\d.]+"/g, '');
+    }
+    out = out
              .replace(/fill-rule:\s*[a-z]+;?/g, '')
              .replace(/style="\s*"/g, '')
              .replace(/\s{2,}/g, ' ')
              .replace(/\s+\/>/, '/>');
     if (clase) out = out.replace(/^<(\w+)/, '<$1 class="' + clase + '"');
     return out;
+}
+
+/* Los <g transform> que envuelven el dibujo, tal cual, para poder reconstruir
+   la envoltura cuando se conserva el lienzo del archivo. */
+function pilaCompleta(crudo) {
+    const re = /<g\b([^>]*)>/g;
+    let m, abre = '', cierra = '';
+    while ((m = re.exec(crudo))) {
+        const tr = (m[1].match(/transform="([^"]*)"/) || [])[1];
+        if (!tr) continue;
+        abre += '<g transform="' + tr + '">';
+        cierra += '</g>';
+    }
+    return { abre, cierra };
 }
 
 function normalizar(archivo) {
@@ -136,36 +156,65 @@ function normalizar(archivo) {
     }
     if (!dibujables.length) throw new Error('no tiene ningún trazo');
 
-    /* ¿Todas las piezas comparten la misma escala y el mismo origen? Si no, no
-       es un icono exportado de una sola pieza y mejor no adivinar. */
-    const netas = dibujables.map(d => matrizNeta(d.cadena));
-    const base = netas[0];
-    for (const n of netas) {
-        if (Math.abs(n.s - base.s) > 1e-6 || Math.abs(n.tx - base.tx) > 1e-3 || Math.abs(n.ty - base.ty) > 1e-3) {
-            throw new Error('sus piezas vienen con transformaciones distintas');
+    /* ¿Se pueden tirar las envolturas sin mover el dibujo? Solo si todas las
+       piezas comparten la misma escala y el mismo origen, y sin girar ni
+       deformar. Esto YA NO ES UN REQUISITO: es solo la pregunta que decide si
+       se puede dejar el símbolo limpio de 24 o si hay que conservar el lienzo
+       del archivo. Un «no» aquí no rechaza nada. */
+    let mismasPiezas = true;
+    try {
+        const netas = dibujables.map(d => matrizNeta(d.cadena));
+        const base = netas[0];
+        for (const n of netas) {
+            if (Math.abs(n.s - base.s) > 1e-6 || Math.abs(n.tx - base.tx) > 1e-3 ||
+                Math.abs(n.ty - base.ty) > 1e-3) { mismasPiezas = false; break; }
         }
-    }
+    } catch (e) { mismasPiezas = false; }   // rotado, estirado: se conserva tal cual
 
-    /* Y lo que decide todo: ¿las coordenadas de dentro están en el grid de 24?
-       Si lo están, las envolturas solo colocan el dibujo y se pueden tirar. */
+    /* ¿Las coordenadas de dentro están ya en el grid de 24? Si lo están, las
+       envolturas solo colocan el dibujo y se pueden tirar: queda un símbolo
+       limpio de 24×24, idéntico en forma a los demás.
+
+       Y SI NO LO ESTÁN, NO PASA NADA. Antes esto se negaba, y era una
+       limitación mía disfrazada de regla: el lienzo donde dibuja Edwin —720 o
+       el que sea— jamás llega al CSS, porque un SVG es vectorial y el símbolo
+       se escala al tamaño que pida cada pantalla. Así que en ese caso se
+       conserva el lienzo del archivo y sus transformaciones TAL CUAL, y el
+       icono se ve exactamente como él lo dibujó, márgenes incluidos.
+
+       Lo único que cambia entre un camino y el otro es de dónde sale el marco:
+       del grid de 24 o del lienzo del archivo. Nada más. */
     const numeros = [];
     for (const d of dibujables) {
         const g = d.attrs.replace(/transform="[^"]*"/g, '').replace(/style="[^"]*"/g, '');
         (g.match(/-?\d+(\.\d+)?/g) || []).forEach(x => numeros.push(parseFloat(x)));
     }
     const min = Math.min.apply(null, numeros), max = Math.max.apply(null, numeros);
-    if (!(min >= -1 && max <= GRID + 1)) {
-        throw new Error('su dibujo no está en un lienzo de ' + GRID + '×' + GRID +
-                        ' (va de ' + min.toFixed(1) + ' a ' + max.toFixed(1) + ')');
+    const enGrid = mismasPiezas && numeros.length > 0 && min >= -1 && max <= GRID + 1;
+
+    if (enGrid) {
+        const cuerpo = dibujables.map(d => {
+            let el = d.bruto.replace(/\s*transform="[^"]*"/g, '');
+            if (!d.cerrado) el = el.replace(/>$/, '/>');
+            return limpiarEstilo(el);
+        }).join('');
+        return { nombre, viewBox: '0 0 ' + GRID + ' ' + GRID, cuerpo, limpio: true };
     }
 
+    /* El camino de respeto: su lienzo, sus transformaciones, solo sin colores
+       escritos. El grosor del trazo se escala con el dibujo, así que se deja
+       pasar (es el único caso en que `stroke-width` no sobra). */
+    const vb = (crudo.match(/viewBox="([^"]+)"/) || [])[1];
+    if (!vb) throw new Error('no declara viewBox, así que no se sabe de qué tamaño es su lienzo');
     const cuerpo = dibujables.map(d => {
-        let el = d.bruto.replace(/\s*transform="[^"]*"/g, '');
+        let el = d.bruto;
         if (!d.cerrado) el = el.replace(/>$/, '/>');
-        return limpiarEstilo(el);
+        return limpiarEstilo(el, true);
     }).join('');
-
-    return { nombre, viewBox: '0 0 ' + GRID + ' ' + GRID, cuerpo };
+    /* Hay que volver a abrir los grupos que envolvían: sin ellos las
+       transformaciones de los padres se pierden y el dibujo se va de sitio. */
+    const envoltura = pilaCompleta(crudo);
+    return { nombre, viewBox: vb, cuerpo: envoltura.abre + cuerpo + envoltura.cierra, limpio: false };
 }
 
 /* ── Se reescribe el bloque de símbolos del sprite ───────────────────────── */

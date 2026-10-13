@@ -26222,14 +26222,35 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
             eq(r.viewBox, '0 0 24 24', r.viewBox);
             return eq(r.cuerpo.indexOf('<path') > -1, true, r.cuerpo);
         });
-        test('…se niega si viene rotado', () =>
-            eq(/rotado|deformado/.test(falla('<svg viewBox="0 0 24 24"><g transform="matrix(1,0.5,-0.5,1,0,0)"><path d="M3 12h18"/></g></svg>')), true, 'lo tragó'));
-        test('…se niega si viene estirado', () =>
-            eq(/estirado/.test(falla('<svg viewBox="0 0 24 24"><g transform="matrix(2,0,0,3,0,0)"><path d="M3 12h18"/></g></svg>')), true, 'lo tragó'));
-        test('…se niega si el dibujo no está en el lienzo de 24', () =>
-            eq(/lienzo/.test(falla('<svg viewBox="0 0 720 720"><path d="M300 400h200"/></svg>')), true, 'lo tragó'));
-        test('…y se niega si no trae ningún trazo', () =>
+        /* EL LIENZO DEL ARCHIVO NO LIMITA NADA, y esto lo demuestra. Edwin
+           dibuja en la mesa de trabajo que le acomode —720 o la que sea— y el
+           icono entra igual: un SVG es vectorial y el símbolo se escala al
+           tamaño que pida cada pantalla, así que ese número nunca llega al CSS.
+           Si el dibujo está sobre el grid de 24, sale un símbolo limpio; si no,
+           se conserva su lienzo tal cual y se ve exactamente como lo dibujó. */
+        test('un dibujo libre en 720 entra, conservando su lienzo', () => {
+            const r = norm(archivo('<svg viewBox="0 0 720 720"><path d="M120 360L600 360" ' +
+                'style="stroke:rgb(240,236,228);stroke-width:63px;fill:none"/>' +
+                '<circle cx="450" cy="270" r="63" style="fill:rgb(61,190,122)"/></svg>'));
+            eq(r.viewBox, '0 0 720 720', r.viewBox);
+            eq(/rgb\(/.test(r.cuerpo), false, 'dejó colores escritos');
+            eq(/class="etx-punto"/.test(r.cuerpo), true, 'no marcó el verde');
+            /* El grosor normalmente sobra —lo pone la hoja del sprite— pero
+               cuando el dibujo viaja escalado, quitarlo lo dejaría finísimo. */
+            return eq(/stroke-width/.test(r.cuerpo), true, 'le quitó el grosor y quedará como un hilo');
+        });
+        test('…y hasta uno rotado, con su giro intacto', () => {
+            const r = norm(archivo('<svg viewBox="0 0 720 720"><g transform="matrix(0.7,0.7,-0.7,0.7,100,100)">' +
+                '<path d="M120 360L600 360" style="stroke:rgb(240,236,228);stroke-width:63px"/></g></svg>'));
+            eq(r.viewBox, '0 0 720 720', r.viewBox);
+            return eq(/transform=/.test(r.cuerpo), true, 'perdió el giro: el dibujo se iría de sitio');
+        });
+        /* Lo único que sigue sin poder entrar: un archivo sin trazos, o sin
+           viewBox, porque entonces no hay forma de saber de qué tamaño es. */
+        test('se niega si no trae ningún trazo', () =>
             eq(/trazo/.test(falla('<svg viewBox="0 0 24 24"></svg>')), true, 'lo tragó'));
+        test('…y si no dice de qué tamaño es su lienzo', () =>
+            eq(/viewBox/.test(falla('<svg><path d="M300 400h200"/></svg>')), true, 'lo tragó'));
         /* Lo que SÍ tiene que tragar: el envoltorio del exportador de diseño,
            que es justo lo que llega en la práctica. */
         test('…pero sí traga el envoltorio de un exportador (escala + mover)', () => {
