@@ -26096,6 +26096,36 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         return eq(puestos <= 1, true, 'se pintó ' + puestos + ' veces');
     });
 
+    /* ── El ojo de la contraseña: uno, no cuatro ─────────────────────────
+       Estaba escrito a mano cuatro veces: en el marcado del hub, en su
+       interruptor, y lo mismo otra vez en staff.html. Cuatro copias del mismo
+       dibujo es cuatro oportunidades de que uno se quede atrás el día que la
+       marca cambie el trazo. */
+    test('el ojo de la contraseña ya no está escrito a mano en ningún lado', () => {
+        const conOjo = ['hub.html', 'administrativo/staff.html'].filter(f =>
+            fs.readFileSync(path.join(RAIZ, f), 'utf8').indexOf('M1 12s4-8 11-8 11 8 11 8') > -1);
+        return eq(conOjo.length, 0, 'todavía lo dibujan: ' + conOjo.join(', '));
+    });
+    [['hub.html', 'loginPwdIcon'], ['administrativo/staff.html', 'fPwdOjo']].forEach(par => {
+        test(par[0] + ' pide el ojo al juego de iconos y lo pinta al arrancar', () => {
+            const t = fs.readFileSync(path.join(RAIZ, par[0]), 'utf8');
+            eq(t.indexOf("etaaxIcono('eye-off'") > -1 || /etaaxIcono\(\s*abierto/.test(t), true,
+               'no usa el icono compartido');
+            /* Y que lo pinte al arrancar: si solo lo pintara al pulsar, el
+               botón nacería vacío y nadie sabría que se puede pulsar. */
+            return eq(t.indexOf(par[1]) > 1 && (t.match(new RegExp(par[1], 'g')) || []).length >= 2, true,
+                      'el hueco existe pero nadie lo llena al arrancar');
+        });
+    });
+    /* El ojo ABIERTO significa «se está viendo»: el icono tiene que ser el
+       tachado cuando la contraseña está a la vista, no al revés. */
+    test('…y el estado del ojo no está invertido', () => {
+        const t = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        const i = t.indexOf('function _pintarOjo(');
+        return eq(/abierto \? 'eye-off' : 'eye'/.test(t.slice(i, i + 300)), true,
+                  'enseña el ojo abierto cuando la contraseña ya se ve');
+    });
+
     /* ── Quien lo usa, lo carga ──────────────────────────────────────────── */
     test('toda pantalla que usa etaaxIcono carga el archivo', () => {
         const paginas = [];

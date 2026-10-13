@@ -531,7 +531,11 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           <div class="pwd-wrap">
             <input class="auth-input" id="loginPwd" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')loginSubmit()">
             <button type="button" class="pwd-toggle" onclick="togglePwd('loginPwd',this)" tabindex="-1" aria-label="Mostrar contraseña">
-              <svg id="loginPwdIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <!-- El dibujo NO se escribe aquí: lo pone /etaax-iconos.js al
+                   arrancar. Un `<use href="#etx-eye">` escrito en el marcado
+                   apuntaría a un sprite que todavía no existe cuando el
+                   navegador lee esta línea. Por eso se pide, no se dibuja. -->
+              <span id="loginPwdIcon"></span>
             </button>
           </div>
         </div>
@@ -1634,6 +1638,10 @@ function _pintarContactoAlta() {
 }
 
 async function init() {
+    /* El ojo de la contraseña, del juego de iconos. Se pinta aquí y no en el
+       marcado porque el sprite lo inyecta el script del final del body: para
+       cuando corre init(), ya está puesto. */
+    _pintarOjo(document.getElementById('loginPwdIcon'), false);
     _renderPlanGrid();
     _pintarContactoAlta();
     var params     = new URLSearchParams(window.location.search);
@@ -2156,11 +2164,16 @@ function togglePwd(inputId, btn) {
     var inp = document.getElementById(inputId);
     var showing = inp.type === 'text';
     inp.type = showing ? 'password' : 'text';
-    btn.querySelector('svg').innerHTML = showing
-        ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
-        : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>' +
-          '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>' +
-          '<line x1="1" y1="1" x2="23" y2="23"/>';
+    /* Antes los dos dibujos venían escritos aquí, otra copia en el marcado de
+       arriba y dos más en staff.html: cuatro versiones del mismo ojo. Ahora los
+       dos estados salen del juego de iconos de la marca. */
+    _pintarOjo(btn, !showing);
+    btn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+}
+/* `abierto` = la contraseña se está viendo, así que toca el ojo tachado. */
+function _pintarOjo(cont, abierto) {
+    if (!cont || typeof etaaxIcono !== 'function') return;
+    cont.innerHTML = etaaxIcono(abierto ? 'eye-off' : 'eye', { tam: 18 });
 }
 
 function selectPlan(key) {
@@ -4122,6 +4135,7 @@ async function guardarNuevaPassword(){
 })();
 </script>
 <script src="admin-guard.js"></script>
+<script src="/etaax-iconos.js"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
 <script src="security.js"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>

@@ -515,7 +515,9 @@
                     <div class="pwd-wrap">
                         <input type="password" id="fPwd" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
                         <button type="button" class="pwd-toggle-btn" onclick="toggleStaffPwd(this)" tabindex="-1">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <!-- Lo pinta /etaax-iconos.js al arrancar: el sprite
+                                 todavía no existe cuando se lee esta línea. -->
+                            <span id="fPwdOjo"></span>
                         </button>
                     </div>
                     <span class="form-hint">Dejar vacío para no cambiar</span>
@@ -732,6 +734,7 @@
 <script src="/etaax-core.js"></script><!-- la regla del sueldo: una sola verdad -->
 <script src="/bancos-mx.js"></script><!-- bancos de México + CLABE: fuente única, no copiar -->
 <script src="/staff-area.js?v=04dedb59"></script><!-- el área de un colaborador: fuente única -->
+<script src="/etaax-iconos.js"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
 <script>
 
 
@@ -890,9 +893,16 @@ function toggleStaffPwd(btn) {
     var inp = btn.closest('.pwd-wrap').querySelector('input');
     var showing = inp.type === 'text';
     inp.type = showing ? 'password' : 'text';
-    btn.querySelector('svg').innerHTML = showing
-        ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
-        : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
+    /* Los dos dibujos del ojo ya no viven aquí: son los del juego de iconos de
+       la marca, los mismos que en el hub. Había cuatro copias del mismo ojo
+       repartidas entre las dos pantallas. */
+    _pintarOjoStaff(btn, !showing);
+    btn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+}
+/* `abierto` = la contraseña se está viendo, así que toca el ojo tachado. */
+function _pintarOjoStaff(cont, abierto) {
+    if (!cont || typeof etaaxIcono !== 'function') return;
+    cont.innerHTML = etaaxIcono(abierto ? 'eye-off' : 'eye', { tam: 16 });
 }
 
 /* ── SORT + FILTER STATE ── */
@@ -2488,7 +2498,12 @@ function _abrirNomParams() {
         if (window.NominaParams) NominaParams.open(getNegocioActivo(), function(){ renderAll(); });
     }, '💵 Continuar');
 }
-document.addEventListener('DOMContentLoaded', initPage);
+document.addEventListener('DOMContentLoaded', function () {
+    /* El ojo de la contraseña, del juego de iconos de la marca. Aquí y no en el
+       marcado: el sprite lo inyecta el script del final del body. */
+    _pintarOjoStaff(document.getElementById('fPwdOjo'), false);
+    initPage();
+});
 
 document.getElementById('modalStaff').addEventListener('click', function(e){
     if (e.target === this) closeModal();
