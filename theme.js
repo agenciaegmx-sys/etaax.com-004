@@ -77,6 +77,39 @@
         (document.head || document.documentElement).appendChild(st);
     })();
 
+    /* 1c) EL WORDMARK SIGUE AL TEMA ───────────────────────────────────────
+          El logo existe en dos versiones —letras crema para fondos oscuros,
+          letras tinta para claros— y las 38 páginas pedían SIEMPRE la oscura.
+          En modo claro quedaba crema sobre blanco: invisible, salvo las contras
+          de la «e» y las «a», que iban pintadas del color del fondo oscuro y se
+          veían como tres manchas sueltas. (Eso ya está arreglado en el propio
+          archivo: ahora son huecos de verdad.)
+
+          Se hace aquí y no en cada página por lo de siempre: 38 copias de una
+          regla son 38 oportunidades de que una se quede atrás. Y se cambia el
+          `src` en vez de poner la imagen de fondo con CSS porque el logo vive
+          en <img> con su texto alternativo, y un fondo no se lee en voz alta.
+
+          OJO con el papel: un reporte impreso va sobre blanco SIEMPRE, sin
+          importar el tema de la pantalla. Por eso se respeta cualquier logo
+          marcado con `data-logo="fijo"`, que es como se pide «este no cambia». */
+    function _logoDelTema() {
+        /* Este archivo corre lo más arriba posible del <head> y en documentos de
+           todas las formas —páginas completas, vistas parciales, arneses—. Si no
+           hay dónde buscar, no hay nada que cambiar: se sale sin ruido, como el
+           resto de este archivo. */
+        if (!document.querySelectorAll) return;
+        var luz = _actual() === 'light';
+        var cual = luz ? 'claro' : 'oscuro';
+        var imgs = document.querySelectorAll('img[src*="/marca/etaax-logo-"]');
+        for (var i = 0; i < imgs.length; i++) {
+            if (imgs[i].getAttribute('data-logo') === 'fijo') continue;
+            var src = imgs[i].getAttribute('src') || '';
+            var quiere = src.replace(/etaax-logo-(claro|oscuro)\.svg/, 'etaax-logo-' + cual + '.svg');
+            if (quiere !== src) imgs[i].setAttribute('src', quiere);
+        }
+    }
+
     /* 2) El botón: icono y palabra dicen A DÓNDE se va, no dónde se está. */
     function _sincronizarBoton() {
         var luz = _actual() === 'light';
@@ -94,6 +127,7 @@
         if (_actual() === t) return;
         document.documentElement.setAttribute('data-theme', t);
         _sincronizarBoton();
+        _logoDelTema();
         try { window.dispatchEvent(new CustomEvent('etaax:theme', { detail: { tema: t } })); }
         catch (e) {}
     }
@@ -125,6 +159,7 @@
           dos. */
     document.addEventListener('DOMContentLoaded', function () {
         _sincronizarBoton();
+        _logoDelTema();
         if (document.querySelector('.theme-toggle')) return;
         if (/[?&]embed=1/.test(window.location.search)) return;
         if (!document.body) return;   // documento sin cuerpo (arneses, vistas parciales)

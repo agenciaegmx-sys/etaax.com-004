@@ -9614,6 +9614,27 @@ console.log('\n══ BE2 · El freno de la pantalla de entrada ══');
      · Y al cambiar el tema DENTRO de una ventana flotante, la página de atrás
        se quedaba con el anterior hasta recargarla: dos temas a la vez.         */
 console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
+
+    /* ── LAS CONTRAS DEL LOGO SON HUECOS, NO MANCHAS ─────────────────────
+       Estaban pintadas del color del fondo oscuro (#0f0e0c). Sobre cualquier
+       superficie que no fuera esa —el modo claro, un papel, una tarjeta de
+       otro tono— se veían como tres parches sueltos entre la e y las a. */
+    ['oscuro', 'claro'].forEach(cual => {
+        const svg = fs.readFileSync(path.join(RAIZ, 'marca/etaax-logo-' + cual + '.svg'), 'utf8');
+        test('el logo ' + cual + ' recorta sus contras de verdad', () =>
+            eq((svg.match(/fill-rule="evenodd"/g) || []).length, 3,
+               'las tres contras (la e y las dos a) tienen que ser huecos'));
+        test('…y no las pinta del color de ninguna superficie', () => {
+            const sinComentario = svg.replace(/<!--[\s\S]*?-->/g, ' ');
+            const fondos = (sinComentario.match(/fill="(#0f0e0c|#ffffff|#fff)"/gi) || []);
+            /* En el logo de letras tinta, el #0f0e0c SÍ es el color de la
+               letra: lo que no puede haber es una contra pintada aparte. */
+            return eq(fondos.length, cual === 'claro' ? 5 : 0,
+                      'quedan superficies pintadas: ' + fondos.join(' '));
+        });
+        test('…y conserva su checkpoint verde', () =>
+            eq(/3dbe7a/i.test(svg), true, 'se perdió el verde de la marca'));
+    });
 {
     const tema = fs.readFileSync(path.join(RAIZ, 'theme.js'), 'utf8');
 
@@ -9635,6 +9656,12 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
                 documentElement: root,
                 getElementById(id){ return nodos[id] || null; },
                 querySelector(){ return opts.conBoton ? {} : null; },
+                /* El wordmark de la página, para poder comprobar que sigue al
+                   tema. Un <img> de mentira con su `src` y sus atributos. */
+                querySelectorAll(sel){
+                    if (!/marca\/etaax-logo-/.test(sel)) return [];
+                    return (opts.logos || []);
+                },
                 createElement(){ return { style:{}, addEventListener(){}, set innerHTML(v){}, setAttribute(){} }; },
                 addEventListener(t, f){ (oyentes[t] = oyentes[t] || []).push(f); },
                 head: { appendChild(){} },
@@ -9657,6 +9684,40 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
     }
 
     /* ── Lo básico ── */
+    /* ── EL WORDMARK SIGUE AL TEMA ───────────────────────────────────────
+       El logo existe en dos versiones y las 38 páginas pedían SIEMPRE la
+       oscura: en modo claro quedaba crema sobre blanco, invisible. Va aquí y
+       no en cada página porque 38 copias de una regla son 38 oportunidades de
+       que una se quede atrás. */
+    {
+        const img = (src) => ({ _a:{src}, getAttribute(k){ return this._a[k] === undefined ? null : this._a[k]; },
+                                setAttribute(k,v){ this._a[k] = v; } });
+        const enClaro = img('/marca/etaax-logo-oscuro.svg');
+        /* El cambio se aplica al cargar, igual que en una página de verdad. */
+        pagina('light', { logos: [enClaro] }).cargar();
+        test('en modo claro el logo cambia a la versión de letras tinta', () =>
+            eq(enClaro.getAttribute('src'), '/marca/etaax-logo-claro.svg', enClaro.getAttribute('src')));
+
+        const enOscuro = img('/marca/etaax-logo-claro.svg');
+        pagina('dark', { logos: [enOscuro] }).cargar();
+        test('…y en oscuro vuelve a la de letras crema', () =>
+            eq(enOscuro.getAttribute('src'), '/marca/etaax-logo-oscuro.svg', enOscuro.getAttribute('src')));
+
+        /* Las rutas relativas de las subcarpetas también: media app las usa. */
+        const relativo = img('../marca/etaax-logo-oscuro.svg');
+        pagina('light', { logos: [relativo] }).cargar();
+        test('…también con rutas relativas (../marca/…)', () =>
+            eq(relativo.getAttribute('src'), '../marca/etaax-logo-claro.svg', relativo.getAttribute('src')));
+
+        /* Un reporte impreso va sobre blanco SIEMPRE, sin importar el tema de
+           la pantalla: quien lo marque como fijo no se toca. */
+        const fijo = img('/marca/etaax-logo-claro.svg');
+        fijo.setAttribute('data-logo', 'fijo');
+        pagina('dark', { logos: [fijo] }).cargar();
+        test('…pero un logo marcado como fijo no se toca (el papel es blanco)', () =>
+            eq(fijo.getAttribute('src'), '/marca/etaax-logo-claro.svg', fijo.getAttribute('src')));
+    }
+
     test('sin nada guardado, arranca en oscuro', () => eq(pagina(null).tema(), 'dark', 'oscuro'));
     test('con claro guardado, la página ABRE en claro', () => eq(pagina('light').tema(), 'light', 'claro'));
     /* Antes del primer pintado: si se aplicara después, se vería el parpadeo de

@@ -128,10 +128,13 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   display:flex;flex-direction:column;align-items:center;
   text-align:center;margin-bottom:40px;animation:fadeUp .7s ease both;
 }
-.hub-eyebrow{font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;}
+/* Los dos rótulos del encabezado comparten el gris apagado del sistema, no uno
+   cada uno: antes el de arriba iba en --muted y el de abajo en --dim, dos
+   grises distintos a cinco líneas de distancia, y el de abajo casi no se leía. */
+.hub-eyebrow{font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--ui-apagado);margin-bottom:16px;}
 .hub-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(36px,6vw,68px);letter-spacing:2px;line-height:.95;color:var(--text);margin-bottom:12px;}
 .hub-title .g{color:var(--green);}
-.hub-subtitle{font-size:14px;color:var(--dim);letter-spacing:1px;}
+.hub-subtitle{font-size:14px;color:var(--ui-apagado);letter-spacing:.6px;}
 
 /* ═══════════════════════════════════════
    AUTH VIEWS (Login / Registro)
@@ -255,7 +258,7 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
   width:100%;display:flex;align-items:center;justify-content:center;gap:12px;
   background:var(--green);color:var(--bg);font-family:'DM Sans',sans-serif;
   font-size:14px;font-weight:700;padding:14px;border-radius:10px;border:none;
-  cursor:pointer;transition:background .2s,transform .15s;margin-top:22px;
+  cursor:pointer;transition:background .2s,transform .15s;margin-top:24px;
 }
 /* Sobre una superficie verde el trazo crema desaparece: va del color del
    fondo. Lo dice el README de sus iconos y es lo que se ve en su maqueta. */
@@ -270,7 +273,7 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 .ic-fila{display:inline-flex;align-items:center;gap:7px;}
 .auth-switch a{color:var(--text);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--auth-borde);transition:color .2s;}
 .auth-switch a:hover{color:var(--green);}
-.auth-divider{height:1px;background:var(--b1);margin:24px 0;}
+.auth-divider{height:1px;background:var(--ui-borde);margin:24px 0;}
 
 /* ═══════════════════════════════════════
    PLAN SELECTOR (en Registro)
@@ -653,7 +656,7 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
         </div>
         <div class="auth-error" id="loginError"></div>
         <!-- Aparece solo cuando la contraseña es incorrecta -->
-        <div id="loginForgot" style="display:none;margin:-2px 0 14px">
+        <div id="loginForgot" style="display:none;margin:2px 0 4px;text-align:right">
           <a onclick="abrirResetPassword()" style="font-size:12px;color:var(--green);cursor:pointer;text-decoration:none">¿Olvidaste tu contraseña?</a>
         </div>
         <button class="btn-auth" onclick="loginSubmit()"><span>Iniciar sesión</span><span id="icLoginFlecha"></span></button>
