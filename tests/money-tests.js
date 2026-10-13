@@ -11828,8 +11828,30 @@ console.log('\n══ BC · El freno de la pantalla de entrada (hub.html) ══
         eq(hub.indexOf('var _tras = await _loginFallo(input);') > -1, true, 'cuenta'));
     test('un login fallido de colaborador TAMBIÉN cuenta (misma pantalla)', () =>
         eq(hub.indexOf('var _trasStaff = await _loginFallo(input);') > -1, true, 'cuenta'));
-    test('entrar bien borra el contador', () =>
-        eq((hub.match(/_loginExito\(input\)/g) || []).length, 3, 'los tres caminos'));
+    /* ANTES: tres llamadas, una por camino. Ya no, y el cambio es a propósito:
+       `login_exito` la podía llamar CUALQUIERA para CUALQUIER cuenta (no pedía
+       prueba de haber entrado), así que la escalera de esperas era decorativa —
+       fallo, borrar el contador del vecino, fallo… La v77 le exige sesión y que
+       el identificador sea el suyo, y los dos caminos de colaborador —que no
+       tienen sesión todavía— reinician el contador DEMOSTRÁNDOLO: llamando a
+       staff_login, que es donde el servidor comprueba la contraseña. */
+    test('entrar bien borra el contador — una sola vez, y donde sí se puede probar', () => {
+        const n = (hub.match(/_loginExito\(input\)/g) || []).length;
+        eq(n, 1, 'una sola llamada');
+        const iAuth2 = hub.indexOf('auth.signInWithPassword({ email: input');
+        const iExito = hub.indexOf('_loginExito(input)');
+        const iStaff = hub.indexOf('// ── Intento 2: login de colaborador');
+        return eq(iAuth2 > -1 && iAuth2 < iExito && iExito < iStaff, true,
+                  'auth=' + iAuth2 + ' exito=' + iExito + ' staff=' + iStaff);
+    });
+    test('…y los caminos de colaborador lo PRUEBAN con staff_login', () => {
+        const i = hub.indexOf('// ── Intento 2: login de colaborador');
+        const j = hub.indexOf('async function _iniciarSesionStaff');
+        const tramo = hub.slice(i, j);
+        eq(i > -1 && j > i, true, 'tramo i=' + i + ' j=' + j);
+        eq(/rpc\('staff_login'/.test(tramo), true, 'con prueba');
+        return eq(tramo.indexOf('_loginExito('), -1, 'y sin pedirlo de palabra');
+    });
     /* El mensaje no puede cambiar según si el correo existe: eso convertiría la
        pantalla en un buscador de clientes. */
     test('el mensaje de error no distingue correo inexistente de contraseña mala', () =>
@@ -24689,6 +24711,258 @@ console.log('\n══ BH54 · El nombre de una carpeta no es una llave ══');
     });
 }
 
+/* ═══════════ SUITE BE7 · LA BAJA DE UN COLABORADOR CIERRA LAS DOS PUERTAS ══
+   La v63 le cerró la puerta de enfrente a quien se da de baja: staff_login dejó
+   de dejarlo entrar. Quedaban dos por donde seguía pasando, y el inventario de
+   producción las encontró:
+
+     · LA PUERTA DE ATRÁS. `obtener_staff_cred` entrega la credencial de la
+       cuenta COMPARTIDA del negocio a cambio del hash de cualquier
+       colaborador… y nunca miró el estado. Al dado de baja se le cerraba una
+       puerta y se le dejaba la otra.
+
+     · EL EQUIPO DONDE YA HABÍA ENTRADO. El login de colaborador tiene DOS
+       caminos: la lista cacheada en el equipo y la nube. El candado del
+       servidor no alcanza al primero, así que bastaba una tablet donde la
+       persona ya hubiera entrado alguna vez.
+
+   Y de paso, el freno de intentos: la v63, al reescribir staff_login en una
+   sola consulta para arreglar lo de las bajas, se llevó el límite de 10
+   intentos que le había puesto la v30. No dio error ni cambió una sola
+   respuesta — solo dejó de contar.
+
+   Esta suite no lee el código: CORRE el login de hub.html sobre un DOM de
+   mentira con la lista cacheada puesta a mano, y corre el cierre de sesión.    */
+async function suiteBajaColaborador() {
+console.log('\n══ BE7 · La baja de un colaborador cierra las dos puertas (v77) ══');
+
+    /* ── 1. La regla de alta/baja, corrida de verdad ─────────────────────── */
+    /* Tiene que estar en UN solo lugar: el login local y el de la nube la
+       aplican los dos, y si no dicen lo mismo aceptan a distinta gente — el que
+       manda en la práctica es el más permisivo, que siempre es el que se quedó
+       sin actualizar. */
+    const seg = crearContexto();
+    cargarJS(seg, 'security.js');
+    const act = seg.window.etaaxStaffActivo;
+    test('la regla de alta/baja vive en un solo lugar y es llamable', () =>
+        eq(typeof act, 'function', typeof act));
+    test('…"Activo" entra', () => eq(act({ estado: 'Activo' }), true));
+    test('…sin el campo entra (los colaboradores de antes de la v63)', () =>
+        eq(act({ nombre: 'Caro' }), true));
+    test('…vacío o con espacios entra (igual que el NULLIF del SQL)', () =>
+        eq(act({ estado: '   ' }), true));
+    test('…"Baja temporal" NO entra', () => eq(act({ estado: 'Baja temporal' }), false));
+    test('…"Baja definitiva" NO entra', () => eq(act({ estado: 'Baja definitiva' }), false));
+    test('…y nada no entra', () => eq(act(null), false));
+
+    /* ── 2. El login de verdad, con la lista cacheada en el equipo ───────── */
+    async function entrar(estado) {
+        const c = crearContexto();
+        c.crypto = require('crypto').webcrypto;      // el hash v2 es SHA-256 real
+        c.TextEncoder = TextEncoder;
+        c.btoa = (x) => Buffer.from(String(x), 'binary').toString('base64');
+        c.unescape = unescape;
+        cargarInline(c, 'hub.html');
+        cargarJS(c, 'security.js');
+        const rpcs = [];
+        c._supabase.rpc = (fn, args) => {
+            rpcs.push({ fn: fn, args: args });
+            // login_estado/login_fallo contestan "0 segundos de espera"; el
+            // staff_login de la nube contesta que no conoce a nadie.
+            return Promise.resolve({ data: (fn === 'login_estado' || fn === 'login_fallo') ? 0 : null, error: null });
+        };
+        const hash = await c.window._hashPwdStaff('secreta');
+        c.localStorage.setItem('etaax_negocios', JSON.stringify([{ id: 'n1', nombre: 'Rincón', tipo: 'otro' }]));
+        const m = { id: 's1', usuario: 'beto', passwordHash: hash, nombre: 'Beto', rol: 'chef' };
+        if (estado !== undefined) m.estado = estado;
+        c.localStorage.setItem('etaax_n1_staff', JSON.stringify([m]));
+        let dentro = null;
+        c._iniciarSesionStaff = function (miembro, neg) { dentro = { miembro: miembro, neg: neg }; return Promise.resolve(); };
+        c.document.getElementById('loginEmail').value = 'beto';
+        c.document.getElementById('loginPwd').value   = 'secreta';
+        await c.window.loginSubmit();
+        return { dentro: dentro, rpcs: rpcs, msg: c.document.getElementById('loginError').textContent };
+    }
+
+    /* El control va PRIMERO: si el arnés no logra entrar ni con la persona
+       activa, las pruebas de abajo celebrarían un rechazo que no es el candado
+       sino el arnés roto. Es el error que más se repite en este archivo. */
+    const activa = await entrar('Activo');
+    await testA('la colaboradora ACTIVA entra con la lista cacheada', async () =>
+        eq(!!activa.dentro, true, 'mensaje: ' + activa.msg));
+    const sinCampo = await entrar(undefined);
+    await testA('…y quien no trae el campo `estado` también (nada viejo se rompe)', async () =>
+        eq(!!sinCampo.dentro, true, 'mensaje: ' + sinCampo.msg));
+
+    const baja = await entrar('Baja definitiva');
+    await testA('el DADO DE BAJA no entra, aunque la contraseña sea correcta', async () =>
+        eq(!!baja.dentro, false, JSON.stringify(baja.dentro)));
+    await testA('…y se le dice por qué, no "contraseña incorrecta"', async () =>
+        eq(/desactivado/i.test(baja.msg), true, baja.msg));
+    const temp = await entrar('Baja temporal');
+    await testA('la baja TEMPORAL también cierra (incapacidad, permiso)', async () =>
+        eq(!!temp.dentro, false, JSON.stringify(temp.dentro)));
+
+    /* ── DOS NEGOCIOS: dado de baja en uno, activo en el otro ────────────
+       El guardián tiene que `continue`, no `return`. Con `return` el primer
+       negocio donde la persona está de baja cancela el login completo y pierde
+       el acceso al negocio donde sí trabaja — un rechazo que se ve igual que
+       «contraseña incorrecta» y que nadie relaciona nunca con esta línea. */
+    async function entrarDosNegocios() {
+        const c = crearContexto();
+        c.crypto = require('crypto').webcrypto;
+        c.TextEncoder = TextEncoder;
+        c.btoa = (x) => Buffer.from(String(x), 'binary').toString('base64');
+        c.unescape = unescape;
+        cargarInline(c, 'hub.html');
+        cargarJS(c, 'security.js');
+        c._supabase.rpc = (fn) => Promise.resolve({ data: (fn === 'login_estado' || fn === 'login_fallo') ? 0 : null, error: null });
+        const hash = await c.window._hashPwdStaff('secreta');
+        c.localStorage.setItem('etaax_negocios', JSON.stringify([
+            { id: 'n1', nombre: 'Donde lo dieron de baja', tipo: 'otro' },
+            { id: 'n2', nombre: 'Donde sí trabaja',        tipo: 'otro' }
+        ]));
+        c.localStorage.setItem('etaax_n1_staff', JSON.stringify([
+            { id: 's1', usuario: 'beto', passwordHash: hash, nombre: 'Beto', rol: 'chef', estado: 'Baja definitiva' }]));
+        c.localStorage.setItem('etaax_n2_staff', JSON.stringify([
+            { id: 's2', usuario: 'beto', passwordHash: hash, nombre: 'Beto', rol: 'chef', estado: 'Activo' }]));
+        let dentro = null;
+        c._iniciarSesionStaff = function (m, n) { dentro = { miembro: m, neg: n }; return Promise.resolve(); };
+        c.document.getElementById('loginEmail').value = 'beto';
+        c.document.getElementById('loginPwd').value   = 'secreta';
+        await c.window.loginSubmit();
+        return dentro;
+    }
+    const dos = await entrarDosNegocios();
+    await testA('la baja en UN negocio no le quita el acceso al otro', async () =>
+        eq(dos && dos.neg && dos.neg.id, 'n2', JSON.stringify(dos && dos.neg)));
+
+    /* El contador de la puerta: lo reinicia el servidor con prueba. */
+    await testA('al entrar por caché se le avisa al servidor con staff_login', async () =>
+        eq(activa.rpcs.some(r => r.fn === 'staff_login' && r.args && r.args.p_usuario === 'beto'),
+           true, JSON.stringify(activa.rpcs)));
+    await testA('…y el cliente ya NO borra el contador por su cuenta', async () =>
+        eq(activa.rpcs.some(r => r.fn === 'login_exito'), false, JSON.stringify(activa.rpcs)));
+    await testA('el intento del dado de baja SÍ se cuenta como fallo', async () =>
+        eq(baja.rpcs.some(r => r.fn === 'login_fallo'), true, JSON.stringify(baja.rpcs)));
+
+    /* ── 3. Salir de verdad ──────────────────────────────────────────────── */
+    async function salir(sesion) {
+        const c = crearContexto();
+        cargarInline(c, 'hub.html');
+        let out;
+        c._supabase.auth = { signOut: (o) => { out = o || {}; return Promise.resolve({}); } };
+        c.localStorage.setItem('etaax_n1_staffcred', JSON.stringify({ email: 'staff.n1@etaax.app', password: 'x' }));
+        c._confirmSalir = () => Promise.resolve(true);
+        c.scrollTo = function () {};
+        /* El bloque inline de hub se corta antes de asignar VIEWS (depende de
+           cosas del navegador que aquí no están), y logout termina pintando la
+           pantalla de entrada. Se le pone la lista vacía: lo que se mide pasa
+           ANTES, pero un revienta aquí tumbaría la suite entera. */
+        setVar(c, 'VIEWS', []);
+        setVar(c, '_sesion', sesion);
+        let err = null;
+        try { await c.window.logout(); } catch (e) { err = e; }
+        return { out: out, cred: c.localStorage.getItem('etaax_n1_staffcred'), err: err };
+    }
+    const sStaff = await salir({ type: 'staff', negocioId: 'n1', nombre: 'Beto', rol: 'chef' });
+    await testA('salir de una sesión de colaborador no revienta', async () =>
+        eq(sStaff.err === null, true, 'revienta: ' + String(sStaff.err && sStaff.err.message)));
+    await testA('al salir, la sesión del colaborador SÍ se cierra', async () =>
+        eq(sStaff.out !== undefined, true, 'nadie llamó a signOut'));
+    /* `scope:'local'`, no el global: los colaboradores comparten UNA cuenta, y
+       el signOut normal revoca la sesión en TODOS los dispositivos — al salir
+       uno se caían todos. Por eso antes se saltaba el signOut por completo. */
+    await testA('…pero solo en este equipo, no en el de sus compañeros', async () =>
+        eq(sStaff.out && sStaff.out.scope, 'local', JSON.stringify(sStaff.out)));
+    await testA('…y se borra la llave compartida cacheada aquí', async () =>
+        eq(sStaff.cred, null, String(sStaff.cred)));
+
+    const sDueño = await salir({ usuarioId: 'u1', nombre: 'Edwin', email: 'a@b.com' });
+    await testA('el dueño sigue cerrando sesión como siempre (sin scope)', async () =>
+        eq(sDueño.out && sDueño.out.scope, undefined, JSON.stringify(sDueño.out)));
+
+    /* ── 4. Y salir desde un módulo (ctx-bar), que es por donde se sale ──── */
+    async function salirModulo(ctxGuardado) {
+        const c = crearContexto();
+        cargarJS(c, 'ctx-bar.js');
+        c.sessionStorage.clear = function () {};
+        c.etaaxConfirmSalir = () => Promise.resolve(true);
+        c.localStorage.setItem('etaax_ctx', JSON.stringify(ctxGuardado));
+        c.localStorage.setItem('etaax_n1_staffcred', '{"email":"staff.n1@etaax.app"}');
+        await c.window.ctxSalir();
+        return c.localStorage.getItem('etaax_n1_staffcred');
+    }
+    await testA('salir desde un módulo también borra la llave compartida', async () =>
+        eq(await salirModulo({ ctxType: 'staff', negId: 'n1' }), null, 'sigue ahí'));
+    /* Y al dueño no se le toca: en SU equipo esa credencial es la que reparte a
+       sus colaboradores, y borrarla lo obligaría a aprovisionar otra vez. */
+    await testA('…y al dueño no se le borra la suya', async () =>
+        eq(await salirModulo({ ctxType: 'owner', negId: 'n1' }) !== null, true, 'se la borró'));
+
+    /* ── 5. La migración v77, por dentro de cada función ─────────────────── */
+    /* Se mira DENTRO del cuerpo de cada una. Buscar el patrón en todo el
+       archivo da por bueno que esté en otra función — o en un comentario. */
+    const v77 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v77.sql'), 'utf8');
+    const cuerpo = (nombre) => {
+        const i = v77.indexOf('FUNCTION ' + nombre + '(');
+        if (i < 0) return '';
+        const j = v77.indexOf('$$;', i);
+        return j < 0 ? '' : v77.slice(i, j);
+    };
+    const sinComentarios = (t) => t.split('\n').filter(l => l.trim().indexOf('--') !== 0).join('\n');
+
+    test('v77 · staff_login vuelve a tener freno de intentos', () => {
+        const b = sinComentarios(cuerpo('staff_login'));
+        eq(b.length > 0, true, 'no se encontró la función');
+        return eq(b.indexOf('_login_golpe') > -1, true, 'sin freno');
+    });
+    test('v77 · …y el freno no se salta con un NULL (la lección de la v70)', () =>
+        eq(/IS NOT TRUE/.test(sinComentarios(cuerpo('staff_login'))), true, 'NOT(NULL) es NULL'));
+    test('v77 · …sigue bloqueando al dado de baja (el candado de la v63)', () =>
+        eq(/estado[\s\S]{0,60}Activo/.test(sinComentarios(cuerpo('staff_login'))), true, 'sin candado'));
+    test('v77 · …y al entrar bien reinicia los DOS contadores', () => {
+        const b = sinComentarios(cuerpo('staff_login'));
+        eq(b.indexOf('_login_exito') > -1, true, 'el de la v30');
+        return eq(b.indexOf('login_puerta') > -1, true, 'el de la v56');
+    });
+    test('v77 · la llave compartida pide estar activo (obtener_staff_cred)', () => {
+        const b = sinComentarios(cuerpo('obtener_staff_cred'));
+        eq(b.length > 0, true, 'no se encontró la función');
+        eq(/estado[\s\S]{0,60}Activo/.test(b), true, 'sin candado de baja');
+        return eq(b.indexOf('_login_golpe') > -1, true, 'y sin perder el freno');
+    });
+    test('v77 · login_exito exige sesión y que la cuenta sea la tuya', () => {
+        const b = sinComentarios(cuerpo('login_exito'));
+        eq(b.indexOf('auth.uid() IS NULL') > -1, true, 'sin exigir sesión');
+        eq(b.indexOf('auth.jwt()') > -1, true, 'sin mirar de quién es la sesión');
+        return eq(/v_mio\s*<>\s*v_pide/.test(b), true, 'sin comparar');
+    });
+    /* El REVOKE tiene que NOMBRAR a anon: en Supabase toda función nueva de
+       `public` nace con EXECUTE concedido a anon POR GRANT DIRECTO, así que
+       quitarlo de PUBLIC no se lo quita. Es el hallazgo de la v71. */
+    test('v77 · y a anon se le quita nombrándolo, no vía PUBLIC', () =>
+        eq(/REVOKE ALL ON FUNCTION login_exito\(TEXT\) FROM PUBLIC, anon/.test(v77), true, 'anon sigue dentro'));
+    test('v77 · obtener_staff_cred SIGUE abierta a anon (se pide sin sesión)', () =>
+        eq(/GRANT EXECUTE ON FUNCTION obtener_staff_cred\(TEXT, TEXT\) TO anon/.test(v77), true,
+           'se le cerró al colaborador su propio login'));
+    /* LA ÚLTIMA INSTRUCCIÓN DEL ARCHIVO ES LA QUE SE VE. El editor de Supabase
+       enseña el resultado de la última y nada más: si fuera un DROP, la tabla
+       de comprobación no se vería y Edwin correría la migración a ciegas. Ya
+       pasó con el inventario de producción. */
+    test('v77 · lo último del archivo es la tabla de comprobación, no un DROP', () => {
+        const sin = v77.split('\n').filter(l => l.trim().indexOf('--') !== 0).join('\n');
+        const sts = sin.split(';').map(x => x.trim()).filter(x => x.length > 0);
+        const ultima = sts[sts.length - 1] || '';
+        return eq(/^(WITH|SELECT)\b/i.test(ultima), true, 'última: ' + ultima.slice(0, 40));
+    });
+    /* La sonda que corre el freno de verdad queda puesta (si el DROP fuera lo
+       último, no se vería la tabla). Que no la pueda llamar nadie. */
+    test('v77 · la sonda de la comprobación no se le concede a nadie', () =>
+        eq(/REVOKE ALL ON FUNCTION _v77_probar_freno\(\) FROM PUBLIC, anon, authenticated/.test(v77),
+           true, 'quedó llamable'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -24705,4 +24979,4 @@ suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
-    .then(suiteCartaGuardado).then(resumen);
+    .then(suiteCartaGuardado).then(suiteBajaColaborador).then(resumen);

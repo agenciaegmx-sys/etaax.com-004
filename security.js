@@ -113,6 +113,27 @@ window._etaaxWipeCache = function () {
 };
 
 /* ============================================================
+   ¿ESTE COLABORADOR SIGUE DADO DE ALTA?
+
+   LA MISMA REGLA QUE EL SERVIDOR, escrita UNA sola vez. En SQL es
+       COALESCE(NULLIF(datos->>'estado',''), 'Activo') = 'Activo'
+   (supabase-migration-v63 y v77). Sin estado capturado = ACTIVO, porque los
+   colaboradores de antes de la v63 no traen el campo y de lo contrario
+   quedarían todos fuera de golpe.
+
+   Por qué aquí y no copiada en cada pantalla: el login de colaborador tiene
+   DOS caminos —la lista cacheada en el equipo y la nube— y si los dos no
+   aplican exactamente la misma regla, aceptan a distinta gente. El que manda
+   en la práctica es el más permisivo, y el permisivo es siempre el que se
+   quedó sin actualizar.
+   ============================================================ */
+window.etaaxStaffActivo = function (m) {
+    if (!m) return false;
+    var e = (m.estado === null || m.estado === undefined) ? '' : String(m.estado).trim();
+    return e === '' || e === 'Activo';
+};
+
+/* ============================================================
    Hash de contraseñas de colaboradores (staff)
    - _hashPwdStaff: SHA-256 (async), formato 'v2$<hex>' — el formato bueno.
    - _hashPwdStaffLegacy: algoritmo anterior (REVERSIBLE — contenía base64 de

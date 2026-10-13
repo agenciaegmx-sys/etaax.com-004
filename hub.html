@@ -1970,6 +1970,10 @@ async function loginSubmit() {
     var negocios = _getNegocios();
     var _hV2   = await _hashPwdStaff(pwd);
     var _hWrap = await _hashPwdStaffWrap(_hashPwdStaffLegacy(pwd));
+    /* Si la contraseña era buena pero la persona está dada de baja, se dice.
+       Solo se enciende DESPUÉS de verificar el hash: antes sería un buscador de
+       usuarios, que es justo lo que la pantalla evita decir. */
+    var _desactivado = false;
     for (var i = 0; i < negocios.length; i++) {
         var neg = negocios[i];
         var staffRaw = localStorage.getItem('etaax_' + neg.id + '_staff');
@@ -1999,12 +2003,32 @@ async function loginSubmit() {
             localStorage.setItem('etaax_' + neg.id + '_staff', JSON.stringify(staffList));
         }
         if (ok) {
+            /* ── DADO DE BAJA: TAMBIÉN POR ESTE CAMINO ──────────────────────
+               Este login valida contra la lista cacheada EN EL EQUIPO, sin
+               preguntarle a nadie, así que el candado del servidor (v63/v77)
+               no lo alcanza: a quien se le da de baja le bastaba un equipo
+               donde ya había entrado. La regla la pone etaaxStaffActivo
+               (security.js), la MISMA que el SQL.
+               `continue` y no `return`: el mismo usuario puede existir en otro
+               negocio donde sí esté activo, y ahí sí debe poder entrar. */
+            if (typeof etaaxStaffActivo === 'function' && !etaaxStaffActivo(miembro)) {
+                _desactivado = true;
+                continue;
+            }
             // Sanar también el registro de la NUBE a v2 (best-effort, no bloquea):
             // demuestra el hash anterior, igual que el propio login.
             if (_hashPrevio && typeof _supabase !== 'undefined') {
                 try { _supabase.rpc('staff_actualizar_hash', { p_usuario: input, p_hash_viejo: _hashPrevio, p_hash_nuevo: _hV2 }).then(function(){}); } catch(e){}
             }
-            _loginExito(input);
+            /* EL CONTADOR LO REINICIA EL SERVIDOR, no el cliente (v77): antes
+               `login_exito` la podía llamar cualquiera para cualquier cuenta,
+               así que la escalera de esperas era decorativa. Como este camino
+               validó en local, se le avisa con la llamada que SÍ demuestra la
+               contraseña —staff_login— y ella borra los dos contadores.
+               Best-effort: sin red el contador caduca solo en una hora. */
+            if (typeof _supabase !== 'undefined') {
+                try { _supabase.rpc('staff_login', { p_usuario: input, p_hash: miembro.passwordHash }).then(function(){}); } catch(e){}
+            }
             _iniciarSesionStaff(miembro, neg);
             return;
         }
@@ -2044,7 +2068,9 @@ async function loginSubmit() {
                     var negs = _getNegocios();
                     if (!negs.find(function (n) { return n.id === negObj.id; })) { negs.push(negObj); _setNegocios(negs); }
                 } catch (e) {}
-                _loginExito(input);
+                /* Sin _loginExito: lo acaba de hacer el servidor DENTRO de
+                   staff_login, que es el único lugar donde consta que la
+                   contraseña era buena (v77). */
                 await _iniciarSesionStaff(miembroObj, negObj);
                 return;
             }
@@ -2052,9 +2078,11 @@ async function loginSubmit() {
     }
 
     var _trasStaff = await _loginFallo(input);
-    shakeError(_trasStaff > 0
-        ? 'Demasiados intentos fallidos. Espera ' + _esperaTexto(_trasStaff) + ' e inténtalo de nuevo.'
-        : 'Usuario o contraseña incorrectos.');
+    shakeError(_desactivado
+        ? 'Tu acceso está desactivado. Habla con tu administrador.'
+        : (_trasStaff > 0
+            ? 'Demasiados intentos fallidos. Espera ' + _esperaTexto(_trasStaff) + ' e inténtalo de nuevo.'
+            : 'Usuario o contraseña incorrectos.'));
 }
 
 async function _iniciarSesionStaff(miembro, neg) {
@@ -2229,6 +2257,25 @@ async function logout() {
     }
     if (!_sesion || _sesion.type !== 'staff') {
         await _supabase.auth.signOut();
+    } else {
+        /* ── LA SESIÓN DEL COLABORADOR TAMBIÉN SE CIERRA ────────────────────
+           Antes este signOut se saltaba, y la razón era buena a medias: los
+           colaboradores de un negocio comparten UNA cuenta de Supabase (v19) y
+           el signOut normal es GLOBAL —revoca la sesión en todos los
+           dispositivos—, así que al salir uno se caían todos. La respuesta no
+           era dejar la sesión abierta: es `scope:'local'`, que cierra solo
+           ESTA y no toca a los compañeros.
+
+           Y se borra la credencial compartida cacheada en este equipo. Es la
+           llave de la nube: mientras siga guardada, el siguiente que entre en
+           esta tablet la usa sin pedirle permiso al servidor. Borrada, hay que
+           volver a pedirla con la contraseña —y a quien está dado de baja ya
+           no se le da (v77)—. Sin red no se pierde nada: sin red tampoco se
+           podría iniciar sesión con ella. */
+        try { await _supabase.auth.signOut({ scope: 'local' }); } catch (e) {}
+        try {
+            if (_sesion.negocioId) localStorage.removeItem('etaax_' + _sesion.negocioId + '_staffcred');
+        } catch (e) {}
     }
     _clearSesion();
     showView('viewLogin');

@@ -183,6 +183,18 @@ async function ctxSalir() {
         return;
     }
     if (typeof _etaaxWipeCache === 'function') _etaaxWipeCache();
+    /* El colaborador que sale deja de tener la llave de la nube en este equipo.
+       Es la credencial de la cuenta COMPARTIDA del negocio (v19): mientras siga
+       cacheada, el siguiente que entre en esta tablet la usa sin que el
+       servidor tenga que autorizarlo, y una baja no se nota donde la persona ya
+       había entrado. Al volver a entrar se pide con la contraseña, y a quien
+       está dado de baja ya no se le entrega (v77).
+       La sesión de Supabase vive en sessionStorage, así que el `clear()` de
+       abajo la cierra en esta pestaña sin tocar a los compañeros que comparten
+       la cuenta. */
+    if (ctx && ctx.ctxType === 'staff' && ctx.negId) {
+        try { localStorage.removeItem('etaax_' + ctx.negId + '_staffcred'); } catch (e) {}
+    }
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_ctx');
     sessionStorage.clear();
