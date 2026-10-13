@@ -25886,6 +25886,70 @@ console.log('\n══ BE13 · Resumen y KPIs cuadran peso por peso ══');
        una pantalla y 1.0% en la otra — $175 de diferencia en un mes de juguete.
        Esta prueba demuestra las dos mitades: que el orden cambia el importe (si
        no, la delegación daría igual) y que las dos pantallas ya delegan. */
+    /* ── KPIs TAMBIÉN TIENE QUE SER HONESTO ──────────────────────────────
+       Resumen ya avisaba cuando una consulta fallaba (R13). KPIs no: hacía
+       `if (!r[0].error)` y, si fallaba, dejaba su caché en null — y el tablero
+       enseñaba ceros con cara de cifras reales. Un tablero miente igual de bien
+       que un P&L, y encima se mira más seguido. */
+    function kpisCon(porTabla) {
+        const K = crearContexto();
+        K._storage['etaax_negocio_activo'] = 'negC';
+        cargarJS(K, 'etaax-core.js');
+        cargarJS(K, 'etaax-db.js');
+        cargarInline(K, 'financiero/kpis.html');
+        K._supabase.from = function (tabla) {
+            const resp = porTabla[tabla] || { data: [], error: null };
+            const q = {};
+            ['select','eq','order','limit','gt'].forEach(m => q[m] = () => q);
+            q.maybeSingle = () => Promise.resolve(resp);
+            q.then = (res) => {
+                const filas = (resp.data || []).map((d, i) => ({ id: 'x' + i, datos: d }));
+                return Promise.resolve(resp.error ? { data: null, error: resp.error }
+                                                  : { data: filas, error: null, count: filas.length }).then(res);
+            };
+            return q;
+        };
+        return K;
+    }
+    {
+        const K = kpisCon({ gastos: { data: null, error: { message: 'Failed to fetch' } } });
+        await K._sbInit();
+        const falló = getVar(K, '_kCache').falló || [];
+        test('KPIs · una consulta fallida NO se presenta como cero', () =>
+            eq(falló.some(x => /gastos/.test(x)), true, JSON.stringify(falló)));
+        test('KPIs · …y se avisa ARRIBA del tablero', () => {
+            const html = K.document.getElementById('kpiFalla').innerHTML;
+            eq(/incompleto/i.test(html), true, 'no lo dice');
+            return eq(html.indexOf('no son ceros reales') > -1, true, 'y por qué importa');
+        });
+        /* El impreso es el que se guarda, se enseña y se firma: viaja sin su
+           contexto y nadie puede reintentar desde él. */
+        test('KPIs · el reporte IMPRESO también lo dice', () => {
+            let doc = null;
+            K.etaaxReporteDoc = (cfg) => { doc = cfg; return '<html></html>'; };
+            K.window.open = () => ({ document: { write(){}, close(){} } });
+            K.imprimirKPIs();
+            eq(!!doc, true, 'no se armó el reporte');
+            eq(/INCOMPLETO/.test(doc.subtitulo || ''), true, 'el subtítulo no avisa: ' + doc.subtitulo);
+            return eq(/INCOMPLETO/.test(doc.cuerpo || ''), true, 'el cuerpo no lleva el cartel');
+        });
+    }
+    {
+        const K = kpisCon({});
+        await K._sbInit();
+        test('KPIs · cuando todo carga bien, no hay cartel', () => {
+            eq((getVar(K, '_kCache').falló || []).length, 0, 'inventó un fallo');
+            return eq(K.document.getElementById('kpiFalla').style.display, 'none', 'cartel de más');
+        });
+        test('KPIs · …y el impreso tampoco lo lleva', () => {
+            let doc = null;
+            K.etaaxReporteDoc = (cfg) => { doc = cfg; return '<html></html>'; };
+            K.window.open = () => ({ document: { write(){}, close(){} } });
+            K.imprimirKPIs();
+            return eq(/INCOMPLETO/.test((doc.subtitulo || '') + (doc.cuerpo || '')), false, 'cartel de más');
+        });
+    }
+
     /* LA DIFERENCIA QUE HABÍA, con números. Cada pantalla armaba su propia lista
        de cuentas de débito y la comisión de un corte que no dice de qué cuenta
        es sale de la PRIMERA de esa lista. Aquí se reconstruyen las dos maneras
