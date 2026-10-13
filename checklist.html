@@ -192,7 +192,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
-<script src="/staff-area.js?v=2"></script><!-- el área de un colaborador: fuente única -->
+<script src="/staff-area.js?v=04dedb59"></script><!-- el área de un colaborador: fuente única -->
 <script>
 
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
@@ -761,8 +761,9 @@ async function registrarCumplimiento(){
     try {
         var r = await _supabase.rpc('checklist_registrar', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH, p_datos: entry });
         /* Rechazo por NIP = id vacío, no error (v79). Ver etaaxRegistroFallo. */
+        /* Respaldo prudente: sin id no se guardó, aunque falte el ayudante. */
         var _falloK = (typeof etaaxRegistroFallo === 'function')
-            ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar: '+r.error.message : '');
+            ? etaaxRegistroFallo(r) : ((!r || r.error || !r.data) ? 'No se guardó. Vuelve a entrar con tu NIP e inténtalo de nuevo.' : '');
         if (_falloK) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent=_falloK; return; }
         btn.disabled=false;
         var col = pct>=90?'var(--green)':pct>=70?'#e0a52e':'#e05a3a';

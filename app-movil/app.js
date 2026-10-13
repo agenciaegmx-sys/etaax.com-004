@@ -542,8 +542,10 @@ async function enviarRun() {
         var r = await _supabase.rpc('checklist_registrar',
             { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH, p_datos: entry });
         /* Rechazo por NIP = id vacío, no error (v79). Ver etaaxRegistroFallo. */
+        /* Respaldo prudente: sin id no se guardó. En la app instalada esto
+           importa el doble — el service worker puede servir un ayudante viejo. */
         var _falloK = (typeof etaaxRegistroFallo === 'function')
-            ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar: ' + r.error.message : '');
+            ? etaaxRegistroFallo(r) : ((!r || r.error || !r.data) ? 'No se guardó. Vuelve a entrar con tu NIP e inténtalo de nuevo.' : '');
         if (_falloK) { $('btnEnviar').disabled = false; barraMsg(_falloK, 'err'); return; }
         RUN = null;
         toast('✓ Check list enviado · ' + c.pct + '% cumplido', 'ok');
@@ -969,8 +971,9 @@ async function enviarLote() {
             });
             /* Rechazo por NIP = id vacío, no error (v79): si solo se mirara el
                error, la captura se borraría de la lista dándola por guardada. */
+            /* Respaldo prudente: sin id no se guardó. */
             var _falloL = (typeof etaaxRegistroFallo === 'function')
-                ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar.' : '');
+                ? etaaxRegistroFallo(r) : ((!r || r.error || !r.data) ? 'No se guardó. Vuelve a entrar con tu NIP e inténtalo de nuevo.' : '');
             if (_falloL) { fallidos.push(LOTE[i]); _motivoL = _motivoL || _falloL; } else ok++;
         } catch (e) { fallidos.push(LOTE[i]); }
     }

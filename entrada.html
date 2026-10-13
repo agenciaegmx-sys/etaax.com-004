@@ -375,7 +375,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
-<script src="/staff-area.js?v=2"></script><!-- el área de un colaborador: fuente única -->
+<script src="/staff-area.js?v=04dedb59"></script><!-- el área de un colaborador: fuente única -->
 <script>
 
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
@@ -988,8 +988,9 @@ async function enviarConteo(){
         };
         var r = await _supabase.rpc('inventario_conteo_registrar', { p_neg:NEG, p_token:TOKEN, p_niphash:_NIPHASH, p_datos:entry });
         /* Rechazo por NIP = id vacío, no error (v79). Ver etaaxRegistroFallo. */
+        /* Respaldo prudente: sin id no se guardó (ver el lote, más abajo). */
         var _falloC = (typeof etaaxRegistroFallo === 'function')
-            ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar: '+r.error.message : '');
+            ? etaaxRegistroFallo(r) : ((!r || r.error || !r.data) ? 'No se guardó. Vuelve a entrar con tu NIP e inténtalo de nuevo.' : '');
         if (_falloC){ msg.className='cap-msg err'; msg.textContent=_falloC; return; }
         /* Se APILA, no se reemplaza: la lista de la sesión debe reflejar lo mismo
            que la tabla — un renglón por conteo enviado. */
@@ -1259,8 +1260,14 @@ async function _registrarBatch(flujo){
             /* OJO: el rechazo por NIP ya NO es un error, es un id vacío (v79).
                Mirar solo `r.error` daría por guardado lo que no se guardó, y la
                captura se borraría de la lista. Lo decide etaaxRegistroFallo. */
+            /* EL RESPALDO TAMBIÉN TIENE QUE SER PRUDENTE. Si esta pantalla se
+               cargó nueva pero el ayudante llegó viejo de la caché (el QR vive
+               en teléfonos y el service worker sirve primero lo guardado), este
+               renglón es el único que queda — y mirar solo `r.error` daría por
+               guardado un rechazo, borrando la captura de la lista. SIN ID NO
+               SE GUARDÓ: esa es la regla, aquí también. Lo encontró Codex. */
             var _falloE = (typeof etaaxRegistroFallo === 'function')
-                ? etaaxRegistroFallo(r) : (r.error ? 'No se pudo guardar.' : '');
+                ? etaaxRegistroFallo(r) : ((!r || r.error || !r.data) ? 'No se guardó. Vuelve a entrar con tu NIP e inténtalo de nuevo.' : '');
             if (_falloE) { fallidos.push(it); _motivo = _motivo || _falloE; } else ok++;
         } catch(e){ fallidos.push(it); }
     }

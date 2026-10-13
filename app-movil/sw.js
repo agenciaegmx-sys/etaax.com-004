@@ -18,7 +18,7 @@
    le ocurra borrar los datos del sitio.
    ══════════════════════════════════════════════════════════════════════════ */
 
-var CACHE = 'etaax-movil-v4';
+var CACHE = 'etaax-movil-v5';
 
 /* Las rutas de ARRIBA (../) son del proyecto, no de esta carpeta: la app
    reutiliza el cliente de Supabase y el vocabulario de áreas en vez de tener
@@ -34,8 +34,14 @@ var CASCARA = [
     '../supabase-config.js',
     /* CON SU VERSIÓN, igual que en el HTML: sin ella el service worker guarda
        el archivo viejo y la app instalada se queda con el vocabulario de áreas
-       anterior aunque el sitio ya tenga el nuevo. */
-    '../staff-area.js?v=2'
+       anterior aunque el sitio ya tenga el nuevo.
+
+       Y LA VERSIÓN ES EL CONTENIDO DEL ARCHIVO, no un número que alguien sube a
+       mano: el candado la calcula y falla si no coincide. Lo motivó un caso que
+       encontró Codex — pantalla nueva con ayudante viejo de la caché, y una
+       captura rechazada anunciada como guardada. Con la versión atada al
+       contenido, esa pareja no puede existir. */
+    '../staff-area.js?v=04dedb59'
 ];
 
 self.addEventListener('install', function (e) {

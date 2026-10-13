@@ -17712,15 +17712,21 @@ console.log('\n══ BH19 · El archivo viejo en la caché ══');
                      'recetas/inventarios.html', 'app-movil/index.html'];
     PAGS_SA.forEach(p => {
         const h = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+        /* La versión ya no es un número que alguien sube a mano: es la huella
+           del contenido del archivo (ver «la versión de staff-area.js es la
+           huella de su contenido»). Aquí solo se exige que LA TRAIGA. */
         test(p + ': pide el vocabulario con versión', () =>
-            eq(/src="(?:\.\.\/|\/)staff-area\.js\?v=\d+"/.test(h), true, 'sin caché vieja'));
+            eq(/src="(?:\.\.\/|\/)staff-area\.js\?v=[a-z0-9]+"/.test(h), true, 'sin caché vieja'));
     });
     /* El service worker guarda la cáscara: si guardara la dirección SIN versión,
        la app instalada se quedaría con el vocabulario viejo aunque el sitio ya
        tenga el nuevo. */
     const sw2 = fs.readFileSync(path.join(RAIZ, 'app-movil/sw.js'), 'utf8');
+    /* Qué versión es exactamente lo decide la prueba de la huella; aquí lo que
+       importa es que NO guarde la dirección pelada, que serviría eternamente la
+       copia vieja a la app instalada. */
     test('el service worker guarda la versión nueva, no la vieja', () =>
-        eq(sw2.indexOf("'../staff-area.js?v=2'") > -1 && /'\.\.\/staff-area\.js'/.test(sw2) === false,
+        eq(/'\.\.\/staff-area\.js\?v=[a-z0-9]+'/.test(sw2) && /'\.\.\/staff-area\.js'/.test(sw2) === false,
            true, 'al día'));
     /* Y su propia versión sube: el navegador lo compara byte a byte y, sin
        cambio, no instala la cáscara nueva. */
@@ -20905,9 +20911,15 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
         eq(/if \(!pz\.length && c\.cantidad\)/.test(amv), true, 'los dos flujos'));
     /* Tocar la app sin subirle la versión al service worker la deja congelada
        en lo viejo: el navegador compara el archivo byte a byte. */
-    test('APP · se le subió la versión al service worker', () =>
-        eq(fs.readFileSync(path.join(RAIZ, 'app-movil/sw.js'), 'utf8').indexOf("var CACHE = 'etaax-movil-v4'") > -1,
-           true, 'o se queda con lo viejo'));
+    /* Se exige que la versión VAYA SUBIENDO, no un número concreto: fijarlo
+       obliga a tocar el candado en cada entrega, y un candado que hay que
+       editar para que pase deja de ser un candado. */
+    test('APP · se le subió la versión al service worker', () => {
+        const m = fs.readFileSync(path.join(RAIZ, 'app-movil/sw.js'), 'utf8')
+            .match(/var CACHE = 'etaax-movil-v(\d+)'/);
+        eq(!!m, true, 'no se encontró el nombre de la caché');
+        return eq(Number(m[1]) >= 5, true, 'quedó en v' + (m && m[1]) + ': o se queda con lo viejo');
+    });
     /* Las dos pantallas tienen que rotular IGUAL: si el QR dice «📦 355 ml ·
        Viena Obscura» y la app otra cosa, el mismo conteo se lee de dos maneras
        según por dónde se mire. */
@@ -25445,6 +25457,69 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
                       'mira solo r.error: daría por guardado un rechazo');
         });
     });
+    /* ── 7 bis. EL RESPALDO, CUANDO EL AYUDANTE LLEGA VIEJO ────────────────
+       Las cinco llamadas delegan en etaaxRegistroFallo, y si no está, cae a un
+       respaldo escrito en la propia pantalla. Ese respaldo miraba solo
+       `r.error` —el comportamiento de antes de la v79— así que la pareja
+       «pantalla nueva + ayudante viejo de la caché» anunciaba como guardada una
+       captura rechazada y la borraba de la lista. No es hipotético: el QR vive
+       en teléfonos y el service worker sirve primero lo que tiene guardado.
+       Lo encontró Codex comparando las dos versiones del archivo.
+
+       Esto no lo lee: EXTRAE el respaldo de cada pantalla y lo CORRE sin el
+       ayudante, con la respuesta que devuelve el servidor al rechazar. */
+    sitios.forEach(par => {
+        const src = fs.readFileSync(path.join(RAIZ, par[0]), 'utf8');
+        test(par[0] + ' · ' + par[1].slice(0, 30) + ': sin el ayudante, un id vacío NO es guardado', () => {
+            const i = src.indexOf(par[1]);
+            const tramo = src.slice(i, i + 1200);
+            const m = tramo.match(/\(typeof etaaxRegistroFallo === 'function'\)\s*\n?\s*\?\s*etaaxRegistroFallo\(r\)\s*:\s*([\s\S]*?);\n/);
+            eq(!!m, true, 'no se encontró el respaldo');
+            /* Se corre el respaldo TAL CUAL, con el ayudante ausente y la
+               respuesta de un rechazo por NIP: data en nulo y sin error. */
+            const respaldo = new Function('r', 'return ' + m[1] + ';');
+            const aviso = respaldo({ data: null, error: null });
+            eq(!!aviso, true, 'da por guardado un rechazo: la captura se perdería');
+            /* Y lo de siempre tiene que seguir funcionando. */
+            eq(!!respaldo({ data: null, error: { message: 'boom' } }), true, 'un error sí es fallo');
+            return eq(respaldo({ data: 'id123', error: null }), '', 'un id de vuelta SÍ es guardado');
+        });
+    });
+
+    /* ── 7 ter. LA VERSIÓN DEL AYUDANTE ES SU CONTENIDO ────────────────────
+       Para que esa pareja —pantalla nueva, ayudante viejo— no pueda existir, el
+       `?v=` de staff-area.js no es un número que alguien sube a mano: es la
+       huella del archivo. Si el archivo cambia y el `?v=` no, esto falla y dice
+       exactamente qué poner. El service worker de la app guarda el archivo CON
+       su versión, así que ahí vale doble. */
+    test('la versión de staff-area.js es la huella de su contenido', () => {
+        const huella = require('crypto').createHash('sha1')
+            .update(fs.readFileSync(path.join(RAIZ, 'staff-area.js'))).digest('hex').slice(0, 8);
+        const refs = [];
+        const mirar = (rel) => {
+            const t = fs.readFileSync(path.join(RAIZ, rel), 'utf8');
+            const re = /staff-area\.js\?v=([a-z0-9]+)/g;
+            let m; while ((m = re.exec(t))) refs.push({ archivo: rel, v: m[1] });
+        };
+        ['entrada.html', 'checklist.html', 'app-movil/index.html', 'app-movil/sw.js',
+         'administrativo/staff.html', 'administrativo/horarios.html',
+         'recetas/insumos.html', 'recetas/inventarios.html'].forEach(mirar);
+        eq(refs.length >= 8, true, 'se encontraron ' + refs.length + ' referencias');
+        const malas = refs.filter(x => x.v !== huella);
+        return eq(malas.length, 0,
+            'hay que poner ?v=' + huella + ' en: ' + malas.map(x => x.archivo).join(', '));
+    });
+    /* Y la app instalada tiene que estrenar caché cuando cambia la cáscara: el
+       navegador compara el service worker byte a byte y, si no cambió, no
+       instala nada. Como el nombre de la caché lleva la versión, cambiar el
+       archivo ya basta — pero el nombre tiene que ir subiendo. */
+    test('la caché de la app móvil va por delante de la que tenía el fallo', () => {
+        const sw = fs.readFileSync(path.join(RAIZ, 'app-movil/sw.js'), 'utf8');
+        const m = sw.match(/var CACHE = 'etaax-movil-v(\d+)'/);
+        eq(!!m, true, 'no se encontró el nombre de la caché');
+        return eq(Number(m[1]) >= 5, true, 'quedó en v' + (m && m[1]));
+    });
+
     /* Y el tercer hallazgo: el aviso de espera se preparaba y se tiraba. */
     test('al guardar un lote se dice POR QUÉ falló, no solo que falló', () => {
         const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
