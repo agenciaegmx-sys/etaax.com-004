@@ -3,8 +3,12 @@
 <head>
 <script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <meta charset="UTF-8">
-<script src="/theme.js?v=e6b90817"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<script src="/theme.js?v=e6b90817"></script>
+<script src="/etaax-iconos.js?v=83b0b21d"></script><!-- los iconos de la marca -->
+<script src="/portal-operativo.js?v=ad0c4bbc"></script><!-- solo presentación: ni NIP ni RPC --><!-- tema claro/oscuro: uno solo para todo el sistema -->
+<!-- Sin `maximum-scale`: bloquear el zoom en una pantalla de cocina, con
+     letra chica y las manos ocupadas, no es una decisión de diseño. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>ETAAX – Registro de barra/cocina</title>
 <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
@@ -15,6 +19,7 @@
 <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=d87bdb06">
+<link rel="stylesheet" href="/portal-operativo.css?v=59ef4715">
 <style>
 body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px 40px;box-sizing:border-box}
 .cap-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:440px;padding:24px 22px;text-align:center}
@@ -94,7 +99,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 
     <!-- ── Pantalla HISTORIAL: qué se lleva registrado en este periodo ── -->
     <div id="histScreen" style="display:none">
-        <button class="volver" onclick="_show('menuScreen')">← Menú</button>
+        <button class="volver-menu" onclick="_show('menuScreen')">Regresar al menú</button>
         <div class="cap-title">Lo registrado</div>
         <div class="cap-sub" id="histSub">Desde el último inventario</div>
         <div id="histTot" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 6px"></div>
@@ -129,7 +134,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 
     <!-- ── Pantalla CONTAR EXISTENCIAS ── -->
     <div id="conteoScreen" style="display:none">
-        <button class="volver" onclick="volverMenu()">← Menú</button>
+        <button class="volver-menu" onclick="volverMenu()">Regresar al menú</button>
 
         <label class="lbl">Área</label>
         <div class="chips" id="areaChipsCnt"></div>
@@ -179,7 +184,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 
     <!-- ── Pantalla ENTRADA de insumos ── -->
     <div id="formScreen" style="display:none">
-        <button class="volver" onclick="volverMenu()">← Menú</button>
+        <button class="volver-menu" onclick="volverMenu()">Regresar al menú</button>
 
         <label class="lbl">Área</label>
         <div class="chips" id="areaChipsEnt"></div>
@@ -233,7 +238,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 
     <!-- ── Pantalla MERMA (insumo o producto del menú) ── -->
     <div id="mermaScreen" style="display:none">
-        <button class="volver" onclick="volverMenu()">← Menú</button>
+        <button class="volver-menu" onclick="volverMenu()">Regresar al menú</button>
 
         <label class="lbl">Área</label>
         <div class="chips" id="areaChipsMer"></div>
@@ -300,7 +305,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 
     <!-- ── Pantalla SALIDA de insumo (cortesía / préstamo) ── -->
     <div id="salidaScreen" style="display:none">
-        <button class="volver" onclick="volverMenu()">← Menú</button>
+        <button class="volver-menu" onclick="volverMenu()">Regresar al menú</button>
 
         <label class="lbl">Área</label>
         <div class="chips" id="areaChipsSal"></div>
@@ -375,7 +380,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
-<script src="/staff-area.js?v=04dedb59"></script><!-- el área de un colaborador: fuente única -->
+<script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única -->
 <script>
 
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}

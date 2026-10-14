@@ -3,8 +3,12 @@
 <head>
 <script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <meta charset="UTF-8">
-<script src="/theme.js?v=e6b90817"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<script src="/theme.js?v=e6b90817"></script>
+<script src="/etaax-iconos.js?v=83b0b21d"></script><!-- los iconos de la marca -->
+<script src="/portal-operativo.js?v=ad0c4bbc"></script><!-- solo presentación: ni NIP ni RPC --><!-- tema claro/oscuro: uno solo para todo el sistema -->
+<!-- Sin `maximum-scale`: bloquear el zoom en una pantalla de cocina, con
+     letra chica y las manos ocupadas, no es una decisión de diseño. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>ETAAX – Check list operativo</title>
 <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
@@ -15,6 +19,7 @@
 <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=d87bdb06">
+<link rel="stylesheet" href="/portal-operativo.css?v=59ef4715">
 <style>
 body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px 40px;box-sizing:border-box}
 .cap-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:460px;padding:24px 22px;text-align:center}
@@ -118,7 +123,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 
     <!-- ── Recetario operativo (sin costos) ── -->
     <div id="recScreen" style="display:none">
-        <button class="volver" onclick="_verMenu()">← Regresar</button>
+        <button class="volver-menu" onclick="_verMenu()">Regresar al menú</button>
         <input id="recBuscar" class="fld" placeholder="🔍 Buscar receta…" oninput="_pintarRecetas()">
         <div id="recTabs" class="rec-tabs"></div>
         <div id="recList"></div>
@@ -130,13 +135,13 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 
     <!-- ── Guías de uso ── -->
     <div id="guiaScreen" style="display:none">
-        <button class="volver" onclick="_verMenu()">← Regresar</button>
+        <button class="volver-menu" onclick="_verMenu()">Regresar al menú</button>
         <div id="guiaList"></div>
     </div>
 
     <!-- ── Lista de checklists ── -->
     <div id="listScreen" style="display:none">
-        <button class="volver" onclick="_verMenu()">← Regresar</button>
+        <button class="volver-menu" onclick="_verMenu()">Regresar al menú</button>
         <div class="quien">👤 Registra: <b id="quienNom">—</b></div>
         <div id="countBox">⏱️ Tiempo en el check list: <b id="countVal" style="color:var(--text)">0:00</b></div>
         <label class="lbl">Elige el check list a realizar</label>
@@ -192,7 +197,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
-<script src="/staff-area.js?v=04dedb59"></script><!-- el área de un colaborador: fuente única -->
+<script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única -->
 <script>
 
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}

@@ -36,7 +36,8 @@ const COMPARTIDOS = [
     'novedades.js', 'theme.js', 'ctx-bar.js', 'global-nav.js', 'financiero/nav.js',
     'security.js', 'page-guard.js', 'negocio-tab.js', 'presencia.js', 'modal-drag.js',
     'modal-dock.js', 'precios.js', 'datos-pago.js', 'negocio-tipos.js', 'insumo-label.js',
-    'reporte-marca.js', 'carta-tema.js', 'nav-pref.js', 'styles.css'
+    'reporte-marca.js', 'carta-tema.js', 'nav-pref.js', 'styles.css',
+    'portal-operativo.css', 'portal-operativo.js', 'staff-area.js'
 ].filter(f => fs.existsSync(path.join(RAIZ, f)));
 
 const huella = (f) =>
@@ -47,7 +48,7 @@ function paginas(dir, out) {
     fs.readdirSync(path.join(RAIZ, dir) || RAIZ, { withFileTypes: true }).forEach(e => {
         const rel = dir ? dir + '/' + e.name : e.name;
         if (e.isDirectory()) {
-            if (!['.git', 'node_modules', 'docs', 'iconos', 'marca', 'tests', 'app-movil', 'guia', 'novedades'].includes(e.name)) paginas(rel, out);
+            if (!['.git', 'node_modules', 'docs', 'iconos', 'marca', 'tests', 'guia', 'novedades'].includes(e.name)) paginas(rel, out);
         } else if (e.name.endsWith('.html')) out.push(rel);
     });
     return out;
@@ -57,19 +58,34 @@ const revisar = process.argv.includes('--revisar');
 const esperado = {};
 COMPARTIDOS.forEach(f => { esperado[f] = huella(f); });
 
+/* La app instalada guarda su cáscara con las MISMAS URLs que su HTML. Si una
+   versión cambia en la página y no en `sw.js`, el service worker se queda
+   cacheando un archivo que ya nadie pide — y la app instalada se congela en la
+   versión anterior hasta que alguien borre los datos del sitio. Nadie relaciona
+   nunca ese síntoma con esta causa, así que el service worker entra aquí. */
+const SW = 'app-movil/sw.js';
 let tocadas = 0, desfasadas = [];
-paginas('').forEach(rel => {
+paginas('').concat(fs.existsSync(path.join(RAIZ, SW)) ? [SW] : []).forEach(rel => {
     const p = path.join(RAIZ, rel);
     let txt = fs.readFileSync(p, 'utf8'), antes = txt;
     COMPARTIDOS.forEach(f => {
         /* `/archivo.js`, `archivo.js`, `../archivo.js`: todas las formas en que
            las páginas lo piden, con o sin versión previa. */
-        const re = new RegExp('((?:src|href)="(?:\\.\\.\\/|\\.\\/|\\/)?' +
-            f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(\\?[^"]*)?"', 'g');
-        txt = txt.replace(re, (m, inicio, q) => {
+        const esc = f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        /* En el HTML viaja como `src="…"`; en el service worker, como una cadena
+           suelta dentro de su lista de cáscara. Las dos formas, una regla. */
+        const re = rel === SW
+            ? new RegExp("(['\"]\\.\\.\\/" + esc + ")(\\?[^'\"]*)?(['\"])", 'g')
+            /* La comilla final se CAPTURA también en el HTML aunque siempre sea
+               la misma: si una expresión tiene tres grupos y la otra dos, el
+               cuarto argumento del reemplazo deja de ser la comilla y pasa a ser
+               la POSICIÓN —un número— que se escribe tal cual dentro del
+               atributo. Así quedó un `?v=f7366b4c14248>` que nadie entiende. */
+            : new RegExp('((?:src|href)="(?:\\.\\.\\/|\\.\\/|\\/)?' + esc + ')(\\?[^"]*)?(")', 'g');
+        txt = txt.replace(re, (m, inicio, q, comilla) => {
             if (q === '?v=' + esperado[f]) return m;
             desfasadas.push(rel + ' → ' + f);
-            return inicio + '?v=' + esperado[f] + '"';
+            return inicio + '?v=' + esperado[f] + (comilla || '"');
         });
     });
     if (txt !== antes) { tocadas++; if (!revisar) fs.writeFileSync(p, txt); }

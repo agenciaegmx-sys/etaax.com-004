@@ -3,8 +3,12 @@
 <head>
 <script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <meta charset="UTF-8">
-<script src="/theme.js?v=e6b90817"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<script src="/theme.js?v=e6b90817"></script>
+<script src="/etaax-iconos.js?v=83b0b21d"></script><!-- los iconos de la marca -->
+<script src="/portal-operativo.js?v=ad0c4bbc"></script><!-- solo presentación: ni NIP ni RPC --><!-- tema claro/oscuro: uno solo para todo el sistema -->
+<!-- Sin `maximum-scale`: bloquear el zoom en una pantalla de cocina, con
+     letra chica y las manos ocupadas, no es una decisión de diseño. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>ETAAX – Subir foto</title>
 <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
@@ -15,6 +19,7 @@
 <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=d87bdb06">
+<link rel="stylesheet" href="/portal-operativo.css?v=59ef4715">
 <style>
 body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:28px 18px 40px;box-sizing:border-box}
 .cap-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:420px;padding:24px 22px;text-align:center}

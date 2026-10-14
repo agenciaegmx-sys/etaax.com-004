@@ -25615,7 +25615,12 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
        exactamente qué poner. El service worker de la app guarda el archivo CON
        su versión, así que ahí vale doble. */
     test('la versión de staff-area.js es la huella de su contenido', () => {
-        const huella = require('crypto').createHash('sha1')
+        /* MISMO ALGORITMO QUE `versionar.js`. Esta prueba nació antes que la
+           herramienta y calculaba la huella con sha-1 mientras la herramienta
+           usa sha-256: dos formas de calcular lo mismo que no coinciden nunca,
+           así que el candado pedía una versión y el comando ponía otra. Una
+           sola forma. */
+        const huella = require('crypto').createHash('sha256')
             .update(fs.readFileSync(path.join(RAIZ, 'staff-area.js'))).digest('hex').slice(0, 8);
         const refs = [];
         const mirar = (rel) => {
@@ -27398,6 +27403,26 @@ console.log('\n══ BE18 · La caché no se mezcla ══');
                 while ((m = re.exec(txt))) if (m[2] !== esperado) desfasados.add(f);
             });
         });
+        /* Y que la huella esté BIEN ESCRITA. Al extender el versionado a la app
+           instalada, una expresión capturaba tres grupos y la otra dos, así que
+           el cuarto argumento del reemplazo dejó de ser la comilla final y pasó
+           a ser la POSICIÓN: quedó `?v=f7366b4c14248>` dentro del atributo, sin
+           cerrar. Eso no rompe ninguna prueba de contenido —el archivo sigue
+           ahí— pero el navegador pide una URL que no existe y la página carga a
+           medias. */
+        test('ninguna página quedó con una versión mal escrita', () => {
+            const malas = [];
+            paginas.forEach(rel => {
+                const txt = fs.readFileSync(path.join(RAIZ, rel), 'utf8');
+                const re = /(?:src|href)="[^"]*?\?v=([^"]*)"/g;
+                let m;
+                while ((m = re.exec(txt))) if (!/^[a-z0-9.-]{1,12}$/.test(m[1])) malas.push(rel + ' → ?v=' + m[1]);
+                /* …y un atributo sin cerrar: la comilla perdida. */
+                if (/\?v=[a-f0-9]{8}[^"'\s>]/.test(txt)) malas.push(rel + ' → versión sin cerrar');
+            });
+            return eq(malas.length, 0, 'versiones mal escritas: ' + malas.slice(0, 4).join(', '));
+        });
+
         test('cada compartido viaja con la huella de su contenido', () =>
             eq(desfasados.size, 0,
                'el navegador seguiría sirviendo la copia vieja de: ' + [...desfasados].join(', ') +

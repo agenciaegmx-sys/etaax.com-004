@@ -41,7 +41,7 @@ var CASCARA = [
        encontró Codex — pantalla nueva con ayudante viejo de la caché, y una
        captura rechazada anunciada como guardada. Con la versión atada al
        contenido, esa pareja no puede existir. */
-    '../staff-area.js?v=04dedb59'
+    '../staff-area.js?v=f7366b4c'
 ];
 
 self.addEventListener('install', function (e) {
