@@ -13252,6 +13252,65 @@ console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ═
     test('la v61 sigue pidiendo el token del QR', () =>
         eq(v61.indexOf('_entrada_token_ok(p_neg, p_token)') > -1, true, 'con token'));
 
+    /* ── LOS INSUMOS SE QUEDARON SIN SU PARTE (v80) ─────────────────────────
+       Lo de arriba se cerró para las RECETAS en la v61. La consulta de INSUMOS
+       seguía haciendo `SELECT i.datos`: quien tenía el link del QR —un celular
+       sin sesión— recibía la ficha entera de los 1,000 insumos del negocio, con
+       precios de compra, proveedor e historial de cambios. Y sin filtro de
+       sucursal: el único filtro vivía en el JavaScript de la pantalla, que es
+       como no tenerlo (la RPC se puede pedir a mano con el mismo link).
+
+       Se verificó corriendo el archivo contra un Postgres de verdad (PGlite):
+       se provocó el agujero con la definición de la v27, se corrió la v80 y se
+       comprobó que Ana reciba solo su ficha y Beto solo la suya. Esto de aquí
+       vigila que el archivo no se desarme. */
+    const v80 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v80.sql'), 'utf8');
+    test('la v80 ya no manda la ficha entera del insumo', () =>
+        eq(/SELECT\s+i\.datos\s/.test(v80), false, 'lista acotada'));
+    ['precio', 'proveedor', 'historial', 'updatedBy', 'costo'].forEach(k =>
+        test('…y la lista blanca deja fuera `' + k + '`', () =>
+            eq(new RegExp("'" + k + "'").test(v80), false, 'fuera')));
+    test('…pero sí manda lo que la pantalla necesita para contar', () =>
+        eq(["'contNeto'", "'umContenido'", "'origenId'", "'sucursales'"]
+            .every(k => v80.indexOf(k) > -1), true, 'lo necesario'));
+    /* La sucursal sale del NIP, no del enlace: `s` en la URL sella, no autoriza.
+       Si la RPC aceptara una sucursal por parámetro, el barman de una sucursal
+       podría pedir el catálogo de otra cambiando el link. */
+    test('la v80 deriva la sucursal del NIP, no de un parámetro', () => {
+        const f = v80.slice(v80.indexOf('FUNCTION entrada_catalogo'));
+        const cuerpo = f.slice(0, f.indexOf('$$;'));
+        return eq(/FROM staff s/.test(cuerpo) && /p_niphash/.test(cuerpo) &&
+                  !/p_suc\b/.test(cuerpo), true, 'del NIP');
+    });
+    test('…y pide las DOS llaves: token del QR y NIP', () => {
+        const f = v80.slice(v80.indexOf('FUNCTION entrada_catalogo'));
+        const cuerpo = f.slice(0, f.indexOf('$$;'));
+        return eq(/_entrada_token_ok\(p_neg, p_token\)/.test(cuerpo) &&
+                  /_nip_guardia\(p_neg, p_niphash\)/.test(cuerpo), true, 'las dos');
+    });
+    /* El freno de la v78 se anota ANTES de cualquier otra cosa: una excepción
+       posterior revertiría el apunte (fue el agujero que arregló la v79). */
+    test('…y el freno del NIP va primero', () => {
+        const f = v80.slice(v80.indexOf('FUNCTION entrada_catalogo'));
+        const cuerpo = f.slice(0, f.indexOf('$$;'));
+        return eq(cuerpo.indexOf('_nip_guardia') < cuerpo.indexOf('_entrada_token_ok'), true, 'primero');
+    });
+    /* `REVOKE … FROM PUBLIC` no le quita el permiso a `anon` en Supabase: hay
+       que nombrarlo (lo aprendimos en la v72). */
+    test('los helpers internos no quedan al alcance de anon', () =>
+        eq(/REVOKE ALL ON FUNCTION _insumo_en_suc\(JSONB, TEXT\)\s+FROM PUBLIC, anon/.test(v80) &&
+           /REVOKE ALL ON FUNCTION _insumo_qr_campos\(JSONB\)\s+FROM PUBLIC, anon/.test(v80), true, 'nombrado'));
+    /* La migración se corre A MANO: la pantalla tiene que servir antes y después.
+       Sin la caída, el día que Edwin tarde en correrla el QR se queda vacío. */
+    test('la pantalla pide el catálogo acotado y cae a la vieja si la v80 no corrió', () => {
+        const c = ent.slice(ent.indexOf('2) Cargar insumos'), ent.indexOf('3) Menú de conceptos'));
+        return eq(/entrada_catalogo/.test(c) && /entrada_insumos/.test(c) && /p_niphash: h/.test(c), true, 'con caída');
+    });
+    test('…y la sucursal que manda es la que dice el servidor', () => {
+        const c = ent.slice(ent.indexOf('var rc = await'), ent.indexOf('if (_ins === null)'));
+        return eq(/SUC = rc\.data\.sucursal/.test(c), true, 'del servidor');
+    });
+
     /* ── El código REAL del QR ── */
     /* `area` ya no es el chip: es QUIÉN ES el colaborador. El chip solo sella
        dónde cae el movimiento, y por eso se pasa aparte —si los dos fueran el
@@ -25399,10 +25458,13 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
         eq(dobles.length, 0, 'cuentan doble: ' + dobles.join(', ')));
     /* La prueba de que la prueba mira de verdad: si el filtro se quedara vacío,
        los dos tests de arriba pasarían celebrando una lista sin nadie. */
-    test('la revisión mira de verdad las cuatro que comprueban el NIP', () => {
+    /* La lista se escribe a mano A PROPÓSITO: cada vez que nace una puerta de
+       NIP, esta prueba falla y obliga a mirarla. `entrada_catalogo` (v80) entró
+       así. */
+    test('la revisión mira de verdad las cinco que comprueban el NIP', () => {
         const conGuardia = puertas.filter(n => ahora[n].texto.indexOf('_nip_guardia') > -1).sort();
         return eq(conGuardia.join(','),
-            'entrada_historial,entrada_sucursal_de_nip,entrada_validar_nip,portal_perfil',
+            'entrada_catalogo,entrada_historial,entrada_sucursal_de_nip,entrada_validar_nip,portal_perfil',
             conGuardia.join(','));
     });
 

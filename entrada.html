@@ -683,10 +683,31 @@ async function entrar(){
                 AREA_FIJA = _perm.length === 1;
             }
         } catch (e) { /* sin perfil: se ven todas las áreas, como antes */ }
-        // 2) Cargar insumos (token-gated, también por RPC).
-        var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
+        /* 2) Cargar insumos. DOS LLAVES: el token del QR y el NIP de quien
+              entra. Con el NIP el servidor sabe en qué sucursal trabaja y manda
+              SOLO sus fichas, acotadas (sin precios, sin proveedor, sin
+              historial) — v80. La consulta vieja entregaba el `datos` completo
+              de los 1,000 insumos del negocio a cualquiera con el link, y el
+              filtro de sucursal vivía nada más aquí: un filtro que solo existe
+              en el JavaScript no es un filtro.
+
+              Se cae a la vieja si la v80 todavía no se corrió en Supabase (las
+              migraciones se aplican a mano). En ese caso el filtro de esta
+              pantalla sigue haciendo su trabajo, que ya es el correcto. */
+        var _ins = null;
+        try {
+            var rc = await _supabase.rpc('entrada_catalogo', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
+            if (rc && rc.data && rc.data.ok) {
+                _ins = rc.data.insumos || [];
+                if (rc.data.sucursal) SUC = rc.data.sucursal;   // la sucursal la dice el servidor
+            }
+        } catch (e) { /* v80 sin correr: se usa la de siempre */ }
+        if (_ins === null) {
+            var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
+            _ins = ri.data || [];
+        }
         INSUMOS = _unoPorProductoQR(                                    // sin duplicados maestro/copia
-            (ri.data || []).filter(function(x){ return x && x.id && x.activo !== '0' && _enSucQR(x); })  // solo los de ESTA sucursal
+            _ins.filter(function(x){ return x && x.id && x.activo !== '0' && _enSucQR(x); })  // solo los de ESTA sucursal
         );
         INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
         // 3) Menú de conceptos.
