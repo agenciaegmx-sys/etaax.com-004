@@ -399,6 +399,54 @@ async function run(base) {
         assert.deepEqual(await evalPage(p.sid,'__errors'),[]);await close(p);
     }
     p=await page(base,'/hub.html','owner',1440,true);
+    for(const [id,column] of [['administrativo',1],['recetas',2],['financiero',3],['consultoria',4]]){
+        await check('Ir al módulo: aparece bajo '+id+' y abre su portada conservando sucursal',async()=>{
+            await evalPage(p.sid,"document.getElementById('hub-tab-"+id+"').click()");
+            await pause(280);
+            const m=await evalPage(p.sid,"(()=>{const tab=document.getElementById('hub-tab-"+id+"'),a=document.getElementById('hubIrAlModulo'),t=tab.getBoundingClientRect(),r=a.getBoundingClientRect();return {href:a.getAttribute('href'),column:getComputedStyle(a).gridColumnStart,under:r.top>=t.bottom,center:Math.abs((r.left+r.right)-(t.left+t.right))/2,visible:!!a.getClientRects().length,hit:a.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)),label:a.getAttribute('aria-label')}})()");
+            assert.equal(m.href,id+'/index.html');assert.equal(m.column,String(column));
+            assert.ok(m.under && m.visible && m.hit,JSON.stringify(m));assert.ok(m.center<2,JSON.stringify(m));
+            assert.ok(m.label.startsWith('Ir al módulo '));
+            const antes=await evalPage(p.sid,"localStorage.getItem('etaax_ctx')");
+            await go(p,"document.getElementById('hubIrAlModulo').click()","location.pathname==='/"+id+"/index.html' && document.readyState==='complete'");
+            assert.equal(await evalPage(p.sid,"localStorage.getItem('etaax_ctx')"),antes);
+            await go(p,"location.href='/hub.html'","document.getElementById('hub-tab-"+id+"')?.getAttribute('aria-selected')==='true'");
+            assert.equal(await evalPage(p.sid,"localStorage.getItem('etaax_sucursal_activa')"),'matriz');
+        });
+    }
+    assert.deepEqual(await evalPage(p.sid,'__errors'),[]);await close(p);
+    for(const width of [390,320]){
+        p=await page(base,'/hub.html','owner',width,true);
+        await check('Ir al módulo: tarjeta y botón visibles en ambos temas a '+width+'px',async()=>{
+            for(const theme of ['dark','light']){
+                await evalPage(p.sid,"EtaaxTheme.set('"+theme+"')");
+                for(const id of ['administrativo','recetas','financiero','consultoria']){
+                    await evalPage(p.sid,"document.getElementById('hub-tab-"+id+"').click()");await pause(280);
+                    const m=await evalPage(p.sid,"(()=>{const a=document.getElementById('hubIrAlModulo'),r=a.getBoundingClientRect(),t=document.getElementById('hub-tab-"+id+"').getBoundingClientRect(),s=document.getElementById('hubModuloSelector').getBoundingClientRect();return {under:r.top>=t.bottom,left:r.left>=s.left,right:r.right<=s.right,width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}})()");
+                    assert.ok(m.under && m.left && m.right,JSON.stringify(m));assert.ok(m.scroll<=m.width+1,JSON.stringify(m));
+                }
+                await evalPage(p.sid,"document.getElementById('hubModuloSelector').scrollIntoView({block:'center'})");
+                const shot=await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(os.tmpdir(),'etaax-hub-acceso-'+width+'-'+theme+'.png'),Buffer.from(shot.data,'base64'));
+            }
+            await evalPage(p.sid,"document.getElementById('hub-tab-consultoria').focus()");
+            await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab'},p.sid);
+            assert.equal(await evalPage(p.sid,'document.activeElement.id'),'hubIrAlModulo');
+        });
+        assert.deepEqual(await evalPage(p.sid,'__errors'),[]);await close(p);
+    }
+    p=await page(base,'/hub.html','owner',768,true);
+    await check('Ir al módulo: selección rápida, teclado y movimiento reducido',async()=>{
+        await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]},p.sid);
+        await evalPage(p.sid,"['financiero','recetas','consultoria'].forEach(etaaxSeleccionarModulo);document.getElementById('hub-tab-consultoria').focus()");
+        await send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowLeft',code:'ArrowLeft'},p.sid);
+        assert.equal(await evalPage(p.sid,"document.activeElement.id"),'hub-tab-financiero');
+        assert.equal(await evalPage(p.sid,"document.getElementById('hubIrAlModulo').getAttribute('href')"),'financiero/index.html');
+        assert.equal(await evalPage(p.sid,"getComputedStyle(document.getElementById('hubIrAlModulo')).animationName"),'none');
+        await evalPage(p.sid,"etaaxSeleccionarModulo('recetas');document.activeElement.blur();document.getElementById('hubModuloSelector').scrollIntoView({block:'center'})");
+        const shot=await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(os.tmpdir(),'etaax-hub-acceso-768.png'),Buffer.from(shot.data,'base64'));
+    });
+    assert.deepEqual(await evalPage(p.sid,'__errors'),[]);await close(p);
+    p=await page(base,'/hub.html','owner',1440,true);
     await check('Módulos: una sola sucursal con pin, selector con teclado y herramientas debajo',async()=>{
         assert.equal(await evalPage(p.sid,"document.getElementById('negActBar').textContent.match(/\\bCentro\\b/g).length"),1);
         assert.equal(await evalPage(p.sid,"document.querySelector('#chipSucursalHub #chipUbicacionHub use').getAttribute('href')"),'#etx-sh-matriz');
@@ -509,10 +557,14 @@ async function run(base) {
            disponible. Entrar sigue dependiendo del guarda de la página. */
         await evalPage(p.sid,"localStorage.setItem('etaax_n1_permisos',JSON.stringify({mesero:{recetas:true}}));window.dispatchEvent(new CustomEvent('etaax:permisos',{detail:{negId:'n1'}}));document.getElementById('hub-tab-recetas').click()");
         assert.equal(await evalPage(p.sid,"[...document.querySelectorAll('#hubHerramientasTarjetas [data-ruta]:not(.hub-tool-bloqueada)')].map(x=>x.getAttribute('data-ruta')).length"),1);
-        await evalPage(p.sid,"localStorage.setItem('etaax_n1_permisos',JSON.stringify({mesero:{recetas:false}}));window.dispatchEvent(new CustomEvent('etaax:permisos',{detail:{negId:'n1'}}))");
+        await evalPage(p.sid,"localStorage.setItem('etaax_n1_permisos',JSON.stringify({mesero:{recetas:false}}));document.getElementById('hubIrAlModulo').click()");
+        await pause(100);
+        assert.equal(await evalPage(p.sid,'location.pathname'),'/hub.html');
+        await evalPage(p.sid,"window.dispatchEvent(new CustomEvent('etaax:permisos',{detail:{negId:'n1'}}))");
         await pause(100);
         assert.equal(await evalPage(p.sid,'location.pathname'),'/hub.html');
         assert.equal(await evalPage(p.sid,"document.getElementById('hubModuloTitulo').textContent"),'Aprende y analiza');
+        assert.equal(await evalPage(p.sid,"document.getElementById('hubIrAlModulo').getAttribute('href')"),'consultoria/index.html');
         assert.deepEqual(await evalPage(p.sid,"[...document.querySelectorAll('#hubHerramientasTarjetas [data-ruta]:not(.hub-tool-bloqueada)')].map(x=>x.getAttribute('data-ruta'))"),['consultoria/guias.html']);
     });
     assert.deepEqual(await evalPage(p.sid,'__errors'),[]);await close(p);
@@ -539,6 +591,7 @@ async function run(base) {
         await evalPage(p.sid,"_sesion.isAdmin=true;_showModulos({id:'',nombre:'Hub general',tipo:'otro'})");
         assert.equal(await evalPage(p.sid,"document.querySelectorAll('#hubModuloDock button:not(:disabled)').length"),0);
         assert.equal(await evalPage(p.sid,"document.querySelectorAll('#hubHerramientasTarjetas a').length"),0);
+        assert.equal(await evalPage(p.sid,"document.getElementById('hubIrAlModulo').getClientRects().length"),0);
     });await close(p);
     for(const width of [1440,320]){
         p=await page(base,'/hub.html','owner',width,true);

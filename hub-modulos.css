@@ -22,7 +22,10 @@ body.hub-paleta .hub-trabajo-hero .hub-eyebrow{margin-bottom:10px;}
 body.hub-paleta .hub-workspace{max-width:1000px;width:100%;margin:0 auto;}
 body.hub-paleta .hub-module-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:14px 0 10px;font-size:11px;color:var(--ui-apagado);}
 body.hub-paleta .hub-module-intro>span:first-child{font-size:9px;letter-spacing:2px;text-transform:uppercase;}
-body.hub-paleta .hub-module-dock{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;padding:22px 18px;border:1px solid var(--hub-line);border-radius:18px;background:var(--s1);}
+body.hub-paleta .hub-module-selector{position:relative;padding:22px 18px;border:1px solid var(--hub-line);border-radius:18px;background:var(--s1);}
+body.hub-paleta :is(.hub-module-dock,.hub-module-actions){display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;}
+body.hub-paleta .hub-module-actions{margin-top:16px;}
+body.hub-paleta .hub-module-actions[hidden]{display:none;}
 body.hub-paleta .hub-module-tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:150px;min-width:0;padding:16px 10px;background:var(--s2);border:1px solid var(--ui-borde);border-radius:14px;color:var(--text);font-family:inherit;cursor:pointer;transform-origin:50% 100%;transform:translate3d(0,var(--dock-y,0px),0) scale(var(--dock-scale,1));}
 /* EL MÓDULO ELEGIDO, EN CIAN. Iba en terracota, el mismo color del título, del
    botón de entrar y del acento de cada fila: cuatro cosas gritando lo mismo y
@@ -46,6 +49,10 @@ body.hub-paleta .hub-ir-modulo{
   transition:background-color .18s,border-color .18s;
 }
 body.hub-paleta .hub-ir-modulo:hover{background:var(--hub-action-hover);border-color:var(--hub-action-hover);}
+body.hub-paleta .hub-module-actions .hub-ir-modulo{grid-row:1;justify-self:center;justify-content:center;min-height:44px;max-width:100%;}
+body.hub-paleta .hub-ir-modulo:focus-visible{outline:2px solid var(--hub-brand);outline-offset:4px;}
+body.hub-paleta .hub-module-entry-arrow{display:inline-flex;--etx-color:var(--hub-button-ink);}
+body.hub-paleta .hub-acceso-aparece{animation:hubModuloAcceso .24s ease-out both;}
 body.hub-paleta .hub-ir-modulo[hidden]{display:none;}
 body.hub-paleta .hub-herramientas-head[hidden]{display:none;}
 body.hub-paleta .hub-herramientas-icon{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;border:1px solid var(--hub-line);border-radius:15px;background:var(--hub-brand-tint);}
@@ -159,6 +166,7 @@ body.hub-paleta .hub-captura-pie .hub-visor-nav{width:40px;height:40px;}
 body.hub-paleta .hub-captura-pie .etx-ic{width:20px;height:20px;}
 @keyframes hubCapturaAbrir{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes hubToolEntrada{from{opacity:0;translate:0 6px}to{opacity:1;translate:0 0}}
+@keyframes hubModuloAcceso{from{opacity:0;transform:translateY(-8px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-width:720px){
   body.hub-paleta .hub-modulos-bar{padding:16px;gap:12px;}
   body.hub-paleta .hub-modulos-bar .neg-activo-id{flex-basis:calc(100% - 60px);}
@@ -166,7 +174,8 @@ body.hub-paleta .hub-captura-pie .etx-ic{width:20px;height:20px;}
   body.hub-paleta .hub-modulos-bar .user-badge{grid-column:1/-1;justify-self:start;}
   body.hub-paleta .hub-modulos-bar .btn-cambiar-neg{white-space:normal;padding:10px 8px;text-align:center;}
   body.hub-paleta .hub-module-intro{align-items:flex-start;flex-direction:column;gap:8px;}
-  body.hub-paleta .hub-module-dock{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(170px,68%);gap:14px;padding:20px 14px;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding-inline:14px;scrollbar-width:thin;scrollbar-color:var(--hub-line) transparent;}
+  body.hub-paleta .hub-module-selector{padding:20px 14px;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding-inline:14px;scrollbar-width:thin;scrollbar-color:var(--hub-line) transparent;}
+  body.hub-paleta :is(.hub-module-dock,.hub-module-actions){grid-template-columns:repeat(4,minmax(170px,68%));gap:14px;}
   body.hub-paleta .hub-module-tab{scroll-snap-align:start;}
   body.hub-paleta .hub-herramientas{margin-top:30px;}
   body.hub-paleta .hub-herramientas-head{gap:12px;margin-bottom:22px;align-items:flex-start;}
@@ -191,3 +200,4 @@ body.hub-paleta .hub-captura-pie .etx-ic{width:20px;height:20px;}
 }
 @media(prefers-reduced-motion:reduce){body.hub-paleta .hub-tool-fila{animation:none;transition:none;}}
 @media(prefers-reduced-motion:reduce){body.hub-paleta .hub-captura-dialogo[open]{animation:none;}body.hub-paleta :is(.hub-visor-marco,.hub-visor-ampliar){transition:none;}}
+@media(prefers-reduced-motion:reduce){body.hub-paleta .hub-acceso-aparece{animation:none;}body.hub-paleta .hub-ir-modulo{transition:none;}}

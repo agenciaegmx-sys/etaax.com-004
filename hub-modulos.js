@@ -33,7 +33,9 @@
             { nombre: 'Simulador de metas', clave: 'simulador', ruta: 'consultoria/simulador-kpis.html', icono: 'fin-kpis', etiqueta: 'Planeación', permiso: ['financiero'], descripcion: 'Explora las ventas, comensales y cheque promedio necesarios para tus metas.', funciones: ['Meta de venta del mes', 'Comensales y cheque necesarios', 'Escenarios lado a lado'] }
         ]}
     ];
-    var estado = null, seleccionado = '', CLAVE = 'etaax_hub_modulo';
+    var estado = null, seleccionado = '', CLAVE = 'etaax_hub_modulo', ultimoAcceso = '';
+    var marcoDock = document.getElementById('hubModuloSelector') || dock;
+    var acciones = document.getElementById('hubModuloAcciones');
     var panel = document.getElementById('hubHerramientas');
     var tarjetas = document.getElementById('hubHerramientasTarjetas');
     function esc(x) {
@@ -186,6 +188,13 @@
         return '<button type="button" class="hub-module-tab" id="hub-tab-' + m.id + '" data-modulo="' + m.id + '" role="tab" aria-controls="hubHerramientas" aria-selected="false" tabindex="-1" disabled>' +
             '<span class="hub-module-icon" aria-hidden="true">' + icono(m.icono, 38) + '</span><span class="hub-module-numero">Módulo ' + (i + 1) + '</span><span class="hub-module-nombre">' + m.nombre + '</span></button>';
     }).join('');
+    function mostrarSeleccion() {
+        var tab = dock.querySelector('[aria-selected="true"]');
+        if (!tab || !marcoDock.getClientRects().length) return;
+        if (tab.offsetLeft < marcoDock.scrollLeft + 14 || tab.offsetLeft + tab.offsetWidth > marcoDock.scrollLeft + marcoDock.clientWidth - 14) {
+            marcoDock.scrollLeft = Math.max(0, tab.offsetLeft - 14);
+        }
+    }
     function pintar() {
         cerrarCaptura(false);
         var activo = buscar(seleccionado);
@@ -200,7 +209,12 @@
         });
         var aviso = document.getElementById('hubHerramientasEstado');
         document.querySelector('.hub-herramientas-head').hidden = !activo;
+        var ir = document.getElementById('hubIrAlModulo');
+        if (acciones) acciones.hidden = !activo;
+        if (ir) ir.hidden = !activo || !activo.portada;
         if (!activo) {
+            if (ir) ir.removeAttribute('href');
+            ultimoAcceso = '';
             tarjetas.innerHTML = '';
             aviso.textContent = 'Elige un negocio para ver sus herramientas.';
             panel.removeAttribute('aria-labelledby');
@@ -214,13 +228,22 @@
         document.getElementById('hubModuloNumero').textContent = 'Módulo ' + (MODULOS.indexOf(activo) + 1) + ' · activo';
         document.getElementById('hubModuloTitulo').textContent = activo.nombre;
         document.getElementById('hubModuloDescripcion').textContent = activo.descripcion;
-        /* IR AL MÓDULO. Las tarjetas de abajo llevan a una herramienta; esto
-           lleva al módulo entero —su portada, con su barra lateral—, que es la
-           misma página a la que entra «Cambiar módulo» desde el subheader. Sin
-           este botón, desde aquí solo se podía entrar apuntando a una
-           herramienta concreta, y para ver el módulo había que adivinar cuál. */
-        var ir = document.getElementById('hubIrAlModulo');
-        if (ir) { ir.href = activo.portada; ir.hidden = !activo.portada; }
+        /* La acción queda en la columna del módulo elegido, debajo de su
+           tarjeta y fuera del tablist. Comparte su portada y permisos. */
+        if (ir) {
+            ir.href = activo.portada;
+            ir.style.gridColumn = String(MODULOS.indexOf(activo) + 1);
+            ir.setAttribute('aria-label', 'Ir al módulo ' + activo.nombre);
+            var flecha = ir.querySelector('.hub-module-entry-arrow');
+            if (flecha) flecha.innerHTML = icono('flecha', 16);
+            if (ultimoAcceso !== seleccionado) {
+                ir.classList.remove('hub-acceso-aparece');
+                void ir.offsetWidth;
+                ir.classList.add('hub-acceso-aparece');
+                ultimoAcceso = seleccionado;
+            }
+        }
+        requestAnimationFrame(mostrarSeleccion);
         /* UNA FILA POR HERRAMIENTA, Y DENTRO SU GUÍA VISUAL.
            Estas filas NO llevan a ningún lado: enseñan. Cada una pasa las
            capturas de su herramienta —el menú, la pantalla, el modal— con el pie
@@ -274,8 +297,7 @@
         var tab = opciones[siguiente];
         window.etaaxSeleccionarModulo(tab.dataset.modulo);
         tab.focus({ preventScroll: true });
-        if (tab.offsetLeft < dock.scrollLeft) dock.scrollLeft = tab.offsetLeft - 14;
-        else if (tab.offsetLeft + tab.offsetWidth > dock.scrollLeft + dock.clientWidth) dock.scrollLeft = tab.offsetLeft + tab.offsetWidth - dock.clientWidth + 14;
+        mostrarSeleccion();
     });
     /* Las filas enseñan. Las flechas pasan las capturas; tocar la imagen abre
        su vista ampliada, conservando el paso que se estaba leyendo. */
@@ -290,5 +312,10 @@
     window.addEventListener('etaax:permisos', function (e) {
         if (estado && (!e.detail || !e.detail.negId || e.detail.negId === estado.negId)) pintar();
     });
-    if (typeof window.etaaxDock === 'function') window.etaaxDock(dock, '.hub-module-tab');
+    var entrada = document.getElementById('hubIrAlModulo');
+    if (entrada) entrada.addEventListener('click', function (e) {
+        var m = buscar(seleccionado);
+        if (!m || !disponible(m)) { e.preventDefault(); pintar(); }
+    });
+    if (typeof window.etaaxDock === 'function') window.etaaxDock(marcoDock, '.hub-module-tab');
 })();

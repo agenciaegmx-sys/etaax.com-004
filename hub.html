@@ -616,7 +616,7 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 </style>
 <link rel="stylesheet" href="/hub-paleta.css?v=0ae181b1">
 <link rel="stylesheet" href="/hub-globales.css?v=e52b7f71">
-<link rel="stylesheet" href="/hub-modulos.css?v=c81afa58">
+<link rel="stylesheet" href="/hub-modulos.css?v=93d3d8dc">
 </head>
 <body class="hub-paleta">
 
@@ -908,14 +908,16 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 
     <div class="hub-workspace">
       <div class="hub-module-intro"><span>¿Qué necesitas hacer?</span><span>Accesos a las cuatro áreas de trabajo</span></div>
-      <div class="hub-module-dock" id="hubModuloDock" role="tablist" aria-label="Áreas de trabajo"></div>
+      <div class="hub-module-selector" id="hubModuloSelector">
+        <div class="hub-module-dock" id="hubModuloDock" role="tablist" aria-label="Áreas de trabajo"></div>
+        <div class="hub-module-actions" id="hubModuloAcciones" hidden>
+          <a class="hub-ir-modulo" id="hubIrAlModulo" href="#" hidden><span>Ir al módulo</span><span class="hub-module-entry-arrow" aria-hidden="true"></span></a>
+        </div>
+      </div>
       <section id="hubHerramientas" class="hub-herramientas" role="tabpanel" tabindex="0">
         <div class="hub-herramientas-head">
           <span class="hub-herramientas-icon" id="hubModuloIcono" aria-hidden="true"></span>
           <div><p id="hubModuloNumero" class="hub-modulo-numero"></p><h2 id="hubModuloTitulo"></h2><p id="hubModuloDescripcion" class="hub-modulo-desc"></p></div>
-          <!-- Las filas de abajo llevan a UNA herramienta; esto lleva al módulo
-               entero, a la misma portada a la que entra «Cambiar módulo». -->
-          <a class="hub-ir-modulo" id="hubIrAlModulo" href="#" hidden>Ir al módulo</a>
         </div>
         <div id="hubHerramientasTarjetas" class="hub-tools-grid"></div>
         <p id="hubHerramientasEstado" class="hub-herramientas-estado" role="status"></p>
@@ -4568,7 +4570,7 @@ async function guardarNuevaPassword(){
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
 <script src="/etaax-header.js?v=8fcd3a4c"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="/hub-interacciones.js?v=43cd2b2b"></script>
-<script src="/hub-modulos.js?v=abcd13e4"></script>
+<script src="/hub-modulos.js?v=9a34c44d"></script>
 <script src="security.js?v=c188734e"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=1f8501c0"></script>
