@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <script src="/theme.js?v=modulos-ui-1"></script>
+    <script src="/theme.js?v=e6b90817"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>etaax – Acceso</title>
-<script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
-<script src="/page-guard.js"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
-<script src="/precios.js"></script>
-<script src="/datos-pago.js?v=cuenta-1"></script><!-- datos de transferencia y contacto: fuente única -->
-<script src="/etaax-core.js?v=financiero-2"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
+<script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
+<script src="/page-guard.js?v=4c811fa3"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
+<script src="/precios.js?v=f98b43e7"></script>
+<script src="/datos-pago.js?v=6d6c3543"></script><!-- datos de transferencia y contacto: fuente única -->
+<script src="/etaax-core.js?v=0ea1eafe"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
 <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
      navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
      (DNS + TLS) en medio, con el texto esperando. -->
@@ -614,9 +614,9 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 .priv-check-label a{color:var(--green);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--greend);}
 .priv-check-label a:hover{color:var(--green2);}
 </style>
-<link rel="stylesheet" href="/hub-paleta.css?v=10">
-<link rel="stylesheet" href="/hub-globales.css?v=3">
-<link rel="stylesheet" href="/hub-modulos.css?v=8">
+<link rel="stylesheet" href="/hub-paleta.css?v=0ae181b1">
+<link rel="stylesheet" href="/hub-globales.css?v=e52b7f71">
+<link rel="stylesheet" href="/hub-modulos.css?v=c81afa58">
 </head>
 <body class="hub-paleta">
 
@@ -1154,9 +1154,9 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
-<script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
-<script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
-<script src="/etaax-db.js"></script>
+<script src="/presencia.js?v=431b2b80"></script><!-- quién está trabajando aquí: avatares en la barra -->
+<script src="/etaax-store.js?v=51ca2ddd"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
+<script src="/etaax-db.js?v=599f78b4"></script>
 <script src="staff-auth.js"></script>
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
@@ -4564,14 +4564,14 @@ async function guardarNuevaPassword(){
 })();
 </script>
 <script src="admin-guard.js"></script>
-<script src="/etaax-iconos.js?v=modulos-1"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
-<script src="/negocio-tipos.js?v=1"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
-<script src="/etaax-header.js?v=paleta-1"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
-<script src="/hub-interacciones.js?v=2"></script>
-<script src="/hub-modulos.js?v=14"></script>
-<script src="security.js"></script>
-<script src="/modal-drag.js"></script>
-<script src="/modal-dock.js"></script>
-<script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/etaax-iconos.js?v=83b0b21d"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
+<script src="/negocio-tipos.js?v=7fdc2cd9"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
+<script src="/etaax-header.js?v=8fcd3a4c"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
+<script src="/hub-interacciones.js?v=43cd2b2b"></script>
+<script src="/hub-modulos.js?v=abcd13e4"></script>
+<script src="security.js?v=c188734e"></script>
+<script src="/modal-drag.js?v=4f2eff35"></script>
+<script src="/modal-dock.js?v=1f8501c0"></script>
+<script src="/novedades.js?v=687781ca"></script><!-- aviso de actualizaciones del sistema -->
 </body>
 </html>

@@ -22815,10 +22815,14 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
     const carta = fs.readFileSync(path.join(RAIZ, 'carta.html'), 'utf8');
     const menu  = fs.readFileSync(path.join(RAIZ, 'administrativo/menu.html'), 'utf8');
 
+    /* Se busca el archivo, no la ruta exacta: los compartidos viajan con la
+       huella de su contenido en `?v=` para que el navegador no sirva la copia
+       de ayer, y esta prueba se caía por un cambio que está bien. */
+    const pide = (html, archivo) => new RegExp('src="\\/' + archivo.replace('.', '\\.') + '(\\?[^"]*)?"').test(html);
     test('la carta pública carga el tema compartido', () =>
-        eq(carta.indexOf('src="/carta-tema.js"') > -1, true, 'un solo archivo'));
+        eq(pide(carta, 'carta-tema.js'), true, 'un solo archivo'));
     test('…y el editor del menú también', () =>
-        eq(menu.indexOf('src="/carta-tema.js"') > -1, true, 'el mismo'));
+        eq(pide(menu, 'carta-tema.js'), true, 'el mismo'));
 
     /* La maqueta del teléfono NO puede tener un color fijo: con uno solo se
        vería bien en el tema oscuro y mentiría con cualquier otro. Se mira el
@@ -27331,6 +27335,45 @@ console.log('\n══ BE18 · La caché no se mezcla ══');
 
     test('las páginas se revisaron de verdad, no una lista vacía', () =>
         eq(paginas.length > 30, true, 'solo ' + paginas.length + ' páginas: el recorrido no encontró el sitio'));
+
+    /* ── LA HUELLA DEL CONTENIDO, NO UN NÚMERO QUE ALGUIEN RECUERDA ────────
+       Netlify sirve el JS y el CSS con `stale-while-revalidate` de una semana:
+       al publicar, el navegador puede seguir ejecutando la copia anterior
+       durante días. Por eso cada compartido viaja con `?v=` — y por eso ese
+       `?v=` tiene que cambiar cuando el archivo cambia.
+
+       Ponerlo a mano no funciona: hoy costó DOS diagnósticos equivocados. El
+       aviso de novedades se arregló tres veces y el navegador seguía corriendo
+       el de ayer, porque iba sin versión en sus 42 páginas; y nadie relaciona
+       nunca ese síntoma con esta causa.
+
+       Aquí la versión ES la huella del contenido, así que esta prueba la
+       recalcula y compara. Si falla: `node versionar.js`.                   */
+    {
+        const crypto = require('crypto');
+        const compartidos = fs.readFileSync(path.join(RAIZ, 'versionar.js'), 'utf8')
+            .match(/const COMPARTIDOS = \[([\s\S]*?)\]/)[1]
+            .match(/'[^']+'/g).map(x => x.slice(1, -1))
+            .filter(f => fs.existsSync(path.join(RAIZ, f)));
+        eq(compartidos.length > 20, true, 'la lista de compartidos se quedó corta');
+
+        const desfasados = new Set();
+        compartidos.forEach(f => {
+            const esperado = crypto.createHash('sha256')
+                .update(fs.readFileSync(path.join(RAIZ, f))).digest('hex').slice(0, 8);
+            const re = new RegExp('(?:src|href)="(?:\\.\\.\\/|\\.\\/|\\/)?' +
+                f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\?v=([a-f0-9]{8}))?"', 'g');
+            paginas.forEach(rel => {
+                const txt = fs.readFileSync(path.join(RAIZ, rel), 'utf8');
+                let m;
+                while ((m = re.exec(txt))) if (m[2] !== esperado) desfasados.add(f);
+            });
+        });
+        test('cada compartido viaja con la huella de su contenido', () =>
+            eq(desfasados.size, 0,
+               'el navegador seguiría sirviendo la copia vieja de: ' + [...desfasados].join(', ') +
+               ' — corre `node versionar.js`'));
+    }
 
     /* Un archivo compartido = una sola versión en todo el sitio. Si una página
        lo pide distinto, se nombra: lo que no se nombra no se arregla. */

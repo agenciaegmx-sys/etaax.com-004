@@ -233,6 +233,10 @@ body.etx-modulos-ui #etx-nov{
   --etx-nov-ink:#0f0e0c;
 }
 
+/* El icono que sustituye a un emoji va con el texto, no encima de él. */
+body.etx-modulos-ui .etx-emoji-slot{display:inline-flex;align-items:center;vertical-align:-3px;margin-right:6px;}
+body.etx-modulos-ui .etx-emoji-slot .etx-ic{width:16px;height:16px;}
+
 /* ═══ LOS CAMPOS Y BUSCADORES ═════════════════════════════════════════════
    Cada pantalla tenía su propio buscador: distinto fondo, distinto borde y
    distinto color al escribir. Aquí se igualan SOLO los colores —el foco en

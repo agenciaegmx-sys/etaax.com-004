@@ -65,6 +65,69 @@
         t.appendChild(fin);
     }
 
+    /* ── LOS EMOJIS DE LOS BOTONES, CAMBIADOS POR LOS ICONOS DE LA MARCA ───
+       Los modales de Ventas y Gastos —cortes, gastos, nóminas, caja fuerte—
+       llevan emojis en sus títulos y botones. Un emoji lo dibuja el sistema
+       operativo: el mismo 🏦 se ve distinto en Mac, en Windows y en un Android
+       viejo, y trae su propio color, que es el único que la paleta no controla.
+
+       Se cambian AQUÍ y no en las ocho mil líneas de `diario.html` por tres
+       razones: vale para los modales que se pintan al vuelo, no toca el código
+       que mueve dinero, y el día que llegue un icono nuevo se añade una línea.
+
+       SOLO SE TOCA EL CROMO —títulos de ventana, botones y etiquetas de
+       sección— y solo si el emoji ABRE el texto. Lo que escribió una persona
+       (el concepto de un gasto, el nombre de un proveedor) no se toca nunca:
+       ahí el emoji es dato, no decoración.                                   */
+    var EMOJIS = {
+        '🏦':'candado',            '🏛':'fin-cuentas-bancarias', '🏛️':'fin-cuentas-bancarias',
+        '💰':'fin-ventas',         '🧾':'fin-gastos',            '📊':'fin-estadisticas',
+        '🎯':'fin-kpis',           '📅':'cat-horarios',          '👥':'cat-colaboradores',
+        '🚚':'cat-proveedores',    '⭐':'cat-clientes',           '📦':'mod-inventarios',
+        '🔒':'candado',            '🌐':'org-corporativo',       '🏪':'sucursal',
+        '📈':'fin-estadisticas',   '💳':'fin-cuentas-bancarias', '🍽':'restaurante',
+        '🍽️':'restaurante'
+    };
+    /* Dónde sí: lo que es interfaz. Dónde no: celdas de tabla y campos. */
+    var CROMO = 'button, .dx-win-title, .dx-card-title, .cf-card-title, .brand-title, ' +
+                '.dx-sec-title, .corte-sec-title, .gs-sec-title, .ck-title, .ev-title, label';
+
+    function iconosEnCromo(raiz) {
+        if (embebido || typeof window.etaaxIcono !== 'function') return;
+        (raiz || document).querySelectorAll(CROMO).forEach(function (el) {
+            if (el.dataset.etxEmoji) return;
+            /* El primer nodo de texto, y solo si empieza con un emoji conocido:
+               así nunca se toca texto de en medio ni contenido de la persona. */
+            var t = el.firstChild;
+            while (t && t.nodeType === 3 && !t.nodeValue.trim()) t = t.nextSibling;
+            if (!t || t.nodeType !== 3) return;
+            var txt = t.nodeValue.replace(/^\s+/, '');
+            var clave = Object.keys(EMOJIS).find(function (e) { return txt.indexOf(e) === 0; });
+            if (!clave) return;
+            var marcado = window.etaaxIcono(EMOJIS[clave], { tam: 16, clase: 'etx-emoji-ic' });
+            if (!marcado) return;
+            el.dataset.etxEmoji = '1';
+            t.nodeValue = txt.slice(clave.length).replace(/^[\s\u00a0]+/, ' ');
+            var hueco = document.createElement('span');
+            hueco.className = 'etx-emoji-slot';
+            hueco.setAttribute('aria-hidden', 'true');
+            hueco.innerHTML = marcado;
+            el.insertBefore(hueco, el.firstChild);
+        });
+    }
+    /* Los modales nacen después, así que se vuelve a pasar cuando el documento
+       cambia. Se agrupa en un cuadro de animación: sin eso, pintar una tabla de
+       doscientos renglones dispararía doscientas pasadas. */
+    function vigilarCromo() {
+        if (embebido || typeof MutationObserver !== 'function') return;
+        var pendiente = false;
+        new MutationObserver(function () {
+            if (pendiente) return;
+            pendiente = true;
+            requestAnimationFrame(function () { pendiente = false; iconosEnCromo(); });
+        }).observe(document.body, { childList: true, subtree: true });
+    }
+
     function medirLayout() {
         if (embebido) return;
         var bar = document.getElementById('ctxBar'), nav = document.getElementById('nav');
@@ -220,6 +283,8 @@
         if (nav && innerWidth <= 600) { nav.classList.add('cerrado');document.body.classList.remove('nav-open'); }
         if (typeof window.etaaxPintarIconosNav === 'function') window.etaaxPintarIconosNav();
         bicolorTitulo();
+        iconosEnCromo();
+        vigilarCromo();
         medirLayout();window.addEventListener('resize',medirLayout);
         window.addEventListener('etaax:permisos',function(){if(dialogo && dialogo.open && dialogo.querySelector('[data-modulo]')){dialogo.close();abrirModulos();}});
     }
