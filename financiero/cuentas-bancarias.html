@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
-    <script src="/theme.js"></script>
+    <script src="/theme.js?v=modulos-ui-1"></script>
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
@@ -68,6 +68,8 @@
         .cb-save{background:var(--green);border:none;color:#fff;padding:9px 22px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;}
         .hint{font-size:10.5px;color:var(--text-dim);margin-top:-7px;margin-bottom:13px;line-height:1.5;}
     </style>
+<link rel="stylesheet" href="/etaax-sidebar.css?v=1">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1">
 </head>
 <body>
 
@@ -183,7 +185,7 @@
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
-<script src="../ctx-bar.js"></script>
+<script src="/ctx-bar.js?v=modulos-ui-1"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script>
 function toggleNav(){
@@ -399,10 +401,15 @@ document.addEventListener('DOMContentLoaded', function(){
     _sbInit();
 });
 </script>
-<script src="nav.js"></script><!-- la barra lateral, una sola para todo el módulo -->
-<script src="/nav-pref.js"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
+<script src="nav.js?v=resumen-2"></script><!-- la barra lateral, una sola para todo el módulo -->
+<script src="/nav-pref.js?v=modulos-ui-1"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/etaax-iconos.js?v=modulos-1"></script>
+<script src="/etaax-sidebar.js?v=2"></script>
+<script src="/negocio-tipos.js?v=1"></script>
+<script src="/etaax-header.js?v=paleta-1"></script>
+<script src="/etaax-modulos-ui.js?v=1"></script>
 </body>
 </html>

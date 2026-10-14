@@ -1,0 +1,563 @@
+Inventario de la actualización · 13-oct-2026
+Capturado: 2026-10-13T22:57:12-06:00
+Rama: main
+HEAD local: e3e9d6e1f8177460a88f3a0ce9719ec88588f8fc
+Comparación con origin/main local (sin fetch): 0	1
+Las cantidades cambian si continúa el trabajo; verificar git status antes de stage.
+git diff --stat no incluye los archivos sin seguimiento.
+
+ESTADO COMPLETO (git status --short --untracked-files=all)
+ M admin-catalogo-insumos.html
+ M admin-catalogo-rrhh.html
+ M admin-papelera.html
+ M admin.html
+ M administrativo/checklists.html
+ M administrativo/clientes.html
+ M administrativo/diario.html
+ M administrativo/evaluaciones.html
+ M administrativo/horarios.html
+ M administrativo/index.html
+ M administrativo/menu.html
+ M administrativo/organigrama.html
+ M administrativo/perfiles-puesto.html
+ M administrativo/permisos.html
+ M administrativo/proveedores.html
+ M administrativo/staff-hub.html
+ M administrativo/staff.html
+ M alta.html
+ M app.js
+ M aviso-colaboradores.html
+ M aviso-privacidad.html
+ M captura.html
+ M checklist.html
+ M configuracion.html
+ M consultoria/guias.html
+ M consultoria/index.html
+ M consultoria/reportes.html
+ M consultoria/simulador-kpis.html
+ M consultoria/ventas-productos.html
+ M ctx-bar.js
+ M entrada.html
+ M etaax-core.js
+ M etaax-header.js
+ M etaax-iconos.js
+ M financiero/cuentas-bancarias.html
+ M financiero/estadisticas.html
+ M financiero/gastos-globales.html
+ M financiero/index.html
+ M financiero/kpis.html
+ M financiero/nav.js
+ M financiero/previsiones.html
+ M financiero/resumen.html
+ M financiero/ventas.html
+ M global-nav.js
+ M hub.html
+ M iconos/LEEME.md
+ M iconos/generar.js
+ M mi-cuenta.html
+ M nav-pref.js
+ M novedades.js
+ M plan-facturacion.html
+ M recetas/index.html
+ M recetas/insumos.html
+ M recetas/inventarios.html
+ M recetas/requisiciones.html
+ M terminos.html
+ M tests/money-tests.js
+ M tests/probar-cuenta-header.cjs
+ M theme.js
+?? docs/continuidad-codex-2026-10-13/administrativo-pc.png
+?? docs/continuidad-codex-2026-10-13/aprende-portada-movil-320.png
+?? docs/continuidad-codex-2026-10-13/candado-4414-comprobaciones.log
+?? docs/continuidad-codex-2026-10-13/escandallos-movil-320.png
+?? docs/continuidad-codex-2026-10-13/escandallos-pc.png
+?? docs/continuidad-codex-2026-10-13/financiero-movil-390.png
+?? docs/continuidad-codex-2026-10-13/financiero-portada-pc.png
+?? docs/continuidad-codex-2026-10-13/fuentes/fonts.css
+?? docs/continuidad-codex-2026-10-13/fuentes/fuente-0.ttf
+?? docs/continuidad-codex-2026-10-13/fuentes/fuente-1.ttf
+?? docs/continuidad-codex-2026-10-13/fuentes/fuente-2.ttf
+?? docs/continuidad-codex-2026-10-13/fuentes/fuente-3.ttf
+?? docs/continuidad-codex-2026-10-13/fuentes/fuente-4.ttf
+?? docs/continuidad-codex-2026-10-13/fuentes/google.css
+?? docs/continuidad-codex-2026-10-13/guia-clientes-menu/clientes-directorio-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-clientes-menu/clientes-registro-movil.png
+?? docs/continuidad-codex-2026-10-13/guia-clientes-menu/menu-ajustes-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-clientes-menu/menu-qr-movil.png
+?? docs/continuidad-codex-2026-10-13/guia-clientes-menu/money-tests.log
+?? docs/continuidad-codex-2026-10-13/guia-clientes-menu/navegador.log
+?? docs/continuidad-codex-2026-10-13/guia-clientes-menu/revision-visual.log
+?? docs/continuidad-codex-2026-10-13/guia-escandallos/catalogo-corregido-movil.png
+?? docs/continuidad-codex-2026-10-13/guia-escandallos/catalogo-corregido-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-escandallos/guia-alimentos-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-escandallos/guia-menu-movil.png
+?? docs/continuidad-codex-2026-10-13/guia-escandallos/money-tests.log
+?? docs/continuidad-codex-2026-10-13/guia-escandallos/navegador.log
+?? docs/continuidad-codex-2026-10-13/guia-escandallos/revision-catalogo.log
+?? docs/continuidad-codex-2026-10-13/guia-escandallos/revision-guia.log
+?? docs/continuidad-codex-2026-10-13/guia-insumos/catalogo-global-movil.png
+?? docs/continuidad-codex-2026-10-13/guia-insumos/catalogo-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-insumos/edicion-movil.png
+?? docs/continuidad-codex-2026-10-13/guia-insumos/ficha-tecnica-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-insumos/money-tests.log
+?? docs/continuidad-codex-2026-10-13/guia-insumos/navegador.log
+?? docs/continuidad-codex-2026-10-13/guia-insumos/revision-visual.log
+?? docs/continuidad-codex-2026-10-13/guia-requisiciones/existencias-movil.png
+?? docs/continuidad-codex-2026-10-13/guia-requisiciones/existencias-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-requisiciones/exportacion-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-requisiciones/money-tests.log
+?? docs/continuidad-codex-2026-10-13/guia-requisiciones/navegador.log
+?? docs/continuidad-codex-2026-10-13/guia-requisiciones/revision-visual.log
+?? docs/continuidad-codex-2026-10-13/guia-zoom/diario-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-zoom/money-tests.log
+?? docs/continuidad-codex-2026-10-13/guia-zoom/navegador.log
+?? docs/continuidad-codex-2026-10-13/guia-zoom/proveedores-directorio-movil.png
+?? docs/continuidad-codex-2026-10-13/guia-zoom/proveedores-formulario-pc.png
+?? docs/continuidad-codex-2026-10-13/guia-zoom/revision-visual.log
+?? docs/continuidad-codex-2026-10-13/guia-zoom/staff-movil.png
+?? docs/continuidad-codex-2026-10-13/guia-zoom/store-tests.log
+?? docs/continuidad-codex-2026-10-13/kpis/cuenta-header.log
+?? docs/continuidad-codex-2026-10-13/kpis/kpis-320-dark.png
+?? docs/continuidad-codex-2026-10-13/kpis/kpis-390-dark.png
+?? docs/continuidad-codex-2026-10-13/kpis/kpis-390-light.png
+?? docs/continuidad-codex-2026-10-13/kpis/kpis-browser.log
+?? docs/continuidad-codex-2026-10-13/kpis/kpis-completo-dark.png
+?? docs/continuidad-codex-2026-10-13/kpis/kpis-completo-light.png
+?? docs/continuidad-codex-2026-10-13/kpis/kpis-conceptos-320-dark.png
+?? docs/continuidad-codex-2026-10-13/kpis/money.log
+?? docs/continuidad-codex-2026-10-13/kpis/store.log
+?? docs/continuidad-codex-2026-10-13/login-inventarios/inventarios-existencias-pc.png
+?? docs/continuidad-codex-2026-10-13/login-inventarios/inventarios-qr-movil.png
+?? docs/continuidad-codex-2026-10-13/login-inventarios/login-isotipo-claro.png
+?? docs/continuidad-codex-2026-10-13/login-inventarios/login-isotipo-movil.png
+?? docs/continuidad-codex-2026-10-13/login-inventarios/login-isotipo-pc.png
+?? docs/continuidad-codex-2026-10-13/login-inventarios/money-tests.log
+?? docs/continuidad-codex-2026-10-13/login-inventarios/navegador.log
+?? docs/continuidad-codex-2026-10-13/login-inventarios/revision-inventarios.log
+?? docs/continuidad-codex-2026-10-13/login-inventarios/revision-login.log
+?? docs/continuidad-codex-2026-10-13/navegacion-48-casos.log
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/cuenta-header.log
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/kpis-metas-browser.log
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/meta-cocina-1440.png
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/meta-cocina-320.png
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/money.log
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-320-light.png
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-390-dark.png
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-390-light.png
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-browser.log
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-completo-dark.png
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-completo-light.png
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-financiero.pdf
+?? docs/continuidad-codex-2026-10-13/resumen-financiero/store.log
+?? docs/continuidad-codex-2026-10-13/revisar-modulos-ui.cjs
+?? docs/continuidad-codex-2026-10-13/revisar-portadas-ui.cjs
+?? docs/continuidad-codex-2026-10-13/revision-cuatro-modulos.log
+?? docs/continuidad-codex-2026-10-13/revision-portadas-pendiente-staff.log
+?? docs/guia-claude-continuidad-2026-10-13.md
+?? docs/inventario-actualizacion-2026-10-13.txt
+?? docs/reporte-claude-2026-10-13.md
+?? docs/reporte-codex-dia-2026-10-13.md
+?? docs/reporte-codex-diseno-modulos-2026-10-13.md
+?? docs/reporte-codex-globales-2026-10-13.md
+?? docs/reporte-codex-kpis-2026-10-13.md
+?? docs/reporte-codex-modulos-2026-10-13.md
+?? docs/reporte-codex-navegacion-2026-10-13.md
+?? docs/reporte-codex-paleta-hub-2026-10-13.md
+?? docs/reporte-codex-pausa-2026-10-13.md
+?? docs/reporte-codex-resumen-financiero-2026-10-13.md
+?? docs/reporte-codex-zoom-guia-2026-10-13.md
+?? etaax-modulos-ui.css
+?? etaax-modulos-ui.js
+?? etaax-sidebar.css
+?? etaax-sidebar.js
+?? financiero/kpis-panel.css
+?? financiero/metas-referencia.css
+?? financiero/metas-referencia.js
+?? financiero/periodo-enlace.js
+?? financiero/resumen-panel.css
+?? guia/LEEME.md
+?? guia/clientes-1.png
+?? guia/clientes-2.png
+?? guia/clientes-3.png
+?? guia/diario-1.png
+?? guia/diario-10.png
+?? guia/diario-2.png
+?? guia/diario-3.png
+?? guia/diario-4.png
+?? guia/diario-5.png
+?? guia/diario-6.png
+?? guia/diario-7.png
+?? guia/diario-8.png
+?? guia/diario-9.png
+?? guia/escandallos-1.png
+?? guia/escandallos-2.png
+?? guia/escandallos-3.png
+?? guia/escandallos-4.png
+?? guia/escandallos-5.png
+?? guia/escandallos-6.png
+?? guia/escandallos-7.png
+?? guia/insumos-1.png
+?? guia/insumos-2.png
+?? guia/insumos-3.png
+?? guia/insumos-4.png
+?? guia/insumos-5.png
+?? guia/insumos-6.png
+?? guia/insumos-7.png
+?? guia/inventarios-1.png
+?? guia/inventarios-2.png
+?? guia/inventarios-3.png
+?? guia/inventarios-4.png
+?? guia/inventarios-5.png
+?? guia/inventarios-6.png
+?? guia/inventarios-7.png
+?? guia/menu-1.png
+?? guia/menu-2.png
+?? guia/menu-3.png
+?? guia/proveedores-1.png
+?? guia/proveedores-2.png
+?? guia/proveedores-3.png
+?? guia/requisiciones-1.png
+?? guia/requisiciones-2.png
+?? guia/requisiciones-3.png
+?? guia/requisiciones-4.png
+?? guia/staff-1.png
+?? guia/staff-2.png
+?? guia/staff-3.png
+?? guia/staff-4.png
+?? guia/staff-5.png
+?? guia/staff-6.png
+?? guia/staff-7.png
+?? guia/staff-8.png
+?? hub-globales.css
+?? hub-interacciones.js
+?? hub-modulos.css
+?? hub-modulos.js
+?? hub-paleta.css
+?? iconos/catalogos/oscuro/etaax-clientes.svg
+?? iconos/catalogos/oscuro/etaax-colaboradores.svg
+?? iconos/catalogos/oscuro/etaax-horarios.svg
+?? iconos/catalogos/oscuro/etaax-insumos.svg
+?? iconos/catalogos/oscuro/etaax-proveedores.svg
+?? iconos/catalogos/oscuro/etaax-recetas.svg
+?? iconos/catalogos/oscuro/etaax-sub-recetas.svg
+?? iconos/financieros/oscuro/etaax-cuentas-bancarias.svg
+?? iconos/financieros/oscuro/etaax-estadisticas.svg
+?? iconos/financieros/oscuro/etaax-gastos.svg
+?? iconos/financieros/oscuro/etaax-kpis.svg
+?? iconos/financieros/oscuro/etaax-previsiones.svg
+?? iconos/financieros/oscuro/etaax-resumen-resultados.svg
+?? iconos/financieros/oscuro/etaax-ventas.svg
+?? iconos/modulos/principales/oscuro/etaax-aprende-analiza.svg
+?? iconos/modulos/principales/oscuro/etaax-control-administrativo.svg
+?? iconos/modulos/principales/oscuro/etaax-recetas-insumos.svg
+?? iconos/modulos/principales/oscuro/etaax-salud-financiera.svg
+?? iconos/modulos/recetas-insumos/oscuro/etaax-escandallos.svg
+?? iconos/modulos/recetas-insumos/oscuro/etaax-insumos.svg
+?? iconos/modulos/recetas-insumos/oscuro/etaax-inventarios.svg
+?? iconos/modulos/recetas-insumos/oscuro/etaax-requisiciones.svg
+?? iconos/subheader/oscuro/etaax-cambiar-negocio.svg
+?? iconos/subheader/oscuro/etaax-info-negocio.svg
+?? iconos/subheader/oscuro/etaax-info-sucursal.svg
+?? iconos/subheader/oscuro/etaax-matriz.svg
+?? marca/hub/etaax-logo-claro.svg
+?? marca/hub/etaax-logo-oscuro.svg
+?? novedades/01-acceso.png
+?? novedades/02-barra-1.png
+?? novedades/03-cuenta-1.png
+?? novedades/03-cuenta-2.png
+?? novedades/03-cuenta-3.png
+?? novedades/04-sucursales.png
+?? novedades/05-globales-1.png
+?? novedades/05-globales-2.png
+?? novedades/05-globales-3.png
+?? novedades/06-modulos-1.png
+?? novedades/06-modulos-2.png
+?? novedades/07-lateral.png
+?? novedades/08-cambiar-1.png
+?? novedades/08-cambiar-2.png
+?? novedades/09-inicio-1.png
+?? novedades/09-inicio-2.png
+?? novedades/11-iconos.png
+?? novedades/LEEME.md
+?? tests/fixtures/kpis.cjs
+?? tests/probar-kpis.cjs
+?? tests/probar-resumen-financiero.cjs
+
+ARCHIVOS CON SEGUIMIENTO MODIFICADOS (59)
+admin-catalogo-insumos.html
+admin-catalogo-rrhh.html
+admin-papelera.html
+admin.html
+administrativo/checklists.html
+administrativo/clientes.html
+administrativo/diario.html
+administrativo/evaluaciones.html
+administrativo/horarios.html
+administrativo/index.html
+administrativo/menu.html
+administrativo/organigrama.html
+administrativo/perfiles-puesto.html
+administrativo/permisos.html
+administrativo/proveedores.html
+administrativo/staff-hub.html
+administrativo/staff.html
+alta.html
+app.js
+aviso-colaboradores.html
+aviso-privacidad.html
+captura.html
+checklist.html
+configuracion.html
+consultoria/guias.html
+consultoria/index.html
+consultoria/reportes.html
+consultoria/simulador-kpis.html
+consultoria/ventas-productos.html
+ctx-bar.js
+entrada.html
+etaax-core.js
+etaax-header.js
+etaax-iconos.js
+financiero/cuentas-bancarias.html
+financiero/estadisticas.html
+financiero/gastos-globales.html
+financiero/index.html
+financiero/kpis.html
+financiero/nav.js
+financiero/previsiones.html
+financiero/resumen.html
+financiero/ventas.html
+global-nav.js
+hub.html
+iconos/LEEME.md
+iconos/generar.js
+mi-cuenta.html
+nav-pref.js
+novedades.js
+plan-facturacion.html
+recetas/index.html
+recetas/insumos.html
+recetas/inventarios.html
+recetas/requisiciones.html
+terminos.html
+tests/money-tests.js
+tests/probar-cuenta-header.cjs
+theme.js
+
+ARCHIVOS NUEVOS SIN SEGUIMIENTO (216)
+docs/continuidad-codex-2026-10-13/administrativo-pc.png
+docs/continuidad-codex-2026-10-13/aprende-portada-movil-320.png
+docs/continuidad-codex-2026-10-13/candado-4414-comprobaciones.log
+docs/continuidad-codex-2026-10-13/escandallos-movil-320.png
+docs/continuidad-codex-2026-10-13/escandallos-pc.png
+docs/continuidad-codex-2026-10-13/financiero-movil-390.png
+docs/continuidad-codex-2026-10-13/financiero-portada-pc.png
+docs/continuidad-codex-2026-10-13/fuentes/fonts.css
+docs/continuidad-codex-2026-10-13/fuentes/fuente-0.ttf
+docs/continuidad-codex-2026-10-13/fuentes/fuente-1.ttf
+docs/continuidad-codex-2026-10-13/fuentes/fuente-2.ttf
+docs/continuidad-codex-2026-10-13/fuentes/fuente-3.ttf
+docs/continuidad-codex-2026-10-13/fuentes/fuente-4.ttf
+docs/continuidad-codex-2026-10-13/fuentes/google.css
+docs/continuidad-codex-2026-10-13/guia-clientes-menu/clientes-directorio-pc.png
+docs/continuidad-codex-2026-10-13/guia-clientes-menu/clientes-registro-movil.png
+docs/continuidad-codex-2026-10-13/guia-clientes-menu/menu-ajustes-pc.png
+docs/continuidad-codex-2026-10-13/guia-clientes-menu/menu-qr-movil.png
+docs/continuidad-codex-2026-10-13/guia-clientes-menu/money-tests.log
+docs/continuidad-codex-2026-10-13/guia-clientes-menu/navegador.log
+docs/continuidad-codex-2026-10-13/guia-clientes-menu/revision-visual.log
+docs/continuidad-codex-2026-10-13/guia-escandallos/catalogo-corregido-movil.png
+docs/continuidad-codex-2026-10-13/guia-escandallos/catalogo-corregido-pc.png
+docs/continuidad-codex-2026-10-13/guia-escandallos/guia-alimentos-pc.png
+docs/continuidad-codex-2026-10-13/guia-escandallos/guia-menu-movil.png
+docs/continuidad-codex-2026-10-13/guia-escandallos/money-tests.log
+docs/continuidad-codex-2026-10-13/guia-escandallos/navegador.log
+docs/continuidad-codex-2026-10-13/guia-escandallos/revision-catalogo.log
+docs/continuidad-codex-2026-10-13/guia-escandallos/revision-guia.log
+docs/continuidad-codex-2026-10-13/guia-insumos/catalogo-global-movil.png
+docs/continuidad-codex-2026-10-13/guia-insumos/catalogo-pc.png
+docs/continuidad-codex-2026-10-13/guia-insumos/edicion-movil.png
+docs/continuidad-codex-2026-10-13/guia-insumos/ficha-tecnica-pc.png
+docs/continuidad-codex-2026-10-13/guia-insumos/money-tests.log
+docs/continuidad-codex-2026-10-13/guia-insumos/navegador.log
+docs/continuidad-codex-2026-10-13/guia-insumos/revision-visual.log
+docs/continuidad-codex-2026-10-13/guia-requisiciones/existencias-movil.png
+docs/continuidad-codex-2026-10-13/guia-requisiciones/existencias-pc.png
+docs/continuidad-codex-2026-10-13/guia-requisiciones/exportacion-pc.png
+docs/continuidad-codex-2026-10-13/guia-requisiciones/money-tests.log
+docs/continuidad-codex-2026-10-13/guia-requisiciones/navegador.log
+docs/continuidad-codex-2026-10-13/guia-requisiciones/revision-visual.log
+docs/continuidad-codex-2026-10-13/guia-zoom/diario-pc.png
+docs/continuidad-codex-2026-10-13/guia-zoom/money-tests.log
+docs/continuidad-codex-2026-10-13/guia-zoom/navegador.log
+docs/continuidad-codex-2026-10-13/guia-zoom/proveedores-directorio-movil.png
+docs/continuidad-codex-2026-10-13/guia-zoom/proveedores-formulario-pc.png
+docs/continuidad-codex-2026-10-13/guia-zoom/revision-visual.log
+docs/continuidad-codex-2026-10-13/guia-zoom/staff-movil.png
+docs/continuidad-codex-2026-10-13/guia-zoom/store-tests.log
+docs/continuidad-codex-2026-10-13/kpis/cuenta-header.log
+docs/continuidad-codex-2026-10-13/kpis/kpis-320-dark.png
+docs/continuidad-codex-2026-10-13/kpis/kpis-390-dark.png
+docs/continuidad-codex-2026-10-13/kpis/kpis-390-light.png
+docs/continuidad-codex-2026-10-13/kpis/kpis-browser.log
+docs/continuidad-codex-2026-10-13/kpis/kpis-completo-dark.png
+docs/continuidad-codex-2026-10-13/kpis/kpis-completo-light.png
+docs/continuidad-codex-2026-10-13/kpis/kpis-conceptos-320-dark.png
+docs/continuidad-codex-2026-10-13/kpis/money.log
+docs/continuidad-codex-2026-10-13/kpis/store.log
+docs/continuidad-codex-2026-10-13/login-inventarios/inventarios-existencias-pc.png
+docs/continuidad-codex-2026-10-13/login-inventarios/inventarios-qr-movil.png
+docs/continuidad-codex-2026-10-13/login-inventarios/login-isotipo-claro.png
+docs/continuidad-codex-2026-10-13/login-inventarios/login-isotipo-movil.png
+docs/continuidad-codex-2026-10-13/login-inventarios/login-isotipo-pc.png
+docs/continuidad-codex-2026-10-13/login-inventarios/money-tests.log
+docs/continuidad-codex-2026-10-13/login-inventarios/navegador.log
+docs/continuidad-codex-2026-10-13/login-inventarios/revision-inventarios.log
+docs/continuidad-codex-2026-10-13/login-inventarios/revision-login.log
+docs/continuidad-codex-2026-10-13/navegacion-48-casos.log
+docs/continuidad-codex-2026-10-13/resumen-financiero/cuenta-header.log
+docs/continuidad-codex-2026-10-13/resumen-financiero/kpis-metas-browser.log
+docs/continuidad-codex-2026-10-13/resumen-financiero/meta-cocina-1440.png
+docs/continuidad-codex-2026-10-13/resumen-financiero/meta-cocina-320.png
+docs/continuidad-codex-2026-10-13/resumen-financiero/money.log
+docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-320-light.png
+docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-390-dark.png
+docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-390-light.png
+docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-browser.log
+docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-completo-dark.png
+docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-completo-light.png
+docs/continuidad-codex-2026-10-13/resumen-financiero/resumen-financiero.pdf
+docs/continuidad-codex-2026-10-13/resumen-financiero/store.log
+docs/continuidad-codex-2026-10-13/revisar-modulos-ui.cjs
+docs/continuidad-codex-2026-10-13/revisar-portadas-ui.cjs
+docs/continuidad-codex-2026-10-13/revision-cuatro-modulos.log
+docs/continuidad-codex-2026-10-13/revision-portadas-pendiente-staff.log
+docs/guia-claude-continuidad-2026-10-13.md
+docs/inventario-actualizacion-2026-10-13.txt
+docs/reporte-claude-2026-10-13.md
+docs/reporte-codex-dia-2026-10-13.md
+docs/reporte-codex-diseno-modulos-2026-10-13.md
+docs/reporte-codex-globales-2026-10-13.md
+docs/reporte-codex-kpis-2026-10-13.md
+docs/reporte-codex-modulos-2026-10-13.md
+docs/reporte-codex-navegacion-2026-10-13.md
+docs/reporte-codex-paleta-hub-2026-10-13.md
+docs/reporte-codex-pausa-2026-10-13.md
+docs/reporte-codex-resumen-financiero-2026-10-13.md
+docs/reporte-codex-zoom-guia-2026-10-13.md
+etaax-modulos-ui.css
+etaax-modulos-ui.js
+etaax-sidebar.css
+etaax-sidebar.js
+financiero/kpis-panel.css
+financiero/metas-referencia.css
+financiero/metas-referencia.js
+financiero/periodo-enlace.js
+financiero/resumen-panel.css
+guia/LEEME.md
+guia/clientes-1.png
+guia/clientes-2.png
+guia/clientes-3.png
+guia/diario-1.png
+guia/diario-10.png
+guia/diario-2.png
+guia/diario-3.png
+guia/diario-4.png
+guia/diario-5.png
+guia/diario-6.png
+guia/diario-7.png
+guia/diario-8.png
+guia/diario-9.png
+guia/escandallos-1.png
+guia/escandallos-2.png
+guia/escandallos-3.png
+guia/escandallos-4.png
+guia/escandallos-5.png
+guia/escandallos-6.png
+guia/escandallos-7.png
+guia/insumos-1.png
+guia/insumos-2.png
+guia/insumos-3.png
+guia/insumos-4.png
+guia/insumos-5.png
+guia/insumos-6.png
+guia/insumos-7.png
+guia/inventarios-1.png
+guia/inventarios-2.png
+guia/inventarios-3.png
+guia/inventarios-4.png
+guia/inventarios-5.png
+guia/inventarios-6.png
+guia/inventarios-7.png
+guia/menu-1.png
+guia/menu-2.png
+guia/menu-3.png
+guia/proveedores-1.png
+guia/proveedores-2.png
+guia/proveedores-3.png
+guia/requisiciones-1.png
+guia/requisiciones-2.png
+guia/requisiciones-3.png
+guia/requisiciones-4.png
+guia/staff-1.png
+guia/staff-2.png
+guia/staff-3.png
+guia/staff-4.png
+guia/staff-5.png
+guia/staff-6.png
+guia/staff-7.png
+guia/staff-8.png
+hub-globales.css
+hub-interacciones.js
+hub-modulos.css
+hub-modulos.js
+hub-paleta.css
+iconos/catalogos/oscuro/etaax-clientes.svg
+iconos/catalogos/oscuro/etaax-colaboradores.svg
+iconos/catalogos/oscuro/etaax-horarios.svg
+iconos/catalogos/oscuro/etaax-insumos.svg
+iconos/catalogos/oscuro/etaax-proveedores.svg
+iconos/catalogos/oscuro/etaax-recetas.svg
+iconos/catalogos/oscuro/etaax-sub-recetas.svg
+iconos/financieros/oscuro/etaax-cuentas-bancarias.svg
+iconos/financieros/oscuro/etaax-estadisticas.svg
+iconos/financieros/oscuro/etaax-gastos.svg
+iconos/financieros/oscuro/etaax-kpis.svg
+iconos/financieros/oscuro/etaax-previsiones.svg
+iconos/financieros/oscuro/etaax-resumen-resultados.svg
+iconos/financieros/oscuro/etaax-ventas.svg
+iconos/modulos/principales/oscuro/etaax-aprende-analiza.svg
+iconos/modulos/principales/oscuro/etaax-control-administrativo.svg
+iconos/modulos/principales/oscuro/etaax-recetas-insumos.svg
+iconos/modulos/principales/oscuro/etaax-salud-financiera.svg
+iconos/modulos/recetas-insumos/oscuro/etaax-escandallos.svg
+iconos/modulos/recetas-insumos/oscuro/etaax-insumos.svg
+iconos/modulos/recetas-insumos/oscuro/etaax-inventarios.svg
+iconos/modulos/recetas-insumos/oscuro/etaax-requisiciones.svg
+iconos/subheader/oscuro/etaax-cambiar-negocio.svg
+iconos/subheader/oscuro/etaax-info-negocio.svg
+iconos/subheader/oscuro/etaax-info-sucursal.svg
+iconos/subheader/oscuro/etaax-matriz.svg
+marca/hub/etaax-logo-claro.svg
+marca/hub/etaax-logo-oscuro.svg
+novedades/01-acceso.png
+novedades/02-barra-1.png
+novedades/03-cuenta-1.png
+novedades/03-cuenta-2.png
+novedades/03-cuenta-3.png
+novedades/04-sucursales.png
+novedades/05-globales-1.png
+novedades/05-globales-2.png
+novedades/05-globales-3.png
+novedades/06-modulos-1.png
+novedades/06-modulos-2.png
+novedades/07-lateral.png
+novedades/08-cambiar-1.png
+novedades/08-cambiar-2.png
+novedades/09-inicio-1.png
+novedades/09-inicio-2.png
+novedades/11-iconos.png
+novedades/LEEME.md
+tests/fixtures/kpis.cjs
+tests/probar-kpis.cjs
+tests/probar-resumen-financiero.cjs

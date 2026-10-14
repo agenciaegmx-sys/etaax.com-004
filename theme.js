@@ -207,6 +207,7 @@
         _sincronizarBoton();
         _logoDelTema();
         if (document.querySelector('.theme-toggle')) return;
+        if (document.documentElement.classList && document.documentElement.classList.contains('etx-tema-en-header')) return;
         if (/[?&]embed=1/.test(window.location.search)) return;
         if (!document.body) return;   // documento sin cuerpo (arneses, vistas parciales)
         var b = document.createElement('button');

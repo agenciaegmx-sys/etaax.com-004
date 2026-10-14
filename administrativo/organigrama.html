@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
-    <script src="/theme.js"></script>
+    <script src="/theme.js?v=modulos-ui-1"></script>
 <script src="/embed.js"></script>
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
@@ -71,6 +71,8 @@ body.nav-open #viewport{left:200px}
 .om-actions{display:flex;gap:8px;margin-top:18px}
 .theme-toggle{display:none}
 </style>
+<link rel="stylesheet" href="/etaax-sidebar.css?v=1">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1">
 </head>
 <body>
 <header class="top-bar">
@@ -485,11 +487,16 @@ function resetVista(silent){
 document.addEventListener('DOMContentLoaded',function(){ applyTransform(); _sbInit(); });
 </script>
 <script src="../security.js"></script>
-<script src="../ctx-bar.js"></script>
+<script src="/ctx-bar.js?v=modulos-ui-1"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
-<script src="/nav-pref.js"></script>
+<script src="/nav-pref.js?v=modulos-ui-1"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/etaax-iconos.js?v=modulos-1"></script>
+<script src="/etaax-sidebar.js?v=2"></script>
+<script src="/negocio-tipos.js?v=1"></script>
+<script src="/etaax-header.js?v=paleta-1"></script>
+<script src="/etaax-modulos-ui.js?v=1"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
-    <script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+    <script src="/theme.js?v=modulos-ui-1"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX – Salud Financiera · KPIs</title>
@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
-<script src="/etaax-core.js"></script>
+<script src="/etaax-core.js?v=financiero-2"></script>
     <script src="/reporte-marca.js"></script>
     <style>
         /* ── Category colors ── */
@@ -184,6 +184,12 @@
         .empty-state{text-align:center;padding:48px 20px;color:var(--text-dim);}
 
     </style>
+<link rel="stylesheet" href="/etaax-sidebar.css?v=1">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1">
+<link rel="stylesheet" href="/financiero/kpis-panel.css?v=2">
+<link rel="stylesheet" href="/financiero/metas-referencia.css?v=2">
+<script src="/financiero/metas-referencia.js?v=2"></script>
+<script src="/financiero/periodo-enlace.js?v=1"></script>
 </head>
 <body>
 <header class="top-bar">
@@ -237,6 +243,29 @@
             <div id="kpiFalla" style="display:none;background:rgba(232,90,90,.10);
                  border:1px solid rgba(232,90,90,.45);color:#e85a5a;border-radius:10px;
                  padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.6"></div>
+
+            <section class="kpi-operativos" aria-label="Indicadores del periodo">
+                <p class="kpi-base">Cocina y barra: compras pagadas sobre ventas totales. Los promedios usan los comensales registrados en los cortes; las propinas se muestran aparte de los ingresos.</p>
+                <div class="kpi-leyenda"><span><i aria-hidden="true"></i>Resultado del periodo</span><span><i class="kpi-meta-muestra" aria-hidden="true"></i>Meta</span></div>
+                <div class="kpi-oper-grid" id="kpiOperativos" aria-live="polite"></div>
+                <div class="kpi-metas-estado" id="kpiMetasEstado" role="status"></div>
+                <details class="kpi-metas-oper" id="kpiMetasOperativas">
+                    <summary>Metas de estos indicadores</summary>
+                    <p>Define los límites de costos y los importes que quieres alcanzar. Los campos vacíos quedan sin meta, salvo Staff cost, que toma las metas de nómina, y Prime cost, que conserva su meta anterior si la tiene. Utilidad comparte su meta con la vista por conceptos.</p>
+                    <div class="kpi-metas-campos">
+                        <label>Costo de cocina · máximo %<input type="number" id="metaCocina" min="0" max="100" step="0.1" placeholder="Sin definir"></label>
+                        <label>Costo de barra · máximo %<input type="number" id="metaBarra" min="0" max="100" step="0.1" placeholder="Sin definir"></label>
+                        <label>Staff cost · máximo %<input type="number" id="metaStaff" min="0" max="100" step="0.1" placeholder="Meta de nómina"></label>
+                        <label>Prime cost · máximo %<input type="number" id="metaPrimo" min="0" max="100" step="0.1" placeholder="Sin definir"></label>
+                        <label>Cheque promedio · mínimo MXN<input type="number" id="metaCheque" min="0" step="0.01" placeholder="Sin definir"></label>
+                        <label>Propinas promedio · mínimo MXN<input type="number" id="metaPropinas" min="0" step="0.01" placeholder="Sin definir"></label>
+                        <label>Consumo extra · máximo %<input type="number" id="metaExtra" min="0" max="100" step="0.1" placeholder="Sin definir"></label>
+                    </div>
+                    <p>Guarda los cambios con <b>Guardar metas</b> en la parte superior.</p>
+                </details>
+            </section>
+
+            <div class="kpi-vista-original"><h2>Vista por conceptos</h2></div>
 
             <!-- KPI Summary Cards -->
             <div class="kpi-grid">
@@ -384,8 +413,6 @@
     </div>
 </div>
 
-<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
-
 <script>
 
 
@@ -411,7 +438,8 @@ var _kCache = {
     cortes: null, otros: null, gastos: null,
     fijos: null, nominas: null, prevs: null, targets: null,
     deps: null,         // movimientos; los APARTADOS de previsiones viven aquí
-    falló: []           // lo que no se pudo leer ENTERO, para decirlo arriba
+    falló: [],          // lo que no se pudo leer ENTERO, para decirlo arriba
+    listo: false, metasListas: false
 };
 var _KPI_DEFAULTS = {fijos:15,variables:30,nomOp:22,nomAdm:8,prev:5,util:20};
 
@@ -420,6 +448,8 @@ function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo')
 async function _sbInit() {
     var negId = getNegocioActivo();
     if (!negId) return;
+    _kCache.listo = false; _kCache.metasListas = false;
+    _habilitarMetas(false);
     /* ══ LEER ENTERO, Y DECIRLO CUANDO NO SE PUDO ════════════════════════
        Antes cada colección se pedía de un tirón y, de paso, un fallo se
        TRAGABA en silencio: `if (!r[0].error)` dejaba la caché en null y el
@@ -443,14 +473,21 @@ async function _sbInit() {
        nada; un aviso rojo sí. */
     if (typeof etaaxLeerVarias !== 'function') {
         _kCache.falló = ['todo (no cargó el módulo de datos — recarga la página)'];
+        _kCache.listo = true;
         _kAviso(); renderAll();
         return;
     }
-    var r = await Promise.all([
-        etaaxLeerVarias(TABLAS, negId),
-        _supabase.from('gf_nominas').select('datos').eq('negocio_id', negId).maybeSingle(),
-        _supabase.from('kpi_targets').select('datos').eq('negocio_id', negId).maybeSingle()
-    ]);
+    var r;
+    try {
+        r = await Promise.all([
+            etaaxLeerVarias(TABLAS, negId),
+            _supabase.from('gf_nominas').select('datos').eq('negocio_id', negId).maybeSingle(),
+            _supabase.from('kpi_targets').select('datos').eq('negocio_id', negId).maybeSingle()
+        ]);
+    } catch (e) {
+        _kCache.falló = ['todo (no se pudo completar la carga)'];
+        _kCache.listo = true; _kAviso(); renderAll(); return;
+    }
     var col = r[0];
     _kCache.cortes = col.datos.cortes;           _kCache.otros = col.datos.sf_otros;
     _kCache.gastos = col.datos.gastos;           _kCache.fijos = col.datos.gf_fijos;
@@ -460,9 +497,14 @@ async function _sbInit() {
     var falló = col.incompletas.slice();
     if (!r[1].error && r[1].data) _kCache.nominas = r[1].data.datos || {};
     else if (r[1].error) falló.push('nóminas');
-    if (!r[2].error && r[2].data) _kCache.targets = r[2].data.datos || _KPI_DEFAULTS;
-    else if (r[2].error) falló.push('objetivos');
+    if (!r[2].error) {
+        _kCache.targets = r[2].data ? (r[2].data.datos || _KPI_DEFAULTS) : _KPI_DEFAULTS;
+        _kCache.metasListas = true;
+        _pintarMetasInputs(loadTargets());
+    } else falló.push('objetivos');
     _kCache.falló = falló;
+    _kCache.listo = true;
+    _habilitarMetas(_kCache.metasListas);
 
     _kAviso();
     renderAll();
@@ -528,7 +570,7 @@ function prevsRango(from,to){
    restaba igual de completa. El campo "meses" que se capturaba no se usaba en
    ninguna cuenta. */
 function loadPrevsRango(from,to){
-    return EtaaxCore.previsionApartadoRango(_kCache.deps||[], from, to);
+    return EtaaxCore.previsionApartadoRango((_kCache.deps||[]).filter(_deSuc), from, to);
 }
 /* Del gasto del periodo, cuánto venía respaldado por una previsión ya apartada.
    No cambia el egreso —el dinero salió— pero explica diciembre. */
@@ -693,20 +735,56 @@ function getPeriodoData(desde,hasta){
 }
 
 /* ── Targets ── */
-function loadTargets(){ return _kCache.targets || _KPI_DEFAULTS; }
+function loadTargets(){ return Object.assign({}, _KPI_DEFAULTS, _kCache.targets || {}); }
+var _KPI_META_IDS = {fijos:'tgtFijos',variables:'tgtVariables',nomOp:'tgtNomOp',nomAdm:'tgtNomAdm',prev:'tgtPrev',util:'tgtUtil'};
+var _KPI_OP_IDS = {cocina:'metaCocina',barra:'metaBarra',staff:'metaStaff',primo:'metaPrimo',cheque:'metaCheque',propinas:'metaPropinas',extra:'metaExtra'};
+function _metaNumero(v){
+    if(v===null||v===undefined||String(v).trim()==='') return null;
+    var x=Number(v);return isFinite(x)&&x>=0?x:null;
+}
+function _pintarMetasInputs(t){
+    Object.keys(_KPI_META_IDS).forEach(function(k){document.getElementById(_KPI_META_IDS[k]).value=t[k];});
+    Object.keys(_KPI_OP_IDS).forEach(function(k){
+        var v=_metaNumero((t.operativos||{})[k]);
+        document.getElementById(_KPI_OP_IDS[k]).value=v===null?'':v;
+    });
+    updateSumTargets();
+}
+function _habilitarMetas(si){
+    document.getElementById('btnGuardarTargets').disabled=!si;
+    Object.keys(_KPI_META_IDS).concat(Object.keys(_KPI_OP_IDS)).forEach(function(k){
+        var id=_KPI_META_IDS[k]||_KPI_OP_IDS[k];document.getElementById(id).disabled=!si;
+    });
+}
+function _mensajeMetas(txt,error){
+    var el=document.getElementById('kpiMetasEstado');el.textContent=txt;
+    el.className='kpi-metas-estado'+(error?' error':'');
+}
 function saveTargets(){
-    var t={
-        fijos:n(document.getElementById('tgtFijos').value)||15,
-        variables:n(document.getElementById('tgtVariables').value)||30,
-        nomOp:n(document.getElementById('tgtNomOp').value)||22,
-        nomAdm:n(document.getElementById('tgtNomAdm').value)||8,
-        prev:n(document.getElementById('tgtPrev').value)||5,
-        util:n(document.getElementById('tgtUtil').value)||20
-    };
-    _kCache.targets = t;
+    if(!_kCache.metasListas){_mensajeMetas('Espera a que se carguen tus metas antes de guardar.',true);return false;}
+    var t=loadTargets(), op=Object.assign({},t.operativos||{}), invalido=false;
+    function leer(id,porcentaje,defecto){
+        var el=document.getElementById(id), txt=String(el.value).trim();
+        var v=txt===''?defecto:_metaNumero(txt);
+        if((txt!==''&&v===null)||(porcentaje&&v!==null&&v>100)||(el.validity&&el.validity.badInput)){
+            if(!invalido){el.focus();if(el.reportValidity)el.reportValidity();}invalido=true;
+        }
+        return v;
+    }
+    Object.keys(_KPI_META_IDS).forEach(function(k){t[k]=leer(_KPI_META_IDS[k],true,_KPI_DEFAULTS[k]);});
+    Object.keys(_KPI_OP_IDS).forEach(function(k){
+        var v=leer(_KPI_OP_IDS[k],k!=='cheque'&&k!=='propinas',null);
+        if(v===null)delete op[k];else op[k]=v;
+    });
+    if(invalido){_mensajeMetas('Usa porcentajes entre 0 y 100 e importes mayores o iguales a cero.',true);return false;}
+    t.operativos=op;
     var negId = getNegocioActivo();
+    if(!negId)return false;
     sbUpsertDoc('kpi_targets', t, negId);
+    _kCache.targets = t;
     renderAll();
+    _mensajeMetas('Metas actualizadas. Los cambios se sincronizan con tu negocio.',false);
+    return true;
 }
 function updateSumTargets(){
     var sum=['tgtFijos','tgtVariables','tgtNomOp','tgtNomAdm','tgtPrev','tgtUtil'].reduce(function(s,id){return s+n(document.getElementById(id).value);},0);
@@ -728,6 +806,93 @@ function getSem(actual, target, isUtil){
         if(actual<=target*1.25) return{cls:'naranja',label:'ALTO'};
         return{cls:'rojo',label:'CRÍTICO'};
     }
+}
+
+/* La presentación y el reporte comparten datos, unidades y estados. */
+function _kpiOperativosModelo(d,t){
+    var m=EtaaxCore.indicadoresRestaurante({ventas:d.ventas,ingresos:d.ingresos,
+        nomina:d.nomOp+d.nomAdm,utilidad:d.util,cortes:d.cortes,gastos:d.gastos,
+        gastoOpts:{fijos:loadFijos(),staff:loadStaff()}});
+    var f=_kCache.falló||[], todo=f.some(function(x){return /^todo/.test(x);});
+    function falta(nombres){
+        return todo||f.some(function(x){
+            return nombres.indexOf(String(x).split(' (')[0])>=0;
+        });
+    }
+    var costos=falta(['ventas','gastos','gastos fijos','nómina','cuentas','depósitos']);
+    var venta=falta(['ventas']), utilidad=costos||falta(['otros ingresos','previsiones']);
+    var metas=falta(['objetivos']);
+    var definiciones=[
+        {k:'cocina',titulo:'Costo de cocina',desc:'Compras pagadas de alimentos / ventas totales × 100.',ayuda:'Base de compras del periodo.',fallo:costos},
+        {k:'barra',titulo:'Costo de barra',desc:'Compras pagadas de bebidas e insumos de barra / ventas totales × 100.',ayuda:'Base de compras del periodo.',fallo:costos},
+        {k:'staff',titulo:'Staff cost',desc:'Nómina pagada e IMSS / ventas totales × 100.',ayuda:'Incluye nómina operativa y administrativa.',fallo:costos},
+        {k:'primo',titulo:'Prime cost',desc:'(Compras de cocina y barra + nómina e IMSS) / ventas totales × 100.',ayuda:'Compras y costo del personal, juntos.',fallo:costos},
+        {k:'utilidad',titulo:'Utilidad',desc:'Utilidad disponible después de egresos y previsiones / ingresos × 100.',ayuda:fmtM(d.util)+' disponibles en el periodo.',minimo:true,fallo:utilidad},
+        {k:'cheque',titulo:'Cheque promedio',desc:'Ventas totales / comensales registrados en los cortes.',ayuda:'Ventas sin propinas. Promedio por comensal.',monto:true,minimo:true,fallo:venta},
+        {k:'propinas',titulo:'Propinas promedio',desc:'Propinas de efectivo y tarjeta / comensales registrados.',ayuda:'Incluye cortes sin propina. Promedio por comensal.',monto:true,minimo:true,fallo:venta},
+        {k:'extra',titulo:'Consumo extra vs. receta',desc:'Consumo real adicional frente al consumo teórico de recetas.',ayuda:'Hace falta consumo real y teórico valorizado del mismo periodo.'}
+    ];
+    return definiciones.map(function(c){
+        c.valor=m[c.k];
+        c.meta=EtaaxCore.metaRestaurante(t,c.k);
+        if(metas)c.meta=null;
+        c.estado='pendiente';
+        if(!_kCache.listo){
+            c.valor=null;c.etiqueta='Cargando datos';
+            if(c.k==='utilidad')c.ayuda='Esperando ingresos, egresos y apartados del periodo.';
+        }
+        else if(c.fallo){
+            c.valor=null;c.etiqueta='Datos incompletos';
+            if(c.k==='utilidad')c.ayuda='Falta completar la lectura de ingresos, egresos y previsiones.';
+        }
+        else if(c.valor===null||!isFinite(c.valor)){
+            c.valor=null;
+            c.etiqueta=c.k==='extra'?'Sin datos comparables':c.monto?(m.cortesSinComensales?'Faltan comensales':'Sin comensales'):c.k==='utilidad'?'Sin ingresos':'Sin ventas';
+        } else if(c.meta===null)c.etiqueta=metas?'Meta no disponible':'Meta por definir';
+        else {
+            var bien=c.minimo?c.valor+1e-9>=c.meta:c.valor<=c.meta+1e-9;
+            c.estado=bien?'cumplida':'fuera';c.etiqueta=bien?'Meta cumplida':'Fuera de meta';
+        }
+        return c;
+    });
+}
+function _kpiOperValor(c,v){
+    if(v===null||v===undefined)return '—';
+    return c.monto?Number(v).toLocaleString('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:2,maximumFractionDigits:2}):fmtPct(v);
+}
+function _kpiOperMeta(c){return c.meta===null?'Meta por definir':'Meta '+(c.minimo?'≥ ':'≤ ')+_kpiOperValor(c,c.meta);}
+function renderOperativos(d,t){
+    var sugeridas=EtaaxCore.sugerenciasRestaurante(d.cortes,t);
+    document.getElementById('kpiOperativos').innerHTML=_kpiOperativosModelo(d,t).map(function(c){
+        var escala=c.monto?Math.max(c.valor||0,c.meta||0,1)*1.25:100;
+        var actual=c.valor===null?0:Math.max(0,Math.min(100,c.valor/escala*100));
+        var meta=c.meta===null?null:Math.max(0,Math.min(100,c.meta/escala*100));
+        return '<article class="kpi-oper-card" data-kpi="'+c.k+'"><h2>'+c.titulo+'</h2>'+
+            '<div class="kpi-oper-valor">'+_kpiOperValor(c,c.valor)+'</div>'+
+            '<div class="kpi-oper-meta">'+_kpiOperMeta(c)+'</div>'+
+            '<span class="kpi-oper-estado '+c.estado+'">'+c.etiqueta+'</span>'+
+            '<div class="kpi-oper-grafica"><div class="kpi-oper-barra" aria-hidden="true">'+
+                '<div class="kpi-oper-relleno" style="width:'+actual+'%"></div>'+
+                (meta===null?'':'<i class="kpi-oper-marca" style="left:'+meta+'%"></i>')+'</div>'+
+                '<div class="kpi-oper-escala"><span>0</span><span>'+(c.monto?'Escala: '+_kpiOperValor(c,escala):'0–100%')+'</span></div></div>'+
+            '<p class="kpi-oper-descripcion">'+c.desc+'</p><div class="kpi-oper-ayuda">'+c.ayuda+'</div>'+
+            '<div class="kpi-sugerida">Sugerencia inicial: '+EtaaxMetas.formatear(c.k,sugeridas[c.k])+'</div>'+
+            '<button type="button" class="kpi-definir-meta" onclick="definirMetaIndicador(\''+c.k+'\')" '+(!_kCache.metasListas?'disabled':'')+'>'+(c.meta===null?'Definir meta':'Editar meta')+'</button></article>';
+    }).join('');
+}
+
+function definirMetaIndicador(k){
+    var r=getRangoSel(),d=getPeriodoData(r.from,r.to),t=loadTargets();
+    EtaaxMetas.abrir(k,{listo:_kCache.metasListas,cortes:d.cortes,targets:t,
+        actual:EtaaxCore.metaRestaurante(t,k),guardar:function(clave,v){
+            if(!_kCache.metasListas)return false;
+            var nt=loadTargets();
+            if(clave==='utilidad')nt.util=v;
+            else {nt.operativos=Object.assign({},nt.operativos||{});nt.operativos[clave]=v;}
+            sbUpsertDoc('kpi_targets',nt,getNegocioActivo());_kCache.targets=nt;
+            document.getElementById(clave==='utilidad'?'tgtUtil':_KPI_OP_IDS[clave]).value=v;
+            updateSumTargets();renderAll();_mensajeMetas('Meta actualizada. Los cambios se sincronizan con tu negocio.',false);return true;
+        }});
 }
 
 /* ── Reporte imprimible del periodo (header con logo real + pie anclado al fondo) ── */
@@ -791,6 +956,13 @@ function imprimirKPIs(){
         : '';
 
     var cuerpo =
+        '<div class="rsec">Indicadores del periodo</div>' +
+        '<div style="font-size:10px;line-height:1.6;margin-bottom:12px">Cocina y barra: compras pagadas sobre ventas totales. Los promedios usan comensales; las propinas van aparte de los ingresos.</div>' +
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
+            _kpiOperativosModelo(d,t).map(function(c){
+                return card(c.titulo,_kpiOperValor(c,c.valor),c.estado==='fuera'?'#b52a1a':'#1a1916',
+                    _kpiOperMeta(c)+' · '+c.etiqueta+'<br>'+c.desc);
+            }).join('')+'</div>' +
         '<div class="rsec">Resumen del periodo</div>' +
         '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+cards+'</div>' +
         '<div class="rsec">Distribución de egresos + utilidad (% sobre ingresos)</div>' +
@@ -830,6 +1002,7 @@ function renderAll(){
     var mes=r.to.slice(0,7);              // el historial mensual se ancla al mes del periodo
     var d=getPeriodoData(r.from,r.to);
     var t=loadTargets();
+    renderOperativos(d,t);
     _dd={d:d,r:r};                        // data viva para el desglose por concepto
     var rl=document.getElementById('rangoLbl');
     if(rl) rl.textContent=r.from+' → '+r.to;
@@ -1068,12 +1241,8 @@ document.addEventListener('DOMContentLoaded',function(){
     _aplicarNavPref();
     // Load saved targets
     var t=loadTargets();
-    document.getElementById('tgtFijos').value=t.fijos;
-    document.getElementById('tgtVariables').value=t.variables;
-    document.getElementById('tgtNomOp').value=t.nomOp;
-    document.getElementById('tgtNomAdm').value=t.nomAdm;
-    document.getElementById('tgtPrev').value=t.prev;
-    document.getElementById('tgtUtil').value=t.util;
+    _pintarMetasInputs(t);
+    _habilitarMetas(false);
 
     // Periodo: día · semana · mes · rango
     document.getElementById('pickerInput').value=mesStr();
@@ -1101,6 +1270,7 @@ document.addEventListener('DOMContentLoaded',function(){
     else chip.addEventListener('click',function(e){e.stopPropagation();_renderSucMenu();var menu=document.getElementById('sucMenu');menu.classList.toggle('open');chip.classList.toggle('open');});
     document.addEventListener('click',function(e){if(!e.target.closest('#sucMenu')&&!e.target.closest('#sucChip')){var m=document.getElementById('sucMenu');if(m)m.classList.remove('open');chip.classList.remove('open');}});
 
+    if(typeof etaaxPeriodoEnlace==='function')etaaxPeriodoEnlace({periodo:function(t){_setPeriodo(t,document.getElementById({dia:'tabDia',semana:'tabSemana',mes:'tabMes',rango:'tabRango'}[t]));},sucursal:function(id){if(!_SUC_LOCK){_sucursalId=id||null;chip.textContent=_sucLabel()+' ▾';}}});
     renderAll();
     _sbInit();
 });
@@ -1110,12 +1280,17 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
-<script src="../ctx-bar.js"></script>
+<script src="/ctx-bar.js?v=modulos-ui-1"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
-<script src="nav.js"></script><!-- la barra lateral, una sola para todo el módulo -->
-<script src="/nav-pref.js"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
+<script src="nav.js?v=resumen-2"></script><!-- la barra lateral, una sola para todo el módulo -->
+<script src="/nav-pref.js?v=modulos-ui-1"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
+<script src="/etaax-iconos.js?v=modulos-1"></script>
+<script src="/etaax-sidebar.js?v=2"></script>
+<script src="/negocio-tipos.js?v=1"></script>
+<script src="/etaax-header.js?v=paleta-1"></script>
+<script src="/etaax-modulos-ui.js?v=1"></script>
 </body>
 </html>

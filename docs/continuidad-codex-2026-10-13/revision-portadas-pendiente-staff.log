@@ -1,0 +1,17 @@
+1440 admin-portada: {"width":1440,"scroll":1425,"cards":5,"icons":5,"errors":[]}
+1440 fin-portada: {"width":1440,"scroll":1425,"cards":7,"icons":7,"errors":[]}
+1440 aprende-portada: {"width":1440,"scroll":1425,"cards":5,"icons":5,"errors":[]}
+1440 staff: {"width":1440,"scroll":1425,"cards":7,"icons":7,"errors":[]}
+320 admin-portada: {"width":320,"scroll":320,"cards":5,"icons":5,"errors":[]}
+320 fin-portada: {"width":320,"scroll":320,"cards":7,"icons":7,"errors":[]}
+320 aprende-portada: {"width":320,"scroll":320,"cards":5,"icons":5,"errors":[]}
+AssertionError [ERR_ASSERTION]: {"width":349,"scroll":349,"cards":7,"icons":7,"errors":[]}
+    at run (/private/tmp/etaax-revisar-portadas-ui.cjs:145:281)
+    at async /private/tmp/etaax-revisar-portadas-ui.cjs:209:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}

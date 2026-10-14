@@ -4,7 +4,7 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
-    <script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+    <script src="/theme.js?v=modulos-ui-1"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX – Salud Financiera · Gastos Totales</title>
@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
-<script src="/etaax-core.js"></script>
+<script src="/etaax-core.js?v=financiero-2"></script>
 <script src="/reporte-marca.js"></script>
     <style>
         /* ── Tabs principales ── */
@@ -130,6 +130,9 @@
         .empty-state{text-align:center;padding:40px 20px;color:var(--text-dim);}
 
     </style>
+<link rel="stylesheet" href="/etaax-sidebar.css?v=1">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1">
+<script src="/financiero/periodo-enlace.js?v=1"></script>
 </head>
 <body>
 
@@ -595,8 +598,6 @@
     </div>
 </div>
 <!-- Lightbox de evidencia -->
-
-<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
 <script>
 /* ── Tema / Nav ── */
@@ -1879,6 +1880,7 @@ document.addEventListener('DOMContentLoaded',function(){
         var b=document.getElementById(id);
         if(b) b.addEventListener('click',function(){_setPeriodoGG(_tabsGG[id],b);});
     });
+    if(typeof etaaxPeriodoEnlace==='function')etaaxPeriodoEnlace({input:'mesInput',periodo:function(t){_setPeriodoGG(t,document.getElementById({dia:'tabDia',semana:'tabSemana',mes:'tabMes',rango:'tabRango'}[t]));},sucursal:function(id){if(!_SUC_LOCK)_sucursalId=id||null;}});
     if(['fijos','nominas','variables','resumen'].indexOf(_q.tab)>=0) setTimeout(function(){setTab(_q.tab);},0);
 
     /* Sucursal chip */
@@ -1967,16 +1969,21 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="/etaax-db.js"></script>
 <script src="/foto-zoom.js"></script><!-- visor de fotos con zoom y carrusel -->
 <script src="../security.js"></script>
-<script src="../ctx-bar.js"></script>
+<script src="/ctx-bar.js?v=modulos-ui-1"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="../admin-guard.js"></script>
 <script src="/bancos-mx.js"></script><!-- bancos de México + CLABE (lo usa staff-modal) -->
 <script src="/staff-modal.js"></script>
 <script src="/nomina-params.js"></script>
-<script src="nav.js"></script><!-- la barra lateral, una sola para todo el módulo -->
-<script src="/nav-pref.js"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
+<script src="nav.js?v=resumen-2"></script><!-- la barra lateral, una sola para todo el módulo -->
+<script src="/nav-pref.js?v=modulos-ui-1"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/etaax-iconos.js?v=modulos-1"></script>
+<script src="/etaax-sidebar.js?v=2"></script>
+<script src="/negocio-tipos.js?v=1"></script>
+<script src="/etaax-header.js?v=paleta-1"></script>
+<script src="/etaax-modulos-ui.js?v=1"></script>
 </body>
 </html>

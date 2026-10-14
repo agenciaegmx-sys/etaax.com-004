@@ -34,6 +34,12 @@
     var ID = 'etaax-header';
     var escuchando = false;
     var observador = null;
+    var marcaBase = '/marca';
+
+    function marcaDelTema() {
+        var claro = window.EtaaxTheme && EtaaxTheme.actual() === 'light';
+        return marcaBase + '/etaax-logo-' + (claro ? 'claro' : 'oscuro') + '.svg';
+    }
 
     function _ctx() {
         var c = null, s = null;
@@ -103,6 +109,14 @@
             '  color:var(--text,#f0ece4);font:inherit;font-size:13px;cursor:pointer;text-align:left;',
             '  text-decoration:none;}',
             '.etx-hd-op:hover{background:var(--s2,var(--surface2,#232220));}',
+            /* Un punto verde al lado de «Novedades» cuando hay algo sin leer.
+               Sin él, la entrada es un enlace más que nadie abre: lo que avisa
+               no es la palabra, es que algo cambió de color. */
+            '.etx-hd-nuevo{width:7px;height:7px;border-radius:50%;background:var(--green,#3dbe7a);',
+            '  margin-left:auto;flex-shrink:0;}',
+            '.etx-hd-aviso{position:absolute;top:7px;right:7px;width:8px;height:8px;border-radius:50%;',
+            '  background:var(--green,#3dbe7a);border:2px solid var(--s1,var(--surface,#141210));}',
+            '.etx-hd-cuenta{position:relative;}',
             '.etx-hd-op.sale:hover{color:var(--red,#e05a3a);}',
             '.etx-hd-btn:focus-visible,.etx-hd-op:focus-visible{outline:2px solid var(--green,#3dbe7a);outline-offset:3px;}',
             '@media (max-width:720px){ .etx-hd-que,.etx-hd-cuenta .etx-hd-quien,.etx-hd-cuenta .etx-hd-estado{display:none} ',
@@ -150,6 +164,8 @@
 
     window.etaaxHeader = function (opc) {
         opc = opc || {};
+        // El hub prueba otra paleta; los módulos mantienen su marca habitual.
+        marcaBase = opc.marcaBase || (opc.base || '') + '/marca';
         _estilos();
         var d = _ctx();
         var quien = opc.usuario || d.ctx.userName || d.ses.nombre || 'Mi cuenta';
@@ -157,11 +173,22 @@
         var plan = opc.plan || d.ctx.userBadge || '';
         var logo = opc.logo || '';
         var inicio = opc.inicio || '/hub.html';
+        /* QUÉ DICE EL BOTÓN. Desde dentro de un módulo, «Inicio» era una
+           promesa vaga: llevaba al selector de sucursales, no a donde uno
+           espera volver. Las páginas de módulo lo nombran «Módulos» y lo
+           mandan al hub de módulos, que es de donde se entró. Un botón de
+           navegación tiene que decir su destino, no su jerarquía. */
+        var inicioTexto = opc.inicioTexto || 'Inicio';
         /* ¿HAY SESIÓN? No es un detalle: un punto verde latiendo junto a
            «Sesión activa» cuando nadie entró es exactamente la mentira que ya
            se había quitado de la barra vieja del hub. Un indicador que dice que
            sí cuando es que no es peor que no tener indicador. */
         var activa = (opc.activa === undefined) ? true : !!opc.activa;
+
+        /* ¿Esta página sabe de novedades? Se pregunta, no se asume: el header
+           es el mismo para todas y no todas cargan el anuncio. */
+        var hayNov  = !!(window.EtaaxNovedades && EtaaxNovedades.abrir);
+        var novPend = hayNov && activa && EtaaxNovedades.pendiente();
 
         var el = document.getElementById(ID);
         if (!el) {
@@ -173,12 +200,11 @@
         }
         el.innerHTML =
             '<div class="etx-hd-marca">' +
-                '<img src="' + esc(opc.base || '') + '/marca/etaax-logo-' +
-                    ((window.EtaaxTheme && EtaaxTheme.actual() === 'light') ? 'claro' : 'oscuro') + '.svg" alt="ETAAX">' +
+                '<img id="etxHdMarca" src="' + esc(marcaDelTema()) + '" alt="ETAAX">' +
                 '<div class="etx-hd-que">ERP para alimentos<br>y bebidas</div>' +
             '</div>' +
             '<div class="etx-hd-centro">' +
-                '<a class="etx-hd-btn" href="' + esc(inicio) + '">' + ic('hd-inicio', 18) + 'Inicio</a>' +
+                '<a class="etx-hd-btn" href="' + esc(inicio) + '">' + ic('hd-inicio', 18) + esc(inicioTexto) + '</a>' +
             '</div>' +
             '<div class="etx-hd-der">' +
                 '<button class="etx-hd-btn etx-hd-icon" id="etxHdTema" title="Tema">' + ic(_icTema(), 18) + '</button>' +
@@ -192,6 +218,7 @@
                         (activa ? 'Sesión activa' : 'Sin sesión') +
                     '</span></span>' +
                     ic('hd-desplegar', 14) +
+                    (novPend ? '<i class="etx-hd-aviso" title="Hay novedades"></i>' : '') +
                 '</button>' +
             '</div>' +
             '<div class="etx-hd-menu" id="etxHdMenu">' +
@@ -202,6 +229,13 @@
                 '</div>' +
                 (activa ? '<a class="etx-hd-op" id="etxHdCuentaOp" href="' + esc(_destinoCuenta('/mi-cuenta.html')) + '">' + ic('usuario', 18) + 'Mi cuenta</a>' +
                           '<a class="etx-hd-op" id="etxHdPlanOp" href="' + esc(_destinoCuenta('/plan-facturacion.html')) + '">' + ic('org-corporativo', 18) + 'Plan y facturación</a>' : '') +
+                /* NOVEDADES. Va aquí y no en un cartel permanente: el anuncio
+                   grande se muestra una vez, y después esta entrada es la forma
+                   de volver a verlo —«¿qué era lo que había cambiado?»— sin
+                   tener que preguntarle a nadie. Solo aparece si la página
+                   cargó /novedades.js. */
+                (hayNov ? '<button class="etx-hd-op" id="etxHdNovOp">' + ic('catalogos', 18) + 'Novedades' +
+                          (novPend ? '<i class="etx-hd-nuevo"></i>' : '') + '</button>' : '') +
                 '<button class="etx-hd-op" id="etxHdAutoOp">' + ic('hd-sistema', 18) + 'Usar tema del dispositivo</button>' +
                 /* Sin sesión no se ofrece salir ni ver la cuenta: serían dos
                    botones que no llevan a ningún lado. */
@@ -231,9 +265,11 @@
                     if (abierto) document.getElementById('etxHdCuenta').focus();
                 }
             });
-            document.addEventListener('etaax:theme', function () {
+            window.addEventListener('etaax:theme', function () {
                 var b = document.getElementById('etxHdTema');
                 if (b) b.innerHTML = ic(_icTema(), 18);
+                var marca = document.getElementById('etxHdMarca');
+                if (marca) marca.setAttribute('src', marcaDelTema());
             });
         }
         menu.onclick = function (e) { e.stopPropagation(); };
@@ -257,6 +293,13 @@
                 if (destino) window.location.href = destino;
             };
         };
+        liga('etxHdNovOp', function () {
+            /* Desde el menú se abre la presentación completa, no el aviso: quien
+               la pide ya sabe lo que quiere ver. */
+            if (window.EtaaxNovedades) EtaaxNovedades.abrir(0);
+            var p = document.querySelector('.etx-hd-aviso');
+            if (p && p.parentNode) p.parentNode.removeChild(p);
+        });
         liga('etxHdCuentaOp', opc.miCuenta, _destinoCuenta('/mi-cuenta.html'));
         liga('etxHdPlanOp',   opc.planYFacturacion, _destinoCuenta('/plan-facturacion.html'));
         liga('etxHdSalirOp',  opc.cerrarSesion || window.ctxSalir || window.logout);

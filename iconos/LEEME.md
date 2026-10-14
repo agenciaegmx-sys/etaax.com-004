@@ -26,10 +26,10 @@ píxeles.
 1. **Sin colores escritos.** El trazo se hereda del texto que lo rodea — por eso
    la misma flecha se ve sobre el botón verde y sobre el fondo oscuro. Si tu
    exportador escribe el crema `#f0ece4`, el generador lo quita.
-2. **El detalle verde, con el verde de la marca** (`#3dbe7a`). El generador lo
+2. **El detalle de marca, con verde o cian** (`#3dbe7a` / `#8ce4ee`). El generador lo
    reconoce y lo marca solo: `etx-punto` cuando es relleno (el punto del
-   usuario, la pupila) y `etx-trazo` cuando es una línea. Así, el día que cambie
-   el verde, cambian todos.
+   usuario, la pupila) y `etx-trazo` cuando es una línea. Así el acento sigue
+   el tema y la paleta de la pantalla.
 
 Lo demás lo resuelve el generador: si tu dibujo está sobre un grid de 24 lo deja
 como símbolo limpio; si no, conserva tu lienzo y tus transformaciones **tal
@@ -49,6 +49,24 @@ elemento.innerHTML = etaaxIcono('arrow', { tam: 20 });
 Nunca se escribe `<use href="#etx-...">` a mano en el HTML: el sprite se
 inyecta al cargar la página, y un `<use>` que apunta a algo que todavía no
 existe puede no aparecer nunca.
+
+Las familias `catalogos/oscuro/` y `financieros/oscuro/` se importaron de
+`agenciaegmx-sys/iconos-etaax` (commit `ffdb3ce5`). El generador les agrega los
+prefijos `cat-` y `fin-` para que sus nombres no choquen con los de otras
+pantallas. Ejemplo: `etaaxIcono('cat-colaboradores')`. Se usa una geometría por
+icono; el trazo y el acento se adaptan al tema mediante las variables del sprite.
+
+`subheader/oscuro/` viene del mismo repo, commit `7f9f7fe4`. Sus cuatro iconos
+usan el prefijo `sh-`, incluido el pin `sh-matriz` y las flechas
+`sh-cambiar-negocio`. El generador normaliza también el acento cian `#8CE4EE`
+a las clases de marca del sprite para que funcione en ambos temas.
+
+`modulos/principales/oscuro/` y `modulos/recetas-insumos/oscuro/` se importaron
+del commit `7f9f7fe4`. Usan el prefijo `mod-`: los cuatro módulos principales
+y las cuatro herramientas de Recetas e Insumos. La app usa estos SVG en el
+selector del hub y sus tarjetas de herramientas. `etaax-sidebar.js` reutiliza
+estos símbolos, junto con los catálogos y financieros, en las barras laterales
+de los cuatro módulos. No modifica sus enlaces ni sus controles.
 
 ## Lo que todavía no sale de aquí
 

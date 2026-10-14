@@ -1,0 +1,193 @@
+/* Subheader de la sucursal: identidad, plan y acciones del espacio de trabajo. */
+body.hub-paleta .hub-modulos-bar{gap:14px;padding:18px;}
+body.hub-paleta .hub-modulos-bar .neg-activo-emoji-wrap{width:48px;height:48px;aspect-ratio:1;border:1px solid var(--ui-borde);border-radius:50%;background:var(--s2);overflow:hidden;box-shadow:none;}
+body.hub-paleta .hub-modulos-bar .neg-activo-emoji-wrap>img{display:block;width:100%;height:100%;object-fit:cover;border:0;border-radius:50%;}
+body.hub-paleta .hub-modulos-bar .neg-activo-id{flex:1 1 150px;min-width:0;}
+body.hub-paleta .hub-modulos-marca{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ui-apagado);margin-bottom:5px;overflow-wrap:anywhere;}
+body.hub-paleta .hub-modulos-bar .neg-activo-nombre{font-size:20px;white-space:normal;overflow-wrap:anywhere;}
+body.hub-paleta .hub-modulos-bar .neg-activo-tipo{font-size:11px;letter-spacing:0;text-transform:none;white-space:normal;}
+body.hub-paleta .hub-sucursal-nombre{display:flex;align-items:center;gap:8px;}
+body.hub-paleta #chipUbicacionHub{display:inline-flex;flex-shrink:0;}
+body.hub-paleta .hub-modulos-bar .neg-activo-btns{flex-direction:row;align-items:center;gap:10px;}
+body.hub-paleta .hub-modulos-bar .btn-cambiar-neg{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;font-size:12px;letter-spacing:0;padding:10px 14px;border-radius:9px;color:var(--text);}
+body.hub-paleta .hub-modulos-bar .btn-cambiar-neg>span{display:inline-flex;}
+body.hub-paleta .hub-modulos-bar .user-badge{background:transparent;border:none;padding:0;}
+/* El hero se comía el espacio de lo que se viene a usar: con el título grande
+   y su margen, los módulos empezaban casi al final de la pantalla. Aquí es un
+   rótulo, no una portada — lo que importa está debajo. */
+body.hub-paleta .hub-trabajo-hero{margin-bottom:6px;padding-top:0;}
+body.hub-paleta .hub-trabajo-hero .hub-title{font-family:'DM Sans',sans-serif;font-size:clamp(22px,2.6vw,30px);font-weight:600;letter-spacing:-.6px;line-height:1.2;margin-bottom:8px;}
+body.hub-paleta .hub-trabajo-hero .hub-subtitle{max-width:660px;line-height:1.6;font-size:13px;}
+body.hub-paleta .hub-trabajo-hero .hub-eyebrow{margin-bottom:10px;}
+body.hub-paleta .hub-workspace{max-width:1000px;width:100%;margin:0 auto;}
+body.hub-paleta .hub-module-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:14px 0 10px;font-size:11px;color:var(--ui-apagado);}
+body.hub-paleta .hub-module-intro>span:first-child{font-size:9px;letter-spacing:2px;text-transform:uppercase;}
+body.hub-paleta .hub-module-dock{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;padding:22px 18px;border:1px solid var(--hub-line);border-radius:18px;background:var(--s1);}
+body.hub-paleta .hub-module-tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:150px;min-width:0;padding:16px 10px;background:var(--s2);border:1px solid var(--ui-borde);border-radius:14px;color:var(--text);font-family:inherit;cursor:pointer;transform-origin:50% 100%;transform:translate3d(0,var(--dock-y,0px),0) scale(var(--dock-scale,1));}
+/* EL MÓDULO ELEGIDO, EN CIAN. Iba en terracota, el mismo color del título, del
+   botón de entrar y del acento de cada fila: cuatro cosas gritando lo mismo y
+   ninguna destacando. El cian lo separa — y cuando entren las capturas, que
+   traen su propio color, se agradecerá más. */
+body.hub-paleta .hub-module-tab[aria-selected="true"]{border-color:var(--hub-brand);background:var(--hub-brand-tint);box-shadow:inset 0 -3px var(--hub-brand);}
+body.hub-paleta .hub-module-icon{display:inline-flex;}
+body.hub-paleta .hub-module-numero{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ui-apagado);}
+body.hub-paleta .hub-module-nombre{font-size:13px;font-weight:600;line-height:1.4;}
+body.hub-paleta .hub-module-tab[aria-selected="true"] .hub-module-nombre{color:var(--hub-brand);}
+body.hub-paleta .hub-module-tab:disabled{opacity:.4;cursor:default;transform:none;}
+body.hub-paleta .hub-herramientas{margin-top:44px;}
+body.hub-paleta .hub-herramientas-head{display:flex;align-items:center;gap:18px;margin-bottom:26px;}
+body.hub-paleta .hub-herramientas-head>div{flex:1;min-width:0;}
+/* IR AL MÓDULO. Es la acción principal de esta tarjeta —entrar al módulo
+   entero— así que va con el color de acción, no como un enlace más. */
+body.hub-paleta .hub-ir-modulo{
+  display:inline-flex;align-items:center;gap:9px;flex-shrink:0;
+  padding:12px 20px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600;
+  background:var(--hub-heading);border:1px solid var(--hub-heading);color:var(--hub-button-ink);
+  transition:background-color .18s,border-color .18s;
+}
+body.hub-paleta .hub-ir-modulo:hover{background:var(--hub-action-hover);border-color:var(--hub-action-hover);}
+body.hub-paleta .hub-ir-modulo[hidden]{display:none;}
+body.hub-paleta .hub-herramientas-head[hidden]{display:none;}
+body.hub-paleta .hub-herramientas-icon{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;border:1px solid var(--hub-line);border-radius:15px;background:var(--hub-brand-tint);}
+body.hub-paleta .hub-modulo-numero{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--ui-apagado);margin-bottom:9px;}
+body.hub-paleta #hubModuloTitulo{font-size:28px;font-weight:600;letter-spacing:-.5px;color:var(--hub-heading);line-height:1.2;margin:0 0 8px;}
+body.hub-paleta .hub-modulo-desc{font-size:13px;line-height:1.6;color:var(--ui-apagado);}
+/* ── UNA FILA POR HERRAMIENTA, CON SU GUÍA VISUAL ─────────────────────────
+   Las filas NO llevan a ningún lado: enseñan qué hay dentro de cada
+   herramienta pasando sus capturas. El nombre de una herramienta no dice lo
+   que hace —«Escandallos» no significa nada la primera vez—; la foto de la
+   pantalla, sí. Para entrar está «Ir al módulo», arriba: una sola puerta en
+   vez de diecinueve atajos compitiendo con ella.                            */
+body.hub-paleta .hub-tools-grid{display:flex;flex-direction:column;gap:14px;}
+body.hub-paleta .hub-tool-fila{
+  display:grid;grid-template-columns:minmax(0,32%) minmax(0,1fr);gap:24px;align-items:center;
+  min-width:0;padding:20px 22px;background:var(--s1);
+  border:1px solid var(--ui-borde);border-radius:16px;color:var(--text);
+  animation:hubToolEntrada .2s ease both;
+}
+body.hub-paleta .hub-fila-id{display:flex;align-items:flex-start;gap:14px;min-width:0;}
+body.hub-paleta .hub-fila-icono{display:inline-flex;align-items:center;justify-content:center;
+  width:46px;height:46px;flex-shrink:0;border:1px solid var(--hub-line);border-radius:12px;background:var(--hub-brand-tint);}
+body.hub-paleta .hub-fila-texto{flex:1;min-width:0;}
+body.hub-paleta .hub-tool-etiqueta{display:inline-block;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--ui-apagado);border:1px solid var(--ui-borde);border-radius:20px;padding:4px 9px;margin-bottom:7px;}
+body.hub-paleta .hub-tool-fila h3{font-size:18px;line-height:1.3;font-weight:600;letter-spacing:-.3px;}
+body.hub-paleta .hub-tool-fila p{font-size:12.5px;color:var(--ui-apagado);line-height:1.6;margin-top:4px;}
+body.hub-paleta .hub-fila-sinacceso{display:inline-block;margin-top:9px;font-size:11px;color:var(--ui-apagado);border:1px solid var(--ui-borde);border-radius:7px;padding:4px 9px;}
+/* El visor. El marco reserva su alto SIEMPRE, con foto o sin ella: si creciera
+   al cargar la imagen, la fila de abajo se correría sola mientras alguien la
+   está leyendo. */
+/* El visor se topa a 420 px: a ancho completo, cada fila medía casi una
+   pantalla y recorrer diecinueve herramientas se volvía un viaje. */
+body.hub-paleta .hub-visor{min-width:0;max-width:540px;margin-left:auto;width:100%;}
+body.hub-paleta .hub-visor-marco{
+  position:relative;aspect-ratio:16/9;border:1px solid var(--ui-borde);border-radius:12px;
+  width:100%;padding:0;background:var(--bg);overflow:hidden;display:flex;align-items:center;justify-content:center;
+  color:var(--text);font-family:inherit;cursor:zoom-in;transition:border-color .18s;
+}
+body.hub-paleta .hub-visor-marco:disabled{cursor:default;}
+body.hub-paleta .hub-visor-marco:not(:disabled):hover{border-color:var(--hub-brand);}
+body.hub-paleta .hub-visor-marco:focus-visible{outline:2px solid var(--hub-brand);outline-offset:3px;}
+body.hub-paleta .hub-visor-ampliar{
+  position:absolute;right:10px;bottom:10px;display:inline-flex;align-items:center;gap:6px;
+  padding:6px 9px;border:1px solid var(--hub-line);border-radius:8px;
+  background:var(--s1);color:var(--text);font-size:11px;opacity:0;transition:opacity .18s;pointer-events:none;
+}
+body.hub-paleta .hub-visor-ampliar .etx-ic{width:16px;height:16px;}
+body.hub-paleta .hub-visor-marco:not(:disabled):is(:hover,:focus-visible) .hub-visor-ampliar{opacity:1;}
+/* La captura se ve ENTERA, no recortada: estas fotos son de pantallas y de
+   modales, y sus proporciones no se parecen entre sí —hay modales más altos
+   que anchos—. Con recorte se perdía justo lo que la guía viene a enseñar. */
+body.hub-paleta .hub-visor-marco img{width:100%;height:100%;object-fit:contain;display:block;}
+/* `display:block` le gana al atributo `hidden`, así que sin esta línea una
+   captura que todavía no existe no se oculta: se queda el icono roto con su
+   texto alternativo escrito al lado, que es exactamente lo que el marco neutro
+   venía a evitar. */
+body.hub-paleta .hub-visor-marco img[hidden]{display:none;}
+body.hub-paleta .hub-visor-falta{font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--dim,#6b6560);}
+body.hub-paleta .hub-visor-falta[hidden]{display:none;}
+body.hub-paleta .hub-visor-pie{display:flex;align-items:center;gap:10px;margin-top:10px;}
+body.hub-paleta .hub-visor-texto{flex:1;min-width:0;display:flex;align-items:center;gap:9px;font-size:12px;color:var(--ui-apagado);line-height:1.4;}
+body.hub-paleta .hub-visor-cuenta{flex-shrink:0;font-size:10px;font-weight:600;color:var(--hub-brand);
+  border:1px solid var(--hub-line);background:var(--hub-brand-tint);border-radius:20px;padding:3px 8px;}
+body.hub-paleta .hub-visor-nav{
+  display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;
+  border:1px solid var(--ui-borde);border-radius:50%;background:transparent;color:var(--text);
+  cursor:pointer;transition:border-color .18s,background-color .18s;
+}
+body.hub-paleta .hub-visor-nav:hover{border-color:var(--hub-terra-line-hover);background:var(--hub-action-tint);}
+body.hub-paleta .hub-visor-nav:focus-visible{outline:2px solid var(--hub-brand);outline-offset:2px;}
+/* La flecha del sprite apunta a la derecha; la de volver es la misma, al revés. */
+body.hub-paleta .hub-visor-nav[data-dir="-1"] .etx-ic{transform:scaleX(-1);}
+body.hub-paleta .hub-tool-bloqueada{opacity:.5;animation:none;}
+body.hub-paleta .hub-herramientas-estado{font-size:14px;color:var(--ui-apagado);line-height:1.6;}
+body.hub-paleta .hub-herramientas-estado:empty{display:none;}
+/* Captura completa en un modal mayor. Ver detalle aumenta su tamaño y permite
+   desplazarse; Ajustar vuelve a mostrarla completa sin recortarla. */
+body.hub-paleta .hub-captura-dialogo{
+  position:fixed;inset:0;margin:auto;width:min(1500px,calc(100vw - 48px));
+  height:min(980px,calc(100dvh - 48px));max-width:none;max-height:none;
+  padding:20px;border:1px solid var(--hub-line);border-radius:18px;background:var(--s1);color:var(--text);
+  box-shadow:0 24px 80px rgba(0,0,0,.45);overflow:hidden;font-family:inherit;
+}
+body.hub-paleta .hub-captura-dialogo[open]{display:flex;flex-direction:column;gap:16px;animation:hubCapturaAbrir .22s ease both;}
+body.hub-paleta .hub-captura-dialogo::backdrop{background:rgba(0,0,0,.76);backdrop-filter:blur(4px);}
+body.hub-paleta .hub-captura-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;}
+body.hub-paleta .hub-captura-head>div:first-child{min-width:0;}
+body.hub-paleta .hub-captura-eyebrow{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ui-apagado);}
+body.hub-paleta #hubCapturaTitulo{font-size:22px;line-height:1.3;font-weight:600;margin-top:5px;}
+body.hub-paleta .hub-captura-acciones{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+body.hub-paleta :is(.hub-captura-detalle,.hub-captura-cerrar){
+  display:inline-flex;align-items:center;justify-content:center;min-height:40px;border:1px solid var(--ui-borde);
+  border-radius:9px;background:transparent;color:var(--text);font-family:inherit;cursor:pointer;
+}
+body.hub-paleta .hub-captura-detalle{font-size:12px;padding:8px 12px;}
+body.hub-paleta .hub-captura-detalle[aria-pressed="true"]{color:var(--hub-brand);border-color:var(--hub-line);background:var(--hub-brand-tint);}
+body.hub-paleta .hub-captura-detalle:disabled{opacity:.45;cursor:default;}
+body.hub-paleta .hub-captura-cerrar{width:40px;font-size:24px;}
+body.hub-paleta :is(.hub-captura-detalle,.hub-captura-cerrar):hover{border-color:var(--hub-brand);}
+body.hub-paleta .hub-captura-imagen{
+  flex:1;min-width:0;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;
+  overflow:auto;border:1px solid var(--ui-borde);border-radius:12px;background:var(--bg);overscroll-behavior:contain;
+}
+body.hub-paleta .hub-captura-imagen img{display:block;width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;}
+body.hub-paleta .hub-captura-imagen img[hidden],body.hub-paleta .hub-captura-estado[hidden]{display:none;}
+body.hub-paleta .hub-captura-imagen.hub-captura-natural{display:block;}
+body.hub-paleta .hub-captura-natural img{max-width:none;max-height:none;}
+body.hub-paleta .hub-captura-estado{font-size:13px;color:var(--ui-apagado);padding:24px;text-align:center;}
+body.hub-paleta .hub-captura-pie{display:flex;align-items:center;gap:14px;flex-shrink:0;}
+body.hub-paleta .hub-captura-pie .hub-visor-nav{width:40px;height:40px;}
+body.hub-paleta .hub-captura-pie .etx-ic{width:20px;height:20px;}
+@keyframes hubCapturaAbrir{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes hubToolEntrada{from{opacity:0;translate:0 6px}to{opacity:1;translate:0 0}}
+@media(max-width:720px){
+  body.hub-paleta .hub-modulos-bar{padding:16px;gap:12px;}
+  body.hub-paleta .hub-modulos-bar .neg-activo-id{flex-basis:calc(100% - 60px);}
+  body.hub-paleta .hub-modulos-bar .neg-activo-btns{width:100%;margin-left:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  body.hub-paleta .hub-modulos-bar .user-badge{grid-column:1/-1;justify-self:start;}
+  body.hub-paleta .hub-modulos-bar .btn-cambiar-neg{white-space:normal;padding:10px 8px;text-align:center;}
+  body.hub-paleta .hub-module-intro{align-items:flex-start;flex-direction:column;gap:8px;}
+  body.hub-paleta .hub-module-dock{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(170px,68%);gap:14px;padding:20px 14px;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding-inline:14px;scrollbar-width:thin;scrollbar-color:var(--hub-line) transparent;}
+  body.hub-paleta .hub-module-tab{scroll-snap-align:start;}
+  body.hub-paleta .hub-herramientas{margin-top:30px;}
+  body.hub-paleta .hub-herramientas-head{gap:12px;margin-bottom:22px;align-items:flex-start;}
+  body.hub-paleta .hub-herramientas-icon{width:50px;height:50px;border-radius:12px;}
+  body.hub-paleta #hubModuloTitulo{font-size:24px;}
+  body.hub-paleta .hub-modulo-numero{letter-spacing:1.5px;}
+  body.hub-paleta .hub-tool-fila{padding:18px 16px;grid-template-columns:minmax(0,1fr);gap:16px;}
+  /* En el teléfono la identidad se apila y el botón de entrar al módulo pasa a
+     ocupar su propio renglón: con 44 px de alto, que es lo que pide un dedo. */
+  body.hub-paleta .hub-ir-modulo{width:100%;justify-content:center;min-height:44px;}
+  body.hub-paleta .hub-herramientas-head{flex-wrap:wrap;}
+  body.hub-paleta .hub-visor-marco:not(:disabled) .hub-visor-ampliar{opacity:1;}
+  body.hub-paleta .hub-captura-dialogo{width:calc(100vw - 16px);height:calc(100dvh - 24px);padding:12px;border-radius:14px;}
+  body.hub-paleta .hub-captura-dialogo[open]{gap:12px;}
+  body.hub-paleta .hub-captura-head{align-items:flex-start;gap:10px;}
+  body.hub-paleta #hubCapturaTitulo{font-size:17px;}
+  body.hub-paleta .hub-captura-acciones{gap:6px;}
+  body.hub-paleta .hub-captura-detalle{padding:8px;font-size:10.5px;max-width:80px;}
+  body.hub-paleta .hub-captura-cerrar{width:36px;min-height:40px;}
+  body.hub-paleta .hub-captura-pie{gap:8px;}
+  body.hub-paleta .hub-captura-pie .hub-visor-texto{font-size:11px;align-items:flex-start;}
+}
+@media(prefers-reduced-motion:reduce){body.hub-paleta .hub-tool-fila{animation:none;transition:none;}}
+@media(prefers-reduced-motion:reduce){body.hub-paleta .hub-captura-dialogo[open]{animation:none;}body.hub-paleta :is(.hub-visor-marco,.hub-visor-ampliar){transition:none;}}

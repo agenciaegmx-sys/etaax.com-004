@@ -4,7 +4,7 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
-    <script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+    <script src="/theme.js?v=modulos-ui-1"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <script>
 /* ── PERMISOS DE ESTE MÓDULO (ver ETAAX_SUBPERMS.requisiciones) ──────────────
    La regla vive en page-guard.js; aquí solo se le pone el nombre del módulo. */
@@ -244,6 +244,8 @@ document.addEventListener('DOMContentLoaded', function(){
         .rc-sig{width:100%;margin-top:14px;background:rgba(61,190,122,.1);border:1px solid var(--green);color:var(--green);
             border-radius:12px;padding:15px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer}
     </style>
+<link rel="stylesheet" href="/etaax-sidebar.css?v=1">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1">
 </head>
 <body>
 
@@ -514,10 +516,6 @@ document.addEventListener('DOMContentLoaded', function(){
         </div>
     </div>
 </div>
-
-<button class="theme-toggle" onclick="toggleTheme()">
-    <span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span>
-</button>
 
 <script>
 // ── Tema ──────────────────────────────────────────────────────
@@ -1736,15 +1734,20 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="../supabase-config.js"></script>
 <script src="/reporte-marca.js"></script>
 <script src="/insumo-label.js"></script>
-<script src="/etaax-core.js"></script>
+<script src="/etaax-core.js?v=financiero-2"></script>
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
-<script src="../ctx-bar.js"></script>
+<script src="/ctx-bar.js?v=modulos-ui-1"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
-<script src="/nav-pref.js"></script>
+<script src="/nav-pref.js?v=modulos-ui-1"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/etaax-iconos.js?v=modulos-1"></script>
+<script src="/etaax-sidebar.js?v=2"></script>
+<script src="/negocio-tipos.js?v=1"></script>
+<script src="/etaax-header.js?v=paleta-1"></script>
+<script src="/etaax-modulos-ui.js?v=1"></script>
 </body>
 </html>

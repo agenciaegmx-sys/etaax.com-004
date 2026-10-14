@@ -1,0 +1,35 @@
+PASA Resumen financiero y resultados antes de simulación
+PASA Ventas, cheque y comensales concilian sin incluir otros ingresos
+PASA Resultado y disponibilidad se distinguen y cuadran con KPIs
+PASA Compras, nómina e IMSS conservan la clasificación de gastos
+PASA Desgloses de resultado, cocina, barra e ingresos extra suman sus tarjetas
+PASA Las oportunidades tienen evidencia y acción, y son como máximo tres
+PASA Simular conserva la realidad y cambia sólo el escenario
+PASA Impreso lleva dos páginas de resultados y una simulación opcional
+PASA El PDF de resultados ocupa realmente dos páginas
+PASA Cambiar de periodo descarta los cambios de simulación anteriores
+PASA Semana se abre con un valor válido y Año incluye sus doce meses
+PASA Sucursales: matriz y Norte conservan sus cortes y sus reservas
+PASA Comensales parciales no producen un cheque inflado
+PASA El desglose incorpora la comisión automática de los cortes
+PASA El detalle financiero respeta la misma prioridad de clasificación
+PASA Sin gastos pagados no se declara un Score de operación saludable
+PASA Sin metas guardadas el Score no inventa una calificación
+PASA No se produjeron errores de JavaScript durante las operaciones
+PASA failure: fallos y datos faltantes se reconocen sin éxito ficticio
+PASA targets-failure: fallos y datos faltantes se reconocen sin éxito ficticio
+PASA comensales: fallos y datos faltantes se reconocen sin éxito ficticio
+PASA Un enlace preserva el rango y lo propaga a sus fuentes
+PASA Ventas reales conserva el filtro rango que llega del resumen
+PASA Ventas reales conserva el filtro anio que llega del resumen
+PASA 1440px dark: resultados y explicación sin desbordar
+PASA 1440px light: resultados y explicación sin desbordar
+PASA 1440px: simulación contenida y sin errores JS
+PASA 390px dark: resultados y explicación sin desbordar
+PASA 390px light: resultados y explicación sin desbordar
+PASA 390px: simulación contenida y sin errores JS
+PASA 320px dark: resultados y explicación sin desbordar
+PASA 320px light: resultados y explicación sin desbordar
+PASA 320px: simulación contenida y sin errores JS
+Capturas: /private/tmp/etaax-resumen-capturas
+RESUMEN FINANCIERO: 33 casos, 0 fallas. Supabase simulado; sin llamadas de producción.

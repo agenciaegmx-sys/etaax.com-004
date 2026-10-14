@@ -1,0 +1,9 @@
+/* El acento cian de los iconos se comparte con el hub, en ambos temas. */
+#nav { --etx-nav-acento:#8ce4ee; }
+[data-theme="light"] #nav { --etx-nav-acento:#247681; }
+#nav .nav-icon.etx-nav-icono {
+    display:inline-flex;align-items:center;justify-content:center;
+    width:24px;flex-shrink:0;line-height:1;
+}
+#nav .etx-nav-icono .etx-ic { --green:var(--etx-nav-acento);width:22px;height:22px; }
+#nav .nav-top-actions .etx-nav-icono .etx-ic { width:20px;height:20px; }

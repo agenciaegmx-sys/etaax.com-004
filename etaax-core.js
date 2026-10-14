@@ -49,6 +49,7 @@
     function getWeekStr(d) { var tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); var dn = tmp.getUTCDay() || 7; tmp.setUTCDate(tmp.getUTCDate() + 4 - dn); var ys = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1)); var wn = Math.ceil((((tmp - ys) / 86400000) + 1) / 7); return tmp.getUTCFullYear() + '-W' + String(wn).padStart(2, '0'); }
     function semanaISO(fechaStr) { var d = new Date(fechaStr + 'T12:00:00'); var t = new Date(d.valueOf()); t.setDate(t.getDate() - ((d.getDay() + 6) % 7) + 3); var w1 = new Date(t.getFullYear(), 0, 4); return 1 + Math.round(((t - w1) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7); }
     function getRange(tipo, val, end) {
+        if(tipo==='anio'){var y=/^\d{4}$/.test(String(val))?Number(val):new Date().getFullYear();return {from:y+'-01-01',to:y+'-12-31'};}
         if (tipo === 'dia') return { from: val, to: val };
         if (tipo === 'mes') { var y = parseInt(val.slice(0, 4)), m = parseInt(val.slice(5, 7)); return { from: val + '-01', to: new Date(y, m, 0).toISOString().slice(0, 10) }; }
         if (tipo === 'semana') {
@@ -1194,6 +1195,124 @@
         });
         return r;
     }
+    /* Indicadores del restaurante con la misma base de flujo del P&L.
+       Cocina/barra son COMPRAS sobre venta TOTAL: los cortes no guardan ventas
+       por área ni tickets cerrados. Los promedios usan comensales y exigen que
+       todos los cortes con venta o propina tengan ese dato, sin mezclar bases.
+       El consumo real vs. receta aún no tiene una fuente valorizada comparable. */
+    function indicadoresRestaurante(d) {
+        d = d || {};
+        var area = costoInsumosPorArea(d.gastos || [], d.gastoOpts || {});
+        var ventas = n(d.ventas), ingresos = n(d.ingresos), nomina = n(d.nomina);
+        var prop = 0, com = 0, incompletos = 0;
+        (d.cortes || []).forEach(function (c) {
+            var personas = n(c.comensales), p = propinas(c);
+            prop += p;
+            if (personas > 0 && isFinite(personas)) com += personas;
+            else if (ventasBruta(c) !== 0 || p !== 0) incompletos++;
+        });
+        function pct(m, base) { return base > 0 && isFinite(m) && isFinite(base) ? m / base * 100 : null; }
+        var promedio = com > 0 && !incompletos;
+        var primo = area.cocina + area.barra + nomina;
+        return {
+            cocina: pct(area.cocina, ventas), barra: pct(area.barra, ventas),
+            staff: pct(nomina, ventas), primo: pct(primo, ventas),
+            utilidad: pct(n(d.utilidad), ingresos),
+            cheque: promedio ? ventas / com : null,
+            propinas: promedio ? prop / com : null,
+            extra: null,
+            comprasCocina: area.cocina, comprasBarra: area.barra, costoPrimo: primo,
+            nomina: nomina, utilidadMonto: n(d.utilidad), propinasMonto: prop,
+            comensales: com, cortesSinComensales: incompletos
+        };
+    }
+    /* Desglose por producto solo cuando TODOS los cortes cuadran contra la
+       venta por medios. Un campo vacío o un corte antiguo no implica venta 0. */
+    function ventasPorArea(cortes) {
+        var r={alimentos:0,bebidas:0,otros:0,ventas:0,incompletos:0,completa:false};
+        (cortes||[]).forEach(function(c){
+            var v=ventasBruta(c); r.ventas+=v;
+            if(v===0)return;
+            var vals=['alimentos','bebidas','otros'].map(function(k){
+                return c[k]===null||c[k]===undefined||String(c[k]).trim()===''?NaN:Number(c[k]);
+            });
+            if(vals.some(function(x){return !isFinite(x)||x<0;})||Math.abs(vals[0]+vals[1]+vals[2]-v)>.01){r.incompletos++;return;}
+            r.alimentos+=vals[0];r.bebidas+=vals[1];r.otros+=vals[2];
+        });
+        r.completa=r.ventas>0&&r.incompletos===0;
+        return r;
+    }
+    function metaRestaurante(t,k){
+        t=t||{};
+        function val(v){if(v==null||String(v).trim()==='')return null;var x=Number(v);return isFinite(x)&&x>=0?x:null;}
+        var x=k==='utilidad'?val(t.util):val((t.operativos||{})[k]);
+        if(x===null&&k==='staff'){
+            var op=val(t.nomOp),ad=val(t.nomAdm);
+            if(op!==null||ad!==null)x=(op||0)+(ad||0);
+        }
+        if(x===null&&k==='primo')x=val(t.primo);
+        return x;
+    }
+    /* Referencias editoriales revisadas en octubre 2026. Son propuestas,
+       nunca metas guardadas. Cocina/barra se ADAPTAN a venta total; la mezcla
+       registrada debe cuadrar, y la alternativa se declara como supuesto. */
+    function sugerenciasRestaurante(cortes,t,mezcla){
+        var a=ventasPorArea(cortes),mix=mezcla||{};
+        var cocina=a.completa?a.alimentos/a.ventas*100:70;
+        var barra=a.completa?a.bebidas/a.ventas*100:30;
+        if(mix.cocina!=null&&isFinite(Number(mix.cocina)))cocina=Math.max(0,Math.min(100,Number(mix.cocina)));
+        if(mix.barra!=null&&isFinite(Number(mix.barra)))barra=Math.max(0,Math.min(100,Number(mix.barra)));
+        var chequeMeta=metaRestaurante(t,'cheque');if(chequeMeta===null)chequeMeta=300;
+        function red(x){return Math.round(x*100)/100;}
+        return {cocina:red(35*cocina/100),barra:red(22*barra/100),staff:35,primo:65,
+            utilidad:5,cheque:300,propinas:red(chequeMeta*.10),extra:2,
+            mezcla:{cocina:red(cocina),barra:red(barra),origen:a.completa&&!mezcla?'registrada':'estimada'}};
+    }
+    /* Modelo del resumen: recibe el MISMO periodo ya acotado. Ventas, cobros,
+       anticipos aplicados, otros ingresos y reservas conservan su identidad. */
+    function detalleResumenFinanciero(d){
+        d=d||{};var cortes=d.cortes||[],gastos=d.gastos||[],ctas=cuentasDebito(d.ctas||[]),deps=d.deps||[];
+        var comision=cortes.reduce(function(t,c){return t+comisionBancoCorte(c,ctas,deps);},0);
+        var opts={fijos:d.fijos||[],staff:d.staff||[],comisionBanco:comision};
+        var cl=clasificarGastos(gastos,opts),area=costoInsumosPorArea(gastos,{fijos:opts.fijos,staff:opts.staff});
+        var r={ventas:0,efectivo:0,tarjeta:0,transferencias:0,anticipos:0,propinas:0,comision:comision,
+            nomina:{operativa:0,administrativa:0,socios:0,imss:0},impuestos:0,financieros:costoFinanciero(gastos,opts),
+            pendientes:cl.pendiente,programados:cl.programado,compras:area,cuentas:[],cuentasInconsistentes:false,tpvPendiente:0,tpvDetalle:[],diasConCorte:0};
+        var mapa={},dias={};
+        function cuenta(id){id=id||'';if(!mapa[id]){var c=ctas.find(function(x){return x.id===id;});mapa[id]={id:id,nombre:c?(c.nombre||c.banco||'Cuenta'):'Sin cuenta asignada',tarjeta:0,transferencias:0};}return mapa[id];}
+        cortes.forEach(function(c){
+            r.ventas+=ventasBruta(c);r.efectivo+=n(c.efectivo);r.tarjeta+=n(c.tarjeta);r.transferencias+=n(c.transferencia);
+            r.anticipos+=anticipoAplicado(c);r.propinas+=propinas(c);if(c.fecha)dias[c.fecha]=1;
+            var b=ctaBaseCorte(c,ctas),baseId=b?b.id:'',td=0,tr=0;
+            (c.tarjetaCuentas||[]).forEach(function(x){var m=n(x.ventaTC)+n(x.ventaTD);td+=m;cuenta(x.cuentaId).tarjeta+=m;});
+            if(td>n(c.tarjeta)+.01)r.cuentasInconsistentes=true;
+            else if(n(c.tarjeta)-td>.01)cuenta(baseId).tarjeta+=n(c.tarjeta)-td;
+            (c.transferCuentas||[]).forEach(function(x){var m=n(x.monto);tr+=m;cuenta(x.cuentaId).transferencias+=m;});
+            if(tr>n(c.transferencia)+.01)r.cuentasInconsistentes=true;
+            else if(n(c.transferencia)-tr>.01)cuenta(baseId).transferencias+=n(c.transferencia)-tr;
+            /* Pendiente de CONCILIAR: no afirma que el banco no haya pagado.
+               Incluye propina TPV y respeta las comisiones reales al cerrar. */
+            var h=tpvDelCorte(c,deps,null,ctas),pendiente=Math.max(0,h.netoEfectivo-h.conciliado);r.tpvPendiente+=pendiente;
+            if(pendiente>0)r.tpvDetalle.push({fecha:c.fecha,concepto:'Corte '+(c.turno||''),sub:'Neto esperado menos abonos conciliados',monto:pendiente});
+        });
+        gastos.forEach(function(g){
+            if(gastoEstatus(g)!=='pagado')return;var gr=grupoGasto(g,opts);
+            if(gr==='imss')r.nomina.imss+=n(g.monto);
+            else if(gr==='nomOp'||gr==='nomAdm'){
+                var tipo=nomTipoGasto(g,opts.staff);r.nomina[tipo==='socios'?'socios':gr==='nomOp'?'operativa':'administrativa']+=n(g.monto);
+            }
+            if(gr!=='propina'&&/impuesto|\biva\b|\bisr\b|predial/i.test(g.categoria||''))r.impuestos+=n(g.monto);
+        });
+        r.cuentas=Object.keys(mapa).map(function(k){return mapa[k];});r.diasConCorte=Object.keys(dias).length;
+        r.otros=n(d.otros);r.ingresos=r.ventas+r.otros;r.egresos=cl.egresos;
+        r.apartados=previsionApartadoRango(deps,d.desde,d.hasta);
+        r.resultado=r.ingresos-r.egresos;r.utilidad=r.resultado-r.apartados;
+        r.areas=ventasPorArea(cortes);
+        r.indicadores=indicadoresRestaurante({ventas:r.ventas,ingresos:r.ingresos,nomina:cl.nomOp+cl.nomAdm+cl.imss,
+            utilidad:r.utilidad,gastos:gastos,gastoOpts:{fijos:opts.fijos,staff:opts.staff},cortes:cortes});
+        return r;
+    }
+
     /* Lo gastado en insumos del periodo.
        SOLO lo PAGADO: un pedido que todavía se debe no es costo de este mes
        (misma regla que clasificarGastos).
@@ -1345,7 +1464,7 @@
 
     function _puntoLinea(real, meta, mayorEsMejor) {
         if (meta === null || meta === undefined || isNaN(meta)) return null;
-        if (meta === 0) return real <= 0 ? 100 : 0;
+        if (meta === 0) return (mayorEsMejor ? real >= 0 : real <= 0) ? 100 : 0;
         var razon = mayorEsMejor ? (real / meta) : (meta / real);
         if (!isFinite(razon)) return real <= 0 ? 100 : 0;
         if (razon >= 1) return 100;                 // cumple o mejora
@@ -1645,6 +1764,9 @@
         CATS_INSUMO: CATS_INSUMO, esGastoInsumo: esGastoInsumo, costoInsumos: costoInsumos,
         resumenPL: resumenPL, scorePL: scorePL, proyectarPL: proyectarPL,
         CATS_BARRA: CATS_BARRA, areaInsumo: areaInsumo, costoInsumosPorArea: costoInsumosPorArea,
+        indicadoresRestaurante: indicadoresRestaurante,
+        ventasPorArea: ventasPorArea, metaRestaurante: metaRestaurante,
+        sugerenciasRestaurante: sugerenciasRestaurante, detalleResumenFinanciero: detalleResumenFinanciero,
         escaleraPL: escaleraPL, CATS_FINANCIERO: CATS_FINANCIERO, costoFinanciero: costoFinanciero,
         PL_PESOS: PL_PESOS,
         planFijoPago: planFijoPago,

@@ -1,0 +1,115 @@
+{
+  "width": 1010,
+  "body": 1010,
+  "header": {
+    "x": 21,
+    "y": 37,
+    "width": 968,
+    "height": 44,
+    "top": 37,
+    "right": 989,
+    "bottom": 81,
+    "left": 21
+  },
+  "close": {
+    "x": 889.359375,
+    "y": 52,
+    "width": 79.640625,
+    "height": 28,
+    "top": 52,
+    "right": 969,
+    "bottom": 80,
+    "left": 889.359375
+  },
+  "box": {
+    "x": 20,
+    "y": 36,
+    "width": 970,
+    "height": 411,
+    "top": 36,
+    "right": 990,
+    "bottom": 447,
+    "left": 20
+  },
+  "hit": "<div class=\"etx-modal-hd\" style=\"display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px 20px 0\">\n                <h2 style=\"font-size:14px;font-weight:600\">📚 Mis Recetas</h2>\n",
+  "overlay": "1000",
+  "global": "900",
+  "errors": []
+}
+{
+  "width": 390,
+  "body": 390,
+  "header": {
+    "x": 21,
+    "y": 37,
+    "width": 348,
+    "height": 79,
+    "top": 37,
+    "right": 369,
+    "bottom": 116,
+    "left": 21
+  },
+  "close": {
+    "x": 217.9375,
+    "y": 87,
+    "width": 35.359375,
+    "height": 28,
+    "top": 87,
+    "right": 253.296875,
+    "bottom": 115,
+    "left": 217.9375
+  },
+  "box": {
+    "x": 20,
+    "y": 36,
+    "width": 350,
+    "height": 657,
+    "top": 36,
+    "right": 370,
+    "bottom": 693,
+    "left": 20
+  },
+  "hit": "<div class=\"etx-modal-hd\" style=\"display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px 20px 0\">\n                <h2 style=\"font-size:14px;font-weight:600\">📚 Mis Recetas</h2>\n",
+  "overlay": "1000",
+  "global": "900",
+  "errors": []
+}
+{
+  "width": 320,
+  "body": 320,
+  "header": {
+    "x": 11,
+    "y": 37,
+    "width": 298,
+    "height": 79,
+    "top": 37,
+    "right": 309,
+    "bottom": 116,
+    "left": 11
+  },
+  "close": {
+    "x": 207.9375,
+    "y": 87,
+    "width": 35.359375,
+    "height": 28,
+    "top": 87,
+    "right": 243.296875,
+    "bottom": 115,
+    "left": 207.9375
+  },
+  "box": {
+    "x": 10,
+    "y": 36,
+    "width": 300,
+    "height": 720,
+    "top": 36,
+    "right": 310,
+    "bottom": 756,
+    "left": 10
+  },
+  "hit": "<div class=\"etx-modal-hd\" style=\"display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px 20px 0\">\n                <h2 style=\"font-size:14px;font-weight:600\">📚 Mis Recetas</h2>\n",
+  "overlay": "1000",
+  "global": "900",
+  "errors": []
+}
+CUENTA Y HEADER: 0 casos, 0 fallas. Supabase simulado; sin llamadas de producción.

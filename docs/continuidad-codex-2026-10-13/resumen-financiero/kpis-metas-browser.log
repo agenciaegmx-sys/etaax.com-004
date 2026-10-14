@@ -1,0 +1,61 @@
+PASA Ocho tarjetas, utilidad y los seis conceptos conservados
+PASA Todas las tarjetas permiten definir o editar su meta con una fuente
+PASA La sugerencia es visible sin reemplazar la meta guardada
+PASA Cocina y barra usan compras pagadas sin pedidos pendientes
+PASA Nómina incluye IMSS; Prime cost suma insumos y nómina una vez
+PASA Propinas no inflan ingresos, utilidad ni ventas
+PASA Promedios ponderados por comensales, sin tratar personas como tickets
+PASA Consumo extra no inventa cero sin consumos comparables
+PASA Metas cargadas rellenan el formulario en lugar de sobreescribirlas
+PASA Metas de máximo y mínimo califican según su dirección
+PASA Comparación de límite no cambia por redondeo flotante
+PASA Cambiar sucursal también filtra los apartados de previsiones
+PASA Matriz incluye registros antiguos sin sello y excluye Norte
+PASA Día y rango actualizan las tarjetas y excluyen otras fechas
+PASA Semana usa el mismo rango compartido del resto de finanzas
+PASA Sin ventas los porcentajes quedan sin dato y sin meta cumplida
+PASA Utilidad negativa se conserva como pérdida y no se trunca a cero
+PASA Sin metas nuevas no aplica las cifras del ejemplo de referencia
+PASA Guardar una tarjeta conserva las otras metas y campos desconocidos
+PASA Guardar acepta metas cero y conserva campos ajenos
+PASA Las metas sobreviven a recargar con el almacenamiento simulado
+PASA Una meta inválida no cambia el documento guardado
+PASA Importes negativos no se guardan como metas
+PASA Una meta opcional vacía borra sólo ese objetivo
+PASA Reporte usa las ocho tarjetas, los mismos datos y los seis conceptos
+PASA Desglose original sigue accesible sobre el encabezado
+PASA Fallo de gastos: costos pendientes, promedios disponibles y aviso explícito
+PASA El reporte también declara que los datos están incompletos
+PASA failure: sin errores JavaScript
+PASA Sin lectura de metas: conservar datos y bloquear su sobreescritura
+PASA targets-failure: sin errores JavaScript
+PASA Sin lectura de ventas no se muestran porcentajes ni promedios falsos
+PASA sales-failure: sin errores JavaScript
+PASA Comensales incompletos no fabrican promedios a partir de una parte
+PASA comensales: sin errores JavaScript
+PASA El acceso de sucursal queda limitado a sus datos
+PASA branch: sin errores JavaScript
+PASA Durante la carga no permite guardar metas ni declara éxito
+PASA slow: sin errores JavaScript
+PASA 1440px dark: tarjetas, metas y seis conceptos sin desbordar
+PASA 1440px light: tarjetas, metas y seis conceptos sin desbordar
+PASA 1440px: meta flotante visible y sin desbordar
+PASA 1440px: colores distinguen resultado y meta
+PASA 1440px: sin errores JavaScript
+PASA 1080px dark: tarjetas, metas y seis conceptos sin desbordar
+PASA 1080px light: tarjetas, metas y seis conceptos sin desbordar
+PASA 1080px: meta flotante visible y sin desbordar
+PASA 1080px: colores distinguen resultado y meta
+PASA 1080px: sin errores JavaScript
+PASA 390px dark: tarjetas, metas y seis conceptos sin desbordar
+PASA 390px light: tarjetas, metas y seis conceptos sin desbordar
+PASA 390px: meta flotante visible y sin desbordar
+PASA 390px: colores distinguen resultado y meta
+PASA 390px: sin errores JavaScript
+PASA 320px dark: tarjetas, metas y seis conceptos sin desbordar
+PASA 320px light: tarjetas, metas y seis conceptos sin desbordar
+PASA 320px: meta flotante visible y sin desbordar
+PASA 320px: colores distinguen resultado y meta
+PASA 320px: sin errores JavaScript
+Capturas: /private/tmp/etaax-kpis-metas
+KPIs: 59 casos, 0 fallas. Supabase simulado; sin llamadas de producción.

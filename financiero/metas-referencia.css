@@ -1,0 +1,13 @@
+.meta-ind-dialog{margin:auto;max-width:calc(100vw - 24px);width:min(520px,calc(100vw - 24px));max-height:calc(100dvh - 28px);padding:0;border:1px solid var(--border);border-radius:18px;background:var(--surface);color:var(--text);font:14px/1.6 'DM Sans',sans-serif;box-shadow:0 20px 80px #0006;}
+.meta-ind-dialog::backdrop{background:#000b;backdrop-filter:blur(4px);}
+.meta-ind-dialog form{margin:0;}
+.meta-ind-head,.meta-ind-pie{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px;}
+.meta-ind-head{border-bottom:1px solid var(--border);}.meta-ind-head small{font-size:9px;letter-spacing:2px;color:var(--text-dim);}.meta-ind-head h2{font:600 21px/1.4 'DM Sans',sans-serif;margin:6px 0 0;}
+.meta-ind-cuerpo{padding:18px 20px;}.meta-ind-cuerpo p{margin:0 0 14px;color:var(--text-muted);font-size:12px;}.meta-ind-cuerpo label{display:flex;flex-direction:column;gap:7px;font-size:12px;margin-top:18px;}
+.meta-ind-dialog input{width:100%;box-sizing:border-box;padding:11px;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:9px;font:15px 'DM Sans',sans-serif;}
+.meta-ind-dialog button,.kpi-definir-meta{cursor:pointer;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font:500 12px 'DM Sans',sans-serif;padding:10px 14px;}
+.meta-ind-head button{font-size:24px;padding:0 8px;}.meta-ind-fuente{font-size:11px;color:var(--etx-ui-cyan,#8ce4ee);text-decoration:underline;}
+.meta-ind-contexto{margin-top:8px!important;}.meta-ind-sugerencia{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:14px;border:1px solid var(--border);border-radius:10px;margin-top:18px;}.meta-ind-sugerencia span{font-size:11px;color:var(--text-muted);}.meta-ind-sugerencia strong{font-size:20px;}
+.meta-ind-pie{border-top:1px solid var(--border);position:sticky;bottom:0;background:var(--surface);}#metaIndicadorGuardar{background:var(--etx-ui-terra,#fb9b6f);color:var(--bg);border-color:transparent;}#metaIndicadorEstado{color:var(--red);margin-top:10px;margin-bottom:0;}
+.kpi-definir-meta{color:var(--etx-ui-cyan,#8ce4ee);margin-top:12px;}.kpi-definir-meta:disabled{opacity:.5;cursor:wait;}.kpi-sugerida{font-size:10.5px;line-height:1.6;color:var(--text-dim);margin-top:8px;}
+.meta-ind-dialog :is(button,input,a):focus-visible,.kpi-definir-meta:focus-visible{outline:2px solid var(--etx-ui-cyan,#8ce4ee);outline-offset:3px;}

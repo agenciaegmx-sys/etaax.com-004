@@ -3719,8 +3719,12 @@ console.log('\n══ SUITE AD · Pantalla de previsiones (financiero/previsione
     /* Y la pantalla tiene que CARGAR el núcleo de verdad: aquí lo inyecta el
        arnés, así que sin mirar el HTML esto pasaría con la etiqueta borrada. */
     test('el HTML carga /etaax-core.js (sin eso, la página muere en blanco)', () =>
-        eq(fs.readFileSync(path.join(RAIZ, 'financiero/previsiones.html'), 'utf8')
-             .indexOf('src="/etaax-core.js"') > -1, true, 'script'));
+        /* Se busca el archivo, no la ruta exacta: los compartidos llevan `?v=`
+           para que Netlify no mezcle una versión nueva del HTML con una copia
+           vieja del script, y esta prueba se caía cada vez que alguien subía
+           esa etiqueta —por un cambio que era correcto—. */
+        eq(/src="\/etaax-core\.js(\?[^"]*)?"/.test(
+             fs.readFileSync(path.join(RAIZ, 'financiero/previsiones.html'), 'utf8')), true, 'script'));
 
     /* La previsión vieja, tal como está capturada hoy, no puede desaparecer. */
     setVar(P, '_cachePrevs', [{ id:'v1', concepto:'Mantenimiento', estado:'en_curso',
@@ -5432,6 +5436,14 @@ console.log('\n══ AP · Que la página arranque (todas las pantallas) ══
            que en la pantalla de verdad. Sin cargarlo aquí, el arnés contaría un
            arranque menos que el navegador y la red dejaría de cuadrar. */
         cargarJS(W, 'theme.js');
+        /* …y las dependencias que la página pide con `<script src>` y el arnés
+           no conoce. Se enumeran a propósito, no se leen del HTML: cargar TODO
+           lo que una página declara mete aquí scripts que esperan un navegador
+           entero y el arnés revienta por el lado equivocado. Si una pantalla
+           falla con «X no está definido», su archivo va en esta lista. */
+        ['financiero/metas-referencia.js'].forEach(function (dep) {
+            if (archivo.indexOf('kpis.html') > -1) cargarJS(W, dep);
+        });
         cargarInline(W, archivo);
         if (!arranques.length) return { W, corrio: false };
         arranques.forEach(function (fn) { fn(); });   // si alguno lanza, el test falla con el motivo
@@ -5491,7 +5503,11 @@ console.log('\n══ AQ · Que la cuenta de arriba cierre (financiero/kpis.html
 {
     const K = crearContexto();
     cargarJS(K, 'etaax-core.js');
-    cargarInline(K, 'financiero/kpis.html');
+    /* KPIs pide `metas-referencia.js` con <script src>, y el arnés solo
+   corre lo que está EN LÍNEA: sin cargarlo, la pantalla revienta con
+   «EtaaxMetas no está definido» y parece un bug de la página. */
+cargarJS(K, 'financiero/metas-referencia.js');
+cargarInline(K, 'financiero/kpis.html');
     const $ = (id) => K.document.getElementById(id);
 
     /* Los mismos números del caso real. */
@@ -7256,14 +7272,14 @@ const testAsyncCola = [];
    Los catálogos globales y el panel financiero abren por URL escrita a mano en
    el HTML. Un archivo que se renombra o se mueve NO avisa: el botón sigue ahí y
    lleva a una página en blanco. Esto recorre esas rutas y comprueba que existen.
-   Y de paso: que dos tarjetas distintas no lleven al MISMO sitio, que era el
-   caso de Recetas y Sub-recetas.                                              */
+   Recetas y sub-recetas comparten ahora una sola tarjeta por decisión de UX;
+   la pastilla y el filtro interno de sub-recetas siguen disponibles.          */
 console.log('\n══ BC1 · La navegación no manda a ningún lado roto ══');
 {
     const hub = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
     const destinos = [...hub.matchAll(/abrirCatGlobal\('([^']+)'\)/g)].map(m => m[1]);
-    test('el modal de catálogos globales tiene sus 7 tarjetas', () =>
-        eq(destinos.length, 7, destinos.length + ' tarjetas'));
+    test('el modal de catálogos globales ofrece sus 6 accesos', () =>
+        eq(destinos.length, 6, destinos.length + ' accesos'));
     destinos.forEach(function(u){
         const archivo = u.split('?')[0];
         test('catálogo → ' + u + ' existe', () =>
@@ -7273,11 +7289,11 @@ console.log('\n══ BC1 · La navegación no manda a ningún lado roto ══'
     test('ninguna tarjeta lleva al mismo sitio que otra', () =>
         eq(new Set(destinos).size, destinos.length, destinos.join(' · ')));
 
-    /* El filtro que hace honesta la tarjeta de Sub-recetas: 'sub' son las DOS
+    /* El catálogo conserva su filtro de Sub-recetas: 'sub' son las DOS
        familias (alimentos y bebidas). Elegir una escondería la otra. */
     const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
-    test('la tarjeta de Sub-recetas pide el filtro de sub-recetas', () =>
-        eq(destinos.indexOf('recetas/index.html?tipo=sub') > -1, true, 'con filtro'));
+    test('Recetas y sub-recetas comparten una sola tarjeta al catálogo', () =>
+        eq(destinos.filter(u => u.split('?')[0] === 'recetas/index.html').join(','), 'recetas/index.html', 'acceso único'));
     test('el catálogo entiende ese filtro por URL', () =>
         eq(rec.indexOf("var urlTipo = _params.get('tipo');") > -1, true, 'lo lee'));
     test("'sub' incluye las dos familias, no una", () =>
@@ -15690,7 +15706,7 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
     test('los comensales salen de los cortes del periodo', () =>
         eq(DET._comensales, 250, 'mismos cortes'));
     test('…y el cheque promedio se saca de la venta, no promediando promedios', () =>
-        eq(cuerpoRS('renderKpis').indexOf('com>0 ? base.ventas/com : 0') > -1, true, 'ponderado'));
+        eq(ctx.EtaaxCore.indicadoresRestaurante({ventas:100000,cortes:CORTES}).cheque,400,'ponderado sobre ventas, sin ingresos extra'));
 
     /* ── La meta del periodo ── */
     /* Para una semana o un rango suelto, prorratear el mes daría una meta falsa:
@@ -15710,27 +15726,30 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
     test('…y sin meta configurada dice «sin definir», no cero', () =>
         eq(cuerpoRS('metaDelRango').indexOf('return hay ? t : null;') > -1, true, 'honesto'));
     test('…invitando a ponerla donde se pone', () =>
-        eq(cuerpoRS('renderKpis').indexOf("Ponla en <a href=\"ventas.html\"") > -1, true, 'con salida'));
+        eq(cuerpoRS('renderKpis').indexOf("_enlaceRs('ventas.html')") > -1,true,'con salida y filtros'));
 
     /* ── Cómo se leen los porcentajes ── */
     /* En un GASTO, estar por debajo de la meta es cumplir. Pintarlo al revés
        haría leer un ahorro como un problema — y es el error fácil, porque en la
        utilidad es exactamente al revés. */
-    test('en un gasto, por debajo de la meta es cumplir', () =>
-        eq(cuerpoRS('renderKpis').indexOf('var ok = meta2>0 ? (l.pct<=meta2) : null;') > -1, true, 'al derecho'));
-    test('…y en la utilidad, por encima', () =>
-        eq(cuerpoRS('renderKpis').indexOf('var okU = m.util>0 ? (base.utilidadPct>=m.util) : null;') > -1,
-           true, 'al revés, a propósito'));
-    /* Una meta que nadie puso no se inventa: calificar contra un número
-       imaginario es dar una nota que no significa nada. */
-    test('un renglón sin meta no se califica', () =>
-        eq(cuerpoRS('renderKpis').indexOf("'sin meta configurada'") > -1, true, 'sin inventar'));
+    test('en un gasto, por debajo de la meta es cumplir', () => {
+        const sc=ctx.EtaaxCore.scorePL({lineas:[{k:'food',pct:20}],utilidadPct:15},{food:30});
+        return eq(sc.detalle.find(x=>x.k==='food').punto,100,'al derecho');
+    });
+    test('…y en la utilidad, por encima', () => {
+        const sc=ctx.EtaaxCore.scorePL({lineas:[],utilidadPct:25},{util:20});
+        return eq(sc.detalle[0].punto,100,'mayor es mejor');
+    });
+    test('un renglón sin meta no se califica', () => {
+        const sc=ctx.EtaaxCore.scorePL({lineas:[{k:'food',pct:0}],utilidadPct:50},{});
+        return eq(sc.score,null,'sin inventar');
+    });
 
     /* ── La ventana de desglose ── */
     test('cada renglón se puede abrir', () =>
-        eq(cuerpoRS('verDetalle').length > 0 && rs.indexOf('_conLupa(l.k, l.nom)') > -1, true, 'abrible'));
+        eq(cuerpoRS('verDetalle').length > 0 && rs.indexOf("_conLupa(l.k,l.k==='food'?'Compras de insumos':l.nom)") > -1, true, 'abrible'));
     test('…incluido el de ventas', () =>
-        eq(rs.indexOf("_conLupa('ventas','Ventas')") > -1, true, 'también'));
+        eq(rs.indexOf("_conLupa('ventas','Ingresos · ventas + otros')") > -1, true, 'también'));
     /* El pie con el total es lo que convierte la lista en algo verificable: sin
        él hay que sumar a ojo para saber si cuadra. */
     test('…y la ventana cierra con el total de lo que listó', () =>
@@ -15751,7 +15770,7 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
     PAGS.forEach(p => {
         const h = fs.readFileSync(path.join(RAIZ, 'financiero/' + p + '.html'), 'utf8');
         test(p + ' toma la barra de un solo lugar', () =>
-            eq(h.indexOf('src="nav.js"') > -1 &&
+            eq(/src="nav\.js(?:\?[^\"]*)?"/.test(h) &&
                h.indexOf('class="nav-section"') === -1 &&
                h.indexOf('<nav class="nav" id="nav"></nav>') > -1, true, 'una sola'));
         /* EL ENCABEZADO TAMBIÉN. Ya se había separado: Resumen traía 📊 «Salud
@@ -15771,7 +15790,7 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
            reemplaza por la de default y el botón acaba diciendo lo contrario de
            lo que hace. */
         test('…cargando nav.js ANTES que nav-pref.js', () =>
-            eq(h.indexOf('src="nav.js"') < h.indexOf('nav-pref.js'), true, 'en orden'));
+            eq(h.indexOf('src="nav.js') < h.indexOf('nav-pref.js'), true, 'en orden'));
     });
     test('el encabezado de la barra es el mismo para todas', () =>
         eq(nav.indexOf("data-tooltip=\"Panel Financiero\"") > -1 &&
@@ -16141,17 +16160,11 @@ console.log('\n══ BH12 · Dos botones que no hacían nada ══');
         eq(dR('_imprimirResumen').indexOf("createElement('iframe')") > -1, true, 'con red'));
 
     /* Y que de verdad produzca el reporte: se corre el generador real. */
-    const ctx = { console, Date, Math, String, Number, JSON, parseFloat, isNaN, Object, Array,
-                  localStorage: { getItem: () => null, setItem(){} } };
-    ctx.window = ctx;
-    ctx.document = { createElement: () => ({ style:{}, contentWindow:null }), body:{ appendChild(){} },
-                     getElementById: () => null };
-    vm.createContext(ctx);
-    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'etaax-core.js'), 'utf8'), ctx, { filename:'etaax-core.js' });
-    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'reporte-marca.js'), 'utf8'), ctx, { filename:'reporte-marca.js' });
+    const ctx=crearContexto();
+    cargarJS(ctx,'etaax-core.js');cargarJS(ctx,'reporte-marca.js');cargarInline(ctx,'financiero/resumen.html');
     ctx._c = { cortes:[{ fecha:'2026-09-05', efectivo:40000, tarjeta:20000, comensales:150 }], otros:[],
                gastos:[{ fecha:'2026-09-02', concepto:'Carne', categoria:'Alimentos e ingredientes', monto:12000 }],
-               deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{} };
+               deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{},falló:[],listo:true };
     ctx._deSuc = () => true; ctx._sucNom = () => 'Matriz'; ctx._suc = () => '';
     ctx.rango = () => ({ from:'2026-09-01', to:'2026-09-30' });
     ctx._periodoTxt = () => 'septiembre de 2026';
@@ -16159,8 +16172,6 @@ console.log('\n══ BH12 · Dos botones que no hacían nada ══');
     ctx.esc = (x) => String(x == null ? '' : x);
     let papel = null;
     ctx.etaaxAbrirReporte = (h) => { papel = h; };
-    ['n','fmtM','fmtP','_tocado','plDelPeriodo','_metaDelDia','metaDelRango','_imprimirResumen','imprimirResumen']
-        .forEach(f => vm.runInContext(dR(f), ctx, { filename:'resumen.html (extracto)' }));
     ctx.imprimirResumen();
     const ver = papel ? papel.replace(/<style[\s\S]*?<\/style>/g,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ') : '';
 
@@ -16170,7 +16181,7 @@ console.log('\n══ BH12 · Dos botones que no hacían nada ══');
        escalera hay tres utilidades (bruta, operativa y neta) y la de abajo
        necesita apellido para no confundirse con las otras dos. */
     test('…con los renglones del P&L', () =>
-        eq(ver.indexOf('Food cost $12,000') > -1 && ver.indexOf('Utilidad neta $48,000') > -1,
+        eq(ver.indexOf('Compras de insumos $12,000') > -1 && ver.indexOf('Utilidad disponible $48,000') > -1,
            true, 'completo'));
     /* Es lo que se lleva a la junta: el P&L dice cuánto y los indicadores dicen
        de qué manera. En papel se necesitan los dos. */
@@ -16181,15 +16192,15 @@ console.log('\n══ BH12 · Dos botones que no hacían nada ══');
     test('…sin columnas de proyección si nadie la tocó', () =>
         eq(ver.indexOf('Proyección') === -1, true, 'sin relleno'));
     test('…y CON ellas en cuanto se toque', () => {
-        ctx._proy = { ventas: 90000 };
+        ctx._proy = { ventas: 90000 };ctx._simulando=true;
         papel = null; ctx.imprimirResumen();
         const v2 = papel.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
-        return eq(v2.indexOf('Proyección') > -1 && v2.indexOf('Diferencia') > -1, true, 'comparable');
+        return eq(v2.indexOf('Simulación manual') > -1 && v2.indexOf('Simulado') > -1, true, 'comparable');
     });
     /* Decir con qué base se midió es lo que permite comparar este papel con el
        del mes pasado. */
     test('…diciendo en el papel con qué base se midió', () =>
-        eq(ver.indexOf('sin propinas') > -1 && ver.indexOf('comprado') > -1, true, 'auditable'));
+        eq(ver.toLowerCase().indexOf('sin propinas') > -1 && ver.indexOf('Base de flujo: compras') > -1, true, 'auditable'));
 }
 
 /* ═══════════ SUITE BH13 · EL ARRASTRE SE COMÍA LOS CLICS ═══════════════════
@@ -16425,9 +16436,9 @@ console.log('\n══ BH14 · La escalera del restaurante ══');
     };
     test('la tabla intercala los peldaños entre los renglones editables', () => {
         const t = dR('render');
-        return eq(t.indexOf("_escFila('Utilidad bruta'") > -1 &&
+        return eq(t.indexOf("_escFila('Resultado tras compras'") > -1 &&
                   t.indexOf("_escFila('Costo primo'") > -1 &&
-                  t.indexOf("_escFila('Utilidad operativa'") > -1, true, 'en su orden');
+                  t.indexOf("_escFila('Resultado operativo · antes de financieros'") > -1, true, 'en su orden');
     });
     /* Los peldaños salen de los de arriba: dejarlos editar permitiría
        «proyectar» un costo primo que no sale de ningún lado. */
@@ -16450,7 +16461,7 @@ console.log('\n══ BH14 · La escalera del restaurante ══');
         vm.createContext(cx);
         vm.runInContext(core, cx, { filename:'etaax-core.js' });
         cx._c = { cortes:[{ fecha:'2026-09-05', efectivo:348939 }], otros:[], gastos:G,
-                  deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{} };
+                  deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{},falló:[],listo:true };
         cx._deSuc = () => true; cx._sucNom = () => 'Matriz';
         cx.rango = () => ({ from:'2026-09-01', to:'2026-09-30' });
         cx._DET = null; cx._AREA = { cocina:0, barra:0 }; cx._FIN = 0;
@@ -16480,14 +16491,7 @@ console.log('\n══ BH14 · La escalera del restaurante ══');
     /* Sin la meta, el papel imprime «meta <undefined%» — un dato roto que se ve
        como un dato. Se comprueba sobre el reporte GENERADO, no sobre el código. */
     test('…y el papel no imprime ningún «undefined»', () => {
-        const cx = { console, Date, Math, String, Number, JSON, parseFloat, isNaN, Object, Array,
-                     localStorage:{ getItem: () => null, setItem(){} } };
-        cx.window = cx;
-        cx.document = { createElement: () => ({ style:{}, contentWindow:null }),
-                        body:{ appendChild(){} }, getElementById: () => null };
-        vm.createContext(cx);
-        vm.runInContext(core, cx, { filename:'etaax-core.js' });
-        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'reporte-marca.js'), 'utf8'), cx, { filename:'reporte-marca.js' });
+        const cx=crearContexto();cargarJS(cx,'etaax-core.js');cargarJS(cx,'reporte-marca.js');cargarInline(cx,'financiero/resumen.html');
         cx._c = { cortes:[{ fecha:'2026-09-05', efectivo:348939, comensales:780 }], otros:[], gastos:G,
                   deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{} };
         cx._deSuc = () => true; cx._sucNom = () => 'Matriz'; cx._suc = () => '';
@@ -16497,26 +16501,24 @@ console.log('\n══ BH14 · La escalera del restaurante ══');
         cx.esc = (x) => String(x == null ? '' : x);
         let papel = null;
         cx.etaaxAbrirReporte = (h) => { papel = h; };
-        ['n','fmtM','fmtP','_tocado','plDelPeriodo','_metaDelDia','metaDelRango','_imprimirResumen','imprimirResumen']
-            .forEach(fn => vm.runInContext(dR(fn), cx, { filename:'resumen.html' }));
         cx.imprimirResumen();
         return eq(papel !== null && papel.indexOf('undefined') === -1 &&
                   papel.indexOf('NaN') === -1, true, 'sin huecos');
     });
     test('el papel lleva la misma escalera que la pantalla', () => {
         const t = dR('_imprimirResumen');
-        return eq(t.indexOf("fil('Costo primo (insumos + nómina)'") > -1 &&
-                  t.indexOf("fil('Utilidad bruta'") > -1 &&
-                  t.indexOf("fil('Utilidad operativa'") > -1, true, 'la misma');
+        return eq(t.indexOf("fila('Costo primo · subtotal de compras y personal'") > -1 &&
+                  t.indexOf("fila('Resultado tras compras'") > -1 &&
+                  t.indexOf("fila('Resultado operativo · antes de financieros'") > -1, true, 'la misma');
     });
     /* LO QUE NO SE PUEDE FINGIR. El corte de caja registra la venta por forma
        de pago, no por lo que se vendió: no hay de dónde sacar cuánto vendió la
        cocina y cuánto la barra. Decir «bar cost 21%» —costo de barra entre
        VENTA de barra— sería un número que parece el bueno y no lo es. */
-    test('se dice que los dos porcentajes van sobre la venta TOTAL', () =>
-        eq(dR('_imprimirResumen').indexOf('venta <b>total</b>') > -1, true, 'sin fingir'));
-    test('…y por qué: el corte no registra qué se vendió', () =>
-        eq(dR('_imprimirResumen').indexOf('la venta por forma de pago y no por lo que se vendió') > -1,
+    test('se dice que los porcentajes del P&L van sobre ingresos totales', () =>
+        eq(dR('_imprimirResumen').indexOf('sobre los ingresos totales') > -1, true, 'sin fingir'));
+    test('…y compras se conserva como base aunque haya ventas por producto', () =>
+        eq(dR('_imprimirResumen').indexOf('base de compras pagadas') > -1,
            true, 'explicado'));
     /* EBITDA descuenta además depreciación y amortización, y ETAAX no lleva
        activos fijos. Ponerle ese nombre a un número que no los descuenta es dar
@@ -16534,8 +16536,8 @@ console.log('\n══ BH14 · La escalera del restaurante ══');
     });
     /* Y que el peldaño se llame por lo que es. */
     test('…se llama utilidad operativa, que es lo que mide', () =>
-        eq(dR('render').indexOf("_escFila('Utilidad operativa'") > -1 &&
-           dR('_imprimirResumen').indexOf("fil('Utilidad operativa'") > -1, true, 'su nombre'));
+        eq(dR('render').indexOf("_escFila('Resultado operativo · antes de financieros'") > -1 &&
+           dR('_imprimirResumen').indexOf("fila('Resultado operativo · antes de financieros'") > -1, true, 'su nombre'));
     /* Decirle al usuario POR QUÉ no se llama EBITDA es parte del arreglo: si no,
        el primer contador que lo vea va a preguntar dónde está el EBITDA. */
     test('…diciéndole al usuario por qué no es EBITDA', () =>
@@ -25910,6 +25912,10 @@ console.log('\n══ BE13 · Resumen y KPIs cuadran peso por peso ══');
         if (suc) W._storage['etaax_sucursal_activa'] = suc;
         cargarJS(W, 'etaax-core.js');
         cargarJS(W, 'etaax-db.js');
+        /* KPIs pide `metas-referencia.js` con <script src> y el arnés solo corre
+           lo que está EN LÍNEA; sin esto revienta con «EtaaxMetas no está
+           definido» y parece un bug de la página. */
+        if (archivo.indexOf('kpis.html') > -1) cargarJS(W, 'financiero/metas-referencia.js');
         cargarInline(W, archivo);
         W._supabase.from = clienteCon(FIX).from;
         return W;
@@ -25988,7 +25994,11 @@ console.log('\n══ BE13 · Resumen y KPIs cuadran peso por peso ══');
         K._storage['etaax_negocio_activo'] = 'negC';
         cargarJS(K, 'etaax-core.js');
         cargarJS(K, 'etaax-db.js');
-        cargarInline(K, 'financiero/kpis.html');
+        /* KPIs pide `metas-referencia.js` con <script src>, y el arnés solo
+   corre lo que está EN LÍNEA: sin cargarlo, la pantalla revienta con
+   «EtaaxMetas no está definido» y parece un bug de la página. */
+cargarJS(K, 'financiero/metas-referencia.js');
+cargarInline(K, 'financiero/kpis.html');
         K._supabase.from = function (tabla) {
             const resp = porTabla[tabla] || { data: [], error: null };
             const q = {};
@@ -26223,7 +26233,9 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
            a él. La prueba tiene que apuntar a lo que juzga. */
         const btnAdmin = h.slice(i, h.indexOf('var _logoCard', i));
         test('el botón de administrar habla el idioma del sistema, no el del negocio', () => {
-            eq(/var\(--green\)/.test(btnAdmin), true, 'no usa el verde del sistema');
+            const paleta = fs.readFileSync(path.join(RAIZ, 'hub-paleta.css'), 'utf8');
+            eq(/hub-suc-accion/.test(btnAdmin) && /\.hub-suc-accion\{[^}]*color:var\(--hub-heading\)/.test(paleta), true,
+               'no usa el acento de acciones del hub');
             return eq(/sucColor/.test(btnAdmin), false, 'sigue pintándose del color del negocio');
         });
         test('…y el recuadro del icono de la sucursal también es neutro', () =>
@@ -26233,16 +26245,14 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
         test('…mientras que la etiqueta MATRIZ sí lleva el color del negocio', () =>
             eq(/Matriz<\/span>/.test(tarjeta) && /background:' \+ sucColor \+ '22/.test(tarjeta), true,
                'se perdió el distintivo'));
-        /* Y las dos tarjetas globales: neutras en reposo, con su color solo al
-           pasar el cursor. Dos colores fuertes permanentes al lado del color
-           del negocio ensucian la pantalla en vez de ordenarla. */
-        test('las tarjetas globales son neutras en reposo', () => {
-            const j = h.indexOf("abrirCatalogosGlobalesNeg()");
-            const bloque = h.slice(j, j + 1400);
-            eq(/background:var\(--s1\);border:1px solid var\(--ui-borde\)/.test(bloque), true,
-               'siguen con fondo y borde de color fijo');
-            return eq(/onmouseover="this\.style\.background='rgba\(122,184,245/.test(bloque), true,
-                      'perdieron su color al pasar el cursor, que es cuando sirve');
+        /* Las tarjetas globales conservan fondo neutro y contornos de la
+           paleta del hub, sin teñirse con el color de cada negocio. */
+        test('las tarjetas globales tienen fondo neutro y contorno de marca', () => {
+            const paleta = fs.readFileSync(path.join(RAIZ, 'hub-paleta.css'), 'utf8');
+            eq(/\.hub-global-card\{[^}]*background:var\(--s1\);border:1px solid var\(--hub-card-line,var\(--hub-line\)\)/.test(paleta), true,
+               'perdieron el fondo neutro o el contorno de marca');
+            return eq(/\.hub-global-card:hover\{[^}]*border-color:var\(--hub-card-line-hover,var\(--hub-line-hover\)\)/.test(paleta), true,
+                      'perdieron el acento al pasar el cursor');
         });
     }
 
@@ -26299,18 +26309,28 @@ console.log('\n══ BE14 · Los iconos de la marca ══');
                 const veces = (html.match(/#f5c842/g) || []).length;
                 return eq(veces, 2, 'aparece ' + veces + ' veces: el distintivo son 2 (fondo y letra)');
             });
-            test('…mientras lo que se pulsa habla en verde', () =>
-                eq((html.match(/61,190,122/g) || []).length >= 2, true, 'no quedó verde en los botones'));
+            test('…mientras lo que se pulsa lleva el acento de acciones', () =>
+                eq((html.match(/hub-suc-accion/g) || []).length, 4, 'las dos acciones de cada sucursal deben usar la paleta'));
         }
 
-        /* La barra de sesión es la única con contorno verde: encabeza la
-           pantalla, no es una tarjeta más. */
-        test('la barra de sesión se distingue con su contorno verde', () =>
-            eq(/\.neg-activo-bar\{[^}]*border:1px solid rgba\(61,190,122/.test(h), true,
-               'comparte el gris de todo lo demás'));
-        test('…y «cerrar sesión» no parece deshabilitado', () =>
-            eq(/\.btn-logout\{[^}]*color:var\(--text\)/.test(h), true,
-               'sigue en gris apagado, que se lee como botón apagado'));
+        /* La identidad del negocio comparte el contorno de marca del hub. */
+        test('la barra de identidad lleva el contorno de marca', () => {
+            const paleta = fs.readFileSync(path.join(RAIZ, 'hub-paleta.css'), 'utf8');
+            return eq(/\.neg-activo-bar\{border-color:var\(--hub-brand\)/.test(paleta), true,
+                      'la barra no recibe el contorno de marca');
+        });
+        /* La intención se mantiene, cambió de domicilio: salir se escribe en
+           claro, no en el gris de lo apagado. Antes se medía en el botón del
+           hub; ese botón ya no existe —la salida vive en el menú de la cuenta—
+           y la regla que quedaba en hub.html no la usaba nadie, así que la
+           prueba vigilaba un color que nadie pintaba. */
+        test('…y «cerrar sesión» no parece deshabilitado', () => {
+            const hd = fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8');
+            eq(/\.etx-hd-op\{[^}]*color:var\(--text/.test(hd), true,
+               'la salida se lee en gris apagado, como un botón deshabilitado');
+            return eq(/\.etx-hd-op\.sale:hover\{color:var\(--red/.test(hd), true,
+                      'y al apuntarla no avisa que es la que cierra la sesión');
+        });
     }
 
     /* ── EL RELLENO AUTOMÁTICO NO PUEDE PINTAR SU PROPIO FONDO ───────────
@@ -26849,6 +26869,722 @@ console.log('\n══ BE16 · La barra de arriba, una sola y fija ══');
     });
 }
 
+/* ═══════════ SUITE BE17 · «ACTUALIZAMOS EL SISTEMA, VE LAS NOVEDADES» ═══════
+   Un rediseño que nadie anuncia se siente como un error: el que entra el lunes
+   no ve «mejor navegación», ve que le movieron el botón de salir.
+
+   Lo que se vigila aquí no es que el recuadro se pinte —eso se ve— sino las
+   cuatro decisiones que SÍ pueden fallar en silencio, y que cuestan caro:
+
+     · que no salga encima de la pantalla de acceso;
+     · que no se le coma el anuncio al segundo colaborador de la misma tablet;
+     · que cerrar a medias no cuente como haber leído;
+     · y que nunca salgan las dos capas —avisito y presentación— en la misma
+       entrada, que es cómo se le enseña a alguien a cerrar avisos sin leerlos.
+
+   Cada prueba CORRE el archivo de verdad. Un `grep` del comentario de arriba
+   sobreviviría a la mutación que mete el bug.                                */
+function suiteNovedades() {
+console.log('\n══ BE17 · «Actualizamos el sistema, ve las novedades» ══');
+
+    /* Un contexto limpio, con o sin sesión. El DOM de mentira devuelve un
+       elemento por cada id que se le pida, así que el recuadro se puede LEER
+       por su innerHTML: es lo que de verdad vería la persona. */
+    const arranca = (opc) => {
+        opc = opc || {};
+        const C = crearContexto();
+        if (opc.sesion !== false) {
+            C.localStorage.setItem('etaax_ctx', JSON.stringify({
+                userId: opc.quien || 'u-edwin', negNombre: 'EGMx'
+            }));
+        }
+        if (opc.yaVio) C.localStorage.setItem('etaax_novedades_vista', JSON.stringify(opc.yaVio));
+        if (opc.hace === undefined) cargarJS(C, 'novedades.js');
+        else {
+            /* El reloj hacia adelante: la ventana del anuncio se cuenta desde la
+               FECHA que el hook estampa al publicar, así que para probar «pasados
+               tres días» hay que mover esa fecha, no el reloj del sistema. Se
+               arma en hora LOCAL porque el archivo cuenta los días en local: con
+               UTC, la prueba fallaría solo por las tardes. */
+            const d = new Date(); d.setDate(d.getDate() - opc.hace);
+            const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+                      + '-' + String(d.getDate()).padStart(2, '0');
+            const src = fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8')
+                          .replace(/var FECHA\s*=\s*'[^']*'/, "var FECHA = '" + iso + "'");
+            vm.runInContext(src, C, { filename: 'novedades.js' });
+        }
+        const N = C.window.EtaaxNovedades;
+        /* El anuncio nace APAGADO (ver `ANUNCIAR` en novedades.js): se enciende
+           el día del push. Las pruebas de comportamiento lo encienden a mano;
+           la de más abajo comprueba justamente que apagado no se asoma. */
+        if (opc.anuncio !== false) N.anunciar(true);
+        return { C, N, html: () => C.document.getElementById('etx-nov').innerHTML };
+    };
+
+    /* ── 1 · Nunca encima de la contraseña ───────────────────────────────── */
+    test('sin sesión no se anuncia nada', () => {
+        const a = arranca({ sesion: false });
+        return eq(a.N.quizas(), false, 'un recuadro encima de la pantalla de acceso');
+    });
+    test('…y con sesión sí, una vez', () => {
+        const a = arranca();
+        eq(a.N.quizas(), true, 'quien entró no se enteró de nada');
+        return eq(/actualización/i.test(a.html()), true, 'el recuadro salió vacío');
+    });
+    test('…y no se pinta encima de sí misma si la pantalla llama dos veces', () => {
+        const a = arranca();
+        a.N.quizas();
+        return eq(a.N.quizas(), false, 'dos recuadros, uno sobre otro');
+    });
+
+    /* ── 2 · La tablet compartida ────────────────────────────────────────────
+       Cuatro personas, un navegador. Con una sola marca, el primero que entra
+       se come el anuncio de los demás — y los demás son justo quienes más
+       necesitan saber que les movieron el botón. */
+    test('lo que vio uno no se lo quita al siguiente', () => {
+        const a = arranca({ quien: 'u-edwin' });
+        a.N.quizas(); a.N.vista();
+        eq(a.N.pendiente(), false, 'a quien ya lo vio se le repite');
+        /* el mismo navegador, otra persona */
+        a.C.localStorage.setItem('etaax_ctx', JSON.stringify({ userId: 'u-chef' }));
+        return eq(a.N.pendiente(), true, 'al segundo colaborador se le comió el anuncio');
+    });
+
+    /* ── 3 · Cerrar no es haber leído ────────────────────────────────────── */
+    test('cerrar a la mitad no cuenta como visto', () => {
+        const a = arranca();
+        a.N.abrir(0);
+        a.N.cerrar();
+        return eq(a.N.pendiente(), true, 'se dio por leído algo que nadie leyó');
+    });
+    test('…pero tampoco insiste otra vez en la misma pestaña', () => {
+        const a = arranca();
+        a.N.abrir(0); a.N.cerrar();
+        eq(a.N.quizas(), false, 'reaparece en cada cambio de pantalla: eso es ruido');
+        /* …y en la siguiente entrada vuelve a ofrecerse */
+        a.C.sessionStorage.removeItem('etaax_novedades_aplazada');
+        return eq(a.N.quizas(), true, 'se perdió para siempre por un clic al aire');
+    });
+    test('llegar a la última SÍ cuenta, aunque se cierre con Escape', () => {
+        const a = arranca();
+        a.N.abrir(a.N.lista().length - 1);
+        return eq(a.N.pendiente(), false,
+                  'quien lee todo y cierra con Escape lo recibiría otra vez mañana');
+    });
+    test('…y «Listo» marca la versión, no un simple "sí"', () => {
+        const a = arranca();
+        a.N.vista();
+        const m = JSON.parse(a.C.localStorage.getItem('etaax_novedades_vista'));
+        return eq(m['u-edwin'], a.N.VERSION, 'sin versión guardada, el próximo anuncio no se nota');
+    });
+    test('al subir VERSION, quien ya vio la anterior vuelve a verla', () => {
+        const a = arranca({ yaVio: { 'u-edwin': '1999.01' } });
+        return eq(a.N.pendiente(), true, 'el interruptor del anuncio no sirve de nada');
+    });
+    test('olvidar() devuelve el anuncio a quien quiere repasarlo', () => {
+        const a = arranca();
+        a.N.vista();
+        a.N.olvidar();
+        return eq(a.N.pendiente(), true, 'no hay forma de volver a verlo sin borrar datos a mano');
+    });
+
+    /* ── 3bis · El interruptor, apagado hasta el día del push ───────────── */
+    /* El interruptor se encendió el día de publicar ETAAX 2.0. Lo que esta
+       prueba cuida ya no es el valor con el que viene —eso cambia en cada
+       actualización— sino que APAGARLO siga funcionando: es la única forma de
+       preparar el anuncio de la próxima versión sin que salga a medio hacer. */
+    test('apagado, el anuncio no se asoma solo', () => {
+        const a = arranca({ anuncio: false });
+        a.N.anunciar(false);
+        eq(a.N.anunciando(), false, 'el interruptor ya no apaga nada');
+        eq(a.N.quizas(), false, 'se anunciaría una actualización que todavía no se publica');
+        return eq(a.N.arrancar() !== 'presentacion', true, 'el arranque lo saca igual');
+    });
+    test('…pero quien lo pide desde el menú sí lo ve', () => {
+        const a = arranca({ anuncio: false });
+        a.N.anunciar(false);
+        a.N.abrir(0);
+        return eq(/Paso 1 de /.test(a.html()), true,
+                  'el interruptor apagaría también la puerta de quien lo busca');
+    });
+
+    /* UNA SALIDA VISIBLE. Escape y tocar fuera son cosas que hay que SABER:
+       quien no las conoce se siente atrapado en un anuncio que no pidió. */
+    test('la portada pregunta y ofrece las dos salidas', () => {
+        const a = arranca();
+        a.N.avisar();
+        const h = a.html();
+        eq(/¿Quieres ver las novedades\?/.test(h), true, 'la portada no pregunta nada');
+        eq(/Ver novedades/.test(h), true, 'no hay botón para verlas');
+        return eq(/Omitir novedades/.test(h), true, 'no hay forma de saltárselas sin cerrar la ventana');
+    });
+    /* La actualización se presenta por su NOMBRE, no por una fecha: «la de Mise
+       en Place» se le queda a alguien; «2026.10» no se lo queda nadie. */
+    test('la portada se presenta con el número y el nombre de la versión', () => {
+        const a = arranca();
+        a.N.avisar();
+        const h = a.html();
+        eq(h.indexOf('ETAAX ' + a.N.NUMERO) > -1, true, 'la actualización no dice qué número es');
+        eq(h.indexOf(a.N.NOMBRE) > -1, true, 'la actualización no tiene nombre a la vista');
+        /* …y el número ES la marca de «ya lo vi»: si fueran dos cuentas
+           distintas, subir uno sin el otro dejaría a medio mundo sin anuncio. */
+        return eq(a.N.VERSION, a.N.NUMERO, 'el número de versión y la marca de visto se separaron');
+    });
+    test('…y no presume cuántas novedades son', () => {
+        const a = arranca();
+        a.N.avisar();
+        return eq(/Son \d+/.test(a.html()), false,
+                  'contar las novedades invita a compararlas con lo que uno esperaba');
+    });
+    test('el anuncio se puede cerrar con un botón a la vista', () => {
+        const a = arranca();
+        a.N.avisar();
+        eq(/etxNovX/.test(a.html()), true, 'el aviso no tiene salida visible');
+        a.N.abrir(1);
+        return eq(/etxNovX/.test(a.html()), true, 'la presentación no tiene salida visible');
+    });
+
+    /* ── 3ter · LA VENTANA DE TRES DÍAS ────────────────────────────────────
+       El anuncio sale en CADA inicio de sesión durante tres días desde la
+       publicación —no una sola vez—, porque quien ese día entró con prisa se lo
+       perdería para siempre. Pasados los tres días deja de asomarse solo. */
+    test('dentro de los tres días sale aunque ya se haya visto', () => {
+        const a = arranca({ hace: 1 });
+        a.N.vista();                                   // ya lo recorrió entero
+        eq(a.N.pendiente(), false, 'la marca de visto no se guardó');
+        return eq(a.N.quizas(), true,
+                  'solo saldría una vez: quien entró con prisa ese día ya no lo vería');
+    });
+    test('…y al cuarto día ya no se asoma solo', () => {
+        const a = arranca({ hace: 4 });
+        eq(a.N.vigenteAnuncio(), false, 'la ventana no caduca: seguiría saliendo para siempre');
+        return eq(a.N.quizas(), false, 'sigue apareciendo pasada su vigencia');
+    });
+    test('…pero quien lo busque en el menú lo encuentra igual', () => {
+        const a = arranca({ hace: 40 });
+        a.N.abrir(0);
+        return eq(/Paso 1 de /.test(a.html()), true,
+                  'la ventana apagaría también la puerta de quien lo busca');
+    });
+    test('…y el último día de la ventana todavía cuenta', () => {
+        const a = arranca({ hace: 3 });
+        return eq(a.N.quizas(), true, 'se corta un día antes de lo prometido');
+    });
+
+    /* ── 4 · Las dos capas, nunca juntas ─────────────────────────────────── */
+    test('si hay presentación pendiente, el avisito se calla', () => {
+        const a = arranca();
+        return eq(a.N.arrancar(), 'presentacion',
+                  'se anuncia lo mismo dos veces: una esquina y un recuadro');
+    });
+    /* El avisito vuelve a su sitio en cuanto la presentación se calla — ya no
+       porque «se haya visto» (dentro de la ventana sale igual), sino porque en
+       esta sesión ya se ofreció y se cerró. Lo que no puede pasar nunca es que
+       salgan los dos. */
+    test('…y cuando la presentación se calla, el avisito vuelve a ser el de siempre', () => {
+        const a = arranca({ hace: 1 });
+        a.N.abrir(0);
+        a.N.cerrar();                       // aplazada en esta sesión
+        return eq(a.N.arrancar(), 'avisito', 'se quedó sin el aviso automático de cada publicación');
+    });
+    test('sin sesión no sale ninguna de las dos… salvo el avisito, que no lee nada', () => {
+        const a = arranca({ sesion: false });
+        return eq(a.N.arrancar() !== 'presentacion', true, 'la presentación se colaría al acceso');
+    });
+
+    /* ── 5 · La navegación, sin salirse por los bordes ───────────────────── */
+    test('el recorrido no se sale por los extremos', () => {
+        const a = arranca();
+        a.N.abrir(-5);
+        eq(/Paso 1 de /.test(a.html()), true, 'empieza en una novedad que no existe');
+        a.N.abrir(999);
+        /* El último paso del recorrido, no la última novedad: con el contador
+           por pasos, acabar en «17 de 19» sería dejar dos pantallas sin ver. */
+        const pasos = a.N.lista().reduce((t, n) => t + Math.max(1, (n.fotos || []).length), 0);
+        return eq(new RegExp('Paso ' + pasos + ' de ' + pasos).test(a.html()), true,
+                  'se pasa del final y la pantalla queda vacía');
+    });
+    test('la última ofrece salir, las de en medio ofrecen seguir', () => {
+        const a = arranca();
+        a.N.abrir(0);
+        eq(/etxNovSig/.test(a.html()), true, 'no hay cómo avanzar');
+        a.N.abrir(a.N.lista().length - 1);
+        return eq(/etxNovListo/.test(a.html()) && !/etxNovSig/.test(a.html()), true,
+                  'en la última sigue diciendo «Siguiente» y no lleva a ningún lado');
+    });
+    test('cada novedad enseña su título y su texto, no el nombre de la llave', () => {
+        const a = arranca();
+        const l = a.N.lista();
+        for (let i = 0; i < l.length; i++) {
+            a.N.abrir(i);
+            const h = a.html();
+            eq(h.indexOf(l[i].titulo.slice(0, 18)) > -1, true, 'novedad ' + (i + 1) + ' sin título');
+            eq(h.indexOf(l[i].texto.slice(0, 24)) > -1, true, 'novedad ' + (i + 1) + ' sin texto');
+        }
+        return eq(l.length > 0, true, 'no hay nada que anunciar');
+    });
+
+    /* ── 6 · Las capturas ──────────────────────────────────────────────────
+       El riesgo real no es que la foto falle: es que el código espere
+       `05-organizacion-giro.png` y el LEEME pida `05-giro.png`. Ahí nadie sube
+       nada y el anuncio sale con siete marcos vacíos el día del lanzamiento. */
+    /* Una novedad puede traer VARIAS capturas: hay cosas que no se enseñan en
+       una sola foto. Lo que se exige de cada una es lo mismo de siempre —que
+       exista en el repo, porque el día del anuncio no hay margen para
+       descubrir que faltaba una. */
+    test('cada captura que espera el código existe de verdad', () => {
+        const a = arranca();
+        const l = a.N.lista();
+        let total = 0;
+        l.forEach(n => {
+            const fotos = n.fotos || [];
+            /* Se permite una novedad sin captura —hay mejoras que no se
+               fotografían—, pero la que promete una tiene que tenerla. */
+            fotos.forEach(f => {
+                eq(/^\/novedades\/[\w-]+\.png$/.test(f), true, 'ruta rara: ' + f);
+                eq(fs.existsSync(path.join(RAIZ, f.replace(/^\//, ''))), true,
+                   'falta ' + f + ', y esa novedad saldría con el marco vacío');
+                total++;
+            });
+        });
+        return eq(total > 0, true, 'el anuncio entero se quedó sin capturas');
+    });
+    /* UN SOLO PAR DE BOTONES. Antes la captura traía sus propias flechas y el
+       recuadro sus botones: dos formas de avanzar en la misma tarjeta, y
+       ninguna decía cuál llevaba más lejos. Ahora «Siguiente» recorre las
+       capturas de la novedad y, al acabarse, pasa a la siguiente. */
+    test('«Siguiente» recorre las capturas antes de cambiar de novedad', () => {
+        const a = arranca();
+        a.N.abrir(2);                                   // la de tres capturas
+        const ver = () => a.html();
+        /* La tercera novedad empieza en el paso 3: una captura la primera, una
+           la segunda. Si el contador no lo refleja, está contando novedades y
+           no pantallas — que es lo que confundía. */
+        eq(/Paso 3 de /.test(ver()), true, 'no empieza en su primera captura');
+        eq(/etxNovSig/.test(ver()), true, 'no hay con qué avanzar');
+        return eq(/etx-nov-fnav/.test(ver()), false,
+                  'siguen las flechas de la captura, duplicando lo que ya hace «Siguiente»');
+    });
+    test('…y «Atrás» vuelve por donde se vino, no al principio de otra novedad', () => {
+        const f = fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8');
+        eq(/foto = Math\.max\(0, previa\.length - 1\);/.test(f), true,
+           'volver atrás saltaría a la primera captura de la anterior, no a la que se estaba viendo');
+        return eq(/if \(foto < fotos\.length - 1\) \{ foto\+\+;/.test(f), true,
+                  '«Siguiente» se salta las capturas 2 y 3 de cada novedad');
+    });
+    test('…y el hueco de la foto se cierra solo si el archivo no está', () => {
+        const a = arranca();
+        a.N.abrir(0);
+        return eq(/onerror=/.test(a.html()), true,
+                  'sin eso sale el icono de imagen rota: una buena noticia con cara de error');
+    });
+    test('el marco de la captura mide lo mismo con foto y sin ella', () => {
+        /* Si crece al cargar la imagen, el botón que ibas a tocar se corre solo
+           y acabas pulsando otro. */
+        const f = fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8');
+        return eq(/\.etx-nov-foto\{[^}]*aspect-ratio/.test(f), true, 'el recuadro brinca al cargar la foto');
+    });
+
+    /* ── 7 · Que las pantallas lo pidan de verdad ───────────────────────── */
+    test('el hub lo ofrece al entrar, no al cargar la pantalla de acceso', () => {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        const i = h.indexOf('function showView(id)');
+        const cuerpo = h.slice(i, i + 900);
+        eq(/EtaaxNovedades\.quizas\(\)/.test(cuerpo), true, 'el hub no lo pide nunca');
+        return eq(/viewNegocios' \|\| id === 'viewModulos'/.test(cuerpo), true,
+                  'lo pediría también en la vista de acceso');
+    });
+    test('y el menú de la cuenta deja volver a verlo cuando sea', () => {
+        const hd = fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8');
+        eq(/etxHdNovOp/.test(hd), true, 'visto una vez, no hay forma de repasarlo');
+        return eq(/EtaaxNovedades\.abrir\(0\)/.test(hd), true, 'la entrada del menú no abre nada');
+    });
+
+    /* ── 8 · El acento no se escribe a mano ───────────────────────────────
+       El hub tiene paleta propia (cian de marca, terracota de acción) y los
+       módulos siguen en verde. Un color fijo en este archivo haría del anuncio
+       la única pieza del hub que no habla su idioma. */
+    test('el recuadro enruta su acento por variables, no por un color fijo', () => {
+        const f = fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8');
+        /* Las reglas del recuadro, menos el bloque donde se DEFINEN los valores
+           de respaldo (ese sí nombra el verde, y debe hacerlo). */
+        const reglas = f.split('\n')
+            .filter(l => /'\.etx-nov-/.test(l) && !/--etx-nov-\w+:/.test(l));
+        eq(reglas.length > 4, true, 'no se encontraron las reglas del recuadro');
+        reglas.forEach(l => {
+            eq(/var\(--green|#3dbe7a|rgba\(61,\s*190,\s*122/i.test(l), false,
+               'color fijo en: ' + l.trim().slice(0, 60));
+        });
+        return eq(/--etx-nov-accion:var\(--green/.test(f), true,
+                  'sin valor de respaldo, una página sin paleta propia pierde el acento');
+    });
+    test('…y el hub lo reapunta a la suya', () => {
+        const c = fs.readFileSync(path.join(RAIZ, 'hub-paleta.css'), 'utf8');
+        const i = c.indexOf('#etx-nov{');
+        eq(i > -1, true, 'el anuncio se vería verde en un hub cian y terracota');
+        const bloque = c.slice(i, c.indexOf('}', i));
+        eq(/--etx-nov-accion:var\(--hub-heading\)/.test(bloque), true, 'la acción no toma el terracota');
+        return eq(/--etx-nov-marca:var\(--hub-brand\)/.test(bloque), true, 'la marca no toma el cian');
+    });
+}
+
+/* ═══════════ SUITE BE18 · LA CACHÉ NO SE MEZCLA ═════════════════════════════
+   Netlify sirve el JS con `stale-while-revalidate`: al publicar, un navegador
+   puede quedarse con el script anterior mientras ya recibió el HTML nuevo. Por
+   eso cada archivo compartido que cambia lleva `?v=`.
+
+   La trampa no es olvidar el `?v=` — es ponerlo en 28 páginas y que dos se
+   queden atrás. Esas dos sirven la versión vieja del archivo compartido y se
+   ven «a medias», que es el bug más difícil de creer: la misma URL se ve bien
+   en una pantalla y mal en otra, y solo para quien ya había entrado antes.
+
+   Hoy pasó: `mi-cuenta.html` y `plan-facturacion.html` pedían el header en
+   `?v=cuenta-1` cuando el resto del sistema ya iba en `?v=paleta-1`, y las
+   tres páginas con header pedían `theme.js` SIN versión — justo las tres donde
+   una copia vieja vuelve a dibujar el botón flotante del tema encima del de la
+   barra. Esta suite lo mide en vez de confiar en que nadie se despiste.        */
+function suiteCacheUnaVersion() {
+console.log('\n══ BE18 · La caché no se mezcla ══');
+
+    const paginas = [];
+    (function recorrer(dir) {
+        fs.readdirSync(path.join(RAIZ, dir) || RAIZ, { withFileTypes: true }).forEach(e => {
+            const rel = dir ? dir + '/' + e.name : e.name;
+            if (e.isDirectory()) {
+                if (!['.git', 'node_modules', 'docs', 'iconos', 'marca', 'tests'].includes(e.name)) recorrer(rel);
+            } else if (e.name.endsWith('.html')) paginas.push(rel);
+        });
+    })('');
+
+    const versiones = {}, donde = {};
+    paginas.forEach(rel => {
+        const txt = fs.readFileSync(path.join(RAIZ, rel), 'utf8');
+        const re = /(?:src|href)="(\/?[A-Za-z0-9_.-]+\.(?:js|css))(\?[^"]*)?"/g;
+        let m;
+        while ((m = re.exec(txt))) {
+            const arch = m[1].replace(/^\//, ''), v = m[2] || '';
+            (versiones[arch] = versiones[arch] || new Set()).add(v);
+            (donde[arch] = donde[arch] || {})[v] = (donde[arch][v] || []).concat(rel);
+        }
+    });
+
+    test('las páginas se revisaron de verdad, no una lista vacía', () =>
+        eq(paginas.length > 30, true, 'solo ' + paginas.length + ' páginas: el recorrido no encontró el sitio'));
+
+    /* Un archivo compartido = una sola versión en todo el sitio. Si una página
+       lo pide distinto, se nombra: lo que no se nombra no se arregla. */
+    Object.keys(versiones).sort().forEach(arch => {
+        const vs = [...versiones[arch]];
+        if (vs.length < 2) return;
+        const pags = Object.keys(donde[arch]).map(v => (v || '«sin versión»') + ' → ' + donde[arch][v].join(', '));
+        test('un solo ' + arch + ' para todo el sitio', () =>
+            eq(vs.length, 1, 'versiones mezcladas:\n      ' + pags.join('\n      ')));
+    });
+
+    /* Y el caso concreto que se rompió hoy, por su nombre: las dos pantallas
+       de cuenta nacieron en otro bloque y se quedaron en la versión anterior
+       del header — el mismo que ahora lleva la entrada de Novedades. */
+    ['mi-cuenta.html', 'plan-facturacion.html'].forEach(pag => {
+        test(pag + ' pide el header y el sprite de hoy', () => {
+            const t = fs.readFileSync(path.join(RAIZ, pag), 'utf8');
+            const vHd = [...(versiones['etaax-header.js'] || [])][0];
+            eq(t.indexOf('etaax-header.js' + vHd) > -1, true, 'se quedó en un header anterior');
+            return eq(/etaax-iconos\.js\?v=/.test(t), true,
+                      'el sprite sin versión puede llegar sin los iconos nuevos');
+        });
+    });
+}
+
+/* ═══════════ SUITE BE19 · CAMBIAR DE MÓDULO ENTRA AL MÓDULO ═════════════════
+   El botón del subheader devolvía al hub: para pasar de Recetas a Financiero
+   había que salir del espacio de trabajo y volver a entrar — dos pantallas para
+   un movimiento lateral. Ahora va directo a la portada del módulo.
+
+   Lo que se vigila aquí es lo que un revisor de navegador NO alcanza a cubrir:
+   el revisor prueba UNA de las cuatro rutas (financiero), y las otras tres se
+   romperían en silencio con una letra de más en la ruta. Aquí se exige que las
+   cuatro apunten a un archivo que existe de verdad en el repo.                */
+function suiteCambiarModulo() {
+console.log('\n══ BE19 · Cambiar de módulo entra al módulo ══');
+
+    const js = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+    const modulos = [...js.matchAll(/\{ id:'([a-z]+)'[^}]*portada:'([^']+)'/g)]
+        .map(m => ({ id: m[1], portada: m[2] }));
+
+    test('los cuatro módulos dicen a dónde entrar', () =>
+        eq(modulos.length, 4, 'hay ' + modulos.length + ' con portada: alguno volvería al hub'));
+
+    modulos.forEach(m => {
+        test('…y la de ' + m.id + ' es un archivo que existe', () => {
+            eq(/^\/[a-z]+\/index\.html$/.test(m.portada), true, 'ruta rara: ' + m.portada);
+            return eq(fs.existsSync(path.join(RAIZ, m.portada.replace(/^\//, ''))), true,
+                      'apunta a ' + m.portada + ', que no está en el repo');
+        });
+    });
+
+    test('ninguno devuelve al hub al cambiar de módulo', () =>
+        eq(modulos.some(m => /hub\.html/.test(m.portada)), false,
+           'volver al hub era el problema, no la solución'));
+
+    /* El hub tiene que quedar enterado: si luego vas a él, te recibe en el
+       módulo en el que estabas. Eso no se ve en pantalla y es lo que se pierde
+       al cambiar una navegación. */
+    test('…pero el hub queda enterado del módulo elegido', () =>
+        eq(/sessionStorage\.setItem\('etaax_hub_modulo',m\.id\)/.test(js), true,
+           'el hub te recibiría en otro módulo del que dejaste'));
+
+    /* ── El hub de módulos: las filas, sus funciones y el botón de entrar ── */
+    const hub = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8');
+
+    /* DOS TABLAS DE RUTAS, UNA SOLA VERDAD. El subheader de los módulos
+       (`etaax-modulos-ui.js`) y el hub (`hub-modulos.js`) declaran cada uno a
+       dónde lleva su módulo. Si se separan, «Ir al módulo» y «Cambiar módulo»
+       aterrizan en sitios distintos y nadie se entera hasta que un cliente lo
+       cuenta. */
+    test('«Ir al módulo» y «Cambiar módulo» llevan al MISMO sitio', () => {
+        const delHub = [...hub.matchAll(/id: '([a-z]+)', portada: '([^']+)'/g)]
+            .map(m => m[1] + '→/' + m[2]).sort();
+        const delSubheader = modulos.map(m => m.id + '→' + m.portada).sort();
+        eq(delHub.length, 4, 'el hub no declara las cuatro portadas');
+        return eq(delHub.join(' | '), delSubheader.join(' | '),
+                  'las dos tablas se separaron:\n      hub: ' + delHub.join(', ') +
+                  '\n      subheader: ' + delSubheader.join(', '));
+    });
+
+    /* Cada herramienta enseña lo que hay DENTRO. Una sin funciones sale como una
+       fila muda —nombre y nada más—, que es justo lo que había antes. */
+    const herramientas = [...hub.matchAll(/\{ nombre: '([^']+)', clave: '([^']+)'[\s\S]*?funciones: \[([^\]]*)\]/g)]
+        .map(m => ({ nombre: m[1], clave: m[2], pasos: m[3].split(/',\s*'/).length }));
+
+    test('cada herramienta del hub enseña qué vas a encontrar dentro', () => {
+        eq(herramientas.length, 19, 'hay ' + herramientas.length + ' herramientas con guía, de 19');
+        herramientas.forEach(h => eq(h.pasos >= 3, true, '«' + h.nombre + '» solo tiene ' + h.pasos + ' paso(s)'));
+        return eq(/class="hub-visor"/.test(hub), true, 'la guía no se pinta en ningún lado');
+    });
+
+    /* LA FILA NO LLEVA A NINGÚN LADO. Es una guía: enseña. Si vuelve a ser un
+       enlace, compite con «Ir al módulo» y volvemos a tener diecinueve atajos
+       discutiendo con la puerta buena. */
+    test('las filas ilustran, no navegan', () => {
+        eq(/'<article class="hub-tool-fila/.test(hub), true, 'la fila volvió a ser un enlace');
+        eq(/hub-fila-cta/.test(hub), false, 'la fila conserva su botón de abrir');
+        return eq(/href="' \+ h\.ruta/.test(hub), false, 'la fila sigue apuntando a la herramienta');
+    });
+
+    /* La clave es el nombre del archivo de su captura: si dos la comparten, una
+       enseña las fotos de la otra y nadie entiende por qué. */
+    test('cada herramienta tiene su propia clave de capturas', () => {
+        const claves = herramientas.map(h => h.clave);
+        eq(new Set(claves).size, claves.length, 'hay claves repetidas: ' + claves.join(', '));
+        return eq(claves.every(c => /^[a-z-]+$/.test(c)), true, 'una clave no sirve como nombre de archivo');
+    });
+    test('…y el LEEME pide exactamente esas capturas', () => {
+        const leeme = fs.readFileSync(path.join(RAIZ, 'guia', 'LEEME.md'), 'utf8');
+        herramientas.forEach(h => {
+            eq(leeme.indexOf('`' + h.clave + '-1.png`') > -1, true,
+               'nadie va a subir ' + h.clave + '-1.png: no está en el LEEME');
+        });
+        return eq(/hub-modulos\.js/.test(leeme), true, 'el LEEME no dice quién arma la fila');
+    });
+    /* UNA GUÍA A MEDIAS ES PEOR QUE NINGUNA. Las capturas se suben de una en
+       una, así que lo que hay que vigilar no es que estén todas —habrá
+       herramientas sin foto por un tiempo— sino que **la que empezó, termine**:
+       si existe el paso 1 y falta el 6, quien la recorre se topa con «captura
+       en camino» a media explicación. */
+    test('las guías que ya tienen capturas las tienen COMPLETAS', () => {
+        const dir = path.join(RAIZ, 'guia');
+        let conGuia = 0;
+        herramientas.forEach(h => {
+            if (!fs.existsSync(path.join(dir, h.clave + '-1.png'))) return;
+            conGuia++;
+            for (let k = 1; k <= h.pasos; k++) {
+                eq(fs.existsSync(path.join(dir, h.clave + '-' + k + '.png')), true,
+                   'falta ' + h.clave + '-' + k + '.png, y su paso ' + k + ' de ' + h.pasos + ' sale vacío');
+            }
+            /* …y que no sobren: una captura de más es un paso que nadie va a ver,
+               porque el recorrido lo marcan los pies escritos en el código. */
+            eq(fs.existsSync(path.join(dir, h.clave + '-' + (h.pasos + 1) + '.png')), false,
+               h.clave + ' tiene una captura de más: el recorrido solo llega al paso ' + h.pasos);
+        });
+        return eq(conGuia > 0, true, 'ninguna herramienta tiene capturas todavía');
+    });
+    test('el visor pasa las capturas y da la vuelta por los dos lados', () => {
+        eq(/paso = \(\(paso % total\) \+ total\) % total;/.test(hub), true,
+           'en el primer paso, «anterior» dejaría el visor en blanco');
+        eq(/'\/guia\/' \+ h\.clave \+ '-' \+ \(paso \+ 1\) \+ '\.png'/.test(hub), true,
+           'la captura no se busca por el nombre que pide el LEEME');
+        return eq(/img\.onerror = function/.test(hub), true,
+                  'sin captura saldría el icono de imagen rota: una guía con cara de error');
+    });
+    test('…y la tarjeta de arriba ofrece entrar al módulo entero', () => {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        eq(/id="hubIrAlModulo"/.test(h), true, 'no hay botón para entrar al módulo');
+        eq(/ir\.href = activo\.portada/.test(hub), true, 'el botón no apunta a la portada del módulo');
+        return eq(/<div class="hub-eyebrow">Explora<\/div>/.test(h), true,
+                  'el rótulo del espacio de trabajo volvió a repetir el título');
+    });
+
+    /* ── El título: mayúsculas y dos colores, en los cuatro módulos ───────── */
+    const css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8');
+    /* El cuerpo de una regla, buscándola por su selector: los selectores llevan
+       `:is(...)`, así que partir el archivo por llaves no sirve —el paréntesis
+       engaña al corte— y una prueba que no encuentra nada pasa por vacía. */
+    const cuerpoDe = (selector) => {
+        const i = css.indexOf(selector);
+        if (i < 0) return '';
+        const a = css.indexOf('{', i + selector.length - 1);
+        return a < 0 ? '' : css.slice(a, css.indexOf('}', a));
+    };
+    test('los títulos de portada van en mayúsculas', () => {
+        const r = cuerpoDe('body.etx-modulos-ui :is(.cf-hero-title,.dx-hero-title');
+        eq(r !== '', true, 'no se encontró la regla de los títulos de portada');
+        return eq(/text-transform:uppercase/.test(r), true, 'siguen en minúsculas');
+    });
+    test('…y los de herramienta también, con el nombre en crema', () => {
+        const r = cuerpoDe('body.etx-modulos-ui .brand-title {');
+        eq(/text-transform:uppercase/.test(r), true, 'el título de herramienta sigue en minúsculas');
+        return eq(/color:var\(--text\)/.test(r), true,
+                  'va entero en el acento: a ese tamaño un color que lo cubre todo no distingue nada');
+    });
+    test('…y el acento del final sale de la paleta del módulo', () => {
+        eq(css.indexOf('.brand-title .g {color:var(--etx-ui-terra)') > -1, true, 'el de herramienta no');
+        return eq(css.indexOf('#moduloLanding .cf-hero-title) .g {color:var(--etx-ui-terra)') > -1, true,
+                  'el de portada no');
+    });
+    /* La regla de Recetas lleva un id (`#moduloLanding`): si el selector
+       compartido no lo nombra, gana ella y ese título se queda en verde
+       mientras los otros tres van en terracota. */
+    test('…incluido el de Recetas, que define el suyo con un id', () =>
+        eq(/#moduloLanding \.cf-hero-title\)/.test(css), true,
+           'Recetas conservaría su propio acento y rompería la fila'));
+
+    /* Y el reparto del acento en los títulos de herramienta: una sola palabra
+       no se parte (no hay dónde), y nunca se mete marcado de la página. */
+    test('el acento del título de herramienta se reparte sin tocar 21 archivos', () => {
+        eq(/function bicolorTitulo\(\)/.test(js), true, 'nadie reparte el acento');
+        return eq(/fin\.textContent = texto\.slice/.test(js), true,
+                  'se arma con innerHTML: entraría marcado de la página al título');
+    });
+    /* «CLIENTES» es una sola palabra: no hay dónde partir. Sin esta regla, esa
+       pantalla —y «INSUMOS»— eran las dos únicas de una sola tinta en todo el
+       sistema; el acento pasa a su rótulo de arriba y la fila se mantiene. */
+    test('…y un título de una sola palabra tiñe su rótulo, no se parte a la fuerza', () => {
+        eq(/if \(corte < 1\) \{/.test(js), true, 'se partiría un título por donde no hay espacio');
+        eq(/rotulo\.classList\.add\('g'\)/.test(js), true, 'esa pantalla se queda de una sola tinta');
+        const css2 = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8');
+        return eq(/\.brand-label\.g \{color:var\(--etx-ui-terra\)/.test(css2), true,
+                  'el rótulo marcado no recibe el acento');
+    });
+
+    /* ── El encabezado de las herramientas y sus botones ─────────────────── */
+    test('las dieciocho herramientas encabezan igual: nombre a la izquierda y una línea', () => {
+        const r = cuerpoDe('body.etx-modulos-ui .header {');
+        eq(/justify-content:space-between/.test(r), true, 'cada página vuelve a centrar el título a su manera');
+        eq(/border-bottom:1px solid/.test(r), true, 'sin línea, el encabezado se confunde con el contenido');
+        return eq(/align-items:flex-start/.test(cuerpoDe('body.etx-modulos-ui .header .brand {')), true,
+                  'el nombre de la pantalla brinca de sitio al navegar');
+    });
+
+    /* EL COLOR ES EL PAPEL. Había verde, dorado, morado y rojo repartidos sin
+       regla, así que tres botones distintos podían parecer igual de
+       importantes. Lo que se vigila no es «qué color tiene cada uno» sino que
+       los cuatro papeles sigan siendo CUATRO: el día que dos compartan tinta,
+       el color deja de decir nada y volvemos al principio. */
+    test('los cuatro papeles de botón se distinguen por color, y son cuatro', () => {
+        const tinta = (sel) => {
+            const b = cuerpoDe(sel);
+            const m = b.match(/(?:^|[;{])\s*(?:background|border)[^;]*?(var\(--etx-ui-[a-z-]+\)|#[0-9a-f]{3,6})/i);
+            return m ? m[1] : '';
+        };
+        const papeles = {
+            principal:    tinta('body.etx-modulos-ui :is(.btn-primary,.btn-save) {'),
+            secundaria:   tinta('body.etx-modulos-ui .btn-accent {'),
+            terciaria:    tinta('body.etx-modulos-ui :is(.btn-vista,.btn-ghost,.btn-reset) {'),
+            destructiva:  tinta('body.etx-modulos-ui .btn-danger {'),
+        };
+        Object.keys(papeles).forEach(k => eq(papeles[k] !== '', true, 'el papel «' + k + '» no define su color'));
+        const distintos = new Set([papeles.principal, papeles.secundaria, papeles.destructiva]);
+        return eq(distintos.size, 3,
+                  'dos papeles comparten tinta y el color deja de decir qué es más importante: ' +
+                  JSON.stringify(papeles));
+    });
+    /* DESDE UN MÓDULO, EL BOTÓN DE ARRIBA DICE «MÓDULOS». «Inicio» era una
+       promesa vaga: llevaba al selector de sucursales, no a donde uno espera
+       volver. Un botón de navegación tiene que decir su destino. */
+    test('dentro de un módulo, el botón de arriba lleva a los módulos y lo dice', () => {
+        const ui = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        eq(/inicioTexto:'Módulos'/.test(ui), true, 'sigue diciendo «Inicio» desde dentro de un módulo');
+        eq(/inicio:'\/hub\.html'/.test(ui), true, 'manda al selector de sucursales, no al hub de módulos');
+        const hd = fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8');
+        eq(/opc\.inicioTexto \|\| 'Inicio'/.test(hd), true, 'la barra no acepta otro nombre para ese botón');
+        /* …y donde no se pide otro nombre, sigue siendo «Inicio»: el hub no
+           puede ofrecer «Módulos» para quedarse donde ya está. */
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        return eq(/inicioTexto/.test(h), false, 'el hub también se renombró y se ofrece a sí mismo');
+    });
+    test('…y las herramientas con hero llevan su línea, las portadas no', () => {
+        const r = cuerpoDe('body.etx-modulos-ui .main-content :is(.cf-hero,.dx-hero) {');
+        return eq(/border-bottom:1px solid/.test(r), true,
+                  'el título de Ventas y Gastos y el de Staff vuelven a flotar sueltos');
+    });
+    test('…y el foco de los campos avisa en cian, no en el verde viejo', () => {
+        const r = cuerpoDe('body.etx-modulos-ui :is(input,select,textarea):focus {');
+        eq(/border-color:var\(--etx-ui-cyan\)/.test(r), true, 'el campo activo no se distingue');
+        return eq(/outline:none/.test(r) && /box-shadow:0 0 0 2px/.test(r), true,
+                  'se quita el contorno del navegador sin poner nada en su lugar: nadie ve dónde escribe');
+    });
+}
+
+function suiteResumenFinanciero20261013(){
+    console.log('\n══ Resumen financiero y referencias de metas · datos conocidos ══');
+    const w=crearContexto();cargarJS(w,'etaax-core.js');const C=w.EtaaxCore;
+    const F=require('./fixtures/kpis.cjs'),t=F.tables;
+    const d=C.detalleResumenFinanciero({cortes:t.cortes.filter(x=>x.fecha.startsWith('2026-10')),gastos:t.gastos,
+        otros:12000,deps:t.depositos,ctas:[],fijos:[],staff:[],desde:'2026-10-01',hasta:'2026-10-31'});
+    test('resultado antes de apartar + reservas concilia con utilidad disponible',()=>{eq(d.resultado,72000);eq(d.apartados,4200);eq(d.utilidad,67800);eq(d.resultado-d.apartados,d.utilidad);});
+    test('venta se conserva separada de otros ingresos y propinas',()=>{eq(d.ventas,300000);eq(d.ingresos,312000);eq(d.propinas,20000);});
+    test('cobros y anticipos aplicados suman la venta exactamente',()=>eq(d.efectivo+d.tarjeta+d.transferencias+d.anticipos,d.ventas));
+    test('un pedido pendiente no entra a los egresos pagados',()=>{eq(d.pendientes,90000);eq(d.egresos,240000);});
+    test('nómina incluye IMSS una sola vez',()=>{eq(d.nomina.operativa,75000);eq(d.nomina.imss,6000);eq(d.indicadores.staff,27);eq(d.indicadores.primo,59);});
+    test('socios se muestran por separado y siguen sumando la misma nómina',()=>{
+        const r=C.detalleResumenFinanciero({gastos:[{categoria:'Nómina',categoriaNomina:'socios',monto:100},{categoria:'Nómina',categoriaNomina:'administrativa',monto:200},{categoria:'IMSS',monto:40}],cortes:[{efectivo:1000,comensales:10}]});
+        eq(r.nomina.socios,100);eq(r.nomina.administrativa,200);eq(r.nomina.imss,40);eq(r.egresos,340);eq(r.indicadores.staff,34);
+    });
+    test('impuestos y financieros son detalle de egresos y no gastos nuevos',()=>{
+        const r=C.detalleResumenFinanciero({gastos:[{categoria:'Impuestos',monto:50},{categoria:'Gastos financieros',monto:30}],cortes:[{efectivo:1000}]});eq(r.impuestos,50);eq(r.financieros,30);eq(r.egresos,80);eq(r.resultado,920);
+    });
+    test('desglose por cuenta y sobrante antiguo conservan totales de venta',()=>{
+        const r=C.detalleResumenFinanciero({cortes:[{tarjeta:1000,transferencia:200,tarjetaCuentas:[{cuentaId:'a',ventaTC:500,neto:500}],transferCuentas:[{cuentaId:'a',monto:50}]}],ctas:[{id:'a',tipo:'debito',nombre:'Banco A'}]});eq(r.cuentas.reduce((a,x)=>a+x.tarjeta,0),1000);eq(r.cuentas.reduce((a,x)=>a+x.transferencias,0),200);
+    });
+    test('un desglose de cuenta que excede el corte se marca inconsistente',()=>{
+        const r=C.detalleResumenFinanciero({cortes:[{tarjeta:100,tarjetaCuentas:[{ventaTC:200,neto:200}]}]});eq(r.cuentasInconsistentes,true);eq(r.tarjeta,100);
+    });
+    test('TPV conciliado usa comisión real y no deja un pendiente ficticio',()=>{
+        const r=C.detalleResumenFinanciero({cortes:[{id:'c',tarjeta:1000}],deps:[{tipo:'abono_tpv',corteId:'c',cuentaId:'a',monto:950,comision:50}],ctas:[{id:'a',tipo:'debito',comisionTD:3,comisionTC:3}]});eq(r.tpvPendiente,0);eq(r.comision,50);eq(r.egresos,50);
+    });
+    test('un anticipo aplicado suma venta pero no cobro actual',()=>{
+        const r=C.detalleResumenFinanciero({cortes:[{efectivo:100,anticipos:[{monto:200}]}]});eq(r.ventas,300);eq(r.efectivo,100);eq(r.anticipos,200);
+    });
+    test('el desglose de áreas exige coincidencia en cada corte',()=>{
+        eq(C.ventasPorArea([{efectivo:1000,alimentos:600,bebidas:400,otros:0}]).completa,true);
+        eq(C.ventasPorArea([{efectivo:1000,alimentos:600,bebidas:300,otros:0}]).completa,false);
+        eq(C.ventasPorArea([{efectivo:1000}]).completa,false);
+    });
+    test('metas por área adaptan la referencia a la mezcla registrada',()=>{
+        const r=C.sugerenciasRestaurante([{efectivo:1000,alimentos:600,bebidas:400,otros:0}],{});eq(r.cocina,21);eq(r.barra,8.8);eq(r.mezcla.origen,'registrada');
+    });
+    test('si no hay mezcla, el supuesto se identifica y se puede ajustar',()=>{
+        const r=C.sugerenciasRestaurante([],{}, {cocina:50});eq(r.cocina,17.5);eq(r.mezcla.origen,'estimada');
+    });
+    test('sugerir metas nunca muta el documento del negocio',()=>{
+        const antes=JSON.stringify(F.targets);C.sugerenciasRestaurante(t.cortes,F.targets);eq(JSON.stringify(F.targets),antes);
+    });
+    test('las metas guardadas en cero sobreviven a los fallbacks',()=>{eq(C.metaRestaurante({util:0},'utilidad'),0);eq(C.metaRestaurante({operativos:{staff:0},nomOp:20},'staff'),0);eq(C.metaRestaurante({},'cocina'),null);});
+    test('utilidad con meta cero cumple sólo al no tener pérdida',()=>{eq(C.scorePL({lineas:[],utilidadPct:5},{util:0}).score,100);eq(C.scorePL({lineas:[],utilidadPct:-5},{util:0}).score,0);});
+    test('las propinas sugeridas siguen el cheque objetivo y son parametrizables',()=>eq(C.sugerenciasRestaurante([],{operativos:{cheque:250}}).propinas,25));
+    test('Año respeta el año bisiesto y sus límites de calendario',()=>{eq(C.getRange('anio','2024').from,'2024-01-01');eq(C.getRange('anio','2024').to,'2024-12-31');});
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -26861,9 +27597,10 @@ function resumen() {
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
+suiteResumenFinanciero20261013();
 suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
-    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(resumen);
+    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(resumen);

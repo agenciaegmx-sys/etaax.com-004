@@ -1,0 +1,8 @@
+1440 dark: {"width":1440,"scroll":1440,"link":"/index.html","label":"Ir a la página principal de ETAAX","image":"/marca/etaax-isotipo.svg","loaded":true,"button":{"left":694.625,"right":738.625,"width":44,"height":44},"errors":[]}
+1440 light: {"width":1440,"scroll":1440,"link":"/index.html","label":"Ir a la página principal de ETAAX","image":"/marca/etaax-isotipo.svg","loaded":true,"button":{"left":694.625,"right":738.625,"width":44,"height":44},"errors":[]}
+390 dark: {"width":390,"scroll":390,"link":"/index.html","label":"Ir a la página principal de ETAAX","image":"/marca/etaax-isotipo.svg","loaded":true,"button":{"left":148.890625,"right":192.890625,"width":44,"height":44},"errors":[]}
+390 light: {"width":390,"scroll":390,"link":"/index.html","label":"Ir a la página principal de ETAAX","image":"/marca/etaax-isotipo.svg","loaded":true,"button":{"left":148.890625,"right":192.890625,"width":44,"height":44},"errors":[]}
+320 dark: {"width":320,"scroll":320,"link":"/index.html","label":"Ir a la página principal de ETAAX","image":"/marca/etaax-isotipo.svg","loaded":true,"button":{"left":113.890625,"right":157.890625,"width":44,"height":44},"errors":[]}
+320 light: {"width":320,"scroll":320,"link":"/index.html","label":"Ir a la página principal de ETAAX","image":"/marca/etaax-isotipo.svg","loaded":true,"button":{"left":113.890625,"right":157.890625,"width":44,"height":44},"errors":[]}
+LOGIN: isotipo original y enlace a la landing en PC/móvil y ambos temas.
+CUENTA Y HEADER: 0 casos, 0 fallas. Supabase simulado; sin llamadas de producción.

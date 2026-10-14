@@ -48,6 +48,7 @@
             '<span class="nav-icon">↩</span><span class="nav-text">Salir del global</span></a>' +
             '</div>';
         nav.insertAdjacentHTML('beforeend', html);
+        if (typeof window.etaaxPintarIconosNav === 'function') window.etaaxPintarIconosNav();
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();

@@ -40,10 +40,10 @@ const AQUI = __dirname;
 const DESTINO = path.join(AQUI, '..', 'etaax-iconos.js');
 const GRID = 24;
 
-/* El crema y el verde de la marca, en las formas en que los escriben los
+/* El crema y los acentos verde/cian, en las formas en que los escriben los
    exportadores. Lo que coincida se vuelve «hereda el color» o la clase verde. */
 const CREMA = ['rgb(240,236,228)', '#f0ece4', '#F0ECE4', 'white', '#fff', '#ffffff'];
-const VERDE = ['rgb(61,190,122)', '#3dbe7a', '#3DBE7A'];
+const VERDE = ['rgb(61,190,122)', '#3dbe7a', '#3DBE7A', 'rgb(140,228,238)', '#8ce4ee', '#8CE4EE'];
 
 /* ── DOS FAMILIAS CON PREFIJO ──────────────────────────────────────────────
    `acceso/` y `sucursales/` agrupan por PANTALLA: sus nombres son únicos y van
@@ -59,7 +59,7 @@ const VERDE = ['rgb(61,190,122)', '#3dbe7a', '#3DBE7A'];
    Y de las dos familias se lee solo `oscuro/`: el archivo claro es el MISMO
    dibujo con otro color de línea, y aquí el color se normaliza igual. Tomar los
    dos sería tener cada icono dos veces, con el riesgo de que un día difieran. */
-var FAMILIAS = { 'modelos-negocio': 'giro', 'organizacion': 'org', 'header': 'hd' };
+var FAMILIAS = { 'modelos-negocio': 'giro', 'organizacion': 'org', 'header': 'hd', 'subheader': 'sh', 'modulos': 'mod', 'catalogos': 'cat', 'financieros': 'fin' };
 
 function clasificar(rel) {
     var partes = rel.split(path.sep);

@@ -1,0 +1,198 @@
+/* Paleta del acceso y hub. Los estados conservan --green, --gold y --red.
+   La marca y las acciones usan tokens propios; los módulos no cargan esta hoja. */
+body.hub-paleta{
+  --bg:#0f0e0c;
+  /* Los avisos compartidos usan estos nombres; el hub usa --s1/--ui-borde. */
+  --surface:var(--s1);
+  --border:var(--ui-borde);
+  --text-muted:var(--ui-apagado);
+  --text-dim:var(--ui-apagado);
+  --hub-brand:#8ce4ee;
+  --hub-brand-hover:#b1f1f7;
+  --hub-brand-tint:rgba(140,228,238,.08);
+  --hub-brand-ring:rgba(140,228,238,.16);
+  --hub-line:rgba(140,228,238,.42);
+  --hub-line-hover:rgba(140,228,238,.72);
+  --hub-terra-line:rgba(251,155,111,.42);
+  --hub-terra-line-hover:rgba(251,155,111,.72);
+  --hub-settings:#79cad8;
+  --hub-add:#62eba2;
+  --hub-add-hover:#8af5ba;
+  --hub-add-tint:rgba(98,235,162,.07);
+  --hub-heading:#fb9b6f;
+  --hub-action-hover:#ffb18c;
+  --hub-action-tint:rgba(251,155,111,.08);
+  --hub-button-ink:#0a0908;
+  --hub-dock-cyan:#8ce4ee;
+  --hub-dock-terra:#fb9b6f;
+  --hub-dock-ink:#161411;
+}
+[data-theme="light"] body.hub-paleta{
+  --bg:#f4f3f0;
+  --hub-brand:#247681;
+  --hub-brand-hover:#1d626c;
+  --hub-brand-tint:rgba(36,118,129,.06);
+  --hub-brand-ring:rgba(36,118,129,.14);
+  --hub-line:rgba(36,118,129,.45);
+  --hub-line-hover:rgba(36,118,129,.75);
+  --hub-terra-line:rgba(173,75,39,.45);
+  --hub-terra-line-hover:rgba(173,75,39,.75);
+  --hub-settings:#247681;
+  --hub-add:#1b7648;
+  --hub-add-hover:#126038;
+  --hub-add-tint:rgba(27,118,72,.06);
+  --hub-heading:#ad4b27;
+  --hub-action-hover:#913b1e;
+  --hub-action-tint:rgba(173,75,39,.06);
+  --hub-button-ink:#fff;
+}
+/* El acento entra al sprite SVG por herencia, incluida la copia de <use>.
+   --green se adapta solo dentro del icono; los mensajes conservan su estado. */
+body.hub-paleta .etx-ic{--green:var(--hub-brand);}
+body.hub-paleta #etaaxNovedades{--green:var(--hub-brand);}
+/* El recuadro grande de novedades: marca en cian, acción en terracota, como el
+   resto del hub. Enruta por sus propias variables en vez de reapuntar --green,
+   porque su botón principal y su sello NO llevan el mismo color. En los módulos
+   no se carga esta hoja y el aviso sigue en verde. */
+body.hub-paleta #etx-nov{
+  --etx-nov-marca:var(--hub-brand);
+  --etx-nov-accion:var(--hub-heading);
+  --etx-nov-accion-hover:var(--hub-action-hover);
+  --etx-nov-ring:var(--hub-terra-line);
+  --etx-nov-tinte:var(--hub-action-tint);
+  --etx-nov-ink:var(--hub-button-ink);
+}
+body.hub-paleta :is(.hub-title .g,.auth-title,.card-cta,.neg-form-label){color:var(--hub-heading);}
+body.hub-paleta :is(.card-title,.neg-card-nombre,.suc-section-label){color:var(--text);}
+body.hub-paleta :is(.suc-section-sub,.neg-card-meta){color:var(--ui-apagado);}
+/* Contornos de 1 px con color atenuado, como el botón Inicio.
+   El subheader conserva el cian de marca completo. */
+body.hub-paleta #viewNegocios .hub-operacion-title{
+  font-size:clamp(16px,4.5vw,44px);letter-spacing:.2px;white-space:nowrap;
+}
+body.hub-paleta .hub-guide{
+  max-width:960px;margin:0 auto 20px;padding:12px 10px 14px;
+}
+body.hub-paleta .hub-guide-caption{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--ui-apagado);margin-bottom:16px;}
+body.hub-paleta .hub-guide-steps{position:relative;list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;}
+body.hub-paleta .hub-guide-step{
+  position:relative;display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:8px;
+  height:84px;padding:12px 10px;text-align:left;color:var(--hub-dock-ink);cursor:default;
+  border:0;border-radius:6px;background:var(--hub-dock-cyan);transform-origin:50% 100%;
+  transform:translate3d(0,var(--dock-y,0px),0) scale(var(--dock-scale,1));
+}
+body.hub-paleta .hub-guide-step:nth-child(even){background:var(--hub-dock-terra);}
+body.hub-paleta .hub-guide-icon{display:inline-flex;color:var(--hub-dock-ink);--etx-color:var(--hub-dock-ink);}
+body.hub-paleta .hub-guide-icon .etx-ic{width:26px;height:26px;--green:var(--hub-dock-ink);}
+body.hub-paleta .hub-guide-label{font-size:15px;line-height:1.2;font-weight:600;}
+body.hub-paleta .hub-guide-number{position:absolute;right:8px;bottom:5px;font-size:8px;letter-spacing:1px;color:var(--hub-dock-ink);opacity:.6;}
+body.hub-paleta .hub-guide-steps:focus-visible{outline:2px solid var(--hub-brand);outline-offset:4px;border-radius:12px;}
+/* El movimiento continuo vive en hub-interacciones.js. Sin efecto de botón. */
+body.hub-paleta .neg-activo-bar{border-color:var(--hub-brand);}
+body.hub-paleta :is(.hub-card,.neg-form,.neg-form input,.neg-form select,.btn-cambiar-neg){border-color:var(--hub-line);}
+body.hub-paleta .neg-activo-emoji-wrap{background:var(--hub-brand-tint);}
+body.hub-paleta :is(.auth-input,.neg-form input,.neg-form select):focus{border-color:var(--hub-brand);}
+body.hub-paleta .auth-caja:focus-within{border-color:var(--hub-brand);box-shadow:0 0 0 3px var(--hub-brand-ring);}
+body.hub-paleta :is(.auth-switch a:hover,.priv-check-label a){color:var(--hub-brand);}
+body.hub-paleta .priv-check-wrap input[type=checkbox]{accent-color:var(--hub-brand);}
+body.hub-paleta #loginForgot a{color:var(--hub-brand);}
+body.hub-paleta :is(.btn-auth,.btn-crear-neg){background:var(--hub-heading);color:var(--hub-button-ink);--etx-color:var(--hub-button-ink);transition:background-color .18s,transform .18s;}
+body.hub-paleta :is(.btn-auth,.btn-crear-neg):hover{background:var(--hub-action-hover);}
+body.hub-paleta :is(.btn-auth,.btn-crear-neg):active{transform:translateY(0);}
+body.hub-paleta .btn-cambiar-neg{color:var(--hub-heading);}
+body.hub-paleta :is(.btn-cambiar-neg,.btn-nuevo-neg,.hub-config-btn,.etx-hd-btn):hover{
+  border-color:var(--hub-brand-hover);background:var(--hub-brand-tint);
+}
+body.hub-paleta .btn-cambiar-neg:hover{border-color:var(--hub-line-hover);color:var(--hub-heading);}
+body.hub-paleta .etx-hd-btn[aria-expanded="true"]{border-color:var(--hub-brand);}
+body.hub-paleta .hub-login-inicio{width:44px;height:44px;padding:0;border:0;border-radius:11px;justify-content:center;}
+body.hub-paleta .hub-login-inicio img{display:block;width:44px;height:44px;}
+body.hub-paleta .hub-login-inicio:focus-visible{outline:2px solid var(--hub-brand);outline-offset:4px;}
+body.hub-paleta .etx-hd-op:not(.sale):hover{background:var(--hub-brand-tint);}
+body.hub-paleta :is(.etx-opcion.on,.etx-opcion:hover,.plan-card-sel.selected){border-color:var(--hub-brand);background:var(--hub-brand-tint);}
+body.hub-paleta .etx-opcion.on .etx-opcion-ic{--etx-color:var(--hub-brand);}
+body.hub-paleta .hub-global-card{
+  display:grid;grid-template-columns:30px minmax(0,1fr) 36px;align-items:center;gap:16px;text-align:left;
+  background:var(--s1);border:1px solid var(--hub-card-line,var(--hub-line));border-radius:14px;
+  padding:24px 22px;min-height:148px;cursor:pointer;font-family:inherit;
+}
+body.hub-paleta .hub-global-icon{display:inline-flex;color:var(--text);}
+body.hub-paleta .hub-global-copy{display:block;min-width:0;}
+body.hub-paleta .hub-global-title{
+  display:block;font-family:'Bebas Neue','DM Sans',sans-serif;font-size:clamp(24px,2.1vw,30px);
+  font-weight:600;color:var(--text);letter-spacing:.8px;line-height:1.15;
+}
+body.hub-paleta .hub-global-rule{display:block;width:56px;height:2px;margin:10px 0;background:var(--hub-card-accent,var(--hub-brand));opacity:.7;border-radius:2px;}
+body.hub-paleta .hub-global-desc{display:block;font-size:11.5px;color:var(--ui-apagado);line-height:1.6;}
+body.hub-paleta .hub-global-open{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--hub-card-accent,var(--hub-brand));font-size:9px;letter-spacing:.8px;text-transform:uppercase;}
+body.hub-paleta .hub-global-arrow{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--hub-card-line,var(--hub-line));border-radius:50%;}
+body.hub-paleta .hub-global-arrow .etx-ic{transition:translate .18s;}
+body.hub-paleta .hub-global-card:hover .hub-global-arrow{background:var(--hub-card-tint,var(--hub-brand-tint));border-color:var(--hub-card-line-hover,var(--hub-line-hover));}
+body.hub-paleta .hub-global-card:hover .hub-global-arrow .etx-ic{translate:2px 0;}
+/* Financiero global conserva el terracota; las cajas de sucursal pasan al cian
+   de la marca (indicación del dueño). Se separan porque ya no comparten color:
+   tenerlas juntas haría que al cambiar una se moviera la otra sin querer. */
+body.hub-paleta .hub-global-financiero{
+  --hub-card-line:var(--hub-terra-line);
+  --hub-card-line-hover:var(--hub-terra-line-hover);
+  --hub-card-tint:var(--hub-action-tint);
+  border-color:var(--hub-card-line);
+}
+body.hub-paleta .suc-caja{
+  --hub-card-line:var(--hub-line);
+  --hub-card-line-hover:var(--hub-line-hover);
+  --hub-card-tint:var(--hub-brand-tint);
+  border-color:var(--hub-card-line);
+}
+body.hub-paleta .hub-global-financiero{--hub-card-accent:var(--hub-heading);}
+body.hub-paleta .hub-suc-accion{
+  background:transparent;border:1px solid var(--hub-line);color:var(--hub-heading);
+  min-height:46px;cursor:pointer;transition:border-color .18s,background-color .18s,box-shadow .18s,transform .2s cubic-bezier(.2,.8,.2,1);
+}
+body.hub-paleta .hub-suc-actions{display:grid;grid-template-columns:46px minmax(0,1fr);gap:12px;}
+body.hub-paleta .hub-suc-ajustes{width:46px;height:46px;justify-content:center;}
+body.hub-paleta :is(.hub-suc-ajustes,.hub-config-btn){color:var(--hub-settings);}
+body.hub-paleta .hub-config-btn{border-color:var(--hub-brand);}
+body.hub-paleta :is(.hub-suc-ajustes,.hub-config-btn):hover{color:var(--hub-brand-hover);}
+body.hub-paleta .btn-nuevo-neg{color:var(--hub-add);border-color:var(--hub-line);}
+body.hub-paleta .btn-nuevo-neg .etx-ic{--green:var(--hub-add);--etx-color:var(--hub-add);}
+body.hub-paleta .btn-nuevo-neg:hover{color:var(--hub-add-hover);border-color:var(--hub-line-hover);background:var(--hub-add-tint);}
+body.hub-paleta .hub-suc-accion:hover{background:var(--hub-brand-tint);border-color:var(--hub-brand-hover);box-shadow:0 0 0 2px var(--hub-brand-ring);}
+body.hub-paleta .hub-global-card:hover{background:var(--hub-card-tint,var(--hub-brand-tint));border-color:var(--hub-card-line-hover,var(--hub-line-hover));}
+body.hub-paleta :is(.hub-global-card,.hub-card){
+  translate:0 0;transition:border-color .18s,background-color .18s,box-shadow .18s,translate .18s;
+}
+body.hub-paleta .hub-card:not(.disabled):hover{
+  border-color:var(--hub-card-line-hover,var(--hub-line-hover));background:var(--hub-card-tint,var(--hub-brand-tint));box-shadow:0 12px 28px rgba(0,0,0,.16);
+}
+@media(hover:hover){
+  body.hub-paleta :is(.hub-global-card,.hub-card:not(.disabled)):hover{transform:translateY(0);translate:0 -2px;}
+}
+@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+  body.hub-paleta .hub-suc-accion:hover{transform:scale(1.07);}
+}
+body.hub-paleta :is(.hub-global-card,.hub-card):active{translate:0 0;}
+body.hub-paleta :is(button,a,input,select,textarea):focus-visible{outline:2px solid var(--hub-brand);outline-offset:3px;}
+body.hub-paleta :is(.auth-caja input,.neg-form input,.neg-form select):focus-visible{outline:none;}
+@media(max-width:720px){
+  body.hub-paleta .hub-guide{padding:0;margin-bottom:20px;}
+  body.hub-paleta .hub-guide-caption{margin-bottom:4px;}
+  body.hub-paleta .hub-guide-steps{
+    grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(190px,56%);
+    gap:10px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;
+    scrollbar-width:thin;scrollbar-color:var(--hub-line) transparent;padding:20px 12px 16px;
+  }
+  body.hub-paleta .hub-guide-step{scroll-snap-align:start;}
+  body.hub-paleta .hub-global-card{grid-template-columns:30px minmax(0,1fr);padding:22px 18px;gap:12px;}
+  body.hub-paleta .hub-global-title{font-size:24px;}
+  body.hub-paleta .hub-global-open{grid-column:2;flex-direction:row-reverse;justify-self:end;gap:8px;}
+  body.hub-paleta .hub-global-arrow{width:28px;height:28px;}
+}
+/* Hover y foco se distinguen por el contorno. El movimiento se puede desactivar. */
+@media(prefers-reduced-motion:reduce){
+  body.hub-paleta :is(.hub-hero,.auth-wrap,.neg-card,.suc-caja,.hub-card,.neg-form){animation:none;}
+  body.hub-paleta :is(.hub-guide-step,.hub-suc-accion,.hub-global-card,.hub-card,.btn-auth,.btn-crear-neg){transition:none;}
+  body.hub-paleta :is(.hub-global-card,.hub-card:not(.disabled),.btn-auth,.btn-crear-neg):hover{transform:none;translate:0 0;}
+  body.hub-paleta .hub-global-arrow .etx-ic{transition:none;}
+  body.hub-paleta .hub-global-card:hover .hub-global-arrow .etx-ic{translate:0 0;}
+}

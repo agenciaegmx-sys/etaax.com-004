@@ -5,7 +5,7 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
-    <script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+    <script src="/theme.js?v=modulos-ui-1"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX - Escandallo</title>
@@ -23,6 +23,8 @@
         html.embed .header button[onclick*="abrirModalNuevaReceta"],
         html.embed .header button[onclick*="eliminarRecetaActual"] { display:none !important; }
     </style>
+<link rel="stylesheet" href="/etaax-sidebar.css?v=1">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1">
 </head>
 <body>
 <header class="top-bar">
@@ -495,64 +497,58 @@
 </div>
 
 <!-- ══ VISTA PRINCIPAL ESCANDALLO (pantalla completa) ════════ -->
-<div id="vistaMenuReceta" style="display:none;
-    position:fixed;top:48px;right:0;bottom:0;left:0;
-    background:var(--bg);flex-direction:column;z-index:50;
-    transition:left 0.2s ease">
-    <div style="flex:1;overflow-y:auto;padding:8px 16px 32px">
-        <div class="header" style="position:relative;top:auto;margin:0 -16px 32px">
-            <div class="brand">
-                <span class="brand-label">Catálogo de Recetas</span>
-                <span class="brand-title">Escandallos</span>
-            </div>
-        </div>
-        <div style="max-width:660px;margin:0 auto">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
-                <button id="btnVerRecetas" onclick="verRecetas()" class="cat-btn" style="border-color:var(--green);padding:22px 16px">
-                    <span style="font-size:34px">📚</span>
-                    <div class="cat-btn-title" style="color:var(--green);font-size:15px">Ver recetas</div>
-                    <div class="cat-btn-desc">Consultar el recetario completo</div>
+<div id="vistaMenuReceta" style="display:none;position:fixed;top:48px;right:0;bottom:0;left:0;background:var(--bg);flex-direction:column;z-index:50;transition:left .2s ease">
+    <div style="flex:1;overflow-y:auto">
+        <div class="etx-recetas-menu">
+            <div class="header"><div class="brand"><span class="brand-label">Catálogo de recetas</span><span class="brand-title">Escandallos</span></div></div>
+            <p class="etx-recetas-descripcion">Consulta tus recetas y costos, o crea una preparación de esta sucursal.</p>
+            <p class="etx-recetas-label">Consultar</p>
+            <div class="etx-recetas-grid">
+                <button id="btnVerRecetas" onclick="verRecetas()" class="cat-btn">
+                    <span class="etx-tool-icon" aria-hidden="true"></span>
+                    <span class="cat-btn-title">Ver recetas</span>
+                    <span class="cat-btn-desc">Consultar el recetario completo</span>
+                    <span class="etx-tool-cta">Abrir recetario →</span>
                 </button>
-                <button id="btnCaratula" onclick="abrirCaratulaModal()" class="cat-btn" style="border-color:var(--accent);padding:22px 16px">
-                    <span style="font-size:34px">📊</span>
-                    <div class="cat-btn-title" style="color:var(--accent);font-size:15px">Carátula de costos</div>
-                    <div class="cat-btn-desc">Resumen ejecutivo de costeo</div>
+                <button id="btnCaratula" onclick="abrirCaratulaModal()" class="cat-btn">
+                    <span class="etx-tool-icon" aria-hidden="true"></span>
+                    <span class="cat-btn-title">Carátula de costos</span>
+                    <span class="cat-btn-desc">Consulta el resumen ejecutivo de costeo.</span>
+                    <span class="etx-tool-cta">Consultar costos →</span>
                 </button>
             </div>
-            <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
-            <button id="btnEscSimple" onclick="abrirEscModal('simple')" class="cat-btn"
-                style="width:100%;padding:16px 20px;display:flex;align-items:center;gap:16px;
-                    text-align:left;border-color:var(--border);margin-bottom:18px">
-                <span style="font-size:28px;flex-shrink:0">📝</span>
-                <div>
-                    <div class="cat-btn-title" style="font-size:14px;color:var(--text-muted)">Receta Simple</div>
-                    <div class="cat-btn-desc" style="margin-top:2px">
-                        Solo nombre, grupo e ingredientes — elige el tipo después</div>
-                </div>
-            </button>
-            <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-                <button id="btnEscAlimentos" onclick="abrirEscModal('alimentos')" class="cat-btn" style="padding:22px 16px">
-                    <span style="font-size:34px">🍽️</span>
-                    <div class="cat-btn-title" style="font-size:15px">Receta Alimentos</div>
-                    <div class="cat-btn-desc">Platillos, entradas, postres, guarniciones...</div>
+            <p class="etx-recetas-label">Crear preparación</p>
+                <button id="btnEscSimple" onclick="abrirEscModal('simple')" class="cat-btn">
+                    <span class="etx-tool-icon" aria-hidden="true"></span>
+                    <span class="cat-btn-title">Receta simple</span>
+                    <span class="cat-btn-desc">Empieza con nombre, grupo e ingredientes; elige el tipo después.</span>
+                    <span class="etx-tool-cta">Crear preparación →</span>
                 </button>
-                <button id="btnEscBebidas" onclick="abrirEscModal('bebidas')" class="cat-btn" style="padding:22px 16px">
-                    <span style="font-size:34px">🥃</span>
-                    <div class="cat-btn-title" style="font-size:15px">Receta Bebidas</div>
-                    <div class="cat-btn-desc">Cócteles, mocktails, bebidas de la carta...</div>
+            <p class="etx-recetas-label">O elige el tipo de preparación</p>
+            <div class="etx-recetas-grid">
+                <button id="btnEscAlimentos" onclick="abrirEscModal('alimentos')" class="cat-btn">
+                    <span class="etx-tool-icon" aria-hidden="true"></span>
+                    <span class="cat-btn-title">Receta de alimentos</span>
+                    <span class="cat-btn-desc">Platillos, entradas, postres y guarniciones.</span>
+                    <span class="etx-tool-cta">Crear preparación →</span>
                 </button>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-                <button id="btnEscSubAlimentos" onclick="abrirEscModal('sub-alimentos')" class="cat-btn" style="padding:22px 16px">
-                    <span style="font-size:34px">🥣</span>
-                    <div class="cat-btn-title" style="font-size:15px">Sub Receta Alimentos</div>
-                    <div class="cat-btn-desc">Salsas, fondos, masas, bases, rellenos...</div>
+                <button id="btnEscBebidas" onclick="abrirEscModal('bebidas')" class="cat-btn">
+                    <span class="etx-tool-icon" aria-hidden="true"></span>
+                    <span class="cat-btn-title">Receta de bebidas</span>
+                    <span class="cat-btn-desc">Cócteles, mocktails y bebidas de la carta.</span>
+                    <span class="etx-tool-cta">Crear preparación →</span>
                 </button>
-                <button id="btnEscSubBebidas" onclick="abrirEscModal('sub-bebidas')" class="cat-btn" style="padding:22px 16px">
-                    <span style="font-size:34px">🧃</span>
-                    <div class="cat-btn-title" style="font-size:15px">Sub Receta Bebidas</div>
-                    <div class="cat-btn-desc">Jarabes, shrubs, purés, mixes, infusiones...</div>
+                <button id="btnEscSubAlimentos" onclick="abrirEscModal('sub-alimentos')" class="cat-btn">
+                    <span class="etx-tool-icon" aria-hidden="true"></span>
+                    <span class="cat-btn-title">Sub-receta de alimentos</span>
+                    <span class="cat-btn-desc">Salsas, fondos, masas, bases y rellenos.</span>
+                    <span class="etx-tool-cta">Crear preparación →</span>
+                </button>
+                <button id="btnEscSubBebidas" onclick="abrirEscModal('sub-bebidas')" class="cat-btn">
+                    <span class="etx-tool-icon" aria-hidden="true"></span>
+                    <span class="cat-btn-title">Sub-receta de bebidas</span>
+                    <span class="cat-btn-desc">Jarabes, shrubs, purés, mixes e infusiones.</span>
+                    <span class="etx-tool-cta">Crear preparación →</span>
                 </button>
             </div>
         </div>
@@ -561,7 +557,7 @@
 
 <!-- ══ MODAL NUEVA RECETA — flotante, solo 4 tipos ══════════ -->
 <div class="modal-overlay" id="modalNuevaReceta"
-    onclick="if(event.target===this)this.style.display='none'">
+    style="z-index:1010" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal" style="max-width:560px;width:100%">
         <div class="modal-header">
             <h2>¿Qué tipo de receta?</h2>
@@ -650,7 +646,7 @@
 
 <!-- ══ MODAL CONVERTIR RECETA SIMPLE ══════════════════════ -->
 <div class="modal-overlay" id="modalConvertirReceta"
-    onclick="if(event.target===this)this.style.display='none'">
+    style="z-index:1010" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal" style="max-width:480px;width:100%">
         <div class="modal-header">
             <h2>Convertir a...</h2>
@@ -687,7 +683,7 @@
 </div>
 
 <!-- ══ MODAL: Sucursales de la receta (catálogo global) ══ -->
-<div id="modalRecetaSuc" class="modal-overlay" style="display:none;z-index:600" onclick="if(event.target===this)cerrarRecetaSuc()">
+<div id="modalRecetaSuc" class="modal-overlay" style="display:none;z-index:1020" onclick="if(event.target===this)cerrarRecetaSuc()">
     <div class="modal" style="max-width:420px;width:100%">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 8px">
             <h2 style="font-size:14px;font-weight:600">🔗 Vincular a sucursal</h2>
@@ -703,13 +699,15 @@
 </div>
 
 <!-- ══ MODAL VER RECETAS ══════════════════════════════════ -->
+<!-- La barra compartida está en 900: el recetario la cubre y sus ventanas
+     de detalle e impresión quedan encima, conservando el orden de apertura. -->
 <div class="modal-overlay" id="modalVerRecetas" onclick="cerrarVerRecetas(event)"
-    style="align-items:flex-start;padding:20px">
+    style="z-index:1000;align-items:flex-start;padding:20px">
     <div class="modal" style="max-width:1060px;width:100%;margin-top:16px">
         <div style="padding:0;border-bottom:1px solid var(--border)">
-            <div class="etx-modal-hd" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 0">
+            <div class="etx-modal-hd" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px 20px 0">
                 <h2 style="font-size:14px;font-weight:600">📚 Mis Recetas</h2>
-                <div style="display:flex;gap:8px;align-items:center">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                     <button class="btn-vista" id="btnImprimirSeleccion" onclick="imprimirSeleccionadas()"
                         style="display:none;color:var(--green);border-color:var(--green);padding:6px 14px;font-size:12px">
                         🖨️ Imprimir selección
@@ -727,8 +725,8 @@
                 </div>
             </div>
             <div style="padding:12px 20px 10px">
-                <div style="display:flex;gap:8px;align-items:center">
-                    <div style="position:relative;flex:1">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <div style="position:relative;flex:1 1 220px;min-width:0">
                         <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--text-dim)">🔍</span>
                         <input type="text" id="buscarReceta" placeholder="Buscar receta..."
                             oninput="renderGridRecetas()"
@@ -740,10 +738,10 @@
                             onblur="this.style.borderColor='var(--border)'">
                     </div>
                     <!-- Filtros por Grupo y Categoría (se pueblan solos según lo que haya) -->
-                    <select id="filtroRecetaGrupoSel" onchange="filtroRecetaGrupo=this.value;filtroRecetaCat='';renderGridRecetas()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 12px;border-radius:10px;font-family:inherit;font-size:13px;outline:none;max-width:170px">
+                    <select id="filtroRecetaGrupoSel" onchange="filtroRecetaGrupo=this.value;filtroRecetaCat='';renderGridRecetas()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 12px;border-radius:10px;font-family:inherit;font-size:13px;outline:none;max-width:170px;flex:1 1 120px;min-width:0">
                         <option value="">Todos los grupos</option>
                     </select>
-                    <select id="filtroRecetaCatSel" onchange="filtroRecetaCat=this.value;renderGridRecetas()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 12px;border-radius:10px;font-family:inherit;font-size:13px;outline:none;max-width:170px">
+                    <select id="filtroRecetaCatSel" onchange="filtroRecetaCat=this.value;renderGridRecetas()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 12px;border-radius:10px;font-family:inherit;font-size:13px;outline:none;max-width:170px;flex:1 1 120px;min-width:0">
                         <option value="">Todas las categorías</option>
                     </select>
                     <!-- Estado (solo catálogo global): las INACTIVAS viven únicamente aquí -->
@@ -787,7 +785,7 @@
                     <button hidden id="btnIndepSucRec" onclick="abrirIndependizarSucRec()" title="Detecta recetas compartidas entre sucursales y crea una copia independiente por sucursal (con respaldo previo)."
                     style="display:none;padding:6px 16px;border-radius:20px;border:1.5px solid #7ab8f5;background:transparent;color:#7ab8f5;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔗 Independizar sucursales</button>
                 <!-- Galería / Lista (mismo par que el catálogo de insumos) -->
-                <span id="vistaRecetasBtns" style="display:flex;gap:6px;margin-left:auto">
+                <span id="vistaRecetasBtns" style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;max-width:100%">
                     <button id="btnVistaRecGrid" onclick="setVistaRecetas('grid')" title="Vista galería"
                         style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">⊞ Galería</button>
                     <button id="btnVistaRecLista" onclick="setVistaRecetas('lista')" title="Vista lista"
@@ -816,7 +814,7 @@
 
 <!-- ══ MODAL FICHA TÉCNICA ════════════════════════════════ -->
 <div class="modal-overlay" id="modalFichaReceta" onclick="cerrarFichaReceta(event)"
-    style="align-items:flex-start;padding:20px">
+    style="z-index:1010;align-items:flex-start;padding:20px">
     <div class="modal" style="max-width:680px;width:100%;margin-top:20px">
         <div class="modal-header">
             <h2 id="fichaTitulo">Ficha técnica</h2>
@@ -841,7 +839,7 @@
 </div>
 
 <!-- ══ MODAL SUBMENÚ IMPRESIÓN ════════════════════════════ -->
-<div class="modal-overlay" id="modalImpresion" onclick="cerrarModalImpresion(event)">
+<div class="modal-overlay" id="modalImpresion" style="z-index:1020" onclick="cerrarModalImpresion(event)">
     <div class="modal" style="max-width:440px">
         <div class="modal-header">
             <h2>🖨️ Tipo de impresión</h2>
@@ -973,7 +971,7 @@
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
 <script src="/etaax-store.js"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
-<script src="/etaax-core.js"></script><!-- fórmulas de dinero: antes de app.js -->
+<script src="/etaax-core.js?v=financiero-2"></script><!-- fórmulas de dinero: antes de app.js -->
 <script src="/insumo-label.js"></script>
 <script src="/multi-select.js"></script><!-- filtros de grupo/categoría con palomitas -->
 <script src="/reordenar.js"></script><!-- orden manual del catálogo (arrastrar filas) -->
@@ -981,7 +979,7 @@
 <script src="/etaax-nav.js"></script>
 <script src="/qr-pairing.js"></script>
 <script src="../security.js"></script>
-<script src="../app.js"></script>
+<script src="../app.js?v=modulos-ui-1"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -1046,7 +1044,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Por default se muestra la navegación de submódulos (Escandallos / Insumos /
     // Inventarios / Requisiciones). Con ?escandallos=1 se entra directo al editor.
     if (new URLSearchParams(window.location.search).get('escandallos') === '1') {
-        history.replaceState(null, '', window.location.pathname);
+        // Conservar el acceso directo para que una recarga siga en Escandallos.
         entrarEscandallos();
     } else {
         nav.style.display = 'none';
@@ -2253,6 +2251,7 @@ document.addEventListener('change', function(e) {
     }
 });
 document.addEventListener('keydown', function(e) {
+    if (e.target.closest && e.target.closest('#etxModuleDialog,#etaax-header,#ctxBar,#nav')) return;
     if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
         e.preventDefault();
         const focusable = [...document.querySelectorAll('input, select, button, textarea')];
@@ -2271,8 +2270,9 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
-// Guardar estado inicial
-setTimeout(guardarEnHistorial, 300);
+// El formulario dinámico se crea en load. La primera copia debe esperar a
+// ese montaje, también cuando los scripts tardan más en cargar.
+window.addEventListener('load', function() { setTimeout(guardarEnHistorial, 0); });
 
 // ── Configuración de campos por tipo ─────────────────────────
 const TIPO_RECETA_CFG = {
@@ -4932,10 +4932,6 @@ window.addEventListener('load', function() {
 <style>
 
 </style>
-<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar modo">
-    <span id="themeIcon">☀️</span>
-    <span id="themeLabel">Modo claro</span>
-</button>
 <script>
 
 
@@ -4963,7 +4959,7 @@ window.addEventListener('load', function() {
 </div>
 
 <!-- Modal: Editor de escandallo desde carátula de costos -->
-<div class="modal-overlay" id="modalEscandalloCaratula" style="z-index:300;align-items:flex-start;padding:20px;overflow-y:auto">
+<div class="modal-overlay" id="modalEscandalloCaratula" style="z-index:1010;align-items:flex-start;padding:20px;overflow-y:auto">
     <div class="modal" style="max-width:1020px;width:100%;max-height:none;overflow:visible;margin:auto">
         <div class="modal-header">
             <div>
@@ -5000,10 +4996,15 @@ window.addEventListener('load', function() {
 </div>
 
 <script src="../admin-guard.js"></script>
-<script src="/global-nav.js"></script>
-<script src="/nav-pref.js"></script>
+<script src="/global-nav.js?v=iconos-1"></script>
+<script src="/nav-pref.js?v=modulos-ui-1"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/etaax-iconos.js?v=modulos-1"></script>
+<script src="/etaax-sidebar.js?v=2"></script>
+<script src="/negocio-tipos.js?v=1"></script>
+<script src="/etaax-header.js?v=paleta-1"></script>
+<script src="/etaax-modulos-ui.js?v=1"></script>
 </body>
 </html>

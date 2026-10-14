@@ -1,0 +1,55 @@
+PASA Cuenta: perfil real, regreso al módulo y espacio del header
+PASA Un envío cambia el nombre una sola vez y actualiza la sesión
+PASA Tema claro y del dispositivo se sincronizan con el header
+PASA Contraseña incorrecta impide la actualización; la correcta limpia el formulario
+PASA Menú con teclado y enlaces a las dos vistas
+PASA Correo pendiente de confirmación conserva el correo actual
+PASA Colaborador: sin credenciales compartidas ni formularios del titular, en móvil
+PASA La base reconoce al colaborador aunque el navegador diga titular
+PASA Nombre escapado y regreso limitado al mismo sitio
+PASA Plan: suma la tabla compartida por sucursal, conserva contexto y ofrece facturación
+PASA Una suscripción de tarjeta existente evita abrir otra aunque esté vencida
+PASA Fallo de carga del plan se informa y puede reintentarse
+PASA Respuesta vieja de un negocio no pisa el negocio elegido
+PASA Checkout usa el negocio elegido y rechaza una URL insegura
+PASA Plan móvil del colaborador muestra estado sin habilitar cobros
+PASA Sin sesión no hay datos de cuenta ni acciones de acceso
+PASA Titular: contenido y menú completos a 320px en /mi-cuenta.html
+PASA Titular: contenido y menú completos a 320px en /plan-facturacion.html
+PASA Hub: separación real entre header y subheader a 1440px
+PASA Hub: separación real entre header y subheader a 390px
+PASA Guía visual: ampliar la captura actual, detalle y regreso al mismo paso a 1440px
+PASA Guía de Staff: recorrido circular, fondo para cerrar y capturas pendientes a 1440px
+PASA Guía de Proveedores: tres capturas en orden y reapertura inmediata a 1440px
+PASA Guía visual: ampliar la captura actual, detalle y regreso al mismo paso a 390px
+PASA Guía de Staff: recorrido circular, fondo para cerrar y capturas pendientes a 390px
+PASA Guía de Proveedores: tres capturas en orden y reapertura inmediata a 390px
+PASA Módulos: una sola sucursal con pin, selector con teclado y herramientas debajo
+PASA Herramientas de recetas: rutas reales y regreso conservando módulo y sucursal
+PASA Herramientas de financiero: rutas reales y regreso conservando módulo y sucursal
+PASA Herramientas de administrativo: rutas reales y regreso conservando módulo y sucursal
+PASA Herramientas de consultoria: rutas reales y regreso conservando módulo y sucursal
+PASA Escandallos: la tarjeta abre la herramienta real y una recarga conserva esa vista
+PASA Cambiar módulo: cancelar conserva la herramienta y elegir conserva la sucursal
+PASA El selector respeta permisos por herramienta y mantiene las guías disponibles
+PASA Un cambio de permisos actualiza el selector y una revocación frena un enlace anterior
+PASA Cambiar módulo de colaborador: opciones según permisos y misma sucursal
+PASA Sin negocio, el selector no ofrece herramientas de una sucursal anterior
+PASA Módulos: selector real, cancelar y cambio persistente a 1440px
+PASA El selector rechaza bajas y un cambio de negocio desde un diálogo anterior
+PASA Si falla actualizar sucursales, se informa y se conserva la lista guardada
+PASA Módulos: selector real, cancelar y cambio persistente a 320px
+PASA Colaborador: sin selector ni cambio de sucursal por llamada directa
+PASA Hub: una identidad de negocio, plan y guía a 1440px
+PASA Configurar negocio conserva su destino; el subheader refresca el plan y el conteo
+PASA Hub: una identidad de negocio, plan y guía a 320px
+PASA Catálogos: seis tarjetas, seis accesos y cierre con teclado a 1440px
+PASA Financiero: cinco tarjetas iguales, sin cuentas, a 1440px
+PASA Catálogos: seis tarjetas, seis accesos y cierre con teclado a 320px
+PASA Financiero: cinco tarjetas iguales, sin cuentas, a 320px
+PASA Recetas/sub-recetas abre el catálogo completo desde una sola tarjeta
+PASA Ventas global abre su ruta, conserva el nav y vuelve al nuevo panel
+PASA Los enlaces viejos del panel financiero global regresan al nuevo
+PASA Entrar a una sucursal limpia ambos modos globales y conserva Cuentas
+PASA El enlace de regreso global no abre el panel de dueño a un colaborador
+CUENTA Y HEADER: 54 casos, 0 fallas. Supabase simulado; sin llamadas de producción.

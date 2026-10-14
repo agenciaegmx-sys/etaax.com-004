@@ -3,16 +3,16 @@
 <head>
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
-<script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+<script src="/theme.js?v=modulos-ui-1"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ETAAX – Resumen de Resultados</title>
+<title>ETAAX – Resumen financiero</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css">
-<script src="/etaax-core.js"></script>
+<script src="/etaax-core.js?v=financiero-2"></script>
 <script src="/reporte-marca.js"></script>
 <style>
 .rs-wrap { max-width:1180px; margin:0 auto; padding:26px 20px 120px; }
@@ -94,6 +94,10 @@
 .rs-vacio { text-align:center;padding:50px 20px;color:var(--text-dim);line-height:1.7; }
 @media (max-width:700px){ .rs-tbl td,.rs-tbl th{padding:8px 9px;font-size:12.5px} .rs-ed{width:72px} }
 </style>
+<link rel="stylesheet" href="/etaax-sidebar.css?v=1">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1">
+<link rel="stylesheet" href="/financiero/resumen-panel.css?v=2">
+<script src="/financiero/periodo-enlace.js?v=1"></script>
 </head>
 <body>
 <div class="mod-grid-bg"></div>
@@ -105,7 +109,7 @@
     <div class="top-breadcrumb">
         <span class="top-module-badge">Financiero</span>
         <span class="top-sep">|</span>
-        <span class="top-section-name">Resumen de Resultados</span>
+        <span class="top-section-name">Resumen financiero</span>
     </div>
     <a href="index.html" class="topbar-home" title="Salud Financiera" style="margin-left:auto">←</a>
 </header>
@@ -118,10 +122,11 @@
 <div class="rs-wrap">
     <div class="rs-head">
         <div>
-            <div class="rs-title">Resumen de <span class="g">Resultados</span></div>
+            <div class="rs-title">Resumen <span class="g">financiero</span></div>
             <div class="rs-sub" id="rsSub">Cargando…</div>
         </div>
-        <button class="rs-tab" onclick="imprimirResumen()" title="Imprimir el resumen con la proyección">🖨️ Imprimir</button>
+        <button class="rs-tab" id="btnSimular" onclick="toggleSimulacion()" aria-expanded="false">Simular</button>
+        <button class="rs-tab" onclick="imprimirResumen()" title="Imprimir el resumen financiero">🖨️ Imprimir</button>
     </div>
 
     <!-- Periodo -->
@@ -129,9 +134,10 @@
         <button class="rs-tab" id="tbDia"  onclick="setPeriodo('dia')">Día</button>
         <button class="rs-tab" id="tbSem"  onclick="setPeriodo('semana')">Semana</button>
         <button class="rs-tab on" id="tbMes" onclick="setPeriodo('mes')">Mes</button>
+        <button class="rs-tab" id="tbAnio" onclick="setPeriodo('anio')">Año</button>
         <button class="rs-tab" id="tbRan"  onclick="setPeriodo('rango')">Rango</button>
-        <input type="month" class="rs-in" id="pickerInput" onchange="render()">
-        <input type="date"  class="rs-in" id="pickerEnd" onchange="render()" style="display:none">
+        <input type="month" class="rs-in" id="pickerInput" onchange="cambiarFechas()">
+        <input type="date"  class="rs-in" id="pickerEnd" onchange="cambiarFechas()" style="display:none">
         <span style="flex:1"></span>
         <button class="rs-tab" onclick="limpiarProyeccion()" id="btnLimpiar" style="display:none">↺ Limpiar proyección</button>
     </div>
@@ -142,7 +148,10 @@
     <div id="rsFalla" style="display:none;background:rgba(232,90,90,.10);
          border:1px solid rgba(232,90,90,.45);color:#e85a5a;border-radius:10px;
          padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.6"></div>
-    <div class="rs-score" id="rsScore" style="margin-bottom:14px"></div>
+    <div id="rsEstadoDatos" role="status"></div>
+    <h2 class="rs-seccion">Resultados del negocio</h2><div class="rs-kpis" id="rsKpis"></div><div class="rs-promedios" id="rsPromedios"></div>
+    <p class="rs-base">Base del periodo: ventas del corte sin propinas y egresos pagados. Las compras de insumos se muestran como compras; el consumo de inventario necesita una conciliación completa.</p>
+    <p id="rsSimulacionNota" hidden>Simulación manual: cambia montos o porcentajes para explorar el resultado. Los registros reales se conservan; los gastos fijos mantienen su monto al cambiar las ventas.</p>
 
     <!-- La tabla -->
     <div class="rs-card">
@@ -150,24 +159,26 @@
             <thead><tr>
                 <th style="width:30%">Concepto</th>
                 <th>Real</th>
-                <th style="width:72px">%</th>
+                <th style="width:72px" title="Porcentaje de ingresos: ventas más otros ingresos">% ing.</th>
                 <th class="rs-proy">Proyección</th>
                 <th class="rs-proy" style="width:86px">%</th>
-                <th>Diferencia</th>
+                <th class="rs-delta">Diferencia</th>
             </tr></thead>
             <tbody id="rsBody"></tbody>
         </table>
     </div>
 
-    <!-- Los KPIs, debajo del P&L: el mismo periodo visto por indicador -->
-    <div class="rs-kpis" id="rsKpis"></div>
+    <details class="rs-score-detalle"><summary>Cumplimiento de tus metas · detalle del Score</summary><p class="rs-aclaracion">Se evalúan los pagos registrados del periodo. Revisa la captura de gastos antes de interpretar los porcentajes.</p><div class="rs-score" id="rsScore"></div></details>
+    <h2 class="rs-seccion">Cómo se cobró</h2><div class="rs-res-grid" id="rsCobros"></div><div id="rsCuentas"></div>
+    <h2 class="rs-seccion">Propinas y compromisos registrados</h2><div class="rs-res-grid" id="rsMovimientos"></div>
+    <h2 class="rs-seccion">Compras, personal e impuestos</h2><div class="rs-res-grid" id="rsNominaAreas"></div>
+    <h2 class="rs-seccion">Reservas y disponibilidad</h2><div class="rs-res-grid" id="rsReservas"></div>
+    <h2 class="rs-seccion">Qué revisar ahora</h2><div class="rs-oportunidades" id="rsOportunidades"></div>
 
     <div class="rs-nota" id="rsNota"></div>
 </div>
 </main>
 </div>
-
-<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
 <script>
 function toggleNav() {
@@ -193,10 +204,11 @@ function mesStr(){ return todayStr().slice(0,7); }
    Se leen las MISMAS tablas que KPIs y con las MISMAS reglas del núcleo. Si
    esta pantalla calculara por su cuenta, un día diría una utilidad distinta a
    la de KPIs sobre el mismo mes y no habría forma de saber cuál creer. */
-var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{}, falló:[] };
+var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{}, falló:[], listo:false };
 
 async function cargar(){
     var negId = getNegocioActivo(); if(!negId) return;
+    _c.listo=false;_mdCache={};
     /* ══ UN REPORTE NO PUEDE LEER A MEDIAS Y NO DECIRLO ═══════════════════
        Antes esto pedía cada colección de un tirón: `select('datos')` y ya. Eso
        tiene un techo que no se ve —la API trae como mucho las filas que diga
@@ -223,13 +235,13 @@ async function cargar(){
        nada; un aviso rojo sí. */
     if (typeof etaaxLeerVarias !== 'function') {
         _c.falló = ['todo (no cargó el módulo de datos — recarga la página)'];
-        return;
+        _c.listo=true;return;
     }
-    var r = await Promise.all([
+    var r;try { r = await Promise.all([
         etaaxLeerVarias(TABLAS, negId),
         _supabase.from('kpi_targets').select('datos').eq('negocio_id',negId).maybeSingle(),
         _supabase.from('sf_metas').select('datos').eq('negocio_id',negId).maybeSingle()
-    ]);
+    ]); }catch(e){_c.falló=['todo (no se pudo completar la carga)'];_c.listo=true;return;}
     var col = r[0];
     _c.cortes = col.datos.cortes;           _c.otros  = col.datos.sf_otros;
     _c.gastos = col.datos.gastos;           _c.deps   = col.datos.depositos;
@@ -250,7 +262,7 @@ async function cargar(){
        solo quitan la línea de comparación. Se avisan igual, pero aparte. */
     if (r[1] && r[1].error) falló.push('objetivos');
     if (r[2] && r[2].error) falló.push('metas de venta');
-    _c.falló = falló;
+    _c.falló = falló;_c.listo=true;
 }
 
 /* El aviso, arriba del reporte y en rojo. No se esconde el P&L: lo que se
@@ -269,7 +281,7 @@ function _avisoCarga(){
         'color:inherit;border-radius:7px;padding:3px 11px;font:inherit;font-size:12px;' +
         'cursor:pointer;margin-left:6px">Reintentar</button>';
 }
-async function _recargar(){ await cargar(); render(); }
+async function _recargar(){var lectura=cargar();render();await lectura;render();}
 
 /* Alcance por sucursal: vacío = el negocio entero. Misma regla del resto. */
 function _suc(){ return localStorage.getItem('etaax_sucursal_activa')||''; }
@@ -285,14 +297,14 @@ function _pEnd(){ var e=document.getElementById('pickerEnd'); return (e&&e.value
 function rango(){ return EtaaxCore.getRange(periodoTipo,_pVal(),_pEnd()); }
 
 function setPeriodo(t){
-    periodoTipo=t;
+    periodoTipo=t;_proy={};
     _mdCache={};   // el reparto diario depende del mes: al cambiar de periodo se rearma
-    [['dia','tbDia'],['semana','tbSem'],['mes','tbMes'],['rango','tbRan']].forEach(function(p){
+    [['dia','tbDia'],['semana','tbSem'],['mes','tbMes'],['anio','tbAnio'],['rango','tbRan']].forEach(function(p){
         var b=document.getElementById(p[1]); if(b) b.className='rs-tab'+(t===p[0]?' on':'');
     });
     var i=document.getElementById('pickerInput'), e=document.getElementById('pickerEnd');
-    i.type = t==='mes'?'month':(t==='semana'?'week':'date');
-    if(t==='mes') i.value=mesStr(); else if(t!=='semana') i.value=todayStr();
+    i.type=t==='anio'?'number':t==='mes'?'month':t==='semana'?'week':'date';
+    if(t==='mes')i.value=mesStr();else if(t==='semana')i.value=EtaaxCore.getWeekStr(new Date());else if(t==='anio')i.value=new Date().getFullYear();else i.value=todayStr();
     e.style.display = t==='rango'?'':'none';
     render();
 }
@@ -325,7 +337,7 @@ function plDelPeriodo(){
        categorías de fijos adentro). Compartir la misma referencia haría que el
        segundo llamado arrastrara el memo del primero — funciona, pero depende
        de un detalle interno que mañana puede cambiar. */
-    var prevs=EtaaxCore.previsionApartadoRango(_c.deps||[],desde,hasta);
+    var prevs=EtaaxCore.previsionApartadoRango((_c.deps||[]).filter(_deSuc),desde,hasta);
 
     /* El MISMO `opts` para las dos llamadas. Si costoInsumos clasificara con
        otras reglas que clasificarGastos, un mismo gasto podría contarse en dos
@@ -369,7 +381,7 @@ function plDelPeriodo(){
         }
         else if(grupo==='variable') DET.otros.push(reng);
         else if(grupo==='fijo')     DET.fijos.push(reng);
-        else { reng.sub = grupo==='imss'?'IMSS':(grupo==='nomAdm'?'Administrativa':'Operativa');
+        else { reng.sub = grupo==='imss'?'IMSS':(EtaaxCore.nomTipoGasto(g,_c.staff)==='socios'?'Socios':grupo==='nomAdm'?'Administrativa':'Operativa');
                reng.grupo = grupo; DET.nom.push(reng); }
     });
     (_c.deps||[]).filter(_deSuc).forEach(function(d){
@@ -378,6 +390,7 @@ function plDelPeriodo(){
         DET.prevs.push({ fecha:d.fecha, concepto:d.concepto||d.prevNombre||'Apartado',
                          sub:EtaaxCore.apartadoFondo(d)==='banco'?'banco':'caja fuerte', monto:n(d.monto) });
     });
+    if(comision>0)DET.otros.push({fecha:'',concepto:'Comisión bancaria de los cortes',sub:'Automático · comisión reconciliada cuando hay abonos',monto:comision});
     Object.keys(DET).forEach(function(k){
         DET[k].sort(function(a,b){ return String(b.fecha||'').localeCompare(String(a.fecha||'')); });
     });
@@ -461,21 +474,11 @@ function render(mantenFoco){
     var selStart = null;
     try { if(foco) selStart = document.activeElement.selectionStart; } catch(e){}
 
-    var base = plDelPeriodo();
+    var base = plDelPeriodo();_RS_BASE=base;
     var proy = EtaaxCore.proyectarPL(base, _proy);
-    var metas = _c.targets || {};
-    /* La meta de food cost no existía en KPIs (ahí no se medía). Se usa 30 como
-       punto de partida —el rango sano de la industria— y es editable desde
-       KPIs como las demás en cuanto se guarde una. */
-    var m = { food: n(metas.food)||30, nom: (n(metas.nomOp)+n(metas.nomAdm))||30,
-              fijos: n(metas.fijos)||15, otros: n(metas.variables)||10,
-              prevs: n(metas.prev)||5,  util: n(metas.util)||20,
-              /* Metas de los peldaños. 65% de costo primo y 12% de utilidad
-                 operativa son el rango sano de la industria restaurantera; se
-                 usan de punto de partida hasta que el negocio ponga las suyas,
-                 igual que ya se hacía con el food cost. */
-              primo: n(metas.primo)||65, operativa: n(metas.operativa)||12 };
+    var m=_metasRs();
     var sc = EtaaxCore.scorePL(base, m);
+    if(base.egresos<=0||_c.listo===false||_fuenteRs(['ventas','gastos','objetivos','gastos fijos','nómina','cuentas','depósitos','otros ingresos']))sc={score:null,detalle:[],metasPuestas:false};
     /* La escalera se calcula aquí arriba porque el Score ya la usa en sus
        pastillas. Declararla más abajo la dejaba en `undefined` al pintarlas. */
     var escal  = EtaaxCore.escaleraPL(base, {financieros:_FIN});
@@ -503,12 +506,13 @@ function render(mantenFoco){
              son los MISMOS pesos contados de otra manera —el costo primo ya es
              food + nómina— y calificarlos aparte pesaría dos veces lo mismo. */
           (function(){
+              if(!sc.metasPuestas)return '';
               var cP = escal.primoPct<=m.primo ? 'var(--green)' : 'var(--red)';
               var cO = escal.operativaPct>=m.operativa ? 'var(--green)' : 'var(--red)';
               return '<span class="rs-chip" title="Insumos + nómina juntos"><b>Costo primo</b> '+
-                     fmtP(escal.primoPct)+' <span style="color:'+cP+'">· meta &lt;'+m.primo+'%</span></span>'+
+                     fmtP(escal.primoPct)+' <span style="color:'+cP+'">'+(m.primo===null?'· sin meta':'· meta ≤ '+m.primo+'%')+'</span></span>'+
                      '<span class="rs-chip" title="Lo que deja la operación antes de previsiones e intereses"><b>Utilidad operativa</b> '+
-                     fmtP(escal.operativaPct)+' <span style="color:'+cO+'">· meta &gt;'+m.operativa+'%</span></span>';
+                     fmtP(escal.operativaPct)+' <span style="color:'+cO+'">'+(m.operativa===null?'· sin meta':'· meta ≥ '+m.operativa+'%')+'</span></span>';
           })() +
         '</div>';
 
@@ -550,7 +554,7 @@ function render(mantenFoco){
         var cDif = Math.abs(dif)<0.5 ? 'var(--text-dim)' : (dif<0 ? 'var(--green)' : 'var(--red)');
         var tocado = !!_proy[l.k];
         return '<tr>'+
-            '<td>'+_conLupa(l.k, l.nom)+'</td>'+
+            '<td>'+_conLupa(l.k,l.k==='food'?'Compras de insumos':l.nom)+'</td>'+
             '<td>'+fmtM(l.monto)+'</td>'+
             '<td style="color:var(--text-muted)">'+fmtP(l.pct)+'</td>'+
             '<td class="rs-proy"><input class="rs-ed'+(tocado&&_proy[l.k].monto!==undefined?' tocado':'')+'" id="ed_m_'+l.k+'" '+
@@ -575,21 +579,22 @@ function render(mantenFoco){
         _ed[0] +                                                  // Food cost
         (( _AREA.cocina>0||_AREA.barra>0 ) ? _subFila('Cocina · alimentos e ingredientes', _AREA.cocina) +
                                              _subFila('Barra · bebidas, licores y garnish', _AREA.barra) : '') +
-        _escFila('Utilidad bruta', escal.bruta, escal.brutaPct, escalP.bruta, escalP.brutaPct, false,
+        _escFila('Resultado tras compras', escal.bruta, escal.brutaPct, escalP.bruta, escalP.brutaPct, false,
                  'Venta menos el costo de lo que se compró para venderla. Contesta si se está cobrando bien lo que se compra.') +
         _ed[1] +                                                  // Nómina
         _escFila('Costo primo', escal.primo, escal.primoPct, escalP.primo, escalP.primoPct, true,
                  'Insumos + nómina. Es el número que se mira primero en esta industria: los dos se intercambian, y verlos por separado deja que uno tape al otro. Sano: 60-65% de la venta.') +
         _ed[2] + _ed[3] +                                         // Fijos y otros variables
-        _escFila('Utilidad operativa', escal.operativa, escal.operativaPct, escalP.operativa, escalP.operativaPct, false,
+        _escFila('Resultado operativo · antes de financieros', escal.operativa, escal.operativaPct, escalP.operativa, escalP.operativaPct, false,
                  'Lo que deja la operación antes de previsiones e intereses. No se le llama EBITDA porque ETAAX no lleva depreciación ni amortización.') +
         (_FIN>0 ? _subFila('de ahí, intereses y costo del dinero', _FIN) : '') +
+        _escFila('Resultado antes de apartados',base.utilidad+base.prevs,base.ventas>0?(base.utilidad+base.prevs)/base.ventas*100:0,proy.utilidad+proy.lineas[4].monto,proy.ventas>0?(proy.utilidad+proy.lineas[4].monto)/proy.ventas*100:0,false,'Ingresos menos egresos pagados.')+
         _ed[4];                                                   // Previsiones
 
     document.getElementById('rsBody').innerHTML =
         // Ventas arriba: todo lo demás es un porcentaje de esto
         '<tr>'+
-            '<td style="font-weight:600">'+_conLupa('ventas','Ventas')+'</td>'+
+            '<td style="font-weight:600">'+_conLupa('ventas','Ingresos · ventas + otros')+'</td>'+
             '<td style="font-weight:600">'+fmtM(base.ventas)+'</td>'+
             '<td style="color:var(--text-muted)">100%</td>'+
             '<td class="rs-proy"><input class="rs-ed'+(_proy.ventas!==undefined?' tocado':'')+'" id="ed_ventas" '+
@@ -602,7 +607,7 @@ function render(mantenFoco){
         cuerpoEscalera +
         // La utilidad es RESULTADO: no se edita, se observa
         '<tr class="rs-util">'+
-            '<td>Utilidad neta</td>'+
+            '<td>Utilidad disponible</td>'+
             '<td>'+fmtM(base.utilidad)+'</td>'+
             '<td>'+fmtP(base.utilidadPct)+'</td>'+
             '<td class="rs-proy" style="color:var(--blue,#7ab8f5)">'+fmtM(proy.utilidad)+'</td>'+
@@ -618,8 +623,7 @@ function render(mantenFoco){
     /* Decir la base de medición no es letra chica: el mismo mes da utilidades
        distintas según si se mide por flujo o por consumo, y quien lee tiene
        derecho a saber cuál está viendo. */
-    var nota = '🧾 Esto es <b>ingresos contra egresos por categoría</b> del periodo: lo que entró y lo que ' +
-               'salió de la caja. El food cost es lo <b>comprado</b> en alimentos, bebidas e insumos de barra ' +
+    var nota = 'Base de lectura: <b>ventas registradas y egresos pagados</b> del periodo. Los anticipos aplicados forman parte de la venta y se muestran separados de los cobros actuales. El costo de insumos es lo <b>comprado</b> en alimentos, bebidas e insumos de barra ' +
                '— no el consumo de inventario, que todavía no alimenta este resumen.';
     nota += '<br>La utilidad no se edita: es lo que sale de los demás renglones. ' +
             'Los <b>gastos fijos</b> no suben si subes las ventas — por eso el margen mejora solo al vender más.';
@@ -677,62 +681,115 @@ function _kpiCard(lbl, val, sub, color, barraPct, barraColor){
         '<div class="rs-kpi-sub">'+sub+'</div>'+barra+'</div>';
 }
 
-function renderKpis(base, m){
-    var cont=document.getElementById('rsKpis'); if(!cont) return;
-    var com=(_DET&&_DET._comensales)||0;
-    var cortes=(_DET&&_DET._cortes)||0;
-    /* El cheque promedio se calcula sobre la VENTA del periodo, no sumando los
-       cheques de cada corte: promediar promedios le daría el mismo peso a un
-       martes de 12 cuentas que a un sábado de 300. */
-    var cheque = com>0 ? base.ventas/com : 0;
-    var meta = metaDelRango();
-    var cump = (meta&&meta>0) ? (base.ventas/meta*100) : null;
-    var cCump = cump===null ? 'var(--text-dim)' : cump>=100?'var(--green)':cump>=80?'var(--accent-text,var(--accent))':'var(--red)';
-    var dias = Math.max(1, Math.round((new Date(rango().to+'T12:00:00')-new Date(rango().from+'T12:00:00'))/864e5)+1);
-
-    var html='<div class="rs-kpi-grupo">Cómo se vendió</div>';
-    html+=_kpiCard('Meta del periodo',
-        meta===null?'Sin definir':fmtM(meta),
-        meta===null
-            ? 'Ponla en <a href="ventas.html" style="color:var(--green)">Ventas Totales</a> para medir el avance'
-            : (cump===null?'':'<b style="color:'+cCump+'">'+cump.toFixed(0)+'%</b> cumplido · faltan '+
-               (meta-base.ventas>0?fmtM(meta-base.ventas):'$0')),
-        null, cump, cCump);
-    html+=_kpiCard('Comensales',
-        com>0?com.toLocaleString('es-MX'):'—',
-        com>0 ? (com/dias).toFixed(0)+' por día en '+dias+' días'
-              : 'No se capturaron comensales en los cortes del periodo');
-    html+=_kpiCard('Cheque promedio',
-        com>0?fmtM(cheque):'—',
-        com>0 ? 'Venta entre comensales — sin propinas'
-              : 'Hace falta el número de comensales en el corte');
-    html+=_kpiCard('Venta por día',
-        fmtM(base.ventas/dias),
-        cortes+' corte'+(cortes===1?'':'s')+' en el periodo');
-
-    /* El mismo P&L leído como porcentajes, que es como se compara entre meses y
-       contra la meta: los pesos de septiembre y los de febrero no se comparan,
-       los porcentajes sí. */
-    html+='<div class="rs-kpi-grupo">Cómo se gastó · % sobre la venta</div>';
-    base.lineas.forEach(function(l){
-        var meta2 = m[l.k==='otros'?'otros':l.k];
-        /* En un gasto, estar POR DEBAJO de la meta es cumplir. Pintarlo al revés
-           haría leer un ahorro como un problema. */
-        var ok = meta2>0 ? (l.pct<=meta2) : null;
-        var c  = ok===null?'var(--text)':ok?'var(--green)':'var(--red)';
-        html+=_kpiCard(l.nom, fmtP(l.pct),
-            meta2>0 ? ('meta '+meta2+'% · '+(ok?'dentro':'<b style="color:var(--red)">'+(l.pct-meta2).toFixed(1)+' pts arriba</b>'))
-                    : 'sin meta configurada',
-            c, meta2>0?Math.min(100,(l.pct/meta2)*100):null, ok?'var(--green)':'var(--red)');
+/* Datos del mismo periodo para resultados, desgloses y papel. */
+var _RS_INFO=null, _RS_BASE=null, _RS_OPS=[], _simulando=false;
+function _fuenteRs(nombres){return (_c.falló||[]).some(function(f){return /^todo/.test(f)||nombres.indexOf(String(f).split(' (')[0])>=0;});}
+function _metasRs(){
+    var t=_c.targets||{};
+    function v(x){return x==null||String(x).trim()===''?null:(isFinite(Number(x))&&Number(x)>=0?Number(x):null);}
+    return {food:v(t.food),nom:EtaaxCore.metaRestaurante(t,'staff'),fijos:v(t.fijos),otros:v(t.variables),
+        prevs:null,util:v(t.util),primo:EtaaxCore.metaRestaurante(t,'primo'),operativa:v(t.operativa)};
+}
+function _infoRs(){
+    var rg=rango(),dentro=function(x){return x.fecha>=rg.from&&x.fecha<=rg.to;};
+    var cortes=_c.cortes.filter(_deSuc).filter(dentro),gastos=_c.gastos.filter(_deSuc).filter(dentro);
+    var otros=_c.otros.filter(_deSuc).filter(dentro);
+    return EtaaxCore.detalleResumenFinanciero({cortes:cortes,gastos:gastos,otros:otros.reduce(function(t,x){return t+n(x.monto);},0),
+        deps:_c.deps.filter(_deSuc),ctas:_c.ctas,fijos:_c.fijos,staff:_c.staff,desde:rg.from,hasta:rg.to});
+}
+function toggleSimulacion(){
+    _simulando=!_simulando;
+    document.getElementById('mainContent').classList.toggle('rs-simulando',_simulando);
+    document.getElementById('btnSimular').setAttribute('aria-expanded',String(_simulando));
+    document.getElementById('btnSimular').textContent=_simulando?'Cerrar simulación':'Simular';
+    document.getElementById('rsSimulacionNota').hidden=!_simulando;render();
+}
+function cambiarFechas(){_proy={};_mdCache={};render();}
+function _enlaceRs(pagina){var r=rango();return pagina+'?tipo='+encodeURIComponent(periodoTipo)+'&periodo='+encodeURIComponent(_pVal())+'&desde='+r.from+'&hasta='+r.to+'&mes='+r.to.slice(0,7)+'&suc='+encodeURIComponent(_suc());}
+function _tarjetaRs(t,v,sub,k,color){return '<article class="rs-res-card"><h2>'+esc(t)+'</h2>'+ (k?'<button class="rs-res-valor" onclick="verDetalle(\''+k+'\')" title="Abrir los registros del periodo">':'<div class="rs-res-valor">')+'<span'+(color?' style="color:'+color+'"':'')+'>'+v+'</span>'+(k?'</button>':'</div>')+'<p>'+sub+'</p></article>';}
+function _coberturaMetaRs(){
+    var r=rango(),d=new Date(r.from+'T12:00:00'),fin=new Date(r.to+'T12:00:00'),meses={};
+    for(;d<=fin;d.setMonth(d.getMonth()+1,1))meses[d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')]=true;
+    var keys=Object.keys(meses),def=keys.filter(function(k){return (_c.metas||{})[k]&&n(_c.metas[k].meta)>0;}).length;
+    return {total:keys.length,definidos:def,completa:def>0&&def===keys.length};
+}
+function renderKpis(base,m){
+    var a=_RS_INFO=_infoRs(),rg=rango(),meta=metaDelRango(),cobertura=_coberturaMetaRs(),errorVenta=_fuenteRs(['ventas']);
+    var errorResultado=_fuenteRs(['ventas','otros ingresos','gastos','gastos fijos','nómina','cuentas','depósitos']);
+    var cargando=_c.listo===false,com=a.indicadores.comensales,completos=!a.indicadores.cortesSinComensales;
+    function valor(x,fallo){return cargando||fallo?'—':fmtM(x);}
+    document.getElementById('rsEstadoDatos').textContent=cargando?'Cargando información':(_c.falló||[]).length?'Información parcial':'Información cargada · '+rg.from+' → '+rg.to;
+    var html=_tarjetaRs('Ventas del periodo',valor(a.ventas,errorVenta),'Venta del corte sin propinas.','ventaSolo');
+    html+=_tarjetaRs('Meta de ventas',cargando||_fuenteRs(['metas de venta'])?'—':meta===null?'Sin definir':fmtM(meta),
+        meta===null?'Defínela en <a href="'+_enlaceRs('ventas.html')+'">Ventas totales</a>.':(!cobertura.completa?'Meta parcial: '+cobertura.definidos+' de '+cobertura.total+' meses definidos.':errorVenta?'Falta completar las ventas.':(a.ventas/meta*100).toFixed(1)+'% cumplido · '+fmtM(Math.max(0,meta-a.ventas))+' por alcanzar'));
+    html+=_tarjetaRs('Comensales',cargando||errorVenta||!completos?'—':com>0?com.toLocaleString('es-MX'):'—',!completos?'Faltan comensales en '+a.indicadores.cortesSinComensales+' cortes.':a.diasConCorte+' días con corte registrado.','ventaSolo');
+    html+=_tarjetaRs('Cheque promedio',cargando||errorVenta||a.indicadores.cheque===null?'—':fmtM(a.indicadores.cheque),'Ventas / comensales de cortes comparables.','ventaSolo');
+    html+=_tarjetaRs('Resultado antes de apartados',valor(a.resultado,errorResultado),'Ingresos menos egresos pagados.','resultado',a.resultado<0?'var(--red)':'var(--text)');
+    html+=_tarjetaRs('Utilidad disponible',valor(a.utilidad,errorResultado),'Resultado menos '+valor(a.apartados,_fuenteRs(['depósitos']))+' en reservas.','disponible',a.utilidad<0?'var(--red)':'var(--green)');
+    document.getElementById('rsKpis').innerHTML=html;
+    var dias=Math.max(1,Math.round((new Date(rg.to+'T12:00:00')-new Date(rg.from+'T12:00:00'))/864e5)+1);
+    document.getElementById('rsPromedios').textContent=errorVenta||cargando?'Promedios pendientes de completar ventas.':
+        'Venta por día con corte: '+(a.diasConCorte?fmtM(a.ventas/a.diasConCorte):'—')+' · Venta por día calendario: '+fmtM(a.ventas/dias)+' · '+a.diasConCorte+' de '+dias+' días con corte.';
+    /* Desgloses adicionales: cada total conserva los mismos registros. */
+    var cortes=_c.cortes.filter(_deSuc).filter(function(c){return c.fecha>=rg.from&&c.fecha<=rg.to;});
+    function filas(k,fn){_DET[k]=cortes.map(function(c){return {fecha:c.fecha,concepto:'Corte '+(c.turno||''),sub:_sucNom(c.sucursalId)+(k==='ventaSolo'?' · '+n(c.comensales)+' comensales':''),monto:fn(c)};}).filter(function(x){return x.monto!==0;});}
+    filas('ventaSolo',EtaaxCore.ventasBruta);
+    _DET.tpvPendiente=a.tpvDetalle;_DET.comprasCocina=(_DET.food||[]).filter(function(x){return x.area==='cocina';});_DET.comprasBarra=(_DET.food||[]).filter(function(x){return x.area==='barra';});
+    _DET.otrosIngresos=(_DET.ventas||[]).filter(function(x){return x.sub==='ingreso extra';});filas('efectivo',function(c){return n(c.efectivo);});filas('tarjeta',function(c){return n(c.tarjeta);});
+    filas('transferencias',function(c){return n(c.transferencia);});filas('anticipos',EtaaxCore.anticipoAplicado);filas('propinas',EtaaxCore.propinas);
+    _DET.resultado=(_DET.ventas||[]).concat(['food','nom','fijos','otros'].reduce(function(t,k){return t.concat((_DET[k]||[]).map(function(x){return Object.assign({},x,{monto:-x.monto});}));},[]));
+    _DET.disponible=_DET.resultado.concat((_DET.prevs||[]).map(function(x){return Object.assign({},x,{monto:-x.monto});}));
+    ['pendientes','programados','impuestos','financieros'].forEach(function(k){
+        _DET[k]=_c.gastos.filter(_deSuc).filter(function(g){
+            if(g.fecha<rg.from||g.fecha>rg.to)return false;
+            var e=EtaaxCore.gastoEstatus(g);
+            if(k==='pendientes')return e==='pendiente';if(k==='programados')return e==='programado';
+            if(e!=='pagado'||EtaaxCore.grupoGasto(g,{fijos:_c.fijos,staff:_c.staff})==='propina')return false;
+            return k==='impuestos'?/impuesto|\biva\b|\bisr\b|predial/i.test(g.categoria||''):EtaaxCore.costoFinanciero([g],{fijos:_c.fijos,staff:_c.staff})!==0;
+        }).map(function(g){return {fecha:g.fecha,concepto:g.concepto||g.descripcion||g.categoria,sub:g.categoria,monto:n(g.monto)};});
     });
-    var okU = m.util>0 ? (base.utilidadPct>=m.util) : null;
-    html+=_kpiCard('Utilidad', fmtP(base.utilidadPct),
-        m.util>0 ? ('meta '+m.util+'% · '+(okU?'cumplida':'<b style="color:var(--red)">'+(m.util-base.utilidadPct).toFixed(1)+' pts abajo</b>'))
-                 : 'sin meta configurada',
-        okU===null?'var(--text)':okU?'var(--green)':'var(--red)',
-        m.util>0?Math.min(100,(base.utilidadPct/m.util)*100):null,
-        okU?'var(--green)':'var(--red)');
-    cont.innerHTML=html;
+    renderExplicacion(a,base,m,cargando,errorVenta,errorResultado);
+}
+function renderExplicacion(a,base,m,cargando,errorVenta,errorResultado){
+    function card(t,x,sub,k,fallo){return _tarjetaRs(t,cargando||fallo?'—':fmtM(x),cargando?'Cargando información.':fallo?'Falta completar la lectura del periodo.':sub,k);}
+    var cobros=card('Efectivo',a.efectivo,'Ventas cobradas en efectivo.','efectivo',errorVenta)+
+        card('Tarjetas · TPV',a.tarjeta,'Venta capturada; propinas aparte.','tarjeta',errorVenta)+
+        card('Transferencias',a.transferencias,'Venta por transferencia.','transferencias',errorVenta)+
+        card('Anticipos aplicados',a.anticipos,'Cobros anteriores aplicados a la venta.','anticipos',errorVenta);
+    document.getElementById('rsCobros').innerHTML=cobros;
+    var cuentas=a.cuentas.map(function(c){return '<tr><td>'+esc(c.nombre)+'</td><td>'+fmtM(c.tarjeta)+'</td><td>'+fmtM(c.transferencias)+'</td></tr>';}).join('');
+    document.getElementById('rsCuentas').innerHTML=cargando?'Cargando cuentas…':a.cuentasInconsistentes?'<p>El desglose por cuenta no cuadra con los totales de los cortes. Revisa los registros antes de comparar cuentas.</p>':errorVenta||_fuenteRs(['cuentas'])?'<p>Falta completar la lectura de ventas o cuentas.</p>':
+        '<div class="rs-tabla-scroll"><table class="rs-tbl"><thead><tr><th>Cuenta</th><th>Venta TPV</th><th>Transferencias</th></tr></thead><tbody>'+cuentas+'</tbody></table></div><p class="rs-aclaracion">Importes de venta brutos, antes de comisión. Las propinas se muestran por separado.</p>';
+    document.getElementById('rsMovimientos').innerHTML=
+        card('Propinas',a.propinas,'Gratificación voluntaria del equipo.','propinas',errorVenta)+
+        card('TPV por conciliar',a.tpvPendiente,'Neto esperado de estos cortes aún sin conciliación; incluye propina TPV.','tpvPendiente',_fuenteRs(['ventas','cuentas','depósitos']))+
+        card('Pagos pendientes',a.pendientes,'Capturados como pendientes; fuera de egresos pagados.','pendientes',_fuenteRs(['gastos']))+
+        card('Pagos programados',a.programados,'Compromisos registrados; fuera de egresos pagados.','programados',_fuenteRs(['gastos']));
+    var nom=a.nomina;
+    document.getElementById('rsNominaAreas').innerHTML=
+        card('Compras de cocina',a.compras.cocina,'Alimentos pagados.','comprasCocina',_fuenteRs(['gastos','gastos fijos']))+
+        card('Compras de barra',a.compras.barra,'Bebidas e insumos de barra pagados.','comprasBarra',_fuenteRs(['gastos','gastos fijos']))+
+        card('Nómina e IMSS',nom.operativa+nom.administrativa+nom.socios+nom.imss,
+            'Operativa '+fmtM(nom.operativa)+' · Administrativa '+fmtM(nom.administrativa)+' · Socios '+fmtM(nom.socios)+' · IMSS '+fmtM(nom.imss)+'.','nom',_fuenteRs(['gastos','gastos fijos','nómina']))+
+        card('Impuestos capturados',a.impuestos,'Pagados e incluidos en egresos; sin reconstruir IVA/ISR no desglosado.','impuestos',_fuenteRs(['gastos']));
+    document.getElementById('rsReservas').innerHTML=
+        card('Otros ingresos',a.otros,'Separados de las ventas.','otrosIngresos',_fuenteRs(['otros ingresos']))+
+        card('Gastos financieros',a.financieros,'Ya incluidos en egresos.','financieros',_fuenteRs(['gastos','gastos fijos']))+
+        card('Apartados del periodo',a.apartados,'Reservas reales; el dinero sigue en el negocio.','prevs',_fuenteRs(['depósitos']))+
+        '<article class="rs-res-card"><h2>Saldos de caja y banco</h2><p>'+(_suc()?'Consulta el saldo y la disponibilidad acumulada de tus cuentas.':'Elige una sucursal para consultar sus saldos.')+'</p><a class="rs-accion" href="'+(_suc()?_enlaceRs('cuentas-bancarias.html'):'/hub.html?negocios=1')+'">'+(_suc()?'Abrir cuentas bancarias':'Elegir sucursal')+' →</a></article>';
+    var ops=[];
+    if(cargando||errorResultado)ops.push({titulo:'Completar la información',texto:'Faltan fuentes del periodo. Reintenta la carga antes de evaluar el resultado.',accion:'Reintentar',js:'_recargar()'});
+    else {
+        if(a.indicadores.cortesSinComensales)ops.push({titulo:'Completar comensales',texto:a.indicadores.cortesSinComensales+' cortes no permiten calcular un cheque comparable.',accion:'Abrir ventas',href:_enlaceRs('ventas.html')});
+        var laboral=EtaaxCore.metaRestaurante(_c.targets,'staff');
+        if(laboral!==null&&a.indicadores.staff!==null&&a.indicadores.staff>laboral)ops.push({titulo:'Revisar costo del personal',texto:fmtP(a.indicadores.staff)+' frente a una meta de '+fmtP(laboral)+'. Brecha para este volumen: '+fmtM(a.ventas*(a.indicadores.staff-laboral)/100)+'. Revisa turnos, productividad y ventas.',accion:'Ver nómina',js:"verDetalle('nom')"});
+        var u=EtaaxCore.metaRestaurante(_c.targets,'utilidad');
+        if(u!==null&&a.indicadores.utilidad!==null&&a.indicadores.utilidad<u)ops.push({titulo:'Revisar utilidad disponible',texto:fmtP(a.indicadores.utilidad)+' frente a '+fmtP(u)+'. Brecha: '+fmtM(a.ingresos*(u-a.indicadores.utilidad)/100)+'. Revisa egresos y apartados antes de modificar metas.',accion:'Ver resultado',js:"verDetalle('disponible')"});
+        if(a.pendientes>0)ops.push({titulo:'Planear los pagos pendientes',texto:fmtM(a.pendientes)+' capturados por pagar, adicionales a los egresos pagados del periodo.',accion:'Ver pendientes',js:"verDetalle('pendientes')"});
+        if(!ops.length)ops.push({titulo:'Revisar metas del negocio',texto:'Compara los indicadores con objetivos definidos para tu concepto y revisa sus referencias.',accion:'Abrir KPIs',href:_enlaceRs('kpis.html')});
+    }
+    _RS_OPS=ops.slice(0,3);
+    document.getElementById('rsOportunidades').innerHTML=_RS_OPS.map(function(o){return '<article class="rs-oportunidad"><h3>'+esc(o.titulo)+'</h3><p>'+esc(o.texto)+'</p>'+(o.js?'<button onclick="'+esc(o.js)+'">'+esc(o.accion)+'</button>':'<a href="'+o.href+'">'+esc(o.accion)+' →</a>')+'</article>';}).join('');
 }
 
 /* ══ ABRIR UN RENGLÓN ══════════════════════════════════════════════════════
@@ -740,12 +797,23 @@ function renderKpis(base, m){
    total del pie tiene que coincidir con el renglón de la tabla: si no coincide,
    es que la lista y el cálculo se separaron, y eso se ve de inmediato. */
 var _DET_TITULOS = {
+    ventaSolo:['Ventas del periodo','Ventas de los mismos cortes, sin propinas y sin ingresos extra.'],
+    efectivo:['Venta en efectivo','Importes de venta cobrados en efectivo.'],tarjeta:['Venta con tarjeta','Importes brutos de venta TPV, sin propinas.'],
+    transferencias:['Venta por transferencia','Transferencias de venta de los cortes seleccionados.'],anticipos:['Anticipos aplicados','Cobros anteriores aplicados a la venta de este periodo.'],
+    propinas:['Propinas del periodo','Propinas capturadas en efectivo y tarjeta, separadas de los ingresos.'],
+    resultado:['Resultado antes de apartados','Ingresos positivos y egresos pagados negativos. El total es el resultado.'],
+    disponible:['Utilidad disponible','Resultado menos apartados del periodo.'],
+    comprasCocina:['Compras de cocina','Alimentos pagados clasificados como variables.'],comprasBarra:['Compras de barra','Bebidas e insumos de barra pagados clasificados como variables.'],
+    otrosIngresos:['Otros ingresos','Ingresos extra separados de las ventas.'],
+    pendientes:['Pagos pendientes','Compromisos capturados como pendientes en el periodo.'],programados:['Pagos programados','Compromisos capturados como programados en el periodo.'],
+    impuestos:['Impuestos capturados','Impuestos pagados que ya forman parte de los egresos.'],financieros:['Gastos financieros','Pagos clasificados como financieros, ya incluidos en egresos.'],
+    tpvPendiente:['TPV por conciliar','Neto esperado de cada corte menos abonos conciliados; incluye la propina TPV.'],
     ventas:['Ventas e ingresos','Los cortes de caja y los ingresos extra del periodo. La venta se mide BRUTA, sin propinas: la propina es del staff, no ingreso del negocio.'],
     food:  ['Food cost','Lo comprado en alimentos, bebidas e insumos de barra. Es compra, no consumo de inventario.'],
     nom:   ['Nómina','Sueldos, IMSS y lo pagado a socios, separado en operativa y administrativa.'],
     fijos: ['Gastos fijos','Lo que se paga igual venda o no venda: renta, servicios, licencias.'],
     otros: ['Otros variables','Gastos que suben y bajan con la operación y no son insumo: limpieza, mantenimiento, comisiones, impuestos.'],
-    prevs: ['Previsiones','Dinero apartado este periodo para un gasto futuro (aguinaldos, impuestos, reparaciones). Sale de la caja aunque todavía no se gaste.']
+    prevs: ['Previsiones','Reservas del periodo: el dinero sigue en el negocio, pero queda destinado a un gasto futuro.']
 };
 function verDetalle(k){
     if(!_DET) return;
@@ -761,7 +829,7 @@ function verDetalle(k){
            problema es que sobra administración o que falta cocina. */
         var sub='';
         if(k==='nom'){
-            var g={Operativa:0,Administrativa:0,IMSS:0};
+            var g={Operativa:0,Administrativa:0,Socios:0,IMSS:0};
             filas.forEach(function(r){ g[r.sub]=(g[r.sub]||0)+n(r.monto); });
             sub='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
                 Object.keys(g).map(function(x){
@@ -800,12 +868,13 @@ function verDetalle(k){
                 t[1]+'</div></div>'+
             '<button class="rs-tab" onclick="document.getElementById(\'rsDetOv\').remove()">✕ Cerrar</button>'+
         '</div>'+
-        '<div style="flex:1;overflow:auto;padding:14px 18px 20px">'+cuerpo+'</div></div>';
+        '<div style="flex:1;overflow:auto;padding:14px 18px 20px;min-width:0">'+cuerpo+'</div></div>';
     document.body.appendChild(ov);
 }
 
 function _periodoTxt(){
     var r=rango();
+    if(periodoTipo==='anio')return 'Año '+_pVal();
     if(periodoTipo==='mes') return new Date(r.from+'T12:00:00').toLocaleDateString('es-MX',{month:'long',year:'numeric'});
     if(periodoTipo==='dia') return new Date(r.from+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
     return r.from+' al '+r.to;
@@ -821,126 +890,75 @@ function imprimirResumen(){
     catch(e){ console.error(e); alert('No se pudo generar el reporte:\n'+((e&&e.message)||e)); }
 }
 function _imprimirResumen(){
-    if(typeof etaaxReporteDoc!=='function'){
-        alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return;
-    }
-    var base=plDelPeriodo(), proy=EtaaxCore.proyectarPL(base,_proy);
-    var metas=_c.targets||{};
-    var m={ food:n(metas.food)||30, nom:(n(metas.nomOp)+n(metas.nomAdm))||30,
-            fijos:n(metas.fijos)||15, otros:n(metas.variables)||10,
-            prevs:n(metas.prev)||5, util:n(metas.util)||20,
-            primo:n(metas.primo)||65, operativa:n(metas.operativa)||12 };
-    var sc=EtaaxCore.scorePL(base,m);
-    var hayProy=_tocado();
-
-    /* Si nadie tocó la proyección, las columnas de proyección serían una copia
-       de las reales: tres columnas gastando papel para repetir lo mismo. */
-    var fil=function(nom,a,ap,b,bp,fuerte){
-        var t=fuerte?'<b>':'', c=fuerte?'</b>':'';
-        return '<tr><td>'+t+esc(nom)+c+'</td><td>'+t+fmtM(a)+c+'</td><td>'+fmtP(ap)+'</td>'+
-               (hayProy ? '<td>'+fmtM(b)+'</td><td>'+fmtP(bp)+'</td><td>'+
-                          ((b-a)>=0?'+':'−')+fmtM(Math.abs(b-a))+'</td>' : '')+'</tr>';
-    };
-    /* El papel lleva la MISMA escalera que la pantalla. Si el reporte impreso
-       mostrara otra estructura, la junta discutiría sobre números que no se
-       pueden volver a encontrar en el sistema. */
+    if(typeof etaaxReporteDoc!=='function'){alert('No se pudo cargar el módulo de reportes. Recarga la página.');return;}
+    if(_c.listo===false){alert('Espera a que termine la lectura del periodo.');return;}
+    render();
+    var base=_RS_BASE,a=_RS_INFO,rg=rango(),meta=metaDelRango(),m=_metasRs(),cobertura=_coberturaMetaRs();
+    var fallo=_fuenteRs(['ventas','otros ingresos','gastos','gastos fijos','nómina','cuentas','depósitos']);
+    var falloVenta=_fuenteRs(['ventas']);
+    function dinero(v,e){return e?'—':fmtM(v);}
+    function tar(t,v,s){return '<div class="rcard"><div class="l">'+esc(t)+'</div><div class="v">'+v+'</div><div class="s">'+esc(s||'')+'</div></div>';}
+    function fila(t,v,porcentaje,sub){return '<tr'+(sub?' class="rf-sub"':'')+'><td>'+esc(t)+'</td><td>'+dinero(v,fallo)+'</td>'+ (porcentaje===undefined?'':'<td>'+(fallo?'—':fmtP(porcentaje))+'</td>')+'</tr>';}
+    function tabla(t,filas){return '<div><div class="rsec">'+esc(t)+'</div><table class="rt"><tbody>'+filas+'</tbody></table></div>';}
     var escal=EtaaxCore.escaleraPL(base,{financieros:_FIN});
-    var escalP=EtaaxCore.escaleraPL(proy,{financieros:_FIN});
-    var ed=base.lineas.map(function(l,i){ var p=proy.lineas[i]; return fil(l.nom,l.monto,l.pct,p.monto,p.pct); });
-    var sub=function(nom,monto){
-        var pct=base.ventas>0?(monto/base.ventas*100):0;
-        return '<tr><td style="padding-left:24px;color:#4a4a4a">↳ '+esc(nom)+'</td><td>'+fmtM(monto)+'</td>'+
-               '<td>'+fmtP(pct)+'</td>'+(hayProy?'<td></td><td></td><td></td>':'')+'</tr>';
-    };
-    var cuerpo='<div class="rsec">Resultados del periodo</div>'+
-        '<table class="rt"><thead><tr><th>Concepto</th><th>Real</th><th>%</th>'+
-        (hayProy?'<th>Proyección</th><th>%</th><th>Diferencia</th>':'')+'</tr></thead><tbody>'+
-        fil('Ventas', base.ventas,100, proy.ventas,100, true)+
-        ed[0]+
-        ((_AREA.cocina>0||_AREA.barra>0) ? sub('Cocina · alimentos e ingredientes',_AREA.cocina)+
-                                           sub('Barra · bebidas, licores y garnish',_AREA.barra) : '')+
-        fil('Utilidad bruta', escal.bruta,escal.brutaPct, escalP.bruta,escalP.brutaPct, true)+
-        ed[1]+
-        fil('Costo primo (insumos + nómina)', escal.primo,escal.primoPct, escalP.primo,escalP.primoPct, true)+
-        ed[2]+ed[3]+
-        fil('Utilidad operativa', escal.operativa,escal.operativaPct, escalP.operativa,escalP.operativaPct, true)+
-        (_FIN>0 ? sub('de ahí, intereses y costo del dinero',_FIN) : '')+
-        ed[4]+
-        '</tbody><tfoot>'+
-        fil('Utilidad neta', base.utilidad,base.utilidadPct, proy.utilidad,proy.utilidadPct, true)+
-        '</tfoot></table>';
-
-    /* Los indicadores van en el papel porque es lo que se lleva a la junta: el
-       P&L dice cuánto y éstos dicen de qué manera. */
-    var com=(_DET&&_DET._comensales)||0;
-    var meta=metaDelRango();
-    var r=rango();
-    var dias=Math.max(1, Math.round((new Date(r.to+'T12:00:00')-new Date(r.from+'T12:00:00'))/864e5)+1);
-    var tar=function(l,v,s){ return '<div class="rcard"><div class="l">'+esc(l)+'</div>'+
-        '<div class="v">'+v+'</div>'+(s?'<div class="s">'+s+'</div>':'')+'</div>'; };
-    cuerpo+='<div class="rsec">Indicadores</div>'+
-        '<div class="rgrid" style="grid-template-columns:repeat(3,1fr)">'+
-        tar('Score', (sc.score===null?'—':sc.score), sc.metasPuestas?'contra tus metas':'sin metas configuradas')+
-        tar('Costo primo', fmtP(escal.primoPct), 'insumos + nómina · meta &lt;'+m.primo+'%')+
-        tar('Utilidad operativa', fmtP(escal.operativaPct), 'antes de previsiones e intereses')+
-        tar('Meta del periodo', meta===null?'Sin definir':fmtM(meta),
-            (meta&&meta>0)?(base.ventas/meta*100).toFixed(0)+'% cumplido':'')+
-        tar('Comensales', com>0?com.toLocaleString('es-MX'):'—', com>0?(com/dias).toFixed(0)+' por día':'sin captura')+
-        tar('Cheque promedio', com>0?fmtM(base.ventas/com):'—', com>0?'sin propinas':'falta el dato de comensales')+
-        '</div>';
-
-    /* La misma nota de la pantalla: decir con qué base se midió no es letra
-       chica, es lo que permite comparar este papel con el del mes pasado. */
-    cuerpo+='<div style="margin-top:14px;font-size:9.5px;color:#4a4a4a;line-height:1.55">'+
-        'Ingresos contra egresos por categoría del periodo. La venta se mide bruta, sin propinas. '+
-        'El food cost es lo <b>comprado</b> en alimentos, bebidas e insumos de barra — no el consumo de inventario.'+
-        (hayProy?' La columna de proyección es un escenario capturado a mano, no un pronóstico del sistema.':'')+
-        '<br>El costo se parte en cocina y barra por la categoría del gasto; los dos porcentajes van sobre la '+
-        'venta <b>total</b>, porque el corte registra la venta por forma de pago y no por lo que se vendió.'+
-        '</div>';
-
-    /* ══ EL PAPEL TAMBIÉN TIENE QUE DECIRLO ══════════════════════════════
-       El aviso de carga incompleta vivía solo en la pantalla. Y el impreso es
-       JUSTO el que se le entrega a alguien: un P&L en papel con la utilidad
-       neta y sin una palabra de que le falta un pedazo es peor que el de la
-       pantalla, porque viaja sin su contexto y nadie puede reintentar.
-
-       Va ARRIBA del cuerpo, con marco y en negro sobre gris —no en rojo
-       claro—: en una impresora en blanco y negro un recuadro tenue
-       desaparece, y el aviso que no se ve es el que no existe. */
-    var _f = (_c.falló||[]);
-    var _aviso = _f.length
-        ? '<div style="border:2.5px solid #1a1916;background:#ececec;border-radius:8px;' +
-          'padding:12px 14px;margin:0 0 16px;font-size:12px;line-height:1.6;color:#1a1916">' +
-          '<b style="font-size:13px">⚠ ESTE REPORTE ESTÁ INCOMPLETO</b><br>' +
-          'No se pudo leer: <b>' + esc(_f.join(', ')) + '</b>. Las cifras de abajo ' +
-          '<b>no incluyen esa información</b> y los ceros que veas ahí no son ceros ' +
-          'reales. Vuelve a cargar el reporte en pantalla antes de tomar una decisión ' +
-          'con estos números.</div>'
-        : '';
-
-    var html=etaaxReporteDoc({
-        titulo:'Resumen de Resultados',
-        subtitulo:_periodoTxt()+(_suc()?' · esta sucursal':' · todo el negocio') +
-                  (_f.length ? ' · INCOMPLETO' : ''),
-        cuerpo:_aviso+cuerpo, pie:'Salud Financiera · Resumen de Resultados'
-    });
-    // Ventana emergente y, si la bloquean, iframe oculto: el botón NUNCA debe
-    // quedarse en silencio (que es justo lo que hacía).
-    if(typeof etaaxAbrirReporte==='function'){ etaaxAbrirReporte(html); return; }
-    var w=null; try{ w=window.open('','_blank'); }catch(e){}
-    if(w&&w.document){ w.document.write(html); w.document.close(); return; }
+    var filas=fila('Ingresos · ventas + otros',base.ventas,100)+
+        fila('Compras de insumos',base.lineas[0].monto,base.lineas[0].pct)+
+        fila('Cocina · incluida en compras',a.compras.cocina,base.ventas>0?a.compras.cocina/base.ventas*100:0,true)+
+        fila('Barra · incluida en compras',a.compras.barra,base.ventas>0?a.compras.barra/base.ventas*100:0,true)+
+        fila('Resultado tras compras',escal.bruta,escal.brutaPct)+
+        fila('Nómina e IMSS',base.lineas[1].monto,base.lineas[1].pct)+
+        fila('Costo primo · subtotal de compras y personal',escal.primo,escal.primoPct)+
+        fila('Gastos fijos',base.lineas[2].monto,base.lineas[2].pct)+
+        fila('Otros variables',base.lineas[3].monto,base.lineas[3].pct)+
+        fila('Resultado operativo · antes de financieros',escal.operativa,escal.operativaPct)+
+        fila('Resultado antes de apartados',a.resultado,base.ventas>0?a.resultado/base.ventas*100:0)+
+        fila('Apartados del periodo',a.apartados,base.lineas[4].pct)+
+        fila('Utilidad disponible',a.utilidad,base.utilidadPct);
+    var cuerpo='<style>.rf-page{break-after:page;page-break-after:always}.rf-page:last-child{break-after:auto;page-break-after:auto}.rf-page .rsec{margin:12px 0 7px}.rf-page table.rt tbody td{padding:5px 8px;font-size:10px}.rf-page .rf-sub td{color:#555;font-size:9px;padding-left:18px}.rf-page .rcard{padding:10px}.rf-page .rcard .v{font-size:21px}.rf-page .rcard .s{font-size:9px}.rf-dos{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}.rf-nota{font-size:9px;line-height:1.5;margin:9px 0}.rf-op{font-size:10px;line-height:1.5;border-left:2px solid #555;padding:6px 10px;margin:6px 0}</style>';
+    var _f=(_c.falló||[]);
+    var _aviso = _f.length ?'<div style="border:2.5px solid #1a1916;background:#ececec;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:12px;line-height:1.6;color:#1a1916"><b>ESTE REPORTE ESTÁ INCOMPLETO</b><br>No se pudo leer: '+esc(_f.join(', '))+'. Las cifras no incluyen esa información; los ceros parciales no son ceros reales.</div>':'';
+    cuerpo+='<section class="rf-page" data-rf-pagina="1">'+_aviso+'<div class="rsec">1 · Resultados del negocio</div><div class="rgrid" style="grid-template-columns:repeat(3,1fr)">'+
+        tar('Ventas',dinero(a.ventas,falloVenta),'Sin propinas ni ingresos extra')+
+        tar('Meta de ventas',_fuenteRs(['metas de venta'])?'—':meta===null?'Sin definir':fmtM(meta),meta>0&&!falloVenta&&cobertura.completa?(a.ventas/meta*100).toFixed(1)+'% cumplido':meta!==null&&!cobertura.completa?'Meta parcial: '+cobertura.definidos+' de '+cobertura.total+' meses':'')+
+        tar('Comensales',falloVenta||a.indicadores.cortesSinComensales?'—':String(a.indicadores.comensales||'—'),'Registros del mismo periodo')+
+        tar('Cheque promedio',falloVenta||a.indicadores.cheque===null?'—':fmtM(a.indicadores.cheque),'Venta / comensales comparables')+
+        tar('Resultado antes de apartados',dinero(a.resultado,fallo),'Ingresos menos egresos pagados')+
+        tar('Utilidad disponible',dinero(a.utilidad,fallo),'Resultado menos reservas')+'</div>'+
+        '<table class="rt"><thead><tr><th>Concepto</th><th>Monto</th><th>% de ingresos</th></tr></thead><tbody>'+filas+'</tbody></table>'+
+        '<p class="rf-nota">Base de flujo: compras y pagos registrados, sin convertir inventario en consumo. Los subtotales describen los mismos pesos; no son gastos adicionales. Las ventas mantienen la base del corte; no se reconstruye un IVA no desglosado. Los porcentajes del P&amp;L se calculan sobre los ingresos totales. El costo por área mantiene una base de compras pagadas, aunque el corte también permita registrar ventas por producto.</p></section>';
+    function par(t,v,e){return '<tr><td>'+esc(t)+'</td><td>'+dinero(v,!!e)+'</td></tr>';}
+    var cuentas=a.cuentasInconsistentes?'<p class="rf-nota">El desglose por cuenta no cuadra con los totales: requiere revisión.</p>':
+        '<table class="rt"><thead><tr><th>Cuenta</th><th>TPV bruto</th><th>Transfer.</th></tr></thead><tbody>'+a.cuentas.map(function(c){return '<tr><td>'+esc(c.nombre)+'</td><td>'+dinero(c.tarjeta,falloVenta||_fuenteRs(['cuentas']))+'</td><td>'+dinero(c.transferencias,falloVenta||_fuenteRs(['cuentas']))+'</td></tr>';}).join('')+'</tbody></table>';
+    cuerpo+='<section class="rf-page" data-rf-pagina="2">'+_aviso+'<div class="rsec">2 · Explicación y decisiones</div><div class="rf-dos">'+
+        tabla('Cómo se cobró',par('Efectivo',a.efectivo,falloVenta)+par('Tarjetas · venta TPV',a.tarjeta,falloVenta)+par('Transferencias',a.transferencias,falloVenta)+par('Anticipos aplicados',a.anticipos,falloVenta)+par('Otros ingresos',a.otros,_fuenteRs(['otros ingresos'])))+
+        tabla('Propinas y compromisos',par('Propinas del equipo',a.propinas,falloVenta)+par('TPV por conciliar',a.tpvPendiente,_fuenteRs(['ventas','depósitos','cuentas']))+par('Pagos pendientes',a.pendientes,_fuenteRs(['gastos']))+par('Pagos programados',a.programados,_fuenteRs(['gastos']))+par('Apartados del periodo',a.apartados,_fuenteRs(['depósitos'])))+
+        tabla('Compras y personal',par('Compras de cocina',a.compras.cocina,fallo)+par('Compras de barra',a.compras.barra,fallo)+par('Nómina operativa',a.nomina.operativa,fallo)+par('Nómina administrativa',a.nomina.administrativa,fallo)+par('Socios · según clasificación registrada',a.nomina.socios,fallo)+par('IMSS',a.nomina.imss,fallo))+
+        tabla('Pagos identificados · ya incluidos',par('Gastos financieros',a.financieros,fallo)+par('Impuestos capturados',a.impuestos,fallo)+par('Resultado antes de apartados',a.resultado,fallo)+par('Utilidad disponible',a.utilidad,fallo))+'</div>'+
+        '<div class="rsec">Cobros por cuenta</div>'+cuentas+'<div class="rsec">Qué revisar ahora</div>'+
+        (_RS_OPS||[]).map(function(o){return '<div class="rf-op"><b>'+esc(o.titulo)+'</b> · '+esc(o.texto)+' <b>'+esc(o.accion)+'.</b></div>';}).join('')+
+        '<p class="rf-nota">TPV por conciliar indica un abono aún sin verificar; incluye propina y utiliza el neto esperado o conciliado. Pagos pendientes y programados no son egresos pagados. Apartar una reserva conserva dinero en el negocio y reduce lo disponible. Consulta saldos acumulados en Cuentas bancarias.</p></section>';
+    if(_simulando&&_tocado()){
+        var proy=EtaaxCore.proyectarPL(base,_proy);
+        cuerpo+='<section class="rf-page" data-rf-pagina="3">'+_aviso+'<div class="rsec">Simulación manual</div><p class="rf-nota">Escenario capturado para explorar decisiones. No modifica registros ni es un pronóstico.</p><table class="rt"><thead><tr><th>Concepto</th><th>Real</th><th>Simulado</th></tr></thead><tbody><tr><td>Ingresos</td><td>'+fmtM(base.ventas)+'</td><td>'+fmtM(proy.ventas)+'</td></tr>'+
+            base.lineas.map(function(l,i){return '<tr><td>'+esc(l.k==='food'?'Compras de insumos':l.nom)+'</td><td>'+fmtM(l.monto)+'</td><td>'+fmtM(proy.lineas[i].monto)+'</td></tr>';}).join('')+'<tr><td>Utilidad disponible</td><td>'+fmtM(base.utilidad)+'</td><td>'+fmtM(proy.utilidad)+'</td></tr></tbody></table></section>';
+    }
+    var html=etaaxReporteDoc({titulo:'Resumen financiero',subtitulo:_periodoTxt()+(_suc()?' · esta sucursal':' · todo el negocio')+(_f.length?' · INCOMPLETO':''),cuerpo:cuerpo,pie:'Salud Financiera · Resumen financiero'});
+    if(typeof etaaxAbrirReporte==='function'){etaaxAbrirReporte(html);return;}
+    var w=null;try{w=window.open('','_blank');}catch(e){}
+    if(w&&w.document){w.document.write(html);w.document.close();return;}
     var ifr=document.createElement('iframe');
     ifr.style.cssText='position:fixed;left:-10000px;top:0;width:900px;height:1200px;border:0;opacity:0';
     document.body.appendChild(ifr);
-    var d=ifr.contentWindow.document; d.open(); d.write(String(html).replace('window.print();','')); d.close();
-    setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){} }, 450);
+    var doc=ifr.contentWindow.document;doc.open();doc.write(String(html).replace('window.print();',''));doc.close();
+    setTimeout(function(){try{ifr.contentWindow.focus();ifr.contentWindow.print();}catch(e){}},450);
 }
 
 document.addEventListener('DOMContentLoaded', async function(){
     document.getElementById('pickerInput').value = mesStr();
     document.getElementById('pickerEnd').value   = todayStr();
+    if(typeof etaaxPeriodoEnlace==='function')etaaxPeriodoEnlace({periodo:setPeriodo});
     if(typeof _ctxBarInit==='function') _ctxBarInit();
+    render();
     await cargar();
     render();          // render() ya pinta el aviso de carga
 });
@@ -951,9 +969,14 @@ document.addEventListener('DOMContentLoaded', async function(){
 <script src="/etaax-store.js"></script>
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
-<script src="../ctx-bar.js"></script>
+<script src="/ctx-bar.js?v=modulos-ui-1"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
-<script src="nav.js"></script><!-- la barra lateral, una sola para todo el módulo -->
-<script src="/nav-pref.js"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
+<script src="nav.js?v=resumen-2"></script><!-- la barra lateral, una sola para todo el módulo -->
+<script src="/nav-pref.js?v=modulos-ui-1"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
+<script src="/etaax-iconos.js?v=modulos-1"></script>
+<script src="/etaax-sidebar.js?v=2"></script>
+<script src="/negocio-tipos.js?v=1"></script>
+<script src="/etaax-header.js?v=paleta-1"></script>
+<script src="/etaax-modulos-ui.js?v=1"></script>
 </body>
 </html>

@@ -1,0 +1,92 @@
+
+📦 ALMACENAMIENTO LOCAL (etaax-store.js)
+
+  ✅ la escritura se lee de inmediato, sin esperar a IndexedDB
+  ✅ hidratar tarde NO resucita la cola vieja de 314
+  ✅ y el disco se queda con lo nuevo, no con lo viejo
+  ✅ el espejo viejo de localStorage sigue ahí hasta confirmar el disco
+  ✅ con el valor nuevo ya en disco, el espejo obsoleto se suelta
+  ✅ y lo que se lee sigue siendo la cola vacía
+  ✅ tras hidratar, la cola vacía del disco manda sobre el espejo viejo
+  ✅ y el espejo de 348 no se resucita ni aunque siga en localStorage
+  ✅ hidratado() avisa que ya se puede confiar en la memoria
+  ✅ antes de hidratar, el espejo sirve de puente para no arrancar vacío
+  ✅ y hidratado() lo dice con claridad
+  ✅ en cuanto hidrata, manda el disco
+  ✅ leer y escribir ANTES de hidratar cementa lo viejo (por eso _obAdd espera)
+  ✅ quien respeta hidratado() no cae en la trampa
+  ✅ una clave que solo vivía en localStorage se lee bien tras hidratar
+  ✅ guardar antes de hidratar NO resucita la cola vieja
+  ✅ y el cambio nuevo sí quedó encolado (no se perdió por esperar)
+  ✅ ya hidratado, encolar es síncrono (sin esperar a nada)
+  ✅ la cola reporta lo que está esperando por guardar
+  ✅ …y también lo que espera por borrar
+  ✅ …sin mezclar tablas
+  ✅ la otra tabla sí ve lo suyo
+  ✅ una tabla sin cola devuelve vacío, no undefined
+  ✅ el 401 se reconoce como falta de sesión
+  ✅ …y el "row-level security" también
+  ✅ la falta de sesión NO cuenta como intento fallido
+  ✅ …y por eso nunca llega a los 8 ni se descarta
+  ✅ el aviso dice que la sesión se cerró
+  ✅ …y que los datos NO se van a perder
+  ✅ …y ofrece volver a entrar
+  ✅ al subir algo, el aviso deja de decir que no hay sesión
+  ✅ sin IndexedDB, la clave grande se sigue leyendo de localStorage
+  ✅ …y ahí localStorage NO es un espejo obsoleto, es el almacén
+  ✅ una clave chica vive en localStorage, no en IndexedDB
+  ✅ la cola de salida sí es clave grande (por eso se mudó)
+  ✅ una clave que nunca se guardó devuelve null, no undefined
+
+── R09 · «guardado» tiene que significar guardado ──
+  ✅ sin IndexedDB, set() dice que SÍ guardó
+  ✅ …y de verdad quedó algo durable, no solo en memoria
+  ✅ …y se sigue leyendo igual desde la app
+  ✅ lo escrito antes de saber que no hay IndexedDB también aterriza
+  ✅ al saberse que no hay IndexedDB, baja en el acto
+  ✅ lo pendiente que tampoco cabe también avisa en pantalla
+  ✅ si la transacción falla, el pendiente NO se descarta
+  ✅ …y se vuelve a intentar solo
+  ✅ tras varios intentos deja de reintentar en silencio
+  ✅ …y antes de rendirse lo manda al respaldo
+  ✅ al recargar sin IndexedDB, la captura sigue ahí
+  ✅ …y con IndexedDB también, que es el camino normal
+  ✅ la escritura quedó retenida (la carrera es reproducible)
+  ✅ editar en pleno vuelo NO deja la edición nueva sin bajar
+  ✅ …y al recargar está la EDICIÓN NUEVA, no la vieja
+  ✅ tras rendirse, el respaldo tiene la versión nueva
+  ✅ al recargar gana el respaldo, no lo viejo de IndexedDB
+  ✅ …y el respaldo sigue ahí mientras no se confirme su bajada
+  ✅ con IndexedDB sano, el respaldo baja y se libera la cuota
+  ✅ …y el dato quedó en IndexedDB, que es donde va
+  ✅ …y el registro de respaldos no se queda con la marca vieja
+  ✅ si el índice de respaldos no cabe, NO se da por guardado
+  ✅ …y set() devuelve FALSE, no «true» a medias
+  ✅ las dos escrituras quedaron retenidas (la carrera es reproducible)
+  ✅ 1 → 2 → 1: al recargar está el ÚLTIMO 1, no el 2 de en medio
+  ✅ por localStorage parcheado, la carrera también es reproducible
+  ✅ …y 1 → 2 → 1 por esa puerta también deja el ÚLTIMO 1
+  ✅ un respaldo que no cabe devuelve FALSE
+  ✅ …y no deja una marca apuntando a un respaldo que no existe
+  ✅ el respaldo de 2 quedó bien guardado y marcado
+  ✅ la captura que no cabe se rechaza y se avisa
+  ✅ …y el respaldo anterior CONSERVA su marca
+  ✅ al recargar se recupera el respaldo VÁLIDO, no lo viejo de IndexedDB
+  ✅ sin IndexedDB y con localStorage lleno, set() devuelve FALSE
+  ✅ …y se le avisa EN PANTALLA, no en la consola
+  ✅ …diciendo qué va a pasar, no solo que hubo un error
+  ✅ cuando sí guarda, no hay cartel
+  ✅ una clave chica sigue avisando por su cuenta si no cabe
+  ✅ existe la página para verificar R09 en un navegador real
+  ✅ …que no habla con Supabase
+  ✅ …que usa una clave de prueba, no la de un negocio
+  ✅ …que lee el disco CRUDO, no el espejo parcheado
+  ✅ …y que docs/ sigue sin servirse en producción
+  ✅ el aviso que salió al capturar se sabe después de recargar
+  ✅ …y si nunca salió, la página lo dice (ese es el bug de R09)
+  ✅ …el apunte de una captura anterior no vale para la nueva
+  ✅ …un apunte viejo encima no borra el aviso de la captura buena
+  ✅ …y un aviso que sale TARDE lo apunta el observer
+
+════════════════════════════════════
+🔒 ALMACÉN OK — 84 comprobaciones, 0 fallas

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <script src="/theme.js"></script>
+    <script src="/theme.js?v=modulos-ui-1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -10,7 +10,7 @@
 <script src="/page-guard.js"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
 <script src="/precios.js"></script>
 <script src="/datos-pago.js?v=cuenta-1"></script><!-- datos de transferencia y contacto: fuente única -->
-<script src="/etaax-core.js"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
+<script src="/etaax-core.js?v=financiero-2"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
 <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
      navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
      (DNS + TLS) en medio, con el texto esperando. -->
@@ -62,27 +62,12 @@
   --salmon: #b0604f;
   --red:    #cc3f22;
 }
-[data-theme="light"] .hub-bg{opacity:0.5;}
-[data-theme="light"] .hub-glow{background:radial-gradient(ellipse,rgba(40,160,96,0.10) 0%,transparent 65%);}
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px;}
 
-/* BG */
-.hub-bg{
-  position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:linear-gradient(var(--b1) 1px,transparent 1px),linear-gradient(90deg,var(--b1) 1px,transparent 1px);
-  background-size:60px 60px;opacity:0.2;
-  mask-image:radial-gradient(ellipse 100% 100% at 50% 0%,black 30%,transparent 80%);
-}
-.hub-glow{
-  position:fixed;top:-200px;left:50%;transform:translateX(-50%);
-  width:900px;height:600px;
-  background:radial-gradient(ellipse,rgba(61,190,122,0.07) 0%,transparent 65%);
-  pointer-events:none;z-index:0;
-}
 /* La barra reserva su altura real en body; el shell descuenta esa altura del
    viewport y agrega aire antes de la barra del negocio. */
 .hub-shell{
@@ -116,15 +101,11 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .ctx-pres-av:first-of-type{margin-left:0}
 .ctx-pres-av:hover{transform:translateY(-2px) scale(1.08);z-index:2}
 .ctx-pres-mas{background:var(--s2,#1c1a17);color:var(--muted,#a8a29a);font-size:10px}
-/* Salir no es una acción escondida: se escribe en claro, como el resto. En
-   gris apagado parecía deshabilitado — y en la captura de Edwin se veía
-   exactamente así. */
-.btn-logout{
-  background:transparent;border:1px solid var(--ui-borde);color:var(--text);
-  font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 14px;
-  border-radius:8px;cursor:pointer;transition:all .2s;letter-spacing:.3px;
-}
-.btn-logout:hover{border-color:var(--red);color:var(--red);}
+/* El botón de salir ya no vive en el hub: está en el menú de la cuenta, en la
+   barra compartida (`.etx-hd-op.sale` de /etaax-header.js). Su estilo se fue
+   con él. La regla que quedaba aquí no la usaba ningún elemento —y una prueba
+   seguía vigilando su color, así que el candado cuidaba un botón que nadie
+   dibuja: eso es peor que no tener prueba, porque parece que sí hay una. */
 
 /* HERO */
 .hub-hero{
@@ -478,12 +459,6 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
   box-shadow:0 24px 64px rgba(0,0,0,.4),0 0 0 1px rgba(61,190,122,.15);
 }
 .hub-card.disabled{opacity:.42;cursor:default;pointer-events:none;}
-.hub-card::before{
-  content:'';position:absolute;inset:0;
-  background:radial-gradient(ellipse 60% 50% at 50% 0%,rgba(61,190,122,.06) 0%,transparent 70%);
-  opacity:0;transition:opacity .3s;pointer-events:none;
-}
-.hub-card:not(.disabled):hover::before{opacity:1;}
 .card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;}
 .card-icon{width:52px;height:52px;border-radius:14px;background:var(--s2);border:1px solid var(--b2);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}
 .card-status{font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:4px 10px;border-radius:20px;font-weight:600;margin-top:4px;}
@@ -526,10 +501,6 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
   font-weight:700;letter-spacing:-1.2px;line-height:1.15;}
 #viewNegocios .hub-eyebrow{margin-bottom:14px;}
 #viewNegocios .hub-subtitle{max-width:620px;line-height:1.7;}
-.hub-guide{max-width:700px;margin:0 auto 32px;padding:18px 22px;border-left:3px solid var(--green);
-  border-radius:0 12px 12px 0;background:rgba(61,190,122,.09);}
-.hub-guide strong{display:block;font-size:14px;font-weight:600;}
-.hub-guide p{font-size:12.5px;line-height:1.7;color:var(--ui-apagado);margin:6px 0 0;}
 .hub-global-grid{max-width:960px;margin:0 auto 28px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
 /* Acceso discreto al aviso legal: presente, sin competirle a las acciones
    de todos los días. Se despinta hasta que el cursor lo toca. */
@@ -557,12 +528,10 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 .suc-caja{
   background:var(--s1);border:1px solid var(--ui-borde);border-radius:16px;
   padding:16px;display:flex;flex-direction:column;gap:14px;
-  transition:border-color .2s, transform .2s, box-shadow .2s;
   animation:fadeUp .5s ease both;
 }
-.suc-caja:hover{border-color:rgba(61,190,122,.5);transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,0,0,.3);}
 /* La tarjeta de adentro ya no es una caja: es el renglón de identidad. */
-.suc-caja .neg-card{background:transparent;border:none;border-radius:0;padding:0;animation:none;}
+.suc-caja .neg-card{background:transparent;border:none;border-radius:0;padding:0;animation:none;cursor:default;}
 .suc-caja .neg-card:hover{transform:none;box-shadow:none;}
 
 .hub-footer{text-align:center;margin-top:56px;animation:fadeUp .7s .5s ease both;}
@@ -592,7 +561,6 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
   .hub-negocio-actions .user-badge{grid-column:1/-1;justify-self:start;}
   .hub-negocio-actions :is(a,button){white-space:normal;justify-content:center;text-align:center;padding:10px 8px;}
   .hub-global-grid{grid-template-columns:1fr;}
-  .hub-guide{padding:16px 18px;margin-bottom:24px;}
   #viewNegocios .suc-section-head{flex-direction:column;align-items:flex-start;gap:8px;}
   #viewNegocios .suc-section-sub{line-height:1.6;}
 }
@@ -646,10 +614,11 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 .priv-check-label a{color:var(--green);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--greend);}
 .priv-check-label a:hover{color:var(--green2);}
 </style>
+<link rel="stylesheet" href="/hub-paleta.css?v=10">
+<link rel="stylesheet" href="/hub-globales.css?v=3">
+<link rel="stylesheet" href="/hub-modulos.css?v=8">
 </head>
-<body>
-<div class="hub-bg"></div>
-<div class="hub-glow"></div>
+<body class="hub-paleta">
 
 <div class="hub-shell">
 
@@ -761,7 +730,7 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 
     <div class="hub-hero" style="margin-bottom:28px">
       <div class="hub-eyebrow" id="negHeroEyebrow">Centro de operación</div>
-      <div class="hub-title" id="negHeroTitle">Administra tus<br><span class="g">sucursales</span></div>
+      <div class="hub-title hub-operacion-title" id="negHeroTitle">ADMINISTRA TUS <span class="g">SUCURSALES</span></div>
       <div class="hub-subtitle" id="negHeroSub">Opera cada sucursal por separado y consulta los resultados de todo tu negocio.</div>
     </div>
 
@@ -792,44 +761,6 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
     <!-- SECCIÓN B: marca registrada → ver sucursales -->
     <div id="secMarca" style="display:none">
 
-      <aside class="hub-guide" role="note">
-        <strong>Una operación conectada</strong>
-        <p>Comparte catálogos entre sucursales y consulta ventas, gastos y resultados desde un solo lugar. Elige una sucursal para trabajar en su operación diaria.</p>
-      </aside>
-
-      <!-- Nivel NEGOCIO (independiente de sucursales): Catálogos Globales | Financiero Global -->
-      <div class="hub-global-grid">
-        <!-- NEUTRAS EN REPOSO. Tenían fondo y borde de color permanente, y dos
-             colores fuertes al lado del color del negocio ensucian la pantalla
-             en vez de ordenarla. El azul y el morado siguen siendo su
-             identidad, pero solo aparecen cuando el cursor se posa: ahí el
-             color dice «esto se puede tocar», que es para lo que sirve. -->
-        <button onclick="abrirCatalogosGlobalesNeg()"
-          style="display:flex;align-items:center;gap:12px;
-                 background:var(--s1);border:1px solid var(--ui-borde);
-                 border-radius:14px;padding:20px 22px;min-height:92px;cursor:pointer;font-family:inherit;transition:all .18s"
-          onmouseover="this.style.background='rgba(122,184,245,.10)';this.style.borderColor='#7ab8f5'"
-          onmouseout="this.style.background='var(--s1)';this.style.borderColor='var(--ui-borde)'">
-          <span id="icCatGlobal" style="display:inline-flex"></span>
-          <div style="text-align:left">
-            <div style="font-size:15px;font-weight:600;color:var(--text);letter-spacing:.3px">Catálogos globales</div>
-            <div style="font-size:11.5px;color:var(--ui-apagado);margin-top:7px;line-height:1.5">Insumos, recetas, proveedores, clientes y colaboradores de todo el negocio</div>
-          </div>
-        </button>
-        <button onclick="abrirFinancieroGlobal()"
-          style="display:flex;align-items:center;gap:12px;
-                 background:var(--s1);border:1px solid var(--ui-borde);
-                 border-radius:14px;padding:20px 22px;min-height:92px;cursor:pointer;font-family:inherit;transition:all .18s"
-          onmouseover="this.style.background='rgba(155,141,232,.11)';this.style.borderColor='#9b8de8'"
-          onmouseout="this.style.background='var(--s1)';this.style.borderColor='var(--ui-borde)'">
-          <span id="icFinGlobal" style="display:inline-flex"></span>
-          <div style="text-align:left">
-            <div style="font-size:15px;font-weight:600;color:var(--text);letter-spacing:.3px">Financiero global</div>
-            <div style="font-size:11.5px;color:var(--ui-apagado);margin-top:7px;line-height:1.5">Ventas, gastos y P&amp;L consolidados de todas las sucursales o por sucursal</div>
-          </div>
-        </button>
-      </div>
-
       <!-- Header sucursales -->
       <div class="suc-section-head" style="max-width:960px;margin:0 auto 16px">
         <div class="suc-section-label">Sucursales</div>
@@ -857,13 +788,74 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
       </div>
 
       <!-- Form nueva sucursal -->
-      <div id="formNuevaSuc" class="neg-form" style="display:none;max-width:960px;margin:0 auto">
+      <div id="formNuevaSuc" class="neg-form" style="display:none;max-width:960px;margin:0 auto 28px">
         <div class="neg-form-label">Nueva sucursal</div>
         <div class="neg-form-row" style="align-items:center">
           <input id="inSucNombre" placeholder="Nombre de la sucursal..." onkeydown="if(event.key==='Enter')crearSucursal()" autocomplete="off">
           <button type="button" class="btn-crear-neg" id="btnCrearSuc" onclick="crearSucursal()">Crear sucursal →</button>
         </div>
       </div>
+
+      <!-- Nivel NEGOCIO (independiente de sucursales): Catálogos Globales | Financiero Global -->
+      <div class="hub-global-grid">
+        <!-- Fondo neutro: Catálogos en cian y Financiero en terracota. El hover vive en
+             hub-paleta.css para que también siga el tema claro. -->
+        <button type="button" class="hub-global-card" onclick="abrirCatalogosGlobalesNeg()">
+          <span class="hub-global-icon" id="icCatGlobal" aria-hidden="true"></span>
+          <span class="hub-global-copy">
+            <span class="hub-global-title">CATÁLOGOS GLOBALES</span>
+            <span class="hub-global-rule" aria-hidden="true"></span>
+            <span class="hub-global-desc">Insumos, recetas, proveedores, clientes y colaboradores de todo el negocio</span>
+          </span>
+          <span class="hub-global-open" aria-hidden="true">
+            <span class="hub-global-arrow" id="icAbrirCatalogos"></span>
+            <span>Abrir</span>
+          </span>
+        </button>
+        <button type="button" class="hub-global-card hub-global-financiero" onclick="abrirFinancieroGlobal()">
+          <span class="hub-global-icon" id="icFinGlobal" aria-hidden="true"></span>
+          <span class="hub-global-copy">
+            <span class="hub-global-title">FINANCIERO GLOBAL</span>
+            <span class="hub-global-rule" aria-hidden="true"></span>
+            <span class="hub-global-desc">Ventas, gastos y P&amp;L consolidados de todas las sucursales o por sucursal</span>
+          </span>
+          <span class="hub-global-open" aria-hidden="true">
+            <span class="hub-global-arrow" id="icAbrirFinanciero"></span>
+            <span>Abrir</span>
+          </span>
+        </button>
+      </div>
+
+      <aside class="hub-guide" aria-labelledby="hubGuiaTitulo">
+        <p class="hub-guide-caption" id="hubGuiaTitulo">Guía de operación</p>
+        <ol class="hub-guide-steps" role="list" tabindex="0" aria-label="Qué puedes hacer en tu negocio">
+          <li class="hub-guide-step">
+            <span class="hub-guide-icon" id="icGuiaSucursales" aria-hidden="true"></span>
+            <span class="hub-guide-label">Opera tus sucursales</span>
+            <span class="hub-guide-number" aria-hidden="true">01</span>
+          </li>
+          <li class="hub-guide-step">
+            <span class="hub-guide-icon" id="icGuiaReportes" aria-hidden="true"></span>
+            <span class="hub-guide-label">Consulta tus reportes</span>
+            <span class="hub-guide-number" aria-hidden="true">02</span>
+          </li>
+          <li class="hub-guide-step">
+            <span class="hub-guide-icon" id="icGuiaCatalogos" aria-hidden="true"></span>
+            <span class="hub-guide-label">Organiza tus catálogos</span>
+            <span class="hub-guide-number" aria-hidden="true">03</span>
+          </li>
+          <li class="hub-guide-step">
+            <span class="hub-guide-icon" id="icGuiaNegocio" aria-hidden="true"></span>
+            <span class="hub-guide-label">Analiza todo el negocio</span>
+            <span class="hub-guide-number" aria-hidden="true">04</span>
+          </li>
+          <li class="hub-guide-step">
+            <span class="hub-guide-icon" id="icGuiaNuevaSuc" aria-hidden="true"></span>
+            <span class="hub-guide-label">Abre más sucursales</span>
+            <span class="hub-guide-number" aria-hidden="true">05</span>
+          </li>
+        </ol>
+      </aside>
 
     </div>
   </div>
@@ -877,28 +869,28 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
   <div id="viewModulos" style="display:none">
 
     <!-- Negocio activo + info usuario -->
-    <div class="neg-activo-bar" id="negActBar">
+    <div class="neg-activo-bar hub-modulos-bar" id="negActBar">
       <div class="neg-activo-emoji-wrap" id="negActEmojiWrap">
         <span id="chipEmoji">🏢</span>
       </div>
       <div class="neg-activo-id">
-        <div id="chipNombre" class="neg-activo-nombre">—</div>
+        <div id="chipMarcaHub" class="hub-modulos-marca"></div>
+        <div id="chipSucursalHub" class="hub-sucursal-nombre"><span id="chipUbicacionHub" aria-hidden="true"></span><span id="chipNombre" class="neg-activo-nombre">—</span></div>
         <div id="chipTipo" class="neg-activo-tipo">—</div>
       </div>
-      <span id="chipSucursalHub" class="chip-sucursal-hub" style="display:none"></span>
       <!-- Quién más está trabajando en este negocio. El hub NO tenía este hueco
            ni cargaba presencia.js: entre tarea y tarea la gente se queda aquí,
            así que era justo donde más falta hacía y donde nadie se anunciaba. -->
       <div class="ctx-presencia" id="ctxPresencia"></div>
       <div class="neg-activo-btns">
         <div class="user-badge">
-          <span id="userNombreChip" style="font-size:12px">—</span>
+          <span id="userNombreChip" hidden>—</span>
           <span class="user-badge-plan" id="userPlanChip">—</span>
         </div>
-        <button class="btn-cambiar-neg" id="btnInfoNeg" onclick="abrirInfoNegocio()" title="Ver información del negocio" style="display:none">ℹ️ Información del Negocio</button>
-        <button class="btn-cambiar-neg" id="btnInfoSuc" onclick="abrirInfoSucursal()" title="Ver información de la sucursal" style="display:none">🏪 Info Sucursal</button>
+        <button class="btn-cambiar-neg ic-fila" id="btnInfoNeg" onclick="abrirInfoNegocio()" title="Ver información del negocio" style="display:none"><span id="icInfoNegocio" aria-hidden="true"></span>Información del Negocio</button>
+        <button class="btn-cambiar-neg ic-fila" id="btnCambiarSucursal" onclick="abrirCambiarSucursal()" aria-haspopup="dialog" aria-controls="modalCambiarSucursal" style="display:none"><span id="icCambiarSucursal" aria-hidden="true"></span>Cambiar sucursal</button>
+        <button class="btn-cambiar-neg ic-fila" id="btnInfoSuc" onclick="abrirInfoSucursal()" title="Ver información de la sucursal" style="display:none"><span id="icInfoSucursal" aria-hidden="true"></span>Información de sucursal</button>
         <button class="btn-cambiar-neg" id="btnCatGlobal" onclick="abrirCatalogosGlobales()" title="Catálogos globales de todas las sucursales" style="display:none">🌐 Catálogos Globales</button>
-        <button class="btn-cambiar-neg" id="btnCambiarNeg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
         <button class="btn-cambiar-neg" id="btnVolverAdmin" onclick="volverAlAdmin()" style="display:none;border-color:var(--gold);color:var(--gold)">← Panel Admin</button>
         <!-- Salir ya no vive aquí: está en el menú de la cuenta, arriba. Tenerlo en
              los dos sitios era ofrecer la misma salida dos veces en la misma
@@ -908,98 +900,26 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
     </div>
 
     <!-- Hero -->
-    <div class="hub-hero" style="margin-bottom:20px">
-      <div class="hub-eyebrow">Panel de acceso</div>
-      <div class="hub-title" style="font-size:clamp(28px,4.5vw,52px)">Selecciona un<br><span class="g">módulo</span></div>
-      <div class="hub-subtitle">Sistema de gestión a&b · etaax</div>
+    <div class="hub-hero hub-trabajo-hero">
+      <div class="hub-eyebrow">Explora</div>
+      <h1 class="hub-title">TU ESPACIO DE <span class="g">TRABAJO</span></h1>
+      <p class="hub-subtitle">Cambia de módulo y encuentra sus herramientas sin perder el contexto de tu sucursal.</p>
     </div>
 
-    <!-- Módulos -->
-    <div class="hub-grid">
-      <a href="recetas/index.html" class="hub-card">
-        <div class="card-header">
-          <div class="card-icon">🗄️</div>
-          <span class="card-status status-active">Activo</span>
+    <div class="hub-workspace">
+      <div class="hub-module-intro"><span>¿Qué necesitas hacer?</span><span>Accesos a las cuatro áreas de trabajo</span></div>
+      <div class="hub-module-dock" id="hubModuloDock" role="tablist" aria-label="Áreas de trabajo"></div>
+      <section id="hubHerramientas" class="hub-herramientas" role="tabpanel" tabindex="0">
+        <div class="hub-herramientas-head">
+          <span class="hub-herramientas-icon" id="hubModuloIcono" aria-hidden="true"></span>
+          <div><p id="hubModuloNumero" class="hub-modulo-numero"></p><h2 id="hubModuloTitulo"></h2><p id="hubModuloDescripcion" class="hub-modulo-desc"></p></div>
+          <!-- Las filas de abajo llevan a UNA herramienta; esto lleva al módulo
+               entero, a la misma portada a la que entra «Cambiar módulo». -->
+          <a class="hub-ir-modulo" id="hubIrAlModulo" href="#" hidden>Ir al módulo</a>
         </div>
-        <div class="card-title">Recetas e Insumos</div>
-        <div class="card-desc">Escandallos, costeo automático, catálogo de insumos e inventarios. Tu operación gastronómica completa.</div>
-        <div class="card-modules">
-          <span class="card-module-tag">📋 Escandallo</span>
-          <span class="card-module-tag">🗄️ Insumos</span>
-          <span class="card-module-tag">📦 Inventarios</span>
-        </div>
-        <div class="card-footer">
-          <span class="card-cta">Abrir módulo →</span>
-          <div class="card-progress">
-            <div class="progress-dot"></div><div class="progress-dot"></div><div class="progress-dot"></div>
-            <span>3 herramientas</span>
-          </div>
-        </div>
-      </a>
-
-      <a href="financiero/index.html" class="hub-card">
-        <div class="card-header">
-          <div class="card-icon">📊</div>
-          <span class="card-status status-active">Activo</span>
-        </div>
-        <div class="card-title">Salud Financiera</div>
-        <div class="card-desc">Ventas, gastos, previsiones, utilidades y KPI's. Conecta tu operación con tus resultados económicos.</div>
-        <div class="card-modules">
-          <span class="card-module-tag">📈 Ventas</span>
-          <span class="card-module-tag">💸 Gastos</span>
-          <span class="card-module-tag">🎯 KPI's</span>
-        </div>
-        <div class="card-footer">
-          <span class="card-cta">Abrir módulo →</span>
-          <div class="card-progress">
-            <div class="progress-dot"></div><div class="progress-dot"></div><div class="progress-dot"></div>
-            <span>5 herramientas</span>
-          </div>
-        </div>
-      </a>
-
-      <a href="administrativo/index.html" class="hub-card">
-        <div class="card-header">
-          <div class="card-icon">🏢</div>
-          <span class="card-status status-active">Activo</span>
-        </div>
-        <div class="card-title">Control Administrativo</div>
-        <div class="card-desc">Ventas, gastos, menús, catálogos y KPIs del negocio. Gestión operativa y financiera centralizada.</div>
-        <div class="card-modules">
-          <span class="card-module-tag">💰 Ventas</span>
-          <span class="card-module-tag">📤 Gastos</span>
-          <span class="card-module-tag">📊 KPIs</span>
-          <span class="card-module-tag">👥 Staff</span>
-        </div>
-        <div class="card-footer">
-          <span class="card-cta">Abrir módulo →</span>
-          <div class="card-progress">
-            <div class="progress-dot"></div><div class="progress-dot"></div><div class="progress-dot"></div>
-            <span>4 herramientas</span>
-          </div>
-        </div>
-      </a>
-
-      <a href="consultoria/index.html" class="hub-card">
-        <div class="card-header">
-          <div class="card-icon">📚</div>
-          <span class="card-status status-active">Activo</span>
-        </div>
-        <div class="card-title">Aprende y Analiza</div>
-        <div class="card-desc">Las guías de uso de ETAAX, y herramientas para analizar tu operación con tus números reales.</div>
-        <div class="card-modules">
-          <span class="card-module-tag">📚 Guías de uso</span>
-          <span class="card-module-tag">📊 Ventas por Producto</span>
-          <span class="card-module-tag">🧮 Simulador de Metas</span>
-        </div>
-        <div class="card-footer">
-          <span class="card-cta">Abrir módulo →</span>
-          <div class="card-progress">
-            <div class="progress-dot"></div><div class="progress-dot"></div><div class="progress-dot"></div>
-            <span>3 herramientas</span>
-          </div>
-        </div>
-      </a>
+        <div id="hubHerramientasTarjetas" class="hub-tools-grid"></div>
+        <p id="hubHerramientasEstado" class="hub-herramientas-estado" role="status"></p>
+      </section>
     </div>
   </div>
 
@@ -1032,39 +952,59 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
   </div>
 </div>
 
-<!-- ══ MODAL: Catálogos Globales ══ -->
-<style>
-.catg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-@media(max-width:560px){.catg-grid{grid-template-columns:repeat(2,1fr);}}
-.catg-card{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-  background:var(--s2);border:1px solid var(--b1);border-radius:12px;
-  padding:18px 10px;cursor:pointer;transition:all .18s;font-family:inherit;
-}
-.catg-card:hover{border-color:#7ab8f5;background:rgba(122,184,245,.08);transform:translateY(-2px);}
-.catg-emoji{font-size:28px;line-height:1;}
-.catg-label{font-size:12px;font-weight:600;color:var(--text);letter-spacing:.3px;}
-</style>
-<div id="modalCatGlobal" class="modal-overlay" style="display:none" onclick="if(event.target===this)cerrarCatGlobal()">
-  <div class="modal-box" style="max-width:640px">
+<!-- ══ PANELES GLOBALES: mismos accesos y pantallas de trabajo ══ -->
+<div id="modalCambiarSucursal" class="modal-overlay hub-global-panel hub-panel-sucursales" role="dialog" aria-modal="true" aria-labelledby="cambiarSucursalTitulo" style="display:none" onclick="if(event.target===this)_cerrarPanelGlobal()">
+  <div class="modal-box">
     <div class="modal-head">
-      <div class="modal-title">🌐 Catálogos Globales</div>
-      <button class="modal-close" onclick="cerrarCatGlobal()">✕</button>
+      <h2 class="modal-title" id="cambiarSucursalTitulo">Cambiar sucursal</h2>
+      <button type="button" class="modal-close" onclick="_cerrarPanelGlobal()" aria-label="Cerrar selector de sucursal">×</button>
     </div>
     <div class="modal-body">
-      <p style="color:var(--muted);font-size:13px;margin:0 0 18px;line-height:1.5">
-        Vista empresarial: consulta y administra los catálogos de
-        <strong style="color:var(--text)">todas las sucursales</strong> juntos.
-        La cuenta madre comparte esta información entre sucursales.
-      </p>
+      <p class="hub-panel-desc" id="cambiarSucursalDescripcion"></p>
+      <div id="cambiarSucursalOpciones" class="hub-cambiar-opciones"></div>
+      <p id="cambiarSucursalEstado" class="hub-cambiar-estado" role="status"></p>
+      <button type="button" class="hub-cambiar-cancelar" onclick="_cerrarPanelGlobal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+<div id="modalCatGlobal" class="modal-overlay hub-global-panel" role="dialog" aria-modal="true" aria-labelledby="catGlobalTitulo" style="display:none" onclick="if(event.target===this)cerrarCatGlobal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2 class="modal-title" id="catGlobalTitulo"><span id="icCatTitulo" aria-hidden="true"></span>CATÁLOGOS GLOBALES</h2>
+      <button type="button" class="modal-close" onclick="cerrarCatGlobal()" aria-label="Cerrar catálogos globales">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="hub-panel-desc">Consulta y administra los catálogos de <strong>todas tus sucursales</strong> desde un solo lugar.</p>
       <div class="catg-grid">
-        <button class="catg-card" onclick="abrirCatGlobal('administrativo/staff.html')"><span class="catg-emoji">👥</span><span class="catg-label">Colaboradores</span></button>
-        <button class="catg-card" onclick="abrirCatGlobal('administrativo/horarios.html')"><span class="catg-emoji">🗓️</span><span class="catg-label">Horarios</span></button>
-        <button class="catg-card" onclick="abrirCatGlobal('recetas/index.html')"><span class="catg-emoji">🍽️</span><span class="catg-label">Recetas</span></button>
-        <button class="catg-card" onclick="abrirCatGlobal('recetas/index.html?tipo=sub')"><span class="catg-emoji">🥘</span><span class="catg-label">Sub-recetas</span></button>
-        <button class="catg-card" onclick="abrirCatGlobal('recetas/insumos.html')"><span class="catg-emoji">📦</span><span class="catg-label">Insumos</span></button>
-        <button class="catg-card" onclick="abrirCatGlobal('administrativo/clientes.html')"><span class="catg-emoji">🧾</span><span class="catg-label">Clientes</span></button>
-        <button class="catg-card" onclick="abrirCatGlobal('administrativo/proveedores.html')"><span class="catg-emoji">🚚</span><span class="catg-label">Proveedores</span></button>
+        <button type="button" class="catg-card" onclick="abrirCatGlobal('administrativo/staff.html')"><span class="catg-icon" id="icCatColaboradores" aria-hidden="true"></span><span class="catg-label">Colaboradores</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
+        <button type="button" class="catg-card catg-recetas" onclick="abrirCatGlobal('recetas/index.html')">
+          <span class="catg-icon catg-icon-pair" aria-hidden="true"><span id="icCatRecetas"></span><span id="icCatSubRecetas"></span></span>
+          <span class="catg-label" id="catRecetasLabel">Recetas / sub-recetas</span>
+          <span class="catg-abrir" aria-hidden="true">Abrir →</span>
+        </button>
+        <button type="button" class="catg-card" onclick="abrirCatGlobal('administrativo/proveedores.html')"><span class="catg-icon" id="icCatProveedores" aria-hidden="true"></span><span class="catg-label">Proveedores</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
+        <button type="button" class="catg-card" onclick="abrirCatGlobal('administrativo/horarios.html')"><span class="catg-icon" id="icCatHorarios" aria-hidden="true"></span><span class="catg-label">Horarios</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
+        <button type="button" class="catg-card" onclick="abrirCatGlobal('recetas/insumos.html')"><span class="catg-icon" id="icCatInsumos" aria-hidden="true"></span><span class="catg-label">Insumos</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
+        <button type="button" class="catg-card" onclick="abrirCatGlobal('administrativo/clientes.html')"><span class="catg-icon" id="icCatClientes" aria-hidden="true"></span><span class="catg-label">Clientes</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="modalFinGlobal" class="modal-overlay hub-global-panel hub-global-panel-fin" role="dialog" aria-modal="true" aria-labelledby="finGlobalTitulo" style="display:none" onclick="if(event.target===this)cerrarFinGlobal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2 class="modal-title" id="finGlobalTitulo"><span id="icFinTitulo" aria-hidden="true"></span>FINANCIERO GLOBAL</h2>
+      <button type="button" class="modal-close" onclick="cerrarFinGlobal()" aria-label="Cerrar financiero global">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="hub-panel-desc">Consulta ventas, gastos e indicadores de <strong>todo tu negocio</strong>. Dentro de cada reporte puedes elegir una sucursal y un periodo.</p>
+      <div class="catg-grid fing-grid">
+        <svg class="fing-conectores" aria-hidden="true" focusable="false"></svg>
+        <button type="button" class="catg-card fing-resumen" onclick="abrirFinGlobal('financiero/resumen.html')"><span class="catg-icon" id="icFinResumen" aria-hidden="true"></span><span class="catg-label">Resumen financiero</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
+        <button type="button" class="catg-card fing-ventas" onclick="abrirFinGlobal('financiero/ventas.html')"><span class="catg-icon" id="icFinVentas" aria-hidden="true"></span><span class="catg-label">Ventas totales</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
+        <button type="button" class="catg-card fing-kpis" onclick="abrirFinGlobal('financiero/kpis.html')"><span class="catg-icon" id="icFinKpis" aria-hidden="true"></span><span class="catg-label">KPIs</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
+        <button type="button" class="catg-card fing-estadisticas" onclick="abrirFinGlobal('financiero/estadisticas.html')"><span class="catg-icon" id="icFinEstadisticas" aria-hidden="true"></span><span class="catg-label">Estadísticas</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
+        <button type="button" class="catg-card fing-gastos" onclick="abrirFinGlobal('financiero/gastos-globales.html')"><span class="catg-icon" id="icFinGastos" aria-hidden="true"></span><span class="catg-label">Gastos totales</span><span class="catg-abrir" aria-hidden="true">Abrir →</span></button>
       </div>
     </div>
   </div>
@@ -1808,6 +1748,8 @@ async function init() {
     _pintarContactoAlta();
     var params     = new URLSearchParams(window.location.search);
     var goNegocios = params.get('negocios') === '1';
+    var panel = params.get('panel');
+    _panelGlobalPendiente = goNegocios && (panel === 'catalogos' || panel === 'financiero') ? panel : '';
 
     // ── Salir desde sub-páginas ──
     if (params.get('salir') === '1') {
@@ -2021,9 +1963,19 @@ function _pintarHeader() {
                     ? (ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro).label
                     : (neg ? categoriaNegocio(_getSucursales(neg.id).length || 1).nombre : ''),
         logo:    neg ? _getNegLogo(neg.id) : '',
-        inicio:  '/hub.html',
+        inicio:  !_sesion ? '/index.html' : (_sesion.type !== 'staff' && !_sesion.isAdmin ? '/hub.html?negocios=1' : '/hub.html'),
+        marcaBase: '/marca/hub',
         cerrarSesion: function () { logout(); }
     });
+    if (!_sesion) {
+        var inicio = document.querySelector('#etaax-header .etx-hd-centro a');
+        if (inicio) {
+            inicio.classList.add('hub-login-inicio');
+            inicio.setAttribute('aria-label', 'Ir a la página principal de ETAAX');
+            inicio.setAttribute('title', 'Página principal de ETAAX');
+            inicio.innerHTML = '<img src="/marca/etaax-isotipo.svg" alt="">';
+        }
+    }
 }
 
 function _updateTopbar() {
@@ -2061,8 +2013,17 @@ function _updateNegociosBar() {
 ════════════════════════════════════════════════════════ */
 var VIEWS = ['viewLogin','viewRegistro','viewNegocios','viewModulos','viewBloqueado'];
 function showView(id) {
+    if (id !== 'viewNegocios') _cerrarPanelGlobal();
     VIEWS.forEach(function(v){ document.getElementById(v).style.display = (v===id)?'':'none'; });
     window.scrollTo(0,0);
+    /* «Actualizamos el sistema, ve las novedades». Se ofrece al ENTRAR, no al
+       cargar la página: cuando el hub arranca todavía puede no haber sesión, y
+       un recuadro encima de la contraseña no es una noticia, es un estorbo.
+       Aquí ya se sabe que alguien pasó. El propio aviso decide si toca (una vez
+       por persona y por versión, y nada de insistir en la misma pestaña). */
+    if ((id === 'viewNegocios' || id === 'viewModulos') && window.EtaaxNovedades && EtaaxNovedades.quizas) {
+        setTimeout(function () { EtaaxNovedades.quizas(); }, 700);
+    }
 }
 
 /* ════════════════════════════════════════════════════════
@@ -2372,9 +2333,33 @@ function _pintarIconosLogin() {
         var el = document.getElementById(id);
         if (el) el.innerHTML = etaaxIcono(nombre, { tam: tam || 20 });
     };
-    poner('icCatGlobal',    'catalogos', 24);
-    poner('icFinGlobal',    'finanzas', 24);
+    poner('icCatGlobal',    'catalogos', 30);
+    poner('icFinGlobal',    'finanzas', 30);
+    poner('icCatTitulo', 'catalogos', 24);
+    poner('icFinTitulo', 'finanzas', 24);
+    poner('icCatColaboradores', 'cat-colaboradores', 34);
+    poner('icCatRecetas', 'cat-recetas', 30);
+    poner('icCatSubRecetas', 'cat-sub-recetas', 30);
+    poner('icCatProveedores', 'cat-proveedores', 34);
+    poner('icCatHorarios', 'cat-horarios', 34);
+    poner('icCatInsumos', 'cat-insumos', 34);
+    poner('icCatClientes', 'cat-clientes', 34);
+    poner('icFinResumen', 'fin-resumen-resultados', 34);
+    poner('icFinVentas', 'fin-ventas', 34);
+    poner('icFinKpis', 'fin-kpis', 34);
+    poner('icFinEstadisticas', 'fin-estadisticas', 34);
+    poner('icFinGastos', 'fin-gastos', 34);
+    poner('icAbrirCatalogos', 'flecha', 18);
+    poner('icAbrirFinanciero', 'flecha', 18);
+    poner('icGuiaSucursales', 'sucursal', 32);
+    poner('icGuiaReportes', 'finanzas', 32);
+    poner('icGuiaCatalogos', 'catalogos', 32);
+    poner('icGuiaNegocio', 'org-corporativo', 32);
+    poner('icGuiaNuevaSuc', 'anadir-sucursal', 32);
     poner('icNuevaSuc',     'anadir-sucursal', 17);
+    poner('icCambiarSucursal', 'sh-cambiar-negocio', 20);
+    poner('icInfoSucursal', 'sh-info-sucursal', 20);
+    poner('icInfoNegocio', 'sh-info-negocio', 20);
     /* «Cerrar sesión» aparece en dos vistas: se pintan las dos de una vez. */
     var salidas = document.querySelectorAll('.ic-salir');
     for (var i = 0; i < salidas.length; i++) salidas[i].innerHTML = etaaxIcono('cerrar-sesion', { tam: 15 });
@@ -2548,14 +2533,20 @@ function _renderVistaNegocio() {
         _renderBrandBar(null);
         document.getElementById('secCrearMarca').style.display = '';
         document.getElementById('secMarca').style.display = 'none';
-        if (heroTitle) heroTitle.innerHTML = 'Registra tu<br><span class="g">negocio</span>';
+        if (heroTitle) {
+            heroTitle.classList.remove('hub-operacion-title');
+            heroTitle.innerHTML = 'Registra tu<br><span class="g">negocio</span>';
+        }
         if (heroSub)   heroSub.textContent = 'Comienza registrando la información de tu marca';
         _renderColorPicker();
         return;
     }
     document.getElementById('secCrearMarca').style.display = 'none';
     document.getElementById('secMarca').style.display = '';
-    if (heroTitle) heroTitle.innerHTML = 'Administra tus<br><span class="g">sucursales</span>';
+    if (heroTitle) {
+        heroTitle.classList.add('hub-operacion-title');
+        heroTitle.innerHTML = 'ADMINISTRA TUS <span class="g">SUCURSALES</span>';
+    }
     if (heroSub)   heroSub.textContent = 'Opera cada sucursal por separado y consulta los resultados de todo tu negocio.';
     _renderSucursales(marca);
     // Sincronizar sucursales desde Supabase y re-renderizar (nombres/config que
@@ -2570,6 +2561,12 @@ function _renderVistaNegocio() {
     // Gate de suscripción: si el negocio no está activo, esta vista se reemplaza
     // por la pantalla de bloqueo (cubre también el botón de catálogos globales).
     _gateSuscripcion(marca);
+    if (_panelGlobalPendiente) {
+        var pendiente = _panelGlobalPendiente;
+        _panelGlobalPendiente = '';
+        if (pendiente === 'financiero') abrirFinancieroGlobal();
+        else abrirCatalogosGlobalesNeg();
+    }
 }
 
 // Realtime: si las sucursales cambian en otro dispositivo, refrescamos solos.
@@ -2675,7 +2672,7 @@ function _renderSucursales(neg) {
             var sucCfg   = _getSucCfg(suc.id, neg.id);
             var sucColor = sucCfg.color || color;
             var cardOp   = inactiva ? 'opacity:.45;' : '';
-            /* EL VERDE ES EL ACENTO DEL SISTEMA; el color del negocio es su
+            /* EL ACENTO DE ACCIONES ES DEL SISTEMA; el color del negocio es su
                DISTINTIVO. Antes el botón de administrar, el borde del icono y
                el recuadro se pintaban todos del color elegido al crear el
                negocio: con tres sucursales en fila, la pantalla era un muestrario
@@ -2689,12 +2686,11 @@ function _renderSucursales(neg) {
                       'Inactiva' +
                   '</button>'
                 : '<button onclick="entrarSucursal(\'' + suc.id + '\',\'' + neg.id + '\')" ' +
-                      'class="ic-fila" ' +
-                      'style="justify-content:center;background:transparent;border:1px solid rgba(61,190,122,.45);color:var(--green);' +
+                      'class="ic-fila hub-suc-accion" ' +
+                      'style="justify-content:center;' +
                       'font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;padding:10px;' +
-                      'border-radius:8px;cursor:pointer;letter-spacing:.3px;transition:background .2s"' +
-                      'onmouseover="this.style.background=\'rgba(61,190,122,.12)\'" onmouseout="this.style.background=\'transparent\'">' +
-                      'Administrar negocio' + _ic('administrar', 15, 'var(--green)') +
+                      'border-radius:8px;letter-spacing:.3px">' +
+                      '<span>Administrar / ver sucursal</span>' + _ic('administrar', 15) +
                   '</button>';
             // Jerarquía de marca: logo PROPIO de la sucursal (corporativo multi-marca)
             // → si no, el del negocio (hereda) → caja de color. Marco = color de sucursal.
@@ -2725,14 +2721,13 @@ function _renderSucursales(neg) {
                         '</div>' +
                     '</div>' +
                 '</div>' +
-                '<div style="display:grid;grid-template-columns:auto 1fr;gap:8px">' +
+                '<div class="hub-suc-actions">' +
                     '<button onclick="abrirAjustesSucursal(\'' + suc.id + '\',\'' + neg.id + '\',event)" ' +
-                        'style="background:transparent;border:1px solid var(--ui-borde);color:var(--ui-apagado);' +
-                        'font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:500;padding:10px 14px;' +
-                        'border-radius:8px;cursor:pointer;letter-spacing:.3px;transition:all .2s;white-space:nowrap" class="ic-fila"' +
-                        'onmouseover="this.style.borderColor=\'var(--green)\';this.style.color=\'var(--green)\'" ' +
-                        'onmouseout="this.style.borderColor=\'var(--ui-borde)\';this.style.color=\'var(--ui-apagado)\'">' +
-                        _ic('ajustes', 14) + 'Ajustes' +
+                        'aria-label="Ajustes de ' + _esc(suc.nombre) + '" title="Ajustes de sucursal" ' +
+                        'style="' +
+                        'font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:500;padding:10px;' +
+                        'border-radius:8px;letter-spacing:.3px;white-space:nowrap" class="ic-fila hub-suc-accion hub-suc-ajustes">' +
+                        _ic('ajustes', 20) +
                     '</button>' +
                     adminBtn +
                 '</div>' +
@@ -3230,6 +3225,8 @@ function guardarConfigNeg() {
 function entrarSucursal(sucId, negId) {
     // Función aislada: sin dependencias de estado en memoria.
     // Solo escribe localStorage y recarga — fast path lo muestra instantáneo.
+    sessionStorage.removeItem('etaax_cat_global');
+    sessionStorage.removeItem('etaax_fin_global');
     localStorage.setItem('etaax_negocio_activo', negId);
     localStorage.setItem('etaax_sucursal_activa', sucId);
     window.location.reload();
@@ -3247,6 +3244,8 @@ function seleccionarNegocio(id) {
 
 function seleccionarSucursal(sucId, negId) {
     // Persistir selección inmediatamente — antes de cualquier validación
+    sessionStorage.removeItem('etaax_cat_global');
+    sessionStorage.removeItem('etaax_fin_global');
     localStorage.setItem('etaax_negocio_activo', negId);
     localStorage.setItem('etaax_sucursal_activa', sucId);
     _migrarDatosLegacy(negId);
@@ -3266,6 +3265,59 @@ function seleccionarSucursal(sucId, negId) {
         // neg no está en memoria — fast path lo resuelve al recargar
         window.location.reload();
     }
+}
+
+/* Cambia únicamente entre sucursales del negocio activo y con acceso completo.
+   Cancelar el selector conserva el contexto que ya estaba abierto. */
+var _negIdCambioSucursal = '';
+function _negocioCambioSucursal() {
+    if (!_sesion || _sesion.type === 'staff') return null;
+    var id = localStorage.getItem('etaax_negocio_activo');
+    var neg = _getNegocios().find(function(n) { return n.id === id; });
+    return neg && (_sesion.isAdmin || neg.usuarioId === _sesion.usuarioId) ? neg : null;
+}
+function _pintarCambioSucursal(neg, cargando) {
+    var actual = localStorage.getItem('etaax_sucursal_activa');
+    var lista = document.getElementById('cambiarSucursalOpciones');
+    lista.innerHTML = _getSucursales(neg.id).map(function(suc) {
+        var activa = suc.activa !== false, esActual = suc.id === actual;
+        return '<button type="button" class="hub-cambiar-opcion" data-sucursal="' + _esc(suc.id) + '"' +
+            (esActual ? ' aria-current="true"' : '') + (cargando || !activa ? ' disabled' : '') + '>' +
+            '<span>' + _esc(suc.nombre || 'Sucursal') + '</span>' +
+            '<small>' + (!activa ? 'Inactiva' : esActual ? 'Actual' : '') + '</small></button>';
+    }).join('');
+    lista.onclick = function(e) {
+        var boton = e.target.closest('button[data-sucursal]');
+        if (boton && !boton.disabled) cambiarSucursalDesdePanel(boton.dataset.sucursal);
+    };
+}
+async function abrirCambiarSucursal() {
+    var neg = _negocioCambioSucursal();
+    if (!neg) return;
+    _negIdCambioSucursal = neg.id;
+    var cargar = typeof window.sbSucPull === 'function';
+    document.getElementById('cambiarSucursalDescripcion').textContent = 'Elige una sucursal de ' + neg.nombre + '.';
+    var estado = document.getElementById('cambiarSucursalEstado');
+    estado.textContent = cargar ? 'Actualizando sucursales…' : '';
+    _pintarCambioSucursal(neg, cargar);
+    _abrirPanelGlobal('sucursales');
+    if (cargar) {
+        var ok = false;
+        try { ok = await sbSucPull(neg.id); } catch (e) {}
+        var vigente = _negocioCambioSucursal();
+        if (!vigente || vigente.id !== neg.id || _panelGlobalAbierto !== document.getElementById('modalCambiarSucursal')) return;
+        _pintarCambioSucursal(vigente, false);
+        estado.textContent = ok ? '' : 'No se pudo actualizar la lista. Se muestran las sucursales guardadas.';
+    }
+    if (!_getSucursales(neg.id).length) estado.textContent = 'Todavía no hay sucursales registradas.';
+}
+function cambiarSucursalDesdePanel(sucId) {
+    var neg = _negocioCambioSucursal();
+    if (!neg || neg.id !== _negIdCambioSucursal) return;
+    var suc = _getSucursales(neg.id).find(function(s) { return s.id === sucId && s.activa !== false; });
+    if (!suc) return;
+    _cerrarPanelGlobal();
+    seleccionarSucursal(suc.id, neg.id);
 }
 
 function mostrarFormNuevaSuc() {
@@ -3491,76 +3543,40 @@ function _showModulos(neg) {
     if (window.EtaaxPresencia) { try { EtaaxPresencia.entrar(); } catch (e) {} }
     _pintarPresenciaHub();
     _gateSuscripcion(neg); // si el negocio no está activo, reemplaza por la pantalla de bloqueo
-    // Hub General (admin sin negocio): los módulos no operan sin negocio
-    // activo — deshabilitar cards para no abrir páginas vacías.
-    // Staff: deshabilitar los módulos a los que su rol no tiene acceso.
-    var esHubGeneral = !!(_sesion && _sesion.isAdmin && !neg.id);
-    var permsStaff = (_sesion && _sesion.type === 'staff' && neg.id && window.etaaxPermisosRol)
-        ? etaaxPermisosRol(neg.id, _sesion.rol || 'otro') : null;
-    var CARD_KEYS = {
-        'recetas/index.html':        ['recetas','insumos','inventarios','requisiciones'],
-        'financiero/index.html':     ['financiero'],
-        // Aprende y Analiza NO se restringe: contiene las guías de uso, que son
-        // para todo el mundo. Las herramientas de análisis se cuidan adentro.
-        'administrativo/index.html': ['ventas','ventas_productos','gastos','menu','proveedores','clientes','staff','permisos']
-    };
-    document.querySelectorAll('a.hub-card').forEach(function(a) {
-        var href = a.getAttribute('href') || '';
-        if (esHubGeneral) {
-            a.classList.add('disabled');
-            a.title = 'Estás en el Hub General — entra a un negocio desde el Panel Admin para operar sus módulos';
-            return;
-        }
-        if (permsStaff && CARD_KEYS[href]) {
-            var ok = CARD_KEYS[href].some(function(k){ return permsStaff[k]; });
-            a.classList.toggle('disabled', !ok);
-            a.title = ok ? '' : 'Tu rol no tiene acceso a este módulo';
-            return;
-        }
-        if (href) { a.classList.remove('disabled'); a.title = ''; }
-    });
     var t      = TIPOS[neg.tipo] || TIPOS.otro;
     var sucId  = localStorage.getItem('etaax_sucursal_activa') || '';
     var sucCfg = sucId ? _getSucCfg(sucId, neg.id) : {};
     var color  = sucCfg.color || neg.color || '#3dbe7a';
     var sucNom = sucId ? (_getSucursales(neg.id).find(function(s){ return s.id === sucId; }) || {}).nombre || '' : '';
+    var giro = window.EtaaxNegocio ? EtaaxNegocio.giro(sucCfg.giroK || EtaaxNegocio.adivinarGiro(sucCfg.giro || '')) : null;
     // Logo base de la marca en lugar del emoji (si el negocio lo tiene cargado).
     var _wrapChip = document.getElementById('negActEmojiWrap');
     var _logoChip = (sucId ? _getSucLogo(sucId, neg.id) : '') || _getNegLogo(neg.id); // jerarquía sucursal → negocio
     if (_logoChip) {
-        _wrapChip.innerHTML = '<img src="' + _esc(_logoChip) + '" alt="" style="width:100%;height:100%;object-fit:contain">';
-        _wrapChip.style.background = '#fff';
-        _wrapChip.style.overflow = 'hidden';
+        _wrapChip.innerHTML = '<img src="' + _esc(_logoChip) + '" alt="">';
     } else {
-        _wrapChip.innerHTML = '<span id="chipEmoji">' + _esc(neg.emoji || t.emoji) + '</span>';
-        _wrapChip.style.background = color + '1a';
-        _wrapChip.style.overflow = '';
+        _wrapChip.innerHTML = '<span id="chipEmoji">' + _ic(giro ? giro.ic : (sucId ? 'sucursal' : 'org-corporativo'), 28) + '</span>';
     }
-    document.getElementById('chipNombre').textContent         = neg.nombre;
-    document.getElementById('chipTipo').textContent           = t.label;
-    document.getElementById('negActBar').style.borderColor    = color + '44';
-    _wrapChip.style.borderColor = color + '33';
+    document.getElementById('chipMarcaHub').textContent = neg.nombre + (sucNom ? ' / Sucursal activa' : ' / Negocio');
+    document.getElementById('chipNombre').textContent = sucNom || neg.nombre;
+    document.getElementById('chipTipo').textContent = giro ? giro.nom : t.label;
+    document.getElementById('negActBar').style.borderColor = 'var(--hub-brand)';
 
-    // Chip de sucursal activa en el header
-    var chipSuc = document.getElementById('chipSucursalHub');
+    // Una sola identidad de sucursal: pin + nombre junto al logo.
+    var ubicacion = document.getElementById('chipUbicacionHub');
+    if (ubicacion) {
+        ubicacion.innerHTML = sucNom ? _ic('sh-matriz', 18) : '';
+        ubicacion.style.display = sucNom ? 'inline-flex' : 'none';
+    }
     var btnInfoSuc = document.getElementById('btnInfoSuc');
     var btnCatGlobal = document.getElementById('btnCatGlobal');
-    var tieneMasSucs = _getSucursales(neg.id).length > 1;
-    if (chipSuc) {
-        if (sucNom) {
-            chipSuc.textContent = '📍 ' + sucNom;
-            chipSuc.style.display = '';
-            chipSuc.style.background = color + '22';
-            chipSuc.style.color = color;
-            chipSuc.style.border = '1px solid ' + color + '44';
-        } else {
-            chipSuc.style.display = 'none';
-        }
-    }
     if (btnInfoSuc) btnInfoSuc.style.display = sucId ? '' : 'none';
+    var btnCambiarSucursal = document.getElementById('btnCambiarSucursal');
+    if (btnCambiarSucursal) btnCambiarSucursal.style.display = _negocioCambioSucursal() ? '' : 'none';
     // Al ver la parrilla de módulos estamos en el contexto de UNA sucursal: apagar
     // el modo catálogo global (se activa solo al abrir una tarjeta del menú global).
     sessionStorage.removeItem('etaax_cat_global');
+    sessionStorage.removeItem('etaax_fin_global');
     // Los catálogos globales se movieron al selector de sucursales (nivel negocio),
     // para independizarlos de la sucursal activa. Ya no van en el header de módulos.
     if (btnCatGlobal) btnCatGlobal.style.display = 'none';
@@ -3568,7 +3584,6 @@ function _showModulos(neg) {
     if (_sesion) {
         var nombreChip = document.getElementById('userNombreChip');
         var planChip   = document.getElementById('userPlanChip');
-        var btnCambiar = document.getElementById('btnCambiarNeg');
         var btnInfo    = document.getElementById('btnInfoNeg');
         nombreChip.textContent = _sesion.nombre.split(' ')[0];
 
@@ -3580,7 +3595,6 @@ function _showModulos(neg) {
             planChip.className         = 'user-badge-plan';
             planChip.style.background  = r.color + '22';
             planChip.style.color       = r.color;
-            if (btnCambiar) btnCambiar.style.display = 'none';
             if (btnVolver)  btnVolver.style.display  = 'none';
             var rolesDirectivos = ['admin', 'gerente', 'administrativo'];
             if (btnInfo) btnInfo.style.display = rolesDirectivos.indexOf(_sesion.rol) !== -1 ? '' : 'none';
@@ -3589,7 +3603,6 @@ function _showModulos(neg) {
             planChip.className        = 'user-badge-plan';
             planChip.style.background = 'rgba(245,200,66,.15)';
             planChip.style.color      = 'var(--gold)';
-            if (btnCambiar) btnCambiar.style.display = 'none';
             if (btnInfo)    btnInfo.style.display    = '';
             if (btnVolver)  btnVolver.style.display  = '';
         } else {
@@ -3598,16 +3611,22 @@ function _showModulos(neg) {
             planChip.className        = 'user-badge-plan ' + p.planClass;
             planChip.style.background = '';
             planChip.style.color      = '';
-            if (btnCambiar) btnCambiar.style.display = '';
-            if (btnInfo)    btnInfo.style.display    = '';
+            if (btnInfo)    btnInfo.style.display    = 'none';
             if (btnVolver)  btnVolver.style.display  = 'none';
         }
+    }
+    if (typeof window.etaaxPintarModulos === 'function') {
+        window.etaaxPintarModulos({ negId: neg.id, sucId: sucId, staff: !!(_sesion && _sesion.type === 'staff'), rol: (_sesion && _sesion.rol) || 'otro' });
+    }
+    if (_sesion && _sesion.type === 'staff' && neg.id) {
+        if (window.etaaxPermisosRefrescar) etaaxPermisosRefrescar(neg.id);
+        if (window.etaaxPermisosEnVivo) etaaxPermisosEnVivo(neg.id);
     }
 }
 
 // ── Catálogos Globales (vista empresarial multi-sucursal) ──
 function abrirCatalogosGlobales() {
-    document.getElementById('modalCatGlobal').style.display = 'flex';
+    _abrirPanelGlobal('catalogos');
 }
 // Catálogos globales A NIVEL NEGOCIO (desde el selector de sucursales): establece
 // el contexto del negocio SIN una sucursal específica, activa el modo global y
@@ -3618,6 +3637,7 @@ function abrirCatalogosGlobalesNeg() {
     localStorage.setItem('etaax_negocio_activo', marca.id);
     localStorage.removeItem('etaax_sucursal_activa'); // sin sucursal → vista global del negocio
     if (typeof _guardarCtx === 'function') _guardarCtx(marca); // ctx del negocio (sin sucursal)
+    sessionStorage.removeItem('etaax_fin_global');
     sessionStorage.setItem('etaax_cat_global', '1');
     abrirCatalogosGlobales();
 }
@@ -3627,17 +3647,112 @@ function abrirFinancieroGlobal() {
     localStorage.setItem('etaax_negocio_activo', marca.id);
     localStorage.removeItem('etaax_sucursal_activa'); // sin sucursal → el selector abre en 🌐 Vista global
     if (typeof _guardarCtx === 'function') _guardarCtx(marca);
-    window.location.href = 'financiero/index.html';
+    sessionStorage.removeItem('etaax_cat_global');
+    sessionStorage.setItem('etaax_fin_global', '1');
+    _abrirPanelGlobal('financiero');
 }
 function cerrarCatGlobal() {
-    document.getElementById('modalCatGlobal').style.display = 'none';
+    _cerrarPanelGlobal();
 }
-// Activa el modo global (toda la empresa) y abre el catálogo elegido. El flag se
-// apaga solo al volver a la parrilla de módulos (_showModulos).
+function cerrarFinGlobal() { _cerrarPanelGlobal(); }
+// Activa el modo global (toda la empresa) y abre el catálogo elegido. Elegir
+// una sucursal apaga ambos modos; _showModulos también los limpia al renderizar.
 function abrirCatGlobal(url) {
+    sessionStorage.removeItem('etaax_fin_global');
     sessionStorage.setItem('etaax_cat_global', '1');
     window.location.href = url;
 }
+function abrirFinGlobal(url) {
+    sessionStorage.removeItem('etaax_cat_global');
+    sessionStorage.setItem('etaax_fin_global', '1');
+    window.location.href = url;
+}
+
+/* Un solo cierre, foco y teclado para los dos paneles. Seleccionar una sucursal
+   vuelve a establecer su contexto; cerrar el panel conserva el del negocio. */
+var _panelGlobalPendiente = '', _panelGlobalAbierto = null, _panelGlobalFoco = null, _panelGlobalEstado = null;
+var _finConectoresObserver = null;
+function _dibujarFinConectores() {
+    var grid = document.querySelector('#modalFinGlobal .fing-grid');
+    var svg = grid && grid.querySelector('.fing-conectores');
+    if (!svg || !grid.getClientRects().length) return;
+    var base = grid.getBoundingClientRect();
+    if (!base.width) return;
+    function caja(selector) {
+        var r = grid.querySelector(selector).getBoundingClientRect();
+        return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height };
+    }
+    var kpi = caja('.fing-kpis'), movil = window.matchMedia('(max-width:560px)').matches;
+    svg.setAttribute('viewBox', '0 0 ' + base.width + ' ' + base.height);
+    svg.innerHTML = ['.fing-resumen', '.fing-ventas', '.fing-estadisticas', '.fing-gastos'].map(function(selector, i) {
+        var r = caja(selector), izq = i % 2 === 0;
+        var x = izq ? r.x + r.w : r.x, y = r.y + r.h / 2;
+        var finX, finY, codoX, d;
+        if (movil) {
+            // Dos líneas centrales bajan entre las columnas, sin cruzar tarjetas.
+            codoX = base.width / 2 + (izq ? -3 : 3);
+            finX = kpi.x + kpi.w / 2 + (izq ? -18 : 18);
+            finY = kpi.y;
+            d = 'M ' + x + ' ' + y + ' H ' + codoX + ' V ' + (finY - 12) + ' H ' + finX + ' V ' + finY;
+        } else {
+            finX = izq ? kpi.x : kpi.x + kpi.w;
+            finY = kpi.y + kpi.h / 2 + (i < 2 ? -22 : 22);
+            codoX = (x + finX) / 2;
+            d = 'M ' + x + ' ' + y + ' H ' + codoX + ' V ' + finY + ' H ' + finX;
+        }
+        return '<path d="' + d + '"></path><circle cx="' + finX + '" cy="' + finY + '" r="2"></circle>';
+    }).join('');
+}
+function _abrirPanelGlobal(tipo) {
+    var id = { financiero: 'modalFinGlobal', catalogos: 'modalCatGlobal', sucursales: 'modalCambiarSucursal' }[tipo];
+    var modal = id && document.getElementById(id);
+    if (!modal) return;
+    _cerrarPanelGlobal();
+    _panelGlobalFoco = document.activeElement;
+    if (!_panelGlobalFoco || _panelGlobalFoco === document.body) {
+        var acceso = { financiero: '.hub-global-financiero', catalogos: '.hub-global-card', sucursales: '#btnCambiarSucursal' }[tipo];
+        _panelGlobalFoco = document.querySelector(acceso);
+    }
+    _panelGlobalEstado = { overflow: document.body.style.overflow, fondos: [] };
+    ['.hub-shell', '#etaax-header'].forEach(function(s) {
+        var el = document.querySelector(s);
+        if (el) { _panelGlobalEstado.fondos.push({ el: el, inert: el.inert }); el.inert = true; }
+    });
+    document.body.style.overflow = 'hidden';
+    _panelGlobalAbierto = modal;
+    modal.style.display = 'flex';
+    modal.querySelector('.modal-close').focus();
+    if (tipo === 'financiero') {
+        window.requestAnimationFrame(_dibujarFinConectores);
+        if (!_finConectoresObserver && typeof ResizeObserver !== 'undefined') {
+            _finConectoresObserver = new ResizeObserver(_dibujarFinConectores);
+            _finConectoresObserver.observe(modal.querySelector('.fing-grid'));
+        }
+    }
+}
+function _cerrarPanelGlobal() {
+    if (!_panelGlobalAbierto) return;
+    _panelGlobalAbierto.style.display = 'none';
+    _panelGlobalAbierto = null;
+    if (_panelGlobalEstado) {
+        document.body.style.overflow = _panelGlobalEstado.overflow;
+        _panelGlobalEstado.fondos.forEach(function(f) { f.el.inert = f.inert; });
+    }
+    if (_panelGlobalFoco && _panelGlobalFoco.isConnected && _panelGlobalFoco.getClientRects().length) {
+        _panelGlobalFoco.focus({ preventScroll: true });
+    }
+    _panelGlobalEstado = null;
+    _panelGlobalFoco = null;
+}
+document.addEventListener('keydown', function(e) {
+    if (!_panelGlobalAbierto) return;
+    if (e.key === 'Escape') { e.preventDefault(); _cerrarPanelGlobal(); return; }
+    if (e.key !== 'Tab') return;
+    var botones = Array.from(_panelGlobalAbierto.querySelectorAll('button:not([disabled]),a[href],[tabindex="0"]')).filter(function(el) { return el.getClientRects().length; });
+    var primero = botones[0], ultimo = botones[botones.length - 1];
+    if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+});
 
 function cambiarNegocio() {
     localStorage.removeItem('etaax_negocio_activo');
@@ -4440,9 +4555,11 @@ async function guardarNuevaPassword(){
 })();
 </script>
 <script src="admin-guard.js"></script>
-<script src="/etaax-iconos.js"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
-<script src="/negocio-tipos.js"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
-<script src="/etaax-header.js?v=cuenta-1"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
+<script src="/etaax-iconos.js?v=modulos-1"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
+<script src="/negocio-tipos.js?v=1"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
+<script src="/etaax-header.js?v=paleta-1"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
+<script src="/hub-interacciones.js?v=2"></script>
+<script src="/hub-modulos.js?v=14"></script>
 <script src="security.js"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>

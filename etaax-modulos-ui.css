@@ -1,0 +1,432 @@
+/* Espacio de trabajo compartido. Las tablas y los formularios conservan su UI. */
+body.etx-module-cards {
+  --etx-ui-cyan:#8ce4ee;--etx-ui-terra:#fb9b6f;--etx-ui-panel:#171611;
+  --etx-ui-line:#3a3830;--etx-ui-muted:#b5afa3;--etx-ui-tint:rgba(251,155,111,.09);
+  --etx-ui-terra-line:rgba(251,155,111,.52);--etx-ui-cyan-line:rgba(140,228,238,.5);--etx-ui-cyan-soft:rgba(140,228,238,.24);--etx-ui-rojo:#e05a3a;--etx-ui-hondo:#8ce4ee;
+  --etx-ui-cyan-tint:rgba(140,228,238,.08);
+}
+[data-theme="light"] body.etx-module-cards {
+  --etx-ui-cyan:#247681;--etx-ui-terra:#ad4b27;--etx-ui-panel:#fff;
+  --etx-ui-line:#d3cfc7;--etx-ui-muted:#666157;--etx-ui-tint:rgba(173,75,39,.06);
+  --etx-ui-terra-line:rgba(173,75,39,.46);--etx-ui-cyan-line:rgba(36,118,129,.46);--etx-ui-cyan-soft:rgba(36,118,129,.22);--etx-ui-rojo:#c0442a;--etx-ui-hondo:#247681;
+  --etx-ui-cyan-tint:rgba(36,118,129,.07);
+}
+body.etx-modulos-ui {padding:var(--etx-header-h,70px) 0 0;--etx-shell-top:calc(var(--etx-header-h,70px) + var(--etx-context-h,128px));}
+body.etx-modulos-ui .top-bar,body.etx-modulos-ui .theme-toggle,
+body.etx-modulos-ui :is(.mod-grid-bg,.mod-glow) {display:none;}
+body.etx-modulos-ui #etaax-header {--green:var(--etx-ui-cyan);--surface:var(--etx-ui-panel);}
+body.etx-modulos-ui #ctxBar {
+  top:var(--etx-header-h,70px);height:auto;min-height:0;padding:16px 24px;
+  border:0;background:var(--bg);z-index:190;
+}
+body.etx-modulos-ui .ctx-bar-inner {
+  width:100%;max-width:1280px;height:auto;min-height:96px;padding:18px;
+  border:1px solid var(--etx-ui-cyan);border-radius:16px;background:var(--etx-ui-panel);
+  gap:14px;overflow:visible;--green:var(--etx-ui-cyan);
+}
+body.etx-modulos-ui .ctx-neg-emoji-wrap {
+  width:48px;height:48px;border-radius:50%;border:1px solid var(--etx-ui-line);
+  background:var(--surface2);overflow:hidden;padding:0;
+}
+body.etx-modulos-ui .ctx-neg-emoji-wrap img {width:100%;height:100%;object-fit:cover;display:block;}
+body.etx-modulos-ui .ctx-neg-emoji-wrap .etx-ic {width:28px;height:28px;}
+body.etx-modulos-ui .ctx-neg-name .etx-ic {width:18px;height:18px;}
+body.etx-modulos-ui .ctx-neg-id {flex:1;min-width:120px;overflow:visible;}
+body.etx-modulos-ui .etx-ctx-marca {font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--etx-ui-muted);margin-bottom:5px;overflow-wrap:anywhere;}
+body.etx-modulos-ui .ctx-neg-name {font-size:20px;line-height:1.3;display:flex;gap:8px;align-items:center;white-space:normal;overflow-wrap:anywhere;}
+body.etx-modulos-ui .ctx-neg-tipo {font-size:11px;letter-spacing:0;text-transform:none;color:var(--etx-ui-muted);margin-top:3px;white-space:normal;}
+body.etx-modulos-ui .ctx-right {gap:10px;}
+body.etx-modulos-ui .ctx-badge-plan {color:var(--accent-text);background:var(--accent-dim);padding:4px 9px;white-space:nowrap;}
+body.etx-modulos-ui .ctx-btn {
+  gap:8px;min-height:44px;padding:10px 14px;border-radius:9px;
+  font-size:12px;color:var(--text);border:1px solid var(--etx-ui-line);background:transparent;
+  font-family:inherit;letter-spacing:0;
+}
+body.etx-modulos-ui .ctx-btn:hover {border-color:var(--etx-ui-cyan);background:var(--surface2);}
+body.etx-modulos-ui .ctx-btn .etx-ic {width:20px;height:20px;}
+body.etx-modulos-ui .ctx-nav-btns {border:0;padding:0;margin:0;gap:4px;}
+body.etx-modulos-ui .ctx-btn-icon {padding:6px 8px;min-height:32px;color:var(--etx-ui-muted);}
+body.etx-modulos-ui #nav {
+  position:fixed;top:calc(var(--etx-shell-top) + 8px);left:24px;bottom:auto;
+  width:220px;height:auto;max-height:calc(100dvh - var(--etx-shell-top) - 32px);
+  border:1px solid var(--etx-ui-line);border-radius:18px;background:var(--etx-ui-panel);
+  padding:12px;overflow-y:auto;overflow-x:hidden;gap:2px;z-index:100;
+  scrollbar-width:thin;scrollbar-color:var(--etx-ui-line) transparent;
+  transition:width .2s ease,padding .2s ease;
+}
+body.etx-modulos-ui #nav.cerrado {width:64px;padding:10px 8px;}
+body.etx-modulos-ui #nav .nav-top {padding:10px 0 16px;min-height:0;height:auto;gap:12px;width:100%;border-bottom:1px solid var(--etx-ui-line);margin-bottom:10px;}
+body.etx-modulos-ui #nav .etx-nav-identidad {display:flex;align-items:center;gap:10px;min-width:0;padding:4px 8px;}
+body.etx-modulos-ui #nav .etx-nav-identidad>div {min-width:0;}
+body.etx-modulos-ui #nav .etx-nav-identidad strong {font-size:13px;line-height:1.4;display:block;color:var(--text);}
+body.etx-modulos-ui #nav .etx-nav-numero {font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--etx-ui-muted);display:block;margin-bottom:5px;}
+body.etx-modulos-ui #nav .etx-nav-modulo {background:none;border:0;padding:0;display:inline-flex;flex-shrink:0;margin:0;text-decoration:none;}
+body.etx-modulos-ui #nav .etx-nav-modulo .etx-ic {width:28px;height:28px;}
+body.etx-modulos-ui #nav .etx-nav-contraer {
+  display:flex;align-items:center;justify-content:center;min-height:34px;width:100%;
+  border:1px solid var(--etx-ui-line);border-radius:8px;padding:6px;font-size:11px;
+  background:transparent;color:var(--text);font-family:inherit;letter-spacing:0;
+}
+body.etx-modulos-ui #nav .nav-toggle-text {font-size:11px;font-family:inherit;}
+body.etx-modulos-ui #nav .nav-section {padding:0;margin:0;}
+body.etx-modulos-ui #nav .nav-section-label {display:none;}
+body.etx-modulos-ui #nav .nav-link {
+  display:grid;grid-template-columns:26px minmax(0,1fr);column-gap:10px;row-gap:3px;
+  margin:0 0 8px;padding:13px 10px;min-height:58px;border:1px solid transparent;
+  border-radius:11px;color:var(--text);white-space:normal;transition:background .18s,border-color .18s;
+}
+body.etx-modulos-ui #nav .nav-icon {grid-row:1 / span 2;align-self:center;width:26px;}
+body.etx-modulos-ui #nav .nav-text {font-size:13px;font-weight:600;overflow:visible;line-height:1.4;}
+body.etx-modulos-ui #nav .etx-nav-desc {grid-column:2;font-size:10.5px;color:var(--etx-ui-muted);line-height:1.4;}
+body.etx-modulos-ui #nav .nav-link:hover {background:var(--surface2);border-color:var(--etx-ui-line);}
+body.etx-modulos-ui #nav .nav-link.active {background:var(--etx-ui-tint);border-color:var(--etx-ui-terra-line);color:var(--etx-ui-terra);}
+body.etx-modulos-ui #nav .etx-nav-back {
+  margin-top:16px;padding-top:18px;border-top:1px solid var(--etx-ui-line);border-radius:0;
+  color:var(--etx-ui-cyan);min-height:52px;align-items:center;
+}
+body.etx-modulos-ui #nav .etx-nav-back .etx-ic {--etx-color:var(--etx-ui-cyan);transform:rotate(180deg);}
+body.etx-modulos-ui #nav.cerrado .etx-nav-identidad {padding:4px 0;justify-content:center;width:100%;}
+body.etx-modulos-ui #nav.cerrado .etx-nav-identidad>div,
+body.etx-modulos-ui #nav.cerrado :is(.nav-text,.etx-nav-desc) {display:none;}
+body.etx-modulos-ui #nav.cerrado .nav-link {display:flex;justify-content:center;padding:12px 0;min-height:46px;}
+body.etx-modulos-ui #nav.cerrado .nav-top {align-items:center;}
+body.etx-modulos-ui #nav.cerrado .etx-nav-contraer {font-size:16px;}
+body.etx-modulos-ui .main-content {
+  margin-left:var(--etx-sidebar-space,268px);margin-top:var(--etx-context-h,128px);
+  width:calc(100% - var(--etx-sidebar-space,268px));padding:24px 24px 48px;
+}
+body.etx-modulos-ui .main-content>.wrap {width:100%;min-width:0;max-width:100%;}
+/* Los módulos no llaman «wrap» a su envoltorio: Staff y Diario usan `.cf-wrap`
+   y `.dx-wrap`, con su propio tope de ancho. Sin `min-width:0` el envoltorio no
+   puede bajar de su ancho mínimo de contenido y EMPUJA la página entera: a 320
+   px, la portada de colaboradores se abría a 349 y aparecía scroll horizontal
+   en toda la pantalla. Aquí solo se les quita el piso — el `max-width` propio se
+   respeta, que es lo que mantiene la columna centrada en pantalla grande. */
+body.etx-modulos-ui .main-content>:is(.cf-wrap,.dx-wrap) {width:100%;min-width:0;}
+body.etx-modulos-ui .main-content .card-body {max-width:100%;overflow-x:auto;}
+/* ═══ EL ENCABEZADO DE CADA HERRAMIENTA, IGUAL EN LAS DIECIOCHO ═══════════
+   Cada página lo resolvía a su manera: unas centraban el título, otras lo
+   dejaban a la izquierda, unas traían línea debajo y otras no. Al navegar, el
+   nombre de la pantalla brincaba de sitio — y el nombre de la pantalla es lo
+   primero que uno busca para saber dónde está.
+
+   Aquí: el nombre a la izquierda, lo que se pulsa a la derecha, y una línea
+   que separa el encabezado del contenido. Una sola forma.                   */
+body.etx-modulos-ui .header {
+  top:var(--etx-shell-top);margin:0 0 22px;padding:0 0 16px;
+  justify-content:space-between;align-items:flex-end;gap:18px;
+  border-bottom:1px solid var(--etx-ui-line);
+}
+body.etx-modulos-ui .header .brand {align-items:flex-start;text-align:left;gap:3px;}
+body.etx-modulos-ui .header .hdr-acts {gap:8px;justify-content:flex-end;}
+
+/* Y las cinco herramientas que no usan `.header` sino su propio encabezado
+   —Resumen, Horarios, Checklists, Evaluaciones y Perfiles—: mismo trato, para
+   que el nombre de la pantalla no cambie de cara ni de sitio según dónde estés.
+   No se tocan sus clases ni su marcado; solo se les da la misma forma. */
+body.etx-modulos-ui :is(.rs-head,.hr-head,.ck-head,.ev-head,.pp-head) {
+  display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:18px;
+  padding:0 0 16px;margin:0 0 22px;border-bottom:1px solid var(--etx-ui-line);
+}
+body.etx-modulos-ui :is(.rs-title,.hr-title,.ck-title,.ev-title,.pp-title) {
+  font-family:inherit;font-size:clamp(26px,3vw,34px);font-weight:600;
+  text-transform:uppercase;letter-spacing:.6px;color:var(--text);line-height:1.2;
+}
+body.etx-modulos-ui :is(.rs-title,.hr-title,.ck-title,.ev-title,.pp-title) .g {color:var(--etx-ui-terra);}
+body.etx-modulos-ui :is(.rs-sub,.hr-sub,.ck-sub,.ev-sub) {font-size:12.5px;color:var(--etx-ui-muted);line-height:1.6;margin-top:4px;}
+body.etx-modulos-ui .pp-eyebrow {font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--etx-ui-muted);margin-bottom:6px;}
+
+/* ═══ LOS BOTONES, CON LA PALETA DE LA MARCA ══════════════════════════════
+   Había de todo: verde, dorado, morado y rojo repartidos sin regla, así que
+   el color ya no decía nada —tres botones distintos podían ser igual de
+   importantes—. Ahora el color ES el papel, y son cuatro:
+
+     · PRINCIPAL      terracota sólido  — lo que la pantalla viene a hacer
+     · SECUNDARIA     cian              — lo que la acompaña: imprimir, exportar
+     · TERCIARIA      contorno neutro   — cambiar de vista, reiniciar
+     · DESTRUCTIVA    rojo              — borrar, archivar
+
+   El chip de sucursal no es un botón de acción sino identidad: azul profundo,
+   el mismo de la marca. Si todo fuera del color de la marca, la marca dejaría
+   de verse.                                                                 */
+/* Los papeles valen en TODA la página, no solo en su barra de título: media
+   docena de herramientas ponen sus pestañas y sus acciones fuera del `.header`
+   —Resumen, Horarios, Checklists…— y ahí seguían con los colores viejos. Un
+   botón que significa lo mismo no puede cambiar de color según en qué renglón
+   de la página esté. */
+body.etx-modulos-ui :is(.btn-primary,.btn-save) {
+  background:var(--etx-ui-terra);border:1px solid var(--etx-ui-terra);color:#0f0e0c;font-weight:600;
+}
+body.etx-modulos-ui :is(.btn-primary,.btn-save):hover {filter:brightness(1.06);opacity:1;}
+body.etx-modulos-ui .btn-accent {
+  background:var(--etx-ui-cyan-tint);border:1px solid var(--etx-ui-cyan-line);color:var(--etx-ui-cyan);
+}
+body.etx-modulos-ui .btn-accent:hover {background:var(--etx-ui-cyan-tint);border-color:var(--etx-ui-cyan);}
+body.etx-modulos-ui :is(.btn-vista,.btn-ghost,.btn-reset) {
+  background:transparent;border:1px solid var(--etx-ui-line);color:var(--etx-ui-muted);
+}
+body.etx-modulos-ui :is(.btn-vista,.btn-ghost,.btn-reset):hover {
+  border-color:var(--etx-ui-cyan-line);color:var(--etx-ui-cyan);
+}
+body.etx-modulos-ui .btn-danger {
+  background:transparent;border:1px solid var(--etx-ui-rojo);color:var(--etx-ui-rojo);
+}
+body.etx-modulos-ui .btn-danger:hover {background:rgba(224,90,58,.12);}
+body.etx-modulos-ui .suc-chip {
+  background:var(--etx-ui-panel);border:1px solid var(--etx-ui-cyan-soft);color:var(--etx-ui-hondo);
+}
+body.etx-modulos-ui :is(.suc-chip:hover,.suc-chip.open) {
+  border-color:var(--etx-ui-cyan);background:var(--etx-ui-cyan-tint);
+}
+body.etx-modulos-ui .period-tab.active {
+  background:var(--etx-ui-cyan-tint);color:var(--etx-ui-cyan);border-color:var(--etx-ui-cyan-line);
+}
+body.etx-modulos-ui .period-tab:hover:not(.active) {color:var(--text);}
+
+/* Y las barras de herramienta que se nombraron a sí mismas —`hr-btn`,
+   `ck-btn`, `ev-btn`, `pp-btn`, `org-btn`— entran a los mismos papeles. Son las
+   que seguían en morado y verde: el mismo botón de «cuadrícula» se veía de un
+   color en Horarios y de otro en Checklists. Se mapean por su variante, sin
+   tocar el marcado de ninguna página. */
+body.etx-modulos-ui :is(.hr-btn,.ck-btn,.ev-btn,.pp-btn,.org-btn) {
+  background:transparent;border:1px solid var(--etx-ui-line);color:var(--etx-ui-muted);
+}
+body.etx-modulos-ui :is(.hr-btn,.ck-btn,.ev-btn,.pp-btn,.org-btn):hover {
+  border-color:var(--etx-ui-cyan-line);color:var(--etx-ui-cyan);background:var(--etx-ui-cyan-tint);
+}
+body.etx-modulos-ui :is(.ck-btn.primary,.org-btn.primary,.pp-btn.pp-btn-primary) {
+  background:var(--etx-ui-terra);border-color:var(--etx-ui-terra);color:#0f0e0c;font-weight:600;
+}
+body.etx-modulos-ui :is(.ck-btn.primary,.org-btn.primary,.pp-btn.pp-btn-primary):hover {
+  filter:brightness(1.06);background:var(--etx-ui-terra);color:#0f0e0c;
+}
+body.etx-modulos-ui :is(.org-btn.on,.hr-btn.on,.ck-btn.on,.ev-btn.on) {
+  background:var(--etx-ui-cyan-tint);border-color:var(--etx-ui-cyan-line);color:var(--etx-ui-cyan);
+}
+/* Los interruptores de vista («Cuadrícula / Tarjetas», las pestañas de
+   Checklists) iban en morado, que ya no es de la casa. Pasan al cian de lo que
+   está activo. NO se tocan los de asistencia (`ok/no/ret`): esos son semáforo
+   —verde, rojo y ámbar significan algo— y el color ahí es el dato. */
+body.etx-modulos-ui :is(.hr-toggle,.ck-tabs,.ev-tabs,.pp-tabs) button.on {
+  background:var(--etx-ui-cyan-tint);color:var(--etx-ui-cyan);border-color:var(--etx-ui-cyan-line);
+}
+/* «Reporte Directivo» era el último morado suelto del sistema. Es una acción
+   que acompaña, no la principal de la pantalla: papel secundario, cian. */
+body.etx-modulos-ui .btn-directivo {
+  background:var(--etx-ui-cyan-tint);border:1px solid var(--etx-ui-cyan-line);color:var(--etx-ui-cyan);
+}
+body.etx-modulos-ui .btn-directivo:hover {background:var(--etx-ui-cyan-tint);border-color:var(--etx-ui-cyan);}
+body.etx-modulos-ui .ev-btn.danger {
+  background:transparent;border-color:var(--etx-ui-rojo);color:var(--etx-ui-rojo);
+}
+
+/* ═══ LOS CAMPOS Y BUSCADORES ═════════════════════════════════════════════
+   Cada pantalla tenía su propio buscador: distinto fondo, distinto borde y
+   distinto color al escribir. Aquí se igualan SOLO los colores —el foco en
+   cian, el fondo del campo, el texto de pista—; la altura y el espaciado se
+   quedan como están. Mover la geometría de los campos de veintinueve páginas
+   sería rehacer formularios enteros por un tema de color. */
+body.etx-modulos-ui :is(input[type="text"],input[type="search"],input[type="date"],
+  input[type="month"],input[type="number"],input[type="tel"],input[type="email"],select,textarea) {
+  background:var(--ui-campo,var(--surface2));border-color:var(--etx-ui-line);color:var(--text);
+}
+body.etx-modulos-ui :is(input,select,textarea):focus {
+  outline:none;border-color:var(--etx-ui-cyan);box-shadow:0 0 0 2px var(--etx-ui-cyan-tint);
+}
+body.etx-modulos-ui ::placeholder {color:var(--etx-ui-muted);opacity:1;}
+body.etx-modulos-ui :is(#vistaMenuReceta,#vistaCaratula) {top:var(--etx-shell-top)!important;left:var(--etx-sidebar-space,268px)!important;}
+body.etx-modulos-ui:has(#vistaMenuReceta[style*="display: flex"]) {overflow:hidden;}
+body.etx-modulos-ui #moduloLanding {top:var(--etx-shell-top);}
+/* LA PORTADA DE RECETAS, AL MISMO FONDO QUE EL RESTO. Era la última con la
+   cuadrícula azul y el degradado de arriba: el fondo sólido entró por hoja de
+   estilos y aquí la cuadrícula va ESCRITA EN EL ELEMENTO, que gana a cualquier
+   hoja — por eso sobrevivió al cambio. El degradado es un `<div>` suelto; se
+   apaga por ser el único hijo que no es el contenido.
+   De paso se iguala lo demás: esta portada se definió con un id, así que sus
+   reglas le ganaban a las compartidas y se quedó con la tipografía condensada
+   y el azul del hover mientras los otros tres módulos ya iban en terracota. */
+/* …y arrancaba DEBAJO de las barras: su `top:48px` va escrito en el elemento,
+   que gana a la hoja, así que los primeros 180 px del contenido —el título del
+   módulo entero— quedaban tapados por el header y el subheader. Por eso esta
+   portada parecía empezar directamente en «Costeo · Recetas» mientras las otras
+   tres enseñaban su nombre. */
+body.etx-modulos-ui #moduloLanding {top:var(--etx-shell-top)!important;}
+body.etx-modulos-ui #moduloLanding .cf-wrap {padding-top:16px;}
+body.etx-modulos-ui #moduloLanding .cf-hero {padding:8px 0 28px;}
+body.etx-modulos-ui #moduloLanding {background-image:none!important;background-color:var(--bg);}
+body.etx-modulos-ui #moduloLanding>div:not(.cf-wrap) {display:none;}
+body.etx-modulos-ui #moduloLanding :is(.cf-section-title,.cf-card-title) {font-family:inherit;letter-spacing:-.2px;}
+body.etx-modulos-ui #moduloLanding .etx-tool-card:hover {border-color:var(--etx-ui-cyan-line)!important;background:var(--etx-ui-cyan-tint)!important;box-shadow:none;transform:none;}
+body.etx-modulos-ui #moduloLanding .etx-tool-card .cf-card-cta {color:var(--etx-ui-cyan);
+  text-transform:none;letter-spacing:0;font-size:12px;}
+body.etx-modulos-ui #moduloLanding .etx-tool-card .cf-card-desc {font-size:12.5px;line-height:1.65;}
+body.etx-modulos-ui #moduloLanding .etx-tool-card .cf-badge-active {color:var(--etx-ui-muted);background:transparent;border-color:var(--etx-ui-line);}
+body.etx-modulos-ui #moduloLanding .etx-tool-card:hover .cf-card-cta {color:var(--etx-ui-cyan);}
+body.etx-modulos-ui :is(.cf-wrap,.mod-landing-wrap) {padding-top:calc(var(--etx-context-h,128px) + 16px);}
+/* Y el hero no pone el suyo encima. Traía 52 px propios en una portada y 18 en
+   otra, así que el título caía a distinta altura según el módulo y, sumado al
+   envoltorio, quedaba a cien píxeles del subheader: aire de sobra justo donde
+   se busca el nombre de la pantalla. El aire lo pone el envoltorio, una vez. */
+body.etx-modulos-ui :is(.cf-hero,.dx-hero) {padding-top:0;}
+/* Y las herramientas que encabezan con hero —Ventas y Gastos Diarios, Gestión
+   de Staff— llevan la misma línea delgada que el resto: es lo que separa el
+   nombre de la pantalla de su contenido, y sin ella esas dos eran las únicas
+   donde el título flotaba suelto. Va acotado a `.main-content`, que es lo que
+   distingue a una herramienta de una portada de módulo: la portada ya tiene la
+   línea de su primera sección justo debajo, y serían dos seguidas. */
+body.etx-modulos-ui .main-content :is(.cf-hero,.dx-hero) {
+  border-bottom:1px solid var(--etx-ui-line);padding-bottom:18px;margin-bottom:24px;
+}
+/* …pero cuando el envoltorio va DENTRO del contenido, ese espacio ya lo puso
+   `.main-content` con su `margin-top`. Sumarlo dos veces dejaba el título a
+   media pantalla, con un hueco del alto del subheader entre la barra y la
+   primera palabra — y para el que entra, un hueco así no se lee como aire: se
+   lee como que algo no cargó. */
+body.etx-modulos-ui .main-content :is(.cf-wrap,.mod-landing-wrap,.dx-wrap) {padding-top:12px;}
+/* Y el aire de arriba lo pone el envoltorio, no cada hero: una traía 52 px de
+   salida y otra 18, así que el título caía a distinta altura según el módulo.
+   Ahora los cuatro arrancan igual, justo debajo del subheader. */
+
+/* EL TÍTULO DE CADA MÓDULO: mismo tamaño, mayúsculas y dos colores.
+   Cada página traía el suyo —una en Bebas a 58 px, otra a 44, y el acento en
+   morado aquí y verde allá— así que al navegar el título cambiaba de cara y de
+   color sin que cambiara nada más. El nombre va en crema y lo que distingue a
+   ese módulo, en terracota.
+   El `#moduloLanding` del selector entra a propósito: esa regla de Recetas lleva
+   un id, y sin nombrarlo aquí ganaría ella y su acento seguiría en verde. */
+body.etx-modulos-ui :is(.cf-hero-title,.dx-hero-title,#moduloLanding .cf-hero-title) {
+  font-family:inherit;font-size:clamp(22px,4vw,42px);font-weight:600;
+  text-transform:uppercase;letter-spacing:.6px;line-height:1.15;overflow-wrap:anywhere;
+  color:var(--text);
+}
+body.etx-modulos-ui :is(.cf-hero-title,.dx-hero-title,#moduloLanding .cf-hero-title) .g {color:var(--etx-ui-terra);}
+body.etx-modulos-ui .cf-section-hdr {flex-wrap:wrap;min-width:0;}
+body.etx-modulos-ui .cf-section-title {font-family:inherit;font-size:20px;font-weight:600;letter-spacing:-.3px;line-height:1.35;}
+body.etx-modulos-ui :is(.ck-wrap,.ev-wrap) {margin-top:var(--etx-context-h,128px);padding-top:24px;}
+/* EL TÍTULO DE CADA HERRAMIENTA, igual que el de las portadas: mayúsculas, el
+   nombre en crema y el final en terracota. Iba entero en el acento, y a ese
+   tamaño un color que lo cubre todo deja de distinguir nada. El corte lo
+   reparte el script (`bicolorTitulo`), porque son 21 páginas y el marcado no
+   trae dónde partir; con una sola palabra no se parte y se queda en crema. */
+body.etx-modulos-ui .brand-title {font-family:inherit;font-weight:600;font-size:clamp(26px,3vw,34px);text-transform:uppercase;letter-spacing:.6px;color:var(--text);line-height:1.2;}
+body.etx-modulos-ui .brand-title .g {color:var(--etx-ui-terra);}
+body.etx-modulos-ui .brand-label {font-size:9px;letter-spacing:3px;color:var(--etx-ui-muted);margin-bottom:8px;}
+/* «CLIENTES» es una sola palabra: no hay dónde partir el título, así que el
+   acento se lo lleva su rótulo —«BASE DE»— y la pantalla sigue siendo bicolor
+   como las demás. Lo marca el script, que es quien sabe si hubo corte. */
+body.etx-modulos-ui .brand-label.g {color:var(--etx-ui-terra);}
+/* Tarjetas de navegación, no las tarjetas de datos o los formularios. */
+body.etx-module-cards .etx-tool-card {
+  flex-direction:column;align-items:flex-start;text-align:left;gap:12px;
+  /* El contorno también en cian, suave: la tarjeta se reconoce como acceso sin
+     pedir el turno que ya tienen el título y el botón de entrar al módulo. */
+  min-height:176px;padding:24px!important;border:1px solid var(--etx-ui-cyan-soft)!important;
+  border-radius:16px;background:var(--etx-ui-panel)!important;color:var(--text);
+  font-family:inherit;box-shadow:none;transform:none;transition:border-color .18s,background .18s;
+  --green:var(--etx-ui-cyan);
+}
+/* Las tarjetas de herramienta pasan al CIAN: en una pantalla donde el título,
+   el acento y la acción principal ya van en terracota, un bloque más del mismo
+   color deja de destacar. El cian las separa sin competir. */
+body.etx-module-cards .etx-tool-card:hover {border-color:var(--etx-ui-cyan-line)!important;background:var(--etx-ui-cyan-tint)!important;transform:none;box-shadow:none;}
+body.etx-module-cards .etx-tool-card :is(.cf-card-title,.dx-card-title,.cat-btn-title) {font-family:inherit;font-size:18px!important;line-height:1.3;font-weight:600;letter-spacing:-.2px;color:var(--text)!important;}
+body.etx-module-cards .etx-tool-card :is(.cf-card-desc,.dx-card-desc,.cat-btn-desc) {font-size:12.5px;line-height:1.65;color:var(--etx-ui-muted);text-align:left;}
+body.etx-module-cards .etx-tool-card :is(.cf-card-cta,.dx-card-cta,.etx-tool-cta) {font-size:12px;letter-spacing:0;text-transform:none;color:var(--etx-ui-cyan);margin-top:auto;padding-top:12px;}
+body.etx-module-cards .etx-tool-card :is(.cf-card-icon,.dx-card-icon,.etx-tool-icon) {display:inline-flex;line-height:1;}
+body.etx-module-cards .etx-tool-card :is(.cf-card-icon,.dx-card-icon,.etx-tool-icon) .etx-ic {width:30px;height:30px;}
+body.etx-module-cards .etx-tool-card :is(.cf-badge-active,.dx-badge) {font-size:8px;color:var(--etx-ui-muted);background:transparent;border-color:var(--etx-ui-line);}
+body.etx-module-cards :is(.cf-grid,.dx-grid) {gap:16px;}
+.etx-recetas-menu {max-width:920px;margin:0 auto;padding:8px 24px 48px;width:100%;}
+.etx-recetas-menu .header {align-items:flex-start;justify-content:flex-start;position:static;}
+.etx-recetas-menu .brand {align-items:flex-start;}
+.etx-recetas-menu .etx-recetas-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:28px;}
+.etx-recetas-menu .etx-recetas-label {font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--etx-ui-muted);margin:0 0 14px;}
+.etx-recetas-menu .etx-recetas-descripcion {color:var(--etx-ui-muted);font-size:13px;line-height:1.6;margin:14px 0 28px;}
+.etx-recetas-menu #btnEscSimple {width:100%;margin-bottom:28px;}
+.etx-module-dialog {
+  position:fixed;inset:0;margin:auto;width:min(600px,calc(100% - 32px));max-height:calc(100dvh - 40px);
+  padding:24px;border:1px solid var(--etx-ui-cyan);border-radius:18px;
+  background:var(--etx-ui-panel);color:var(--text);font-family:inherit;overflow:auto;
+}
+.etx-module-dialog::backdrop {background:rgba(0,0,0,.68);}
+.etx-dialog-head {display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:14px;}
+.etx-dialog-head h2 {font-size:24px;font-weight:600;letter-spacing:-.4px;}
+.etx-dialog-head button {width:32px;height:32px;border:1px solid var(--etx-ui-line);border-radius:7px;background:transparent;color:var(--text);cursor:pointer;font-size:20px;}
+.etx-module-dialog>p {font-size:13px;color:var(--etx-ui-muted);line-height:1.6;margin-bottom:20px;}
+.etx-module-options {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+.etx-module-options button {display:flex;align-items:center;gap:10px;min-height:116px;padding:16px;border:1px solid var(--etx-ui-line);border-radius:12px;color:var(--text);background:transparent;text-align:left;cursor:pointer;font-family:inherit;--green:var(--etx-ui-cyan);}
+.etx-module-options button:hover,.etx-module-options button[aria-current="true"] {border-color:var(--etx-ui-terra-line);background:var(--etx-ui-tint);}
+.etx-module-options button:disabled {opacity:.4;cursor:default;}
+.etx-module-options button>span {flex:1;}
+.etx-module-options button>svg:last-child {width:16px;height:16px;}
+.etx-module-options button>svg:first-child {width:30px;height:30px;}
+.etx-module-options strong {display:block;font-size:13px;line-height:1.4;margin:5px 0;}
+.etx-module-options small {display:block;font-size:10px;color:var(--etx-ui-muted);}
+.etx-sucursal-datos {display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+.etx-sucursal-datos dt {font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--etx-ui-muted);margin-bottom:5px;}
+.etx-sucursal-datos dd {font-size:13px;overflow-wrap:anywhere;}
+body.etx-modulos-ui :is(#nav,#ctxBar,.etx-module-dialog) :is(a,button):focus-visible {outline:2px solid var(--etx-ui-cyan);outline-offset:3px;}
+/* LA BARRA LATERAL, PEGADA AL HEADER. Empezaba DEBAJO del subheader, así que
+   arrancaba casi a un tercio de la pantalla y el menú del módulo quedaba lejos
+   de todo lo demás. Ahora sube a la altura del subheader, y el subheader le
+   cede su carril: su tarjeta ya no se centra en la ventana sino en el espacio
+   de trabajo. Es el mismo ancho que ya reserva el contenido —`--etx-sidebar-space`,
+   que vale 268, 112 plegada o 0 en las páginas sin menú—, así que las dos
+   piezas se mueven juntas al contraer la barra y nunca se encabalgan.
+   Solo de 901 px para arriba: abajo la barra es un panel que se abre encima. */
+@media(min-width:901px) {
+  body.etx-modulos-ui #ctxBar {padding-left:calc(var(--etx-sidebar-space,268px) + 24px);}
+  body.etx-modulos-ui #nav {
+    top:calc(var(--etx-header-h,70px) + 16px);
+    max-height:calc(100dvh - var(--etx-header-h,70px) - 32px);
+    /* POR DELANTE DEL SUBHEADER. La franja del subheader ocupa todo el ancho y
+       es opaca —aunque su tarjeta esté recortada a la derecha—, así que al subir
+       la barra a su altura le tapaba la cabeza: se veían los iconos de abajo y
+       nada del módulo. Aquí la barra va delante (190 es el subheader; el header
+       sigue siendo 900 y nadie lo tapa). */
+    z-index:200;
+  }
+}
+@media(max-width:900px) {
+  body.etx-modulos-ui .ctx-bar-inner {flex-wrap:wrap;gap:12px;}
+  body.etx-modulos-ui .ctx-right {width:100%;flex-wrap:wrap;margin:0;justify-content:flex-end;}
+  body.etx-modulos-ui .ctx-nav-btns {margin-left:auto;}
+}
+@media(max-width:600px) {
+  body.etx-modulos-ui #ctxBar {padding:12px;}
+  body.etx-modulos-ui .ctx-bar-inner {padding:14px;border-radius:14px;}
+  body.etx-modulos-ui .ctx-neg-id {min-width:120px;}
+  body.etx-modulos-ui .ctx-neg-name {font-size:18px;}
+  body.etx-modulos-ui .ctx-nav-btns {display:none;}
+  body.etx-modulos-ui .ctx-right {display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  body.etx-modulos-ui .ctx-badge-plan {grid-column:1 / -1;justify-self:start;}
+  body.etx-modulos-ui .ctx-btn {padding:8px;font-size:10.5px;white-space:normal;line-height:1.4;justify-content:center;}
+  body.etx-modulos-ui #nav {left:12px;max-height:calc(100dvh - var(--etx-shell-top) - 20px);}
+  body.etx-modulos-ui .main-content {padding:16px 12px 40px;}
+  /* La píldora de sección («Estructura y desarrollo») va en `nowrap`: a 320 px,
+     con la barra lateral comiendo su parte, no cabe y empuja la página entera
+     —el renglón se parte en dos y ya—. Mismo recurso que `.ctx-btn` de arriba:
+     se deja envolver en vez de esconder el rótulo, que es el que dice de qué
+     trata la sección. */
+  body.etx-modulos-ui .cf-section-tag {white-space:normal;letter-spacing:1.6px;line-height:1.5;}
+  body.etx-modulos-ui .cf-section-hdr {flex-wrap:wrap;}
+  body.etx-modulos-ui .main-content .kpi-grid {grid-template-columns:minmax(0,1fr);}
+  body.etx-modulos-ui .hdr-acts {min-width:0;max-width:100%;}
+  body.etx-modulos-ui .hdr-acts .period-tabs {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:100%;min-width:0;}
+  body.etx-modulos-ui .hdr-acts .period-tab {padding:7px 6px;font-size:12px;}
+  body.etx-modulos-ui .period-picker {max-width:100%;}
+  body.etx-modulos-ui .period-picker input {min-width:0;max-width:100%;}
+  body.etx-modulos-ui #nav:not(.cerrado) {box-shadow:12px 0 30px rgba(0,0,0,.25);}
+  .etx-recetas-menu {padding:8px 12px 32px;}
+  .etx-recetas-menu .etx-recetas-grid {grid-template-columns:1fr;}
+  body.etx-module-cards .etx-tool-card {min-height:160px;padding:20px!important;}
+  body.etx-modulos-ui .cf-section-title {font-size:18px;}
+  .etx-module-options,.etx-sucursal-datos {grid-template-columns:1fr;}
+  .etx-module-options button {min-height:90px;}
+}
+@media(prefers-reduced-motion:reduce) {body.etx-modulos-ui #nav,body.etx-module-cards .etx-tool-card {transition:none;}}
+@media print {
+  body.etx-modulos-ui :is(#etaax-header,#ctxBar,#nav,.etx-module-dialog) {display:none!important;}
+  body.etx-modulos-ui {padding:0!important;}
+  body.etx-modulos-ui .main-content {margin:0!important;width:100%;padding:0;}
+}

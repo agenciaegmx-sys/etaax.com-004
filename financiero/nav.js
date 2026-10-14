@@ -13,7 +13,7 @@
 (function () {
     var SECCIONES = [
         { label: 'Resultados', links: [
-            { href: 'resumen.html', icon: '🧮', text: 'Resumen' }
+            { href: 'resumen.html', icon: '🧮', text: 'Resumen financiero' }
         ]},
         { label: 'Ingresos', links: [
             { href: 'ventas.html', icon: '💰', text: 'Ventas Totales' }
@@ -22,7 +22,7 @@
             { href: 'gastos-globales.html', icon: '📤', text: 'Gastos Totales' }
         ]},
         { label: 'Cuentas', links: [
-            { href: 'cuentas-bancarias.html', icon: '🏦', text: 'Cuentas Bancarias' }
+            { href: 'cuentas-bancarias.html', icon: '🏦', text: 'Cuentas Bancarias', soloSucursal: true }
         ]},
         { label: 'Análisis', links: [
             { href: 'previsiones.html',  icon: '🔮', text: 'Previsiones' },
@@ -36,11 +36,14 @@
        Financiera» donde las otras seis traen 🗃️ «Panel Financiero». Son dos
        segundos de duda cada vez que se cambia de sub-módulo —«¿me salí del
        módulo?»— por un copiar y pegar. */
+    var globalFinanciero = false;
+    try { globalFinanciero = sessionStorage.getItem('etaax_fin_global') === '1'; } catch (e) {}
+    var panelHref = globalFinanciero ? '/hub.html?negocios=1&panel=financiero' : 'index.html';
     var TOP =
         '<div class="nav-top">' +
             '<div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>' +
             '<div class="nav-top-actions">' +
-                '<a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Financiero" ' +
+                '<a href="' + panelHref + '" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Financiero" ' +
                    'style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;' +
                    'font-size:16px;line-height:1">🗃️</a>' +
                 '<button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" ' +
@@ -62,9 +65,11 @@
         nav.innerHTML = '';
         nav.insertAdjacentHTML('beforeend', TOP);
         var html = SECCIONES.map(function (sec) {
+            var links = sec.links.filter(function(l) { return !(globalFinanciero && l.soloSucursal); });
+            if (!links.length) return '';
             return '<div class="nav-section">' +
                 '<div class="nav-section-label">' + sec.label + '</div>' +
-                sec.links.map(function (l) {
+                links.map(function (l) {
                     var on = (l.href === aqui) ? ' active' : '';
                     return '<a href="' + l.href + '" class="nav-link' + on + '" data-tooltip="' + l.text + '">' +
                            '<span class="nav-icon">' + l.icon + '</span>' +
@@ -73,6 +78,7 @@
             '</div>';
         }).join('');
         nav.insertAdjacentHTML('beforeend', html);
+        if (typeof window.etaaxPintarIconosNav === 'function') window.etaaxPintarIconosNav();
     }
 
     /* OJO CON EL ORDEN: nav-pref.js guarda si la barra va abierta o cerrada y

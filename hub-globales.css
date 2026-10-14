@@ -1,0 +1,70 @@
+/* Paneles de acceso a los submódulos. La paleta y los estados viven en el hub. */
+body.hub-paleta .hub-global-panel{
+  --hub-panel-line:var(--hub-line);--hub-panel-hover:var(--hub-line-hover);
+  --hub-panel-accent:var(--hub-brand);--hub-panel-tint:var(--hub-brand-tint);
+  z-index:1100;
+}
+body.hub-paleta .hub-global-panel-fin{
+  --hub-panel-line:var(--hub-terra-line);--hub-panel-hover:var(--hub-terra-line-hover);
+  --hub-panel-accent:var(--hub-heading);--hub-panel-tint:var(--hub-action-tint);
+}
+body.hub-paleta .hub-global-panel .modal-box{max-width:720px;border-color:var(--hub-panel-line);}
+body.hub-paleta .hub-global-panel .modal-head{position:sticky;top:0;background:var(--s1);z-index:1;gap:12px;}
+body.hub-paleta .hub-global-panel .modal-title{display:flex;align-items:center;gap:12px;margin:0;font-size:30px;line-height:1.15;font-weight:400;}
+body.hub-paleta .hub-global-panel .modal-title>span{display:inline-flex;flex-shrink:0;}
+body.hub-paleta .hub-global-panel .modal-close{flex-shrink:0;color:var(--ui-apagado);}
+body.hub-paleta .hub-panel-desc{color:var(--ui-apagado);font-size:14px;margin:0 0 24px;line-height:1.6;}
+body.hub-paleta .hub-panel-desc strong{color:var(--text);}
+body.hub-paleta .catg-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+body.hub-paleta .catg-card{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  background:var(--s2);border:1px solid var(--ui-borde);border-radius:14px;
+  height:148px;min-width:0;padding:18px 10px;text-align:center;cursor:pointer;font-family:inherit;
+  transition:border-color .18s,background-color .18s,translate .18s;
+}
+body.hub-paleta .catg-card:hover,body.hub-paleta .catg-card:focus-within{border-color:var(--hub-panel-hover);background:var(--hub-panel-tint);}
+body.hub-paleta button.catg-card:hover{translate:0 -2px;}
+body.hub-paleta .catg-icon,body.hub-paleta .catg-icon>span{display:inline-flex;align-items:center;justify-content:center;}
+body.hub-paleta .catg-icon-pair{gap:8px;}
+body.hub-paleta .catg-label{font-family:'Bebas Neue','DM Sans',sans-serif;font-size:22px;font-weight:400;letter-spacing:.6px;line-height:1.1;text-transform:uppercase;color:var(--text);}
+body.hub-paleta .catg-abrir{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--hub-panel-accent);}
+body.hub-paleta .fing-grid{position:relative;isolation:isolate;gap:24px;grid-template-areas:'resumen kpis ventas' 'estadisticas kpis gastos';}
+/* Los conectores siguen las tarjetas medidas; nunca capturan un toque. */
+body.hub-paleta .fing-conectores{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1;overflow:visible;}
+body.hub-paleta .fing-conectores path{fill:none;stroke:var(--hub-panel-accent);stroke-width:1;opacity:.55;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round;}
+body.hub-paleta .fing-conectores circle{fill:var(--hub-brand);}
+body.hub-paleta .fing-resumen{grid-area:resumen;}
+body.hub-paleta .fing-ventas{grid-area:ventas;}
+body.hub-paleta .fing-kpis{grid-area:kpis;align-self:center;}
+body.hub-paleta .fing-estadisticas{grid-area:estadisticas;}
+body.hub-paleta .fing-gastos{grid-area:gastos;}
+body.hub-paleta .hub-panel-sucursales .modal-box{max-width:430px;}
+body.hub-paleta .hub-panel-sucursales .modal-title{font-family:'DM Sans',sans-serif;font-size:22px;font-weight:600;letter-spacing:0;}
+body.hub-paleta .hub-cambiar-opciones{display:grid;gap:10px;}
+body.hub-paleta :is(.hub-cambiar-opcion,.hub-cambiar-cancelar){font:500 14px 'DM Sans',sans-serif;min-height:46px;padding:12px 14px;border:1px solid var(--ui-borde);border-radius:9px;background:var(--s2);color:var(--text);cursor:pointer;text-align:left;}
+body.hub-paleta .hub-cambiar-opcion{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+body.hub-paleta .hub-cambiar-opcion>span{overflow-wrap:anywhere;min-width:0;}
+body.hub-paleta .hub-cambiar-opcion small{font-size:10px;color:var(--hub-settings);}
+body.hub-paleta .hub-cambiar-opcion[aria-current="true"]{border-color:var(--hub-brand);}
+body.hub-paleta .hub-cambiar-opcion:disabled{cursor:default;opacity:.55;}
+body.hub-paleta :is(.hub-cambiar-opcion:not(:disabled),.hub-cambiar-cancelar):hover{background:var(--hub-brand-tint);border-color:var(--hub-brand);}
+body.hub-paleta .hub-cambiar-estado{font-size:12px;line-height:1.5;color:var(--ui-apagado);margin-top:12px;}
+body.hub-paleta .hub-cambiar-estado:empty{display:none;}
+body.hub-paleta .hub-cambiar-cancelar{margin-top:18px;width:100%;background:transparent;}
+@media(max-width:560px){
+  body.hub-paleta .hub-global-panel{padding:12px;}
+  body.hub-paleta .hub-global-panel .modal-head{padding:20px 18px 16px;}
+  body.hub-paleta .hub-global-panel .modal-body{padding:18px;}
+  body.hub-paleta .hub-global-panel .modal-title{font-size:26px;gap:8px;}
+  body.hub-paleta .hub-panel-sucursales .modal-title{font-size:22px;}
+  body.hub-paleta .catg-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  body.hub-paleta .catg-card{padding:16px 8px;}
+  body.hub-paleta .catg-label{font-size:18px;}
+  body.hub-paleta .fing-grid{gap:24px 20px;grid-template-areas:'resumen ventas' 'estadisticas gastos' 'kpis kpis';}
+  body.hub-paleta .fing-kpis{width:calc((100% - 20px)/2);justify-self:center;}
+}
+@media(prefers-reduced-motion:reduce){
+  body.hub-paleta .hub-global-panel,body.hub-paleta .hub-global-panel .modal-box{animation:none;}
+  body.hub-paleta .catg-card{transition:none;}
+  body.hub-paleta button.catg-card:hover{translate:0 0;}
+}

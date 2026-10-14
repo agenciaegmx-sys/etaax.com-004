@@ -30,9 +30,11 @@
             if (nav)  nav.classList.toggle('cerrado', !ab);
             if (main) main.classList.toggle('expandido', !ab);   // expandido = nav colapsada
             if (document.body) document.body.classList.toggle('nav-open', ab);
-            if (btn && btn.childNodes[0]) btn.childNodes[0].textContent = ab ? '◀' : '▶';
-            if (txt) txt.textContent = ab ? 'Ocultar' : 'Expandir';
+            var nuevo = document.body && document.body.classList.contains('etx-modulos-ui');
+            if (btn && btn.childNodes[0]) btn.childNodes[0].textContent = nuevo ? (ab ? '← ' : '→ ') : (ab ? '◀' : '▶');
+            if (txt) txt.textContent = nuevo ? (ab ? 'Contraer navegación' : 'Expandir navegación') : (ab ? 'Ocultar' : 'Expandir');
             if (btn) btn.setAttribute('data-tooltip', ab ? 'Ocultar' : 'Expandir');
+            if (btn) btn.setAttribute('aria-expanded', String(ab));
         } catch (e) {}
     }
     // Sobrescribe cualquier toggleNav local (este script carga después).

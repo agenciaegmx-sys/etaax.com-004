@@ -2619,6 +2619,14 @@ function initCtxBar() {
         '</div></div>';
     bar.style.display = 'flex';
     document.body.classList.add('has-ctx');
+    if (typeof window.etaaxDisenoCtxBar === 'function') {
+        var logoCtx = bar.querySelector('.ctx-neg-emoji-wrap img');
+        window.etaaxDisenoCtxBar(bar, ctx, {
+            global: catGlobal, volver: catGlobal ? hubPath + '?negocios=1' : hubPath,
+            logo: logoCtx ? logoCtx.getAttribute('src') : '', tipo: tipo,
+            editorNav: bar.querySelector('#ctxEditorNav')
+        });
+    }
 }
 
 function ctxShowEditorNav() {

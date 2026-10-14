@@ -4,7 +4,7 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
-    <script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+    <script src="/theme.js?v=modulos-ui-1"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX - Control Financiero</title>
@@ -190,6 +190,8 @@
         }
 
     </style>
+<link rel="stylesheet" href="/etaax-sidebar.css?v=1">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1">
 </head>
 <body>
 
@@ -315,10 +317,6 @@
     </div><!-- /cf-modules -->
 </div><!-- /cf-wrap -->
 
-<button class="theme-toggle" onclick="toggleTheme()">
-    <span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span>
-</button>
-
 <script>
 
 
@@ -327,8 +325,13 @@
 <script src="/etaax-db.js"></script><!-- la cola de sincronización y sus avisos:
      un hub también tiene que poder mostrar que algo no se guardó -->
 <script src="../security.js"></script>
-<script src="../ctx-bar.js"></script>
+<script src="/ctx-bar.js?v=modulos-ui-1"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/etaax-iconos.js?v=modulos-1"></script>
+<script src="/etaax-sidebar.js?v=2"></script>
+<script src="/negocio-tipos.js?v=1"></script>
+<script src="/etaax-header.js?v=paleta-1"></script>
+<script src="/etaax-modulos-ui.js?v=1"></script>
 </body>
 </html>
