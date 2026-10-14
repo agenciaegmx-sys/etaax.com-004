@@ -67,7 +67,12 @@
 -- solo la ficha de su sucursal y Beto solo la de la suya; que un NIP inventado,
 -- uno dado de baja y un token falso no reciban nada; que el NIP de un negocio
 -- no abra el catálogo de otro; y que correrla dos veces no cambie nada.
--- 25 comprobaciones, 0 fallas.
+-- También se probó la RED DE SEGURIDAD: un catálogo que nunca se repartió por
+-- sucursal (todos los insumos sin asignar) sigue sirviendo —si no, el celular
+-- se queda vacío y nadie puede registrar—, mientras que una sucursal a la que
+-- no le copiaron fichas recibe la lista vacía a propósito: taparlo con los
+-- maestros es el bug que se vino a cerrar.
+-- 29 comprobaciones, 0 fallas.
 --
 -- Idempotente: CREATE OR REPLACE. Se corre a mano en Supabase → SQL Editor.
 -- La comprobación va al final, en una sola instrucción.
@@ -166,6 +171,32 @@ BEGIN
      WHERE i.negocio_id = p_neg
        AND COALESCE(i.datos->>'activo', '1') <> '0'
        AND _insumo_en_suc(i.datos, v_suc);
+    /* RED DE SEGURIDAD — un catálogo que NUNCA se repartió por sucursal.
+       Hay negocios donde todos los insumos están sin asignar porque nadie usó
+       las copias todavía. Ahí el filtro correcto deja la lista vacía y el
+       celular se queda sin nada que registrar, sin que el colaborador pueda
+       hacer nada al respecto. Si NINGÚN insumo del negocio tiene sucursal, se
+       entregan los no asignados: no son de otra sucursal —no hay otra que
+       proteger—, son la ficha de referencia del negocio.
+
+       OJO con la condición: es "el negocio no repartió NADA", no "esta
+       sucursal no tiene". Si S1 tiene sus 200 y S2 ninguno, S2 recibe la lista
+       vacía a propósito: lo que falta ahí es que alguien le copie sus fichas, y
+       taparlo con los maestros es justo el bug que se vino a cerrar.          */
+    IF v_ins = '[]'::jsonb AND NOT EXISTS (
+        SELECT 1 FROM negocio_insumos i
+         WHERE i.negocio_id = p_neg
+           AND COALESCE(i.datos->>'activo', '1') <> '0'
+           AND (   jsonb_typeof(i.datos->'sucursales') = 'array'
+                   AND jsonb_array_length(i.datos->'sucursales') > 0
+                OR COALESCE(i.datos->>'sucursalId', '') <> '' )) THEN
+        SELECT COALESCE(jsonb_agg(_insumo_qr_campos(i.datos)), '[]'::jsonb) INTO v_ins
+          FROM negocio_insumos i
+         WHERE i.negocio_id = p_neg
+           AND COALESCE(i.datos->>'activo', '1') <> '0';
+        RETURN jsonb_build_object('ok', true, 'sucursal', v_suc,
+                                  'sinRepartir', true, 'insumos', v_ins);
+    END IF;
     RETURN jsonb_build_object('ok', true, 'sucursal', v_suc, 'insumos', v_ins);
 END;
 $$;

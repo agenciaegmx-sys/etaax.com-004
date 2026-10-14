@@ -13335,7 +13335,8 @@ console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ═
            copia local que podría haber quedado con el criterio invertido. */
         vm.runInContext(fs.readFileSync(path.join(RAIZ, 'insumo-label.js'), 'utf8'), ctx,
                         { filename: 'insumo-label.js' });
-        ['_SA', '_unoPorProductoQR', '_enSucQR', '_enSucRecetaQR', '_areaDeReceta', '_delAreaQR']
+        vm.runInContext('var _SIN_REPARTIR=false;', ctx);
+        ['_SA', '_unoPorProductoQR', '_enSucQR', '_enSucRecetaQR', '_misInsumosQR', '_areaDeReceta', '_delAreaQR']
             .forEach(f => vm.runInContext(decl(f), ctx, { filename: 'entrada.html' }));
         return ctx;
     }
@@ -13393,6 +13394,63 @@ console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ═
         eq(qr({ suc: 'suc_2' })._enSucQR({ id: 'i_b', activo: '0', sucursales: ['suc_2'] }), false, 'de baja'));
     test('…ni una receta dada de baja', () =>
         eq(qr({ suc: 'suc_2' })._enSucRecetaQR({ id: 'r_b', status: 'inactiva', sucursales: ['suc_2'] }), false, 'de baja'));
+    /* ── LA RED DEBAJO DEL FILTRO ───────────────────────────────────────────
+       Acotar por sucursal tiene un filo: hay negocios donde NADIE usó las
+       copias y todos los insumos están sin asignar. Ahí el filtro correcto deja
+       el celular vacío y el colaborador no puede hacer nada —ni hay otra
+       sucursal que proteger, porque ninguna tiene lo suyo—. Pero la red no
+       puede ser "si esta sucursal no tiene, muéstrale los maestros": eso es el
+       bug otra vez, con otro nombre. */
+    const CATALOGO_REPARTIDO = [
+        { id: 'm', nombre: 'Tónica', activo: '1', sucursales: [] },
+        { id: 'c1', nombre: 'Tónica', activo: '1', origenId: 'm', sucursales: ['suc_1'] },
+        { id: 'c2', nombre: 'Tónica', activo: '1', origenId: 'm', sucursales: ['suc_2'] },
+    ];
+    const CATALOGO_SIN_REPARTIR = [
+        { id: 'a', nombre: 'Limón', activo: '1', sucursales: [] },
+        { id: 'b', nombre: 'Sal', activo: '1' },
+        { id: 'z', nombre: 'Ron viejo', activo: '0', sucursales: [] },
+    ];
+    test('un catálogo que nunca se repartió sigue sirviendo en el QR', () => {
+        const c = qr({ suc: 'suc_7' });
+        const r = c._misInsumosQR(CATALOGO_SIN_REPARTIR);
+        return eq(r.length, 2, 'dejó la pantalla vacía: nadie podría registrar nada');
+    });
+    test('…pero sin resucitar lo dado de baja', () => {
+        const c = qr({ suc: 'suc_7' });
+        return eq(c._misInsumosQR(CATALOGO_SIN_REPARTIR).some(x => x.id === 'z'), false, 'volvió el de baja');
+    });
+    test('…y una sucursal sin fichas propias NO recibe los maestros de rebote', () => {
+        const c = qr({ suc: 'suc_9' });
+        return eq(c._misInsumosQR(CATALOGO_REPARTIDO).length, 0, 'la red tapó el bug que se cerró');
+    });
+    test('…y la sucursal que sí tiene recibe la suya, no el maestro', () => {
+        const c = qr({ suc: 'suc_2' });
+        const r = c._misInsumosQR(CATALOGO_REPARTIDO);
+        return eq(r.length === 1 && r[0].id === 'c2', true, 'recibió ' + r.map(x => x.id).join(','));
+    });
+    /* La app móvil es otro archivo: la red tiene que estar en los dos o el
+       celular instalado se comporta distinto que el del QR. */
+    test('la app móvil tiene la misma red', () => {
+        const ctx = { console, JSON, Object, Array, String, Boolean };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'insumo-label.js'), 'utf8'), ctx, { filename: 'insumo-label.js' });
+        vm.runInContext('var SUC="suc_7";', ctx);
+        const mv = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
+        ['enSuc', 'misInsumos'].forEach((nm) => {
+            const p = mv.indexOf('function ' + nm + '(');
+            const abre = mv.indexOf('{', p);
+            let prof = 0;
+            for (let i = abre; i < mv.length; i++) {
+                if (mv[i] === '{') prof++;
+                else if (mv[i] === '}' && --prof === 0) { vm.runInContext(mv.slice(p, i + 1), ctx); break; }
+            }
+        });
+        return eq(ctx.misInsumos(CATALOGO_SIN_REPARTIR).length === 2 &&
+                  ctx.misInsumos(CATALOGO_REPARTIDO).length === 0, true, 'la red no está igual');
+    });
+
     test('la carga de recetas ya pasa por el deduplicador', () =>
         eq(decl('_cargarRecetas').indexOf('_unoPorProductoQR(') > -1, true, 'dedup'));
     /* Las dos reglas se parecen tanto que se confunden al leer, y preguntarle

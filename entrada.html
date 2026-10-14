@@ -418,6 +418,8 @@ async function _hashNip(pin){
 var NEG = _q('n') || _q('neg');
 var TOKEN = _q('t');             // token secreto del negocio (va en el QR) — NO requiere login
 var SUC = _q('s') || '';         // sucursal del QR (cada sucursal imprime SU QR) — sella cada registro
+var _SIN_REPARTIR = false;       // el negocio nunca repartió su catálogo por sucursal (ver _misInsumosQR)
+var _SIN_REPARTIR = false;       // el negocio nunca repartió su catálogo por sucursal (ver la red de seguridad)
 // ¿El insumo/receta pertenece a la sucursal del QR? (compat: sin lista de sucursales = visible)
 /* UN RENGLÓN POR PRODUCTO. El catálogo guarda un maestro global y una copia por
    sucursal del mismo producto (misma botella, dos registros). Sin esto, la barra ve
@@ -518,6 +520,27 @@ function _enSucQR(x){
     if (!ss || !ss.length) return false;                   // maestro sin asignar: de ninguna
     for (var i = 0; i < ss.length; i++) { if ((ss[i] || 'suc_principal') === SUC) return true; }
     return false;
+}
+/* ── QUÉ INSUMOS SON DE QUIEN ENTRA ──────────────────────────────────────────
+   El filtro de sucursal, con una red debajo: un catálogo que NUNCA se repartió
+   —todos los insumos sin asignar, porque nadie usó las copias todavía— dejaría
+   la pantalla vacía sin que el colaborador pueda hacer nada, y ahí no hay otra
+   sucursal que proteger, porque ninguna tiene lo suyo.
+
+   La condición es "el negocio no repartió NADA", no "esta sucursal no tiene".
+   Si S1 tiene sus fichas y S2 ninguna, S2 recibe la lista vacía a propósito: lo
+   que falta ahí es que alguien le copie las suyas, y taparlo con los maestros
+   del negocio es exactamente el bug que se vino a cerrar. */
+function _misInsumosQR(lista){
+    var vivos = (lista || []).filter(function(x){ return x && x.id && x.activo !== '0'; });
+    var mios  = vivos.filter(_enSucQR);
+    if (!mios.length) {
+        var repartido = vivos.some(function(x){
+            return (x.sucursales && x.sucursales.length) || x.sucursalId;
+        });
+        if (!repartido) { _SIN_REPARTIR = true; return vivos; }
+    }
+    return mios;
 }
 function _enSucRecetaQR(x){
     if (!SUC || !x) return true;
@@ -706,9 +729,7 @@ async function entrar(){
             var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
             _ins = ri.data || [];
         }
-        INSUMOS = _unoPorProductoQR(                                    // sin duplicados maestro/copia
-            _ins.filter(function(x){ return x && x.id && x.activo !== '0' && _enSucQR(x); })  // solo los de ESTA sucursal
-        );
+        INSUMOS = _unoPorProductoQR(_misInsumosQR(_ins));   // sin duplicados maestro/copia
         INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
         // 3) Menú de conceptos.
         /* El nombre solo no dice nada cuando hay tres Diegos o cuando el
@@ -750,7 +771,13 @@ function filtrarIns(q){
         ? lista.map(function(x){
             return '<div class="ins-it" onclick="selIns(\''+x.id+'\')">'+etx(x.nombre)+_insMetaHTML(x)+'</div>';
         }).join('')
-        : '<div class="ins-it" style="color:var(--text-dim);cursor:default">Sin resultados</div>';
+        /* "Sin resultados" es lo que se busca y no está. Que no haya NADA que
+           buscar es otra cosa, y hay que decirla con lo que se puede hacer:
+           alguien tiene que copiarle sus fichas a esta sucursal. */
+        : '<div class="ins-it" style="color:var(--text-dim);cursor:default;line-height:1.5">' +
+          (INSUMOS.length ? 'Sin resultados'
+            : 'No hay productos asignados a tu sucursal.<br><span style="font-size:11px">Pídele al administrador que los copie aquí desde Insumos.</span>') +
+          '</div>';
 }
 function selIns(id){
     SEL = INSUMOS.find(function(x){ return x.id===id; });

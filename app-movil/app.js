@@ -352,10 +352,26 @@ function nomArea(k) { return (_SA() && _SA().nomIns(k)) || k; }
    Se deduplica maestro/copia y se acota a la sucursal del QR: el colaborador
    tiene que ver UN producto por producto, no uno por sucursal. */
 async function cargarInsumos() {
-    var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
-    INSUMOS = unoPorProducto((ri.data || []).filter(function (x) {
-        return x && x.id && x.activo !== '0' && enSuc(x);
-    }));
+    var _ins = null;
+    /* Las DOS llaves (token del QR + NIP) para que el servidor mande solo las
+       fichas de la sucursal donde trabaja quien entra, y acotadas: la consulta
+       vieja entregaba la ficha completa de todos los insumos del negocio, con
+       precios y proveedor (v80). Cae a la vieja si la v80 no se corrió: las
+       migraciones se aplican a mano. */
+    if (NIPHASH) {
+        try {
+            var rc = await _supabase.rpc('entrada_catalogo', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+            if (rc && rc.data && rc.data.ok) {
+                _ins = rc.data.insumos || [];
+                if (rc.data.sucursal) SUC = rc.data.sucursal;
+            }
+        } catch (e) { /* v80 sin correr */ }
+    }
+    if (_ins === null) {
+        var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
+        _ins = ri.data || [];
+    }
+    INSUMOS = unoPorProducto(misInsumos(_ins));
     INSUMOS.sort(function (a, b) { return (a.nombre || '').localeCompare(b.nombre || ''); });
 }
 /* La MISMA regla de `/insumo-label.js` que usa el resto del sistema. Aquí vivía
@@ -370,6 +386,18 @@ function enSuc(x) {
     if (!ss || !ss.length) return false;                   // maestro sin asignar: de ninguna
     for (var i = 0; i < ss.length; i++) { if ((ss[i] || 'suc_principal') === SUC) return true; }
     return false;
+}
+/* El filtro de sucursal con su red debajo — la misma de entrada.html: un
+   catálogo que nunca se repartió sigue sirviendo; una sucursal a la que no le
+   copiaron nada recibe la lista vacía a propósito. */
+function misInsumos(lista) {
+    var vivos = (lista || []).filter(function (x) { return x && x.id && x.activo !== '0'; });
+    var mios  = vivos.filter(enSuc);
+    if (!mios.length) {
+        var repartido = vivos.some(function (x) { return (x.sucursales && x.sucursales.length) || x.sucursalId; });
+        if (!repartido) return vivos;
+    }
+    return mios;
 }
 function enSucReceta(x) {
     if (!SUC || !x) return true;
