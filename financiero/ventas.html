@@ -207,6 +207,13 @@
 
         <div class="wrap">
 
+            <!-- Cuando una lectura falla o se queda a medias, el aviso va ARRIBA
+                 y en rojo: un reporte de ventas incompleto que no lo dice es peor
+                 que no tenerlo, porque nadie sospecha de un número. -->
+            <div id="vtFalla" style="display:none;background:rgba(232,90,90,.10);
+                 border:1px solid rgba(232,90,90,.45);color:#e85a5a;border-radius:10px;
+                 padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.6"></div>
+
             <!-- SUGERENCIA INTELIGENTE -->
             <div class="suggestion-box" id="suggBox" style="display:none">
                 <div class="sug-icon">💡</div>
@@ -430,18 +437,64 @@ var _cacheOtros    = null;
 
 function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo')||''; }
 
+/* Lo que no se pudo leer entero. Vacío = el reporte está completo. */
+var _vtFalló = [];
+
 async function _sbInit() {
     var negId = getNegocioActivo();
     if (!negId) return;
-    var r = await Promise.all([
-        _supabase.from('cortes').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
-        _supabase.from('sf_metas').select('datos').eq('negocio_id', negId).maybeSingle(),
-        _supabase.from('sf_otros').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
-    ]);
-    if (!r[0].error) _cacheCortesSF = (r[0].data||[]).map(function(x){return x.datos;});
-    if (!r[1].error && r[1].data) _cacheMetas = r[1].data.datos || {};
-    if (!r[2].error) _cacheOtros   = (r[2].data||[]).map(function(x){return x.datos;});
+    /* POR CURSOR, HASTA EL FINAL. Antes se pedían cortes y otros ingresos de un
+       solo viaje: pasado el techo de filas del proyecto no hay error ni aviso,
+       llegan las primeras N y la pantalla calcula tan contenta. En un reporte de
+       ventas eso es una venta equivocada con cara de dato bueno — y es peor que
+       un error, porque nadie sospecha de un número.
+       `etaaxLeerVarias` lee por cursor, pregunta cuántas filas debería haber,
+       compara, y NOMBRA lo que no pudo traer entero. Ese nombre acaba en el
+       aviso rojo. Es el mismo lector que ya usan Resumen y KPIs: tres pantallas
+       que leen lo mismo tienen que leerlo igual. */
+    if (typeof etaaxLeerVarias !== 'function') {
+        _vtFalló = ['todo (no cargó el módulo de datos — recarga la página)'];
+        renderAll(); return;
+    }
+    var r;
+    try {
+        r = await Promise.all([
+            etaaxLeerVarias([
+                {tabla:'cortes',   nombre:'ventas'},
+                {tabla:'sf_otros', nombre:'otros ingresos'}
+            ], negId),
+            _supabase.from('sf_metas').select('datos').eq('negocio_id', negId).maybeSingle()
+        ]);
+    } catch (e) {
+        _vtFalló = ['todo (no se pudo completar la carga)'];
+        renderAll(); return;
+    }
+    var col = r[0];
+    _cacheCortesSF = col.datos.cortes;
+    _cacheOtros    = col.datos.sf_otros;
+    var falló = col.incompletas.slice();
+    /* Las metas son un DOCUMENTO por negocio: no hay nada que paginar, pero su
+       fallo tampoco puede pasar callado — sin metas, el cumplimiento sale en
+       cero y parece que nadie vendió contra su objetivo. */
+    if (r[1] && r[1].error) falló.push('metas de venta');
+    else if (r[1] && r[1].data) _cacheMetas = r[1].data.datos || {};
+    _vtFalló = falló;
     renderAll();
+}
+
+/* El aviso, arriba y en rojo. No se esconde el reporte: lo que se pudo leer
+   sigue sirviendo para trabajar; lo que no se puede es dejarlo pasar entero. */
+function _vtAviso(){
+    var box = document.getElementById('vtFalla');
+    if (!box) return;
+    if (!_vtFalló.length) { box.style.display='none'; box.innerHTML=''; return; }
+    box.style.display='block';
+    box.innerHTML = '<b>Este reporte está incompleto.</b> No se pudo leer: ' +
+        etx(_vtFalló.join(', ')) + '. Los totales de abajo NO incluyen esa ' +
+        'información — no son ceros reales. Revisa tu conexión y vuelve a cargar.' +
+        ' <button onclick="_sbInit()" style="background:none;border:1px solid currentColor;' +
+        'color:inherit;border-radius:7px;padding:3px 11px;font:inherit;font-size:12px;' +
+        'cursor:pointer;margin-left:6px">Reintentar</button>';
 }
 function _sbUpOtro(record) { sbUpsert('sf_otros', record); }
 function _sbDelOtro(id) { sbDelete('sf_otros', id); }
@@ -583,6 +636,18 @@ function getRange(){
     return{from:val,to:end};
 }
 function inRange(f,r){return f>=r.from&&f<=r.to;}
+/* Las fechas de un rango, una por una. Se avanza con `setDate`, que resuelve
+   solo el cambio de mes y de año; y se corta a 400 vueltas porque un rango mal
+   capturado —un año tecleado de más— no debe colgar la pantalla. */
+function _fechasDelRango(r){
+    var out=[],d=new Date(r.from+'T12:00:00'),fin=new Date(r.to+'T12:00:00'),n=0;
+    if(isNaN(d)||isNaN(fin)) return out;
+    while(d<=fin && n++<400){
+        out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+        d.setDate(d.getDate()+1);
+    }
+    return out;
+}
 
 /* ── Meta helpers ── */
 function getMetaMes(mesStr){var metas=loadMetas();return metas[mesStr]||null;}
@@ -692,23 +757,33 @@ function renderAll(){
     var totalO=Object.values(otrosMap).reduce(function(s,v){return s+v;},0);
     var total=totalV+totalO;
 
+    /* LA META DEL PERIODO SE SUMA FECHA POR FECHA, mire lo que mire la pantalla.
+       Antes solo se buscaba la meta del MES, así que en vista de día, semana o
+       rango no había mes del que sacarla y la pantalla mostraba meta $0 —
+       mientras el impreso, que sí la calculaba por fecha, decía $100 ese día y
+       $700 esa semana. Dos cuentas de lo mismo en la misma pantalla.
+       Ahora las dos usan `_metaDelDiaSF`, que además resuelve solo los rangos
+       que cruzan de un mes a otro. */
     var mes=r.mes||(periodoTipo==='mes'?_pickerVal().slice(0,7):null);
-    var metaDatos=mes?getMetaMes(mes):null;
     var metaDiaria={},metaPeriodo=0;
-    if(metaDatos){
-        var distMes=calcMetaDiaria(mes,metaDatos.meta,metaDatos.dist||'uniforme',metaDatos.manualDays||null);
-        Object.keys(distMes).forEach(function(f){if(inRange(f,r)){metaDiaria[f]=distMes[f];}});
-        metaPeriodo=Object.values(metaDiaria).reduce(function(s,v){return s+v;},0);
-    }
+    _fechasDelRango(r).forEach(function(f){
+        var m=_metaDelDiaSF(f);
+        if(m>0){ metaDiaria[f]=m; metaPeriodo+=m; }
+    });
 
+    /* SOLO SE PROYECTA LO QUE ESTÁ EN CURSO. Antes se proyectaba cualquier mes:
+       con agosto ya terminado y 26 días de $100 capturados, la pantalla mostraba
+       venta $2,600 y «proyección $3,100» — un pronóstico sobre un mes que ya no
+       puede vender nada. Un mes cerrado tiene resultado, no proyección. */
     var hoy=todayStr();
     var proyeccion=null;
-    if(periodoTipo==='mes'&&r.mes){
+    if(periodoTipo==='mes'&&r.mes&&r.to>=hoy&&r.from<=hoy){
         var diasMes=new Date(parseInt(r.mes.slice(0,4)),parseInt(r.mes.slice(5,7)),0).getDate();
         var diasConData=Object.keys(cortesMap).filter(function(f){return f<=hoy;}).length;
         if(diasConData>0) proyeccion=(total/diasConData)*diasMes;
     }
 
+    _vtAviso();
     _renderKPIs(total,metaPeriodo,proyeccion,r);
     _renderProgress(total,metaPeriodo,metaDiaria,cortesMap,r,mes);
     _renderTabla(cortesMap,otrosMap,metaDiaria,r);
@@ -856,7 +931,8 @@ function _renderOtros(r){
         btn.addEventListener('click',function(){
             var delId = btn.dataset.otroDel;
             _pedirClaveAdmin('Eliminar otro ingreso', function(){
-                _cacheOtros = loadOtros().filter(function(o){return o.id!==delId;});
+                /* …y lo mismo al borrar: sobre la colección completa. */
+                _cacheOtros = (_cacheOtros || []).filter(function(o){return o.id!==delId;});
                 _sbDelOtro(delId);
                 renderAll();
             });
@@ -982,6 +1058,12 @@ function guardarMeta(){
     var entry={meta:val,dist:dist,fechaSet:todayStr(),manualDays:Object.assign({},_manualDays)};
     metas[mes]=entry;
     saveMetas(metas);
+    /* La distribución por día se guarda en caché para no recalcularla en cada
+       renglón del impreso. Al editar una meta esa caché queda vieja: tras
+       cambiar octubre de $3,100 a $6,200, el impreso seguía diciendo $100 al día
+       cuando tocaban $200. Se tira al guardar — que es el único momento en que
+       puede cambiar. */
+    window.__mdCache=null;
     cerrarMetas();
     renderAll();
 }
@@ -1001,9 +1083,15 @@ function _abrirOtrosModal(id){
     document.getElementById('modalOtros').classList.add('open');
     setTimeout(function(){document.getElementById('oConcepto').focus();},60);
 }
-function cerrarOtros(){document.getElementById('modalOtros').classList.remove('open');}
+function cerrarOtros(){document.getElementById('modalOtros').classList.remove('open');_guardandoOtro=false;}
 
+var _guardandoOtro=false;
 function guardarOtro(){
+    /* Freno al doble clic. Quitar la conexión duplicada arregla el clic único,
+       pero dos clics rápidos de verdad siguen siendo dos altas con identificador
+       distinto: el campo `oId` está vacío en un alta y `genId()` devuelve uno
+       nuevo cada vez. Se suelta al cerrar el modal. */
+    if(_guardandoOtro) return;
     var monto=n(document.getElementById('oMonto').value);
     var concepto=document.getElementById('oConcepto').value.trim();
     var fecha=document.getElementById('oFecha').value;
@@ -1013,8 +1101,15 @@ function guardarOtro(){
     var id=document.getElementById('oId').value||genId();
     var record={id:id,fecha:fecha,concepto:concepto,monto:monto,metodo:document.getElementById('oMetodo').value,
         sucursalId:_sucursalId||''}; // sellado con la sucursal en pantalla ('' = Matriz)
-    _cacheOtros = loadOtros().filter(function(o){return o.id!==id;});
+    /* Se trabaja sobre la colección COMPLETA, no sobre `loadOtros()`, que ya
+       viene filtrada por la sucursal en pantalla: asignarle el resultado
+       filtrado borraba de memoria los ingresos de las demás sucursales. Guardar
+       $50 en Matriz dejaba en cero los $200 de otra sucursal hasta recargar —y
+       sin mandar ninguna baja al servidor, así que el dato seguía allá y la
+       pantalla mentía. El filtro se aplica al CONSULTAR, no al guardar. */
+    _cacheOtros = (_cacheOtros || []).filter(function(o){return o.id!==id;});
     _cacheOtros.push(record);
+    _guardandoOtro=true;
     _sbUpOtro(record);
     cerrarOtros();
     renderAll();
@@ -1256,15 +1351,14 @@ document.addEventListener('DOMContentLoaded',function(){
         _buildDayGrid(document.getElementById('metaMes').value, n(document.getElementById('metaVal').value));
     });
 
-    /* Guardar buttons */
-    var btnGuardarMeta=document.querySelector('#modalMetas .btn-primary');
-    if(btnGuardarMeta) btnGuardarMeta.addEventListener('click',guardarMeta);
-    var btnGuardarOtro=document.querySelector('#modalOtros .btn-primary');
-    if(btnGuardarOtro) btnGuardarOtro.addEventListener('click',guardarOtro);
-    var btnCancelarMeta=document.querySelector('#modalMetas .btn-ghost');
-    if(btnCancelarMeta) btnCancelarMeta.addEventListener('click',cerrarMetas);
-    var btnCancelarOtro=document.querySelector('#modalOtros .btn-ghost');
-    if(btnCancelarOtro) btnCancelarOtro.addEventListener('click',cerrarOtros);
+    /* Los botones de los dos modales ya llaman a su función desde el `onclick`
+       del marcado. Aquí se volvían a conectar con `addEventListener`, así que un
+       clic disparaba la acción DOS VECES: un ingreso de $500 se guardaba dos
+       veces con dos identificadores distintos y la lista mostraba $1,000. En
+       Guardar meta no se notaba —se reescribe el mismo documento— pero era la
+       misma falla esperando a que alguien le pusiera un identificador nuevo.
+       Una acción, una conexión. Los de cancelar iban igual de duplicados: ahí no
+       se notaba porque cerrar dos veces cierra una, pero es la misma falla. */
 
     /* Sugg dismiss */
     var suggClose=document.querySelector('#suggBox button[onclick]');

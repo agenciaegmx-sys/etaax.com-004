@@ -130,6 +130,13 @@ async function page(base, route, mode = 'owner', width = 1440, navigation = fals
     await until(sid, mode === 'race' ? "document.getElementById('planNegocio') && window.__release && __release.length===2 && !!document.querySelector('.cuenta-loading')" : route.startsWith('/hub') ? (mode === 'anon' ? "document.getElementById('etaax-header') && document.getElementById('viewLogin').getClientRects().length" : "document.getElementById('etaax-header') && Array.from(document.querySelectorAll('.neg-activo-bar')).some(x=>x.getClientRects().length)") :
         route.startsWith('/recetas/index.html') ? "typeof verRecetas==='function' && document.readyState==='complete'" :
         "document.getElementById('cuentaContenido') && !document.querySelector('.cuenta-loading')");
+    /* ANUNCIO FUERA. Desde ETAAX 2.0 el aviso de novedades se abre solo al
+       entrar y cubre la pantalla; estas pruebas pulsan elementos por debajo con
+       `.click()`, cosa que una persona no puede hacer porque el recuadro está
+       encima. Se descarta primero —como lo haría cualquiera— para que cada caso
+       mida lo que dice medir y no el foco del anuncio.
+       Su propio comportamiento se prueba en el candado (suite BE17). */
+    await evalPage(sid, "(function(){ if(window.EtaaxNovedades){ EtaaxNovedades.anunciar(false); EtaaxNovedades.cerrar(); } })()");
     return {sid,targetId};
 }
 async function close(p) { closedSessions.add(p.sid);await send('Target.closeTarget',{targetId:p.targetId}); }
@@ -646,7 +653,12 @@ async function run(base) {
             const shot=await send('Page.captureScreenshot',{format:'png'},p.sid);
             fs.writeFileSync(path.join(os.tmpdir(),'etaax-catalogos-globales-'+width+'.png'),Buffer.from(shot.data,'base64'));
             await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',modifiers:8},p.sid);
-            assert.equal(await evalPage(p.sid,"document.activeElement.textContent.includes('Clientes')"),true);
+            /* Se ESPERA a que el foco llegue, no se pregunta de inmediato: el
+               evento de teclado se despacha y el navegador mueve el foco en su
+               propio turno. Preguntar en la misma línea hacía que esta prueba
+               pasara o fallara según lo ocupada que estuviera la máquina — y una
+               prueba que pasa por suerte no vigila nada. */
+            await until(p.sid,"document.activeElement && document.activeElement.textContent.includes('Clientes')");
             await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'},p.sid);
             assert.equal(await evalPage(p.sid,"document.getElementById('modalCatGlobal').style.display"),'none');
             assert.equal(await evalPage(p.sid,"document.querySelector('.hub-shell').inert"),false);

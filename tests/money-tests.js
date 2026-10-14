@@ -27585,6 +27585,205 @@ function suiteResumenFinanciero20261013(){
     test('Año respeta el año bisiesto y sus límites de calendario',()=>{eq(C.getRange('anio','2024').from,'2024-01-01');eq(C.getRange('anio','2024').to,'2024-12-31');});
 }
 
+/* ═══════════ SUITE BE20 · VENTAS: LO QUE DEJÓ ABIERTO LA REVISIÓN ═══════════
+   De los seis hallazgos de `docs/revision-ventas-2026-10-13.md`. Cada uno se
+   reprodujo antes de tocar nada: un reporte no es una prueba, y uno de los seis
+   resultó ser PEOR de lo descrito —cuatro acciones conectadas dos veces, no
+   dos—. Lo que sigue vigila que no vuelvan.                                  */
+function suiteVentasFiabilidad() {
+console.log('\n══ BE20 · Ventas: un ingreso, una sola alta ══');
+
+    const V = fs.readFileSync(path.join(RAIZ, 'financiero/ventas.html'), 'utf8');
+
+    /* UN CLIC, UNA ALTA. Los botones de los modales llaman a su función desde
+       el `onclick` del marcado Y se volvían a conectar con `addEventListener`
+       sobre el MISMO elemento. Un ingreso de $500 se guardaba dos veces, con dos
+       identificadores distintos, y la lista mostraba $1,000. */
+    test('los botones de los modales no se conectan dos veces', () => {
+        /* Con comillas de las dos clases: la prueba anterior solo veía las
+           simples, y una mutación con comillas dobles se le coló entera. */
+        const reBind = /querySelector\(\s*['"]#modal(Otros|Metas)\s+\.btn-(primary|ghost)['"]\s*\)/g;
+        const dobles = V.match(reBind) || [];
+        return eq(dobles.length, 0,
+                  'vuelven a conectar por selector un botón que ya llama desde su onclick: ' +
+                  dobles.join(', '));
+    });
+    /* …y el clic rápido de verdad, que la conexión única no cubre: en un alta el
+       campo del id viene vacío y `genId()` devuelve uno nuevo cada vez. */
+    test('…y dos clics rápidos no producen dos ingresos', () => {
+        eq(/var _guardandoOtro=false;/.test(V), true, 'sin freno al doble clic');
+        eq(/if\(_guardandoOtro\) return;/.test(V), true, 'el freno no corta la segunda entrada');
+        return eq(/function cerrarOtros\(\)\{[^}]*_guardandoOtro=false;/.test(V), true,
+                  'el freno no se suelta al cerrar: el siguiente ingreso ya no se podría guardar');
+    });
+
+    /* LA CACHÉ ES DE TODO EL NEGOCIO, EL FILTRO ES DE LA PANTALLA. `loadOtros()`
+       ya viene filtrado por la sucursal activa; asignarle su resultado a la
+       caché borraba de memoria los ingresos de las demás. Guardar $50 en Matriz
+       dejaba en cero los $200 de otra sucursal —sin mandar ninguna baja al
+       servidor, así que el dato seguía allá y la pantalla mentía. */
+    test('guardar en una sucursal no borra los ingresos de las otras', () => {
+        const ctx = crearContexto();
+        const cuerpo = V.slice(V.indexOf('function loadOtros'));
+        const loadOtros = cuerpo.slice(0, cuerpo.indexOf('\n'));
+        /* La línea REAL del archivo, no una copia: si alguien la cambia, esta
+           prueba mide lo que de verdad corre. */
+        const alGuardar = (V.match(/_cacheOtros = \(?_cacheOtros[^;]+filter\(function\(o\)\{return o\.id!==id;\}\);/) || [''])[0];
+        eq(alGuardar !== '', true, 'no se encontró la línea que actualiza la caché al guardar');
+        vm.runInContext(`
+            var _sucursalId='matriz';
+            var _cacheOtros=[{id:'a1',sucursalId:'matriz',monto:50},{id:'b1',sucursalId:'suc2',monto:200}];
+            function _deSuc(o){return !o.sucursalId || o.sucursalId===_sucursalId;}
+            ${loadOtros}
+            var id='a1';
+            ${alGuardar}
+            _cacheOtros.push({id:'a1',sucursalId:'matriz',monto:70});
+        `, ctx);
+        const quedan = ctx._cacheOtros.map(o => o.id).sort().join(',');
+        eq(quedan, 'a1,b1', 'la caché quedó en [' + quedan + ']: se perdió otra sucursal');
+        return eq(ctx._cacheOtros.find(o => o.id === 'b1').monto, 200,
+                  'el ingreso de la otra sucursal cambió de monto');
+    });
+    /* ── LA META DEL PERIODO, LA MISMA EN PANTALLA Y EN PAPEL ──────────────
+       `renderAll` solo buscaba la meta del MES, así que en día, semana o rango
+       no había mes del que sacarla y la pantalla decía meta $0 — mientras el
+       impreso, que sí la calculaba fecha por fecha, decía $100 ese día y $700
+       esa semana. Dos cuentas de lo mismo, en la misma pantalla. */
+    const motorMeta = () => {
+        const ctx = crearContexto();
+        const trozo = (re) => (V.match(re) || [''])[0];
+        vm.runInContext(`
+            var METAS = { '2026-10': { meta: 3100, dist: 'uniforme' } };
+            function getMetaMes(m){ return METAS[m] || null; }
+            function calcMetaDiaria(mes, meta, dist){
+                /* uniforme: la meta del mes repartida entre sus días */
+                var dias = new Date(+mes.slice(0,4), +mes.slice(5,7), 0).getDate(), o = {};
+                for (var d = 1; d <= dias; d++)
+                    o[mes + '-' + String(d).padStart(2,'0')] = meta / dias;
+                return o;
+            }
+            function _mdCacheVentas(){ if(!window.__mdCache) window.__mdCache={}; return window.__mdCache; }
+            ${trozo(/function _metaDelDiaSF\(f\)\{[\s\S]*?\n\}/)}
+            ${trozo(/function _fechasDelRango\(r\)\{[\s\S]*?\n\}/)}
+            function metaDelRango(r){
+                var t = 0;
+                _fechasDelRango(r).forEach(function(f){ t += _metaDelDiaSF(f); });
+                return t;
+            }
+        `, ctx);
+        return ctx;
+    };
+
+    test('la meta de un DÍA ya no sale en cero', () => {
+        const c = motorMeta();
+        /* octubre: $3,100 entre 31 días = $100 al día */
+        return eq(Math.round(c.metaDelRango({ from:'2026-10-13', to:'2026-10-13' })), 100,
+                  'la pantalla seguiría diciendo meta $0 en vista de día');
+    });
+    test('…y la de una SEMANA suma sus siete días', () =>
+        eq(Math.round(motorMeta().metaDelRango({ from:'2026-10-12', to:'2026-10-18' })), 700,
+           'la semana no suma las metas de sus días'));
+    /* El caso que el impreso sí resolvía y la pantalla no: un rango a caballo
+       entre dos meses. Noviembre no tiene meta, así que solo cuentan los días de
+       octubre — y eso es lo correcto, no cero ni un mes entero. */
+    test('…y un rango que cruza de mes solo cuenta los días con meta', () =>
+        eq(Math.round(motorMeta().metaDelRango({ from:'2026-10-30', to:'2026-11-02' })), 200,
+           'un rango a caballo entre dos meses no reparte bien'));
+    /* …y que la PANTALLA use ese motor. Las pruebas de arriba demuestran que la
+       suma por fecha funciona; esta exige que `renderAll` la llame y que no
+       vuelva a condicionarla al mes, que era justo el origen del cero. */
+    test('…y la pantalla calcula la meta con ese motor, sin pedir un mes', () => {
+        const i = V.indexOf('_fechasDelRango(r).forEach(');
+        eq(i > -1, true, 'la pantalla no recorre las fechas del rango para sumar la meta');
+        /* Solo el cuerpo del recorrido: la variable `mes` sigue viva más abajo
+           para otras cosas, y exigir que no exista en todo el bloque convertía
+           esta prueba en una que falla por lo que no es. */
+        const cuerpo = V.slice(i, V.indexOf('});', i));
+        eq(/_metaDelDiaSF\(f\)/.test(cuerpo), true, 'no usa la misma función que el impreso');
+        return eq(/\bmes\b/.test(cuerpo), false,
+                  'vuelve a depender del mes: en día, semana y rango la meta saldría en cero');
+    });
+    test('…y un rango disparatado no cuelga la pantalla', () => {
+        const c = motorMeta();
+        const t0 = Date.now();
+        c.metaDelRango({ from:'2026-10-01', to:'2126-10-01' });   // cien años
+        return eq(Date.now() - t0 < 2000, true, 'un año tecleado de más deja la pantalla colgada');
+    });
+
+    /* LA META IMPRESA NO SE QUEDA VIEJA. La distribución por día vive en caché
+       para no recalcularla en cada renglón del impreso; al editar la meta esa
+       caché quedaba vieja y el papel seguía diciendo lo de antes. */
+    test('al guardar una meta se tira la caché del impreso', () => {
+        const i = V.indexOf('function guardarMeta');
+        const cuerpo = V.slice(i, V.indexOf('\n}', i));
+        return eq(/window\.__mdCache=null;/.test(cuerpo), true,
+                  'tras cambiar la meta, el impreso seguiría repartiendo la anterior');
+    });
+
+    /* UN MES CERRADO TIENE RESULTADO, NO PRONÓSTICO. */
+    test('no se proyecta un mes que ya terminó', () => {
+        const i = V.indexOf('var proyeccion=null;');
+        const cond = V.slice(i, V.indexOf('}', V.indexOf('if(periodoTipo', i)));
+        eq(/r\.to>=hoy/.test(cond), true,
+           'agosto cerrado con $2,600 seguiría mostrando «proyección $3,100»');
+        return eq(/r\.from<=hoy/.test(cond), true,
+                  'un mes futuro, sin un solo corte, también se proyectaría');
+    });
+
+    /* ── LEER HASTA EL FINAL, Y DECIRLO SI NO SE PUDO ─────────────────────
+       Ventas pedía cortes y otros ingresos de un solo viaje. Pasado el techo de
+       filas del proyecto no hay error ni aviso: llegan las primeras N y la
+       pantalla calcula tan contenta. Es el mismo R10 que ya se cerró en Resumen
+       y KPIs; tres pantallas que leen lo mismo tienen que leerlo igual. */
+    test('Ventas lee por cursor, con el mismo lector que Resumen y KPIs', () => {
+        eq(/etaaxLeerVarias\(/.test(V), true, 'sigue pidiendo las colecciones de un solo viaje');
+        eq(/\{tabla:'cortes',\s*nombre:'ventas'\}/.test(V), true, 'los cortes no pasan por el lector');
+        eq(/\{tabla:'sf_otros',\s*nombre:'otros ingresos'\}/.test(V), true, 'otros ingresos tampoco');
+        /* …y que no quede la consulta vieja por ahí, que es como una pantalla
+           acaba leyendo dos veces la misma tabla de dos maneras distintas. */
+        return eq(/from\('cortes'\)\.select/.test(V), false,
+                  'quedó la consulta directa a cortes además del lector');
+    });
+    test('…y si algo queda a medias, lo dice en rojo y con su nombre', () => {
+        eq(/id="vtFalla"/.test(V), true, 'no hay dónde avisar que el reporte está incompleto');
+        eq(/col\.incompletas/.test(V) && /_vtFalló = falló;/.test(V), true,
+           'se traga lo que el lector no pudo traer entero');
+        eq(/Este reporte está incompleto/.test(V), true, 'el aviso no dice qué pasó');
+        /* El fallo del documento de metas no hace cero el reporte, pero sin
+           metas el cumplimiento sale en cero y parece que nadie vendió contra su
+           objetivo: también se nombra. */
+        return eq(/falló\.push\('metas de venta'\)/.test(V), true,
+                  'un fallo al leer las metas pasaría callado');
+    });
+    test('…y el aviso se repinta en cada vuelta, no solo al cargar', () => {
+        const i = V.indexOf('function renderAll');
+        return eq(/_vtAviso\(\);/.test(V.slice(i, V.indexOf('_renderTabla', i))), true,
+                  'el aviso se quedaría de la carga anterior al cambiar de periodo');
+    });
+    test('…y si el módulo de datos no cargó, la pantalla lo dice en vez de caerse', () => {
+        return eq(/typeof etaaxLeerVarias !== 'function'/.test(V), true,
+                  'con el módulo a medias la pantalla se cae en blanco, que no explica nada');
+    });
+
+    test('…y borrar tampoco', () => {
+        const ctx = crearContexto();
+        const cuerpo = V.slice(V.indexOf('function loadOtros'));
+        const loadOtros = cuerpo.slice(0, cuerpo.indexOf('\n'));
+        const alBorrar = (V.match(/_cacheOtros = \(?_cacheOtros[^;]+filter\(function\(o\)\{return o\.id!==delId;\}\);/) || [''])[0];
+        eq(alBorrar !== '', true, 'no se encontró la línea que actualiza la caché al borrar');
+        vm.runInContext(`
+            var _sucursalId='matriz';
+            var _cacheOtros=[{id:'a1',sucursalId:'matriz',monto:50},{id:'b1',sucursalId:'suc2',monto:200}];
+            function _deSuc(o){return !o.sucursalId || o.sucursalId===_sucursalId;}
+            ${loadOtros}
+            var delId='a1';
+            ${alBorrar}
+        `, ctx);
+        return eq(ctx._cacheOtros.map(o => o.id).join(','), 'b1',
+                  'borrar en Matriz se llevó por delante la otra sucursal');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -27603,4 +27802,4 @@ suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
-    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(resumen);
+    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(resumen);
