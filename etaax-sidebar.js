@@ -47,6 +47,24 @@
             return url.origin === location.origin ? url.pathname : '';
         } catch (e) { return ''; }
     }
+    /* Si el menú se vuelve a dibujar —una página que repinta su nav, el modo
+       global— los iconos se reponen solos. Se agrupa en un cuadro de animación
+       para no perseguir cada cambio de clase. */
+    var mirando = false;
+    function vigilar(nav) {
+        if (mirando || typeof MutationObserver !== 'function') return;
+        mirando = true;
+        var pendiente = false;
+        new MutationObserver(function () {
+            if (pendiente) return;
+            pendiente = true;
+            requestAnimationFrame(function () {
+                pendiente = false;
+                var faltan = nav.querySelectorAll('a.nav-link .nav-icon:not(.etx-nav-icono)').length;
+                if (faltan) window.etaaxPintarIconosNav();
+            });
+        }).observe(nav, { childList: true, subtree: true });
+    }
     function pintar(el, nombre, tam) {
         if (!el || !nombre) return;
         var marcado = window.etaaxIcono(nombre, { tam: tam });
@@ -54,9 +72,23 @@
         el.innerHTML = marcado;
         el.classList.add('etx-nav-icono');
     }
+    /* NO SE RINDE EN SILENCIO. Antes, si al correr faltaba el menú o todavía no
+       estaba el sprite, esta función volvía sin hacer nada y nadie la llamaba de
+       nuevo: la barra se quedaba con los emojis del marcado para siempre, y el
+       icono del módulo —que lo pinta otro archivo— sí salía. Ese es justo el
+       síntoma que se reportó dos veces desde producción y que no se reproduce en
+       pruebas, porque ahí todo llega a tiempo.
+       Ahora reintenta durante unos segundos y se queda vigilando el menú: si
+       alguien lo vuelve a pintar, los iconos regresan. */
+    var reintentos = 0;
+    function reintentar() {
+        if (reintentos++ > 40) return;              // ~6 s y se deja de insistir
+        setTimeout(window.etaaxPintarIconosNav, 150);
+    }
     window.etaaxPintarIconosNav = function () {
         var nav = document.getElementById('nav');
-        if (!nav || typeof window.etaaxIcono !== 'function') return;
+        if (!nav || typeof window.etaaxIcono !== 'function') { reintentar(); return; }
+        vigilar(nav);
         var global = enCatalogos();
         nav.querySelectorAll('a.nav-link').forEach(function (enlace) {
             var destino = ruta(enlace), nombre = RUTAS[destino];

@@ -27265,6 +27265,35 @@ console.log('\n══ BE17 · «Actualizamos el sistema, ve las novedades» ═�
         return eq(/EtaaxNovedades\.abrir\(0\)/.test(hd), true, 'la entrada del menú no abre nada');
     });
 
+    /* ── LOS PINTORES NO SE RINDEN EN SILENCIO ────────────────────────────
+       Dos reportes desde producción —los iconos del menú y los emojis de los
+       modales— que no se reproducen en pruebas, porque aquí todo llega a
+       tiempo. La causa compartida era la misma: si al correr faltaba el sprite,
+       la función volvía sin hacer nada y NADIE la llamaba otra vez. El síntoma
+       engaña: el icono del módulo sí sale, porque lo pinta otro archivo. */
+    test('si el sprite llega tarde, el menú vuelve a intentarlo', () => {
+        const f = fs.readFileSync(path.join(RAIZ, 'etaax-sidebar.js'), 'utf8');
+        eq(/\{ reintentar\(\); return; \}/.test(f), true,
+           'se rinde a la primera y la barra se queda con los emojis para siempre');
+        return eq(/reintentos\+\+ > 40/.test(f), true,
+                  'reintenta sin tope: una página sin menú lo intentaría eternamente');
+    });
+    test('…y si alguien repinta el menú, los iconos vuelven solos', () => {
+        const f = fs.readFileSync(path.join(RAIZ, 'etaax-sidebar.js'), 'utf8');
+        eq(/MutationObserver/.test(f), true, 'un menú repintado se queda sin iconos');
+        return eq(/nav-icon:not\(\.etx-nav-icono\)/.test(f), true,
+                  'repinta siempre, en vez de solo cuando falta alguno');
+    });
+    test('…y los emojis del cromo esperan al sprite igual', () => {
+        const f = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        eq(/cromoIntentos\+\+ < 40/.test(f), true, 'los modales se quedarían con sus emojis');
+        /* Y que NO se llamen en círculo: el pintor termina llamando a
+           «estilizar», así que si «estilizar» vuelve a llamar al pintor, el
+           navegador se queda sin pila. Pasó en la primera corrida. */
+        return eq(/etaaxEstilizarNav[\s\S]{0,2000}?window\.etaaxPintarIconosNav\(\);/.test(f), false,
+                  'el pintor y el estilizador se llaman en círculo: se agota la pila');
+    });
+
     /* ── 8 · El acento no se escribe a mano ───────────────────────────────
        El hub tiene paleta propia (cian de marca, terracota de acción) y los
        módulos siguen en verde. Un color fijo en este archivo haría del anuncio

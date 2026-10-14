@@ -92,8 +92,15 @@
     var CROMO = 'button, .dx-win-title, .dx-card-title, .cf-card-title, .brand-title, ' +
                 '.dx-sec-title, .corte-sec-title, .gs-sec-title, .ck-title, .ev-title, label';
 
+    var cromoIntentos = 0;
     function iconosEnCromo(raiz) {
-        if (embebido || typeof window.etaaxIcono !== 'function') return;
+        if (embebido) return;
+        /* Mismo cuidado que en el menú: si el sprite todavía no llegó, se vuelve
+           a intentar en vez de dejar los emojis puestos para siempre. */
+        if (typeof window.etaaxIcono !== 'function') {
+            if (cromoIntentos++ < 40) setTimeout(function () { iconosEnCromo(raiz); }, 150);
+            return;
+        }
         (raiz || document).querySelectorAll(CROMO).forEach(function (el) {
             if (el.dataset.etxEmoji) return;
             /* El primer nodo de texto, y solo si empieza con un emoji conocido:
@@ -168,6 +175,11 @@
             }
             if (a.classList.contains('active')) a.setAttribute('aria-current','page');
         });
+        /* OJO: aquí NO se llama a `etaaxPintarIconosNav`. El pintor termina
+           llamando a esta función, así que pedirle que repase desde aquí los
+           deja llamándose en círculo hasta que el navegador se queda sin pila —
+           el revisor lo cazó en la primera corrida. Si el pintor llegó tarde, lo
+           resuelven su reintento y el vigilante del menú, que para eso están. */
         var salida = nav.querySelector('.etx-nav-back') || nav.querySelector('a[data-tooltip="Salir del global"]');
         if (!salida) {
             salida = document.createElement('a');salida.href = volver;salida.className = 'nav-link';
