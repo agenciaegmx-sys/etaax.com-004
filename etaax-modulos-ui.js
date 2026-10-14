@@ -169,7 +169,8 @@
             if (nombreAccesible) { a.setAttribute('aria-label',nombreAccesible);a.title = nombreAccesible; }
             var url;
             try { url = new URL(a.getAttribute('href'), location.href); } catch (e) { return; }
-            var archivo = url.pathname.split('/').pop(), descripcion = DESCRIPCIONES[archivo];
+            var pathname = typeof window.etaaxRutaModulo === 'function' ? window.etaaxRutaModulo(url.pathname) : url.pathname;
+            var archivo = pathname.split('/').pop(), descripcion = DESCRIPCIONES[archivo];
             if (descripcion && !a.querySelector('.etx-nav-desc')) {
                 var sub = document.createElement('span');sub.className = 'etx-nav-desc';sub.textContent = descripcion;a.appendChild(sub);
             }

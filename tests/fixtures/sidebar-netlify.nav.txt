@@ -1,0 +1,25 @@
+<!-- Fragmento de menú descargado de https://etaax.com/administrativo/diario.html el 14-oct-2026.
+Netlify reescribe estos href; conservarlos sin .html en esta regresión. -->
+<nav class="nav cerrado" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Control Financiero</span></div>
+            <div class="nav-top-actions">
+                <a class='nav-toggle nav-toggle-btn' data-tooltip='Panel Admin' href='/administrativo/' style='text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1'>🗃️</a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Admin</div>
+            <a class='nav-link active' data-tooltip='Ventas y Gastos' href='/administrativo/diario'><span class="nav-icon">🧾</span><span class="nav-text">Ventas y Gastos</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogos</div>
+            <a class='nav-link' data-tooltip='Staff' href='/administrativo/staff-hub'><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
+            <a class='nav-link' data-tooltip='Proveedores' href='/administrativo/proveedores'><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
+            <a class='nav-link' data-tooltip='Clientes' href='/administrativo/clientes'><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Menús</div>
+            <a class='nav-link' data-tooltip='Menú' href='/administrativo/menu'><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
+        </div>
+    </nav>

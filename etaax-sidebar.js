@@ -37,14 +37,25 @@
         '/consultoria/ventas-productos.html': 'fin-estadisticas',
         '/consultoria/simulador-kpis.html': 'fin-kpis'
     };
-    window.etaaxIconoRuta = function (pathname) { return RUTAS[pathname] || ''; };
+    /* Netlify convierte los href del HTML a URLs sin .html al publicarlo.
+       El servidor local conserva .html. Ambos deben resolver el mismo icono
+       y descripción; reintentar el pintado no corrige una ruta desconocida. */
+    function rutaModulo(pathname) {
+        var path = String(pathname || '');
+        if (!/^\/(administrativo|recetas|financiero|consultoria)(?:\/|$)/.test(path)) return path;
+        path = path.replace(/\/+$/, '');
+        if (/^\/[^/]+$/.test(path)) return path + '/index.html';
+        return /\/[^/.]+$/.test(path) ? path + '.html' : path;
+    }
+    window.etaaxRutaModulo = rutaModulo;
+    window.etaaxIconoRuta = function (pathname) { return RUTAS[rutaModulo(pathname)] || ''; };
     function enCatalogos() {
         try { return sessionStorage.getItem('etaax_cat_global') === '1'; } catch (e) { return false; }
     }
     function ruta(enlace) {
         try {
             var url = new URL(enlace.getAttribute('href'), location.href);
-            return url.origin === location.origin ? url.pathname : '';
+            return url.origin === location.origin ? rutaModulo(url.pathname) : '';
         } catch (e) { return ''; }
     }
     /* Si el menú se vuelve a dibujar —una página que repinta su nav, el modo
@@ -60,7 +71,7 @@
             pendiente = true;
             requestAnimationFrame(function () {
                 pendiente = false;
-                var faltan = nav.querySelectorAll('a.nav-link .nav-icon:not(.etx-nav-icono)').length;
+                var faltan = nav.querySelectorAll('a.nav-link:not(.etx-nav-back) .nav-icon:not(.etx-nav-icono)').length;
                 if (faltan) window.etaaxPintarIconosNav();
             });
         }).observe(nav, { childList: true, subtree: true });

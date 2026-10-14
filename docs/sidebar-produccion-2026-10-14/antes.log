@@ -1,0 +1,79 @@
+PASA 1440px local: cinco SVG y descripciones, mismos destinos
+FALLA Volver a módulos conserva su flecha sin repintados continuos · Expected values to be strictly equal:
+
+false !== true
+
+FALLA 1440px publicado: cinco SVG y descripciones, mismos destinos · Expected values to be strictly deep-equal:
++ actual - expected
+
+  [
++   undefined,
++   undefined,
++   undefined,
++   undefined,
++   undefined
+-   '#etx-mod-control-administrativo',
+-   '#etx-cat-colaboradores',
+-   '#etx-cat-proveedores',
+-   '#etx-cat-clientes',
+-   '#etx-mod-escandallos'
+  ]
+
+FALLA Rutas de cuatro módulos: .html, URL limpia e inicio de Recetas · Expected values to be strictly equal:
+
+'' !== 'cat-clientes'
+
+FALLA Un menú repintado recupera sus SVG y descripciones · No se cumplió: document.querySelectorAll('#nav a.nav-link:not(.etx-nav-back) .nav-icon use').length===5
+PASA 768px local: cinco SVG y descripciones, mismos destinos
+FALLA 768px publicado: cinco SVG y descripciones, mismos destinos · Expected values to be strictly deep-equal:
++ actual - expected
+
+  [
++   undefined,
++   undefined,
++   undefined,
++   undefined,
++   undefined
+-   '#etx-mod-control-administrativo',
+-   '#etx-cat-colaboradores',
+-   '#etx-cat-proveedores',
+-   '#etx-cat-clientes',
+-   '#etx-mod-escandallos'
+  ]
+
+PASA 390px local: cinco SVG y descripciones, mismos destinos
+FALLA 390px publicado: cinco SVG y descripciones, mismos destinos · Expected values to be strictly deep-equal:
++ actual - expected
+
+  [
++   undefined,
++   undefined,
++   undefined,
++   undefined,
++   undefined
+-   '#etx-mod-control-administrativo',
+-   '#etx-cat-colaboradores',
+-   '#etx-cat-proveedores',
+-   '#etx-cat-clientes',
+-   '#etx-mod-escandallos'
+  ]
+
+PASA 320px local: cinco SVG y descripciones, mismos destinos
+FALLA 320px publicado: cinco SVG y descripciones, mismos destinos · Expected values to be strictly deep-equal:
++ actual - expected
+
+  [
++   undefined,
++   undefined,
++   undefined,
++   undefined,
++   undefined
+-   '#etx-mod-control-administrativo',
+-   '#etx-cat-colaboradores',
+-   '#etx-cat-proveedores',
+-   '#etx-cat-clientes',
+-   '#etx-mod-escandallos'
+  ]
+
+SIDEBAR: 11 casos, 7 fallas. Sin backend ni peticiones externas.
+Capturas: /private/tmp/etaax-sidebar-antes

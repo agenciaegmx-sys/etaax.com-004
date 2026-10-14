@@ -76,7 +76,7 @@ body.etx-modulos-ui #nav .nav-link {
   border-radius:11px;color:var(--text);white-space:normal;transition:background .18s,border-color .18s;
 }
 body.etx-modulos-ui #nav .nav-icon {grid-row:1 / span 2;align-self:center;width:26px;}
-body.etx-modulos-ui #nav .nav-text {font-size:13px;font-weight:600;overflow:visible;line-height:1.4;}
+body.etx-modulos-ui #nav .nav-text {display:block;font-size:13px;font-weight:600;overflow:visible;line-height:1.4;}
 body.etx-modulos-ui #nav .etx-nav-desc {grid-column:2;font-size:10.5px;color:var(--etx-ui-muted);line-height:1.4;}
 body.etx-modulos-ui #nav .nav-link:hover {background:var(--surface2);border-color:var(--etx-ui-line);}
 body.etx-modulos-ui #nav .nav-link.active {background:var(--etx-ui-tint);border-color:var(--etx-ui-terra-line);color:var(--etx-ui-terra);}
