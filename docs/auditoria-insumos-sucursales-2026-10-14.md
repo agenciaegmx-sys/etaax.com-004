@@ -314,3 +314,71 @@ comprobaciones de fórmulas y **84** del almacén; la validación previa del bot
 incluyó 65 casos de navegador. Eso verifica la entrega del hub, no estos casos
 nuevos de aislamiento. Los documentos de esta auditoría se dejan para revisión
 y ejecución de Claude; no se implementó ni publicó una reparación de insumos.
+
+---
+
+## Qué se arregló (Claude, 14-oct-2026 · commits `ae2a6aa`, `cba451b`, `befcb0e`)
+
+**OJO con `docs/auditoria-insumos-2026-10-14/reproducir.cjs`: ese script AFIRMA
+el comportamiento con el fallo** (`assert.equal(lost.origenId, undefined)` y
+parecidos), así que a partir de estos commits **tiene que fallar**, y falla en
+el primer defecto cerrado. No es una regresión: es que ya no se puede
+reproducir. Las pruebas que afirman el contrato correcto —y que son las que
+deben pasar— viven en `tests/money-tests.js`, suite **BE21**.
+
+### Cerrado
+
+1. **Editar una copia la convertía en maestro.** `guardarInsumo` rearmaba el
+   registro desde los campos del editor, así que `origenId`, `createdAt` y
+   `historial` se perdían. Ahora se conserva del original todo lo que el
+   formulario no define.
+2. **Las cuatro formas de importar, unificadas** detrás de
+   `_importarMaestroASuc` (insumos.js): copia con id propio, `origenId` al
+   maestro, maestro sin membresía, idempotente. «Copiar aquí» (`ignAgregar`) y
+   el catálogo ETAAX (`cgAgregar`) compartían el MISMO registro entre
+   sucursales; ya no existe ese camino. La membresía legacy no se tira: a cada
+   sucursal que vivía en el maestro se le crea su copia antes de soltarla.
+3. **Importar el mismo insumo de ETAAX en dos sucursales** deja dos ids locales
+   distintos y un solo maestro global.
+4. **Borrar la copia de una sucursal** ya no se lleva la de la otra (consecuencia
+   de 2: eran el mismo registro).
+5. **Alta manual repetida** avisa del duplicado por identidad canónica
+   (`_keyInsumo`) y dice dónde vive el que ya existe. Solo avisa.
+6. **El QR y la app móvil ofrecían los 1,000 maestros del negocio** en cualquier
+   sucursal: tenían su propia copia de la regla con el criterio invertido («sin
+   sucursal = en todas»). Ahora las dos usan `/insumo-label.js`, la misma regla
+   de inventarios y el escandallo. Insumos y recetas preguntan por separado
+   (una receta vieja sin sucursal sí vive en Matriz).
+7. **Invariante al hidratar:** un maestro no puede quedar en la misma sucursal
+   donde ya tiene copia (si no, esa sucursal lo ve dos veces). Repara también
+   datos viejos que llegan de la nube.
+8. **La RPC del QR entregaba `datos` completo de todo el negocio a `anon`**
+   —precios de compra, proveedor, historial—, y sin filtro de sucursal: el único
+   filtro vivía en el JavaScript. `supabase-migration-v80.sql` pone lista blanca
+   y filtra en el servidor, con la sucursal derivada del NIP (no del enlace).
+   **Pendiente: Edwin tiene que correrla a mano en Supabase → SQL Editor.** La
+   pantalla funciona antes y después (cae a la RPC vieja si no está).
+9. **Red de seguridad:** un catálogo que nunca se repartió por sucursal sigue
+   sirviendo; una sucursal a la que no le copiaron fichas recibe lista vacía con
+   un mensaje de qué falta.
+
+Verificación: candado 4,550 · 0 fallas; 26 mutaciones provocadas y cazadas;
+v80 corrida contra un Postgres de verdad (PGlite) con el agujero provocado
+antes y 29 comprobaciones después.
+
+### Sigue abierto (del plan, por orden)
+
+- **Etapa 3** — sincronizar solo cambios (el debounce sube el catálogo
+  completo), control de versión/`updated_at` en servidor, y el importador CSV
+  (destino explícito, vista previa, idempotencia, no retirar `_csvRow` de otras
+  sucursales).
+- **Etapa 4, resto** — `.find` crudos que toman la presentación del maestro
+  (`_empaqueDeFila`, `getContenidoPorPieza`, peso bruto, costo vivo),
+  `insumoId` local en operaciones nuevas (hoy guardan el id canónico: ver
+  `entrada.html` líneas de `_buildEntry`), el documento manda en inventarios, y
+  `inventario_conteo_registrar`/`entrada_registrar` validando pertenencia.
+- **Etapa 5** — requisiciones por `(negocio, sucursal)`.
+- **Etapa 6** — decisiones de novedades independientes por sucursal.
+- **Etapa 7** — reparar datos existentes (respaldo + mapa de alias). Lo nuevo ya
+  no crea fichas compartidas; las que existen hoy se parten cuando alguien
+  importa, o con el barrido de «Independizar por sucursal».
