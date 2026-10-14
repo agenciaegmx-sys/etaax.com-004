@@ -125,11 +125,7 @@
        sel.forEach(function(suc){
            if (copPorSuc[suc]) return;
            if (_adoptar[suc]) { _adoptar[suc].origenId = master.id; adoptadas.push(_adoptar[suc]); return; }
-           var real = (suc === MATRIZ_ID_INS) ? '' : suc;
-           var copia = JSON.parse(JSON.stringify(master));
-           copia.id = genId(); copia.origenId = master.id; copia.sucursales = [real]; copia.sucursalId = real;
-           delete copia._memPreMigra;
-           nuevas.push(copia);
+           nuevas.push(_copiaInsParaSuc(master, suc));
        });
        // DESLIGAR (no borrar) las DESMARCADAS que tenían copia: la copia SE QUEDA en su
        // sucursal pero deja de estar ligada al maestro (independiente, ya sin novedades).
@@ -149,6 +145,109 @@
    window.abrirInsumoSuc = abrirInsumoSuc;
    window.cerrarInsumoSuc = cerrarInsumoSuc;
    window.guardarInsumoSuc = guardarInsumoSuc;
+
+   /* ══ IMPORTAR UN MAESTRO A UNA SUCURSAL — LA ÚNICA PUERTA ════════════════
+      Hay cuatro formas de traer un insumo a una sucursal: "Copiar aquí" (de
+      otra sucursal), el catálogo ETAAX, el modal de vincular y el alta manual.
+      Cada una lo hacía a su manera, y dos de ellas NO copiaban nada: sumaban la
+      sucursal al array `sucursales` del MISMO registro. Entonces no había dos
+      fichas que pudieran diferir —había una, vista desde dos lados— y cambiar
+      la copa en una sucursal la cambiaba en la otra. Es el bug que reportó
+      Edwin, y no se arregla guardando mejor: se arregla copiando.
+
+      REGLA: la sucursal recibe una COPIA PROPIA (id nuevo, `origenId` al
+      maestro) y el maestro se queda como ficha de referencia del negocio, SIN
+      membresía. Importar dos veces la misma sucursal no crea dos copias.
+
+      LA MEMBRESÍA VIEJA NO SE TIRA: si el maestro ya vivía en otras sucursales
+      por el modelo anterior, a cada una se le crea su copia antes de quitársela.
+      Borrarla sin copiar dejaría a esas sucursales sin el insumo —y con sus
+      inventarios apuntando a un registro que ya no ven.
+
+      Devuelve { copia, nuevas, tocados, yaEstaba }; NO guarda: eso lo decide
+      quien llama (cada pantalla sincroniza a su modo).                       */
+   function _copiaInsParaSuc(master, sucEff) {
+       var eff   = _effSucIns(sucEff);
+       var real  = (eff === MATRIZ_ID_INS) ? '' : eff;
+       var copia = JSON.parse(JSON.stringify(master));
+       copia.id         = genId();
+       copia.origenId   = master.id;     // liga al maestro (id canónico)
+       copia.sucursales = [real];
+       copia.sucursalId = real;
+       delete copia._memPreMigra;        // dónde vivía el maestro no es asunto de la copia
+       delete copia._csvRow;             // rastro del importador de CSV
+       return copia;
+   }
+   /* ¿Esa sucursal ya tiene una copia de este maestro? (lo que hace idempotente
+      a la importación: dos clics no dejan el insumo dos veces en la lista). */
+   function _copiaDeEnSuc(lista, masterId, sucEff) {
+       var eff = _effSucIns(sucEff);
+       for (var i = 0; i < (lista || []).length; i++) {
+           var x = lista[i];
+           if (!x || x.origenId !== masterId) continue;
+           if (window._insumoEnSuc ? window._insumoEnSuc(x, eff)
+                                   : (window._insumoSucursales(x) || []).map(_effSucIns).indexOf(eff) >= 0) return x;
+       }
+       return null;
+   }
+   function _importarMaestroASuc(ins, sucEff, lista) {
+       lista = lista || getInsumos();
+       var eff = _effSucIns(sucEff);
+       if (!ins) return { copia: null, nuevas: [], tocados: [], yaEstaba: false };
+       /* Si te pasan una COPIA, el maestro es su origen: una copia nunca cuelga
+          de otra copia (si no, el día que cambie el maestro la cadena decide
+          sola por quién pasa la novedad). */
+       var master = ins.origenId
+           ? (lista.find(function (x) { return x.id === ins.origenId; }) || ins)
+           : ins;
+
+       var ya = _copiaDeEnSuc(lista, master.id, eff);
+       if (ya) return { copia: ya, nuevas: [], tocados: [], yaEstaba: true };
+
+       var nuevas = [];
+       var mem = (window._insumoSucursales ? window._insumoSucursales(master) : []).map(_effSucIns);
+       mem.forEach(function (s) {
+           if (s === eff) return;                               // esa se crea abajo
+           if (_copiaDeEnSuc(lista, master.id, s)) return;       // ya tiene la suya
+           nuevas.push(_copiaInsParaSuc(master, s));
+       });
+       var copia = _copiaInsParaSuc(master, eff);
+       nuevas.push(copia);
+       if (mem.length) master._memPreMigra = mem.slice();        // por si hay que revertir
+       master.sucursales = [];
+       master.sucursalId = '';
+       return { copia: copia, nuevas: nuevas, tocados: [master], yaEstaba: false };
+   }
+   /* ¿Hay ya un insumo con esta identidad canónica (nombre·marca·variedad, la
+      misma que usa el resto del sistema para decir "es el mismo insumo")? Gana
+      el que vive en la sucursal activa: es el que el capturista iba a usar. */
+   function _duplicadoDeIns(insumo) {
+       var k = window._keyInsumo ? window._keyInsumo(insumo) : '';
+       if (!k || k === '||') return null;
+       var eff = _effSucIns(_getSucActivaIns()), dup = null;
+       getInsumos().forEach(function (x) {
+           if (!x || !x.id || x.id === insumo.id) return;
+           if ((window._keyInsumo ? window._keyInsumo(x) : '') !== k) return;
+           if (!dup || (window._insumoEnSuc && window._insumoEnSuc(x, eff))) dup = x;
+       });
+       return dup;
+   }
+   /* Para el aviso: dónde vive el que ya existe, en palabras. */
+   function _dondeViveIns(ins) {
+       var mem = (window._insumoSucursales ? window._insumoSucursales(ins) : []);
+       if (ins && ins.origenId && mem.length) return 'ficha de ' + _sucNomIns(mem[0]);
+       if (!mem.length) {
+           var cop = _copiasDe(ins.id);
+           return cop.length
+               ? 'maestro del negocio, con ficha en ' + cop.length + ' sucursal' + (cop.length !== 1 ? 'es' : '')
+               : 'maestro del negocio, sin asignar a ninguna sucursal';
+       }
+       return mem.map(function (s) { return _sucNomIns(s); }).join(', ');
+   }
+   window._duplicadoDeIns = _duplicadoDeIns;
+   window._importarMaestroASuc = _importarMaestroASuc;
+   window._copiaInsParaSuc     = _copiaInsParaSuc;
+   window._copiaDeEnSuc        = _copiaDeEnSuc;
 
    // ── INDEPENDIZAR POR SUCURSAL (paso 4): auto-detecta insumos COMPARTIDOS (viven en >1
    //    sucursal) y crea una COPIA independiente por sucursal, ligada al maestro (origenId).
@@ -173,15 +272,7 @@
       sabría cuál es la buena. Devuelve las copias nuevas; NO guarda. */
    function _forkInsumo(ins, mem) {
        var nuevas = [];
-       mem.forEach(function (suc) {
-           var copia = JSON.parse(JSON.stringify(ins));
-           copia.id         = genId();
-           copia.origenId   = ins.id;        // liga al maestro (id canónico)
-           copia.sucursales = [suc];
-           copia.sucursalId = suc || '';
-           delete copia._memPreMigra;
-           nuevas.push(copia);
-       });
+       mem.forEach(function (suc) { nuevas.push(_copiaInsParaSuc(ins, suc)); });
        /* El maestro se queda SIN sucursal: pasa a ser la ficha de referencia del
           negocio. Dejarlo en una de ellas haría que esa sucursal viera dos veces
           el mismo producto. `_memPreMigra` guarda dónde vivía, por si algún día
@@ -573,6 +664,31 @@
                    .map(function(v){ return v || 'suc_principal'; });
                if (s.indexOf(p.suc) < 0) { s.push(p.suc); x.sucursales = s; }
                else delete _pend[x.id]; // la nube ya la trae → confirmada
+           });
+
+           /* INVARIANTE: un maestro NO puede estar en la misma sucursal donde ya
+              tiene copia. Si no, esa sucursal lo ve dos veces —el maestro y su
+              copia— y nadie sabe en cuál capturar. Pasa cuando el pull trae un
+              snapshot anterior a la importación (la membresía vieja revive) y
+              también con datos viejos que nunca pasaron por la puerta nueva.
+              Se quita SOLO la sucursal duplicada: la membresía en sucursales que
+              aún no tienen copia se respeta, porque borrarla dejaría a esa
+              sucursal sin el insumo. */
+           var _copSuc = {};
+           lista.forEach(function(x){
+               if (!x || !x.origenId) return;
+               (window._insumoSucursales ? window._insumoSucursales(x) : []).forEach(function(sc){
+                   (_copSuc[x.origenId] = _copSuc[x.origenId] || {})[sc || 'suc_principal'] = 1;
+               });
+           });
+           lista.forEach(function(x){
+               if (!x || x.origenId || !_copSuc[x.id]) return;
+               var mem = (window._insumoSucursales ? window._insumoSucursales(x) : []);
+               if (!mem.length) return;
+               var queda = mem.filter(function(sc){ return !_copSuc[x.id][sc || 'suc_principal']; });
+               if (queda.length === mem.length) return;
+               x.sucursales = queda;
+               x.sucursalId = queda.length === 1 ? queda[0] : '';
            });
 
            _insumosCache      = lista;
@@ -5527,6 +5643,22 @@
        var _sucCopiaNueva = ''; // sucursal donde nace la copia vinculada del insumo nuevo ('' = ninguna)
        if (editandoId) {
            var _orig = getInsumos().find(function(x){ return x.id === editandoId; });
+           /* ── LO QUE EL FORMULARIO NO SABE, NO SE PIERDE ────────────────────
+              `insumo` se arma desde los campos del editor, así que TODO lo que
+              no sea un campo del editor desaparecía al guardar: `origenId`, la
+              fecha de alta, el historial y la procedencia de ETAAX. La peor
+              consecuencia no se ve al guardar sino después: una copia de
+              sucursal que pierde su `origenId` deja de ser copia y aparece como
+              un maestro más en el catálogo global del negocio.
+
+              Enumerar a mano los campos que se conservan es justo lo que falla
+              —se olvidó `origenId`, y antes se olvidó la organización del
+              negocio y los horarios del staff—. Así que se invierte: se parte
+              del registro ORIGINAL y encima se escribe lo que trae el
+              formulario. Lo que el editor no toca, sobrevive solo. */
+           if (_orig) Object.keys(_orig).forEach(function (k) {
+               if (!(k in insumo)) insumo[k] = _orig[k];
+           });
            // El select de Área ya vive en el editor y se pobla al abrir → su valor
            // manda (incluido vacío = "Sin área"). Solo se conserva el original si
            // la página no tiene el campo (ej. algún contexto sin ese <select>).
@@ -5550,6 +5682,25 @@
            // En el Catálogo Global no hay sucursal de trabajo: nace SOLO el maestro.
            // (Sin esto heredaba `etaax_sucursal_activa` y nacían dos registros.)
            _sucCopiaNueva = _catGlobalIns() ? '' : _getSucActivaIns();
+       }
+
+       /* ── YA EXISTE UNO ASÍ ────────────────────────────────────────────────
+          Dar de alta dos veces el mismo producto pasa seguido: dos personas
+          capturando a la vez, o alguien que no vio que ya estaba (el catálogo
+          tiene cientos de renglones). Antes nacía un SEGUNDO maestro en
+          silencio y el negocio quedaba con dos fichas idénticas: a partir de
+          ahí media operación costea con una y media con la otra.
+
+          Solo AVISA. Dos productos distintos pueden llamarse igual —y el que
+          captura es el que sabe—, así que se le deja seguir; lo que no se le
+          deja es no enterarse.                                               */
+       if (!editandoId) {
+           var _dup = _duplicadoDeIns(insumo);
+           if (_dup && !confirm('⚠️ YA EXISTE UN INSUMO ASÍ EN ESTE NEGOCIO:\n\n   • ' +
+                   ((typeof insumoTitulo === 'function') ? insumoTitulo(_dup) : (_dup.nombre || '')) +
+                   '\n     (' + _dondeViveIns(_dup) + ')\n\n' +
+                   'ACEPTAR = darlo de alta igual (quedan DOS fichas distintas).\n' +
+                   'CANCELAR = volver al editor para usar el que ya está.')) return;
        }
 
        // #2 Storage: si la foto es base64, súbela a Storage y guarda solo la URL
@@ -5585,11 +5736,7 @@
            // Copia vinculada en la sucursal donde se creó (maestro global + copia ligada
            // por origenId). Se clona DESPUÉS de subir la foto → hereda la misma URL.
            if (_sucCopiaNueva) {
-               _copiaNueva = JSON.parse(JSON.stringify(insumo));
-               _copiaNueva.id = genId();
-               _copiaNueva.origenId = insumo.id;
-               _copiaNueva.sucursales = [_sucCopiaNueva];
-               _copiaNueva.sucursalId = _sucCopiaNueva;
+               _copiaNueva = _copiaInsParaSuc(insumo, _sucCopiaNueva);   // el molde de siempre
                lista.push(_copiaNueva);
            }
        }

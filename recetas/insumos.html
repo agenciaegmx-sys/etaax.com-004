@@ -957,25 +957,23 @@ function ignRender() {
     document.getElementById('ignLista').innerHTML = '<div style="padding:4px 0">' + html + '</div>';
 }
 function ignAgregar(id) {
-    var ins = getInsumos().find(function(x){ return x.id === id; });
+    var lista = getInsumos();
+    var ins = lista.find(function(x){ return x.id === id; });
     if (!ins) return;
     var cur = _effSucIns(_getSucActivaIns()); // sucursal efectiva actual (matriz='suc_principal')
-    // MEMBRESÍA (igual que recetas): agrega la sucursal actual al array `sucursales` del MISMO
-    // registro → el insumo ahora vive también aquí, SIN duplicarlo en la base.
-    var s = (window._insumoSucursales ? window._insumoSucursales(ins) : (ins.sucursalId ? [ins.sucursalId] : []))
-        .map(function(v){ return v || 'suc_principal'; });
-    if (s.indexOf(cur) < 0) s.push(cur);
-    ins.sucursales = s;
-    // Membresía pendiente: si un pull de la nube llega con un snapshot viejo,
-    // insumos.js la re-aplica hasta que Supabase la confirme (fix del "de
-    // repente ya no aparece el insumo agregado a la nueva sucursal").
-    window._insMembPend = window._insMembPend || {};
-    window._insMembPend[ins.id] = { suc: cur, t: Date.now() };
-    setInsumos(getInsumos()); // persiste (ins es referencia del cache) + dispara sync
-    if (typeof _sincronizarInsumosSupabase === 'function') {
-        try { _sincronizarInsumosSupabase(getNegocioActivo(), [ins]); } catch(e){}
+    /* COPIA PROPIA, no membresía compartida. Antes esto sumaba la sucursal al
+       array `sucursales` del MISMO registro: no se duplicaba nada y por eso las
+       dos sucursales acababan editando la MISMA ficha —cambiar la copa aquí la
+       cambiaba allá. La puerta única de insumos.js clona el maestro con id
+       nuevo, lo liga por `origenId` y deja al maestro como referencia global. */
+    var r = window._importarMaestroASuc(ins, cur, lista);
+    if (!r.yaEstaba) {
+        setInsumos(lista.concat(r.nuevas));
+        if (typeof _sincronizarInsumosSupabase === 'function') {
+            try { _sincronizarInsumosSupabase(getNegocioActivo(), r.nuevas.concat(r.tocados)); } catch(e){}
+        }
+        if (window._avisarPadreIns) window._avisarPadreIns(r.nuevas);
     }
-    if (window._avisarPadreIns) window._avisarPadreIns([ins]);
     var btn = document.getElementById('ignBtn_' + id);
     if (btn) { btn.textContent = '✓ Copiado aquí'; btn.disabled = true; btn.style.opacity = '.55'; btn.style.cursor = 'default'; btn.onclick = null; }
 }
@@ -1324,54 +1322,52 @@ async function cgAgregar(id) {
     var ins = _cgTodos.find(function(x){ return x.id === id; });
     if (!ins) return;
     var lista = getInsumos();
-    var _cur = localStorage.getItem('etaax_sucursal_activa') || '';
-    var _curEff = _cur || 'suc_principal';
-    // Si YA vive en el negocio (mismo id: las copias de ETAAX conservan el id
-    // del catálogo maestro) → solo agrega esta sucursal a su membresía.
-    // Identidad = ID, nunca por nombre/marca (productos distintos se llaman igual).
-    var _ex = lista.find(function(x){ return x.id === id; });
-    if (_ex) {
-        var s = (window._insumoSucursales ? window._insumoSucursales(_ex) : (_ex.sucursalId ? [_ex.sucursalId] : []))
-            .map(function(v){ return v || 'suc_principal'; });
-        if (s.indexOf(_curEff) < 0) s.push(_curEff);
-        _ex.sucursales = s;
-        setInsumos(lista);
-        if (typeof _sincronizarInsumosSupabase === 'function') { try { _sincronizarInsumosSupabase(getNegocioActivo(), [_ex]); } catch(e){} }
+    var _curEff = _effSucIns(localStorage.getItem('etaax_sucursal_activa') || '');
+    /* ¿Ya vive en el negocio? Las copias de ETAAX conservan el id del catálogo
+       maestro, así que la identidad es el ID — nunca el nombre/marca (productos
+       distintos se llaman igual). */
+    var maestro = lista.find(function(x){ return x.id === id; });
+    var nace = null;
+    if (!maestro) {
+        /* Nace el MAESTRO del negocio: ficha de referencia global, sin sucursal.
+           Antes el registro importado se quedaba con la sucursal activa y la
+           siguiente sucursal que lo pedía se enganchaba al mismo registro —
+           dos sucursales, una sola ficha. */
+        maestro = JSON.parse(JSON.stringify(ins));
+        delete maestro._csvRow;
+        maestro.sucursales = []; maestro.sucursalId = '';
+        /* Si la foto viene como base64 (insumo del catálogo aún sin migrar),
+           súbela a Storage y guarda solo la URL → el negocio queda LIVIANO y no
+           se duplica la imagen pesada. Se hace ANTES de clonar: así la copia de
+           la sucursal nace ya con la URL, no con el base64. */
+        if (window.sbSubirFotoBase64 && maestro.foto && maestro.foto.indexOf('data:') === 0) {
+            var _bUp = document.getElementById('cgBtn_' + id);
+            if (_bUp) { _bUp.textContent = '⏳ Subiendo…'; _bUp.disabled = true; }
+            try {
+                var _url = await sbSubirFotoBase64('insumos', maestro.foto, getNegocioActivo());
+                if (_url) maestro.foto = _url;
+            } catch(e) {}
+        }
+        nace = maestro;
+    }
+    var r = window._importarMaestroASuc(maestro, _curEff, nace ? lista.concat([nace]) : lista);
+    if (r.yaEstaba && !nace) {
         _cgMarcarAgregado(id);
         try { filtrar(); } catch(e) {}
-        // Si esto corre dentro del modal del escandallo, el padre tiene su propia
-        // memoria y no se entera solo (ver _avisarPadreIns). No se cierra el modal:
-        // lo normal es agregar varios de un tirón.
-        if (window._avisarPadreIns) window._avisarPadreIns([_ex]);
+        if (window._avisarPadreIns) window._avisarPadreIns([r.copia]);
         return;
     }
-    // Nuevo en el negocio → clonar y hacerlo vivir en la sucursal activa (membresía).
-    var copia = JSON.parse(JSON.stringify(ins));
-    delete copia._csvRow;
-    copia.sucursales = _cur ? [_cur] : []; // vive en la sucursal activa (o Matriz)
-    copia.sucursalId = _cur;
-    // Si la foto viene como base64 (insumo del catálogo aún sin migrar), súbela a
-    // Storage y guarda solo la URL → el negocio queda LIVIANO (carga rápida) y no
-    // se duplica la imagen pesada en cada negocio.
-    if (window.sbSubirFotoBase64 && copia.foto && copia.foto.indexOf('data:') === 0) {
-        var _bUp = document.getElementById('cgBtn_' + id);
-        if (_bUp) { _bUp.textContent = '⏳ Subiendo…'; _bUp.disabled = true; }
-        try {
-            var _url = await sbSubirFotoBase64('insumos', copia.foto, getNegocioActivo());
-            if (_url) copia.foto = _url;
-        } catch(e) {}
-    }
-    lista.push(copia);
+    var frescos = (nace ? [nace] : []).concat(r.nuevas);
     var guardado = false;
     try {
-        setInsumos(lista);
+        setInsumos(lista.concat(frescos));
         guardado = true;
     } catch(e) {
         console.error('[cgAgregar] setInsumos error:', e);
         // Último recurso: intentar sin foto de ningún tipo
         try {
-            copia.foto = '';
-            setInsumos(lista);
+            frescos.forEach(function(x){ x.foto = ''; });
+            setInsumos(lista.concat(frescos));
             guardado = true;
         } catch(e2) {
             console.error('[cgAgregar] setInsumos sin foto también falló:', e2);
@@ -1386,9 +1382,15 @@ async function cgAgregar(id) {
         }
         return;
     }
+    if (typeof _sincronizarInsumosSupabase === 'function') {
+        try { _sincronizarInsumosSupabase(getNegocioActivo(), frescos.concat(r.tocados)); } catch(e){}
+    }
     _cgMarcarAgregado(id);
     try { filtrar(); } catch(e) { console.warn('[cgAgregar] filtrar error:', e); }
-    if (window._avisarPadreIns) window._avisarPadreIns([copia]);
+    /* Si esto corre dentro del modal del escandallo, el padre tiene su propia
+       memoria y no se entera solo (ver _avisarPadreIns). No se cierra el modal:
+       lo normal es agregar varios de un tirón. */
+    if (window._avisarPadreIns) window._avisarPadreIns([r.copia]);
 }
 </script>
 

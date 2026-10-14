@@ -6844,9 +6844,9 @@ console.log('\n══ BB6 · El insumo recién agregado aparece ya ══');
     test('hay UN helper que avisa al padre', () =>
         eq(insjs.indexOf('window._avisarPadreIns = function') > -1, true, 'helper'));
     test('el catálogo ETAAX avisa (las dos ramas: ya existía y nuevo)', () =>
-        eq((ins.match(/_avisarPadreIns\(\[_ex\]\)|_avisarPadreIns\(\[copia\]\)/g) || []).length, 2, 'ambas'));
+        eq((ins.match(/_avisarPadreIns\(\[r\.copia\]\)/g) || []).length, 2, 'ambas'));
     test('el catálogo del negocio avisa', () =>
-        eq(ins.indexOf('_avisarPadreIns([ins])') > -1, true, 'avisa'));
+        eq(ins.indexOf('_avisarPadreIns(r.nuevas)') > -1, true, 'avisa'));
     test('guardar un insumo nuevo manda el REGISTRO, no solo el id', () =>
         eq(insjs.indexOf('window._avisarPadreIns(_copiaNueva ? [insumo, _copiaNueva] : [insumo], true)') > -1, true, 'registro'));
     /* ── LO QUE EL HIJO MANDA DE VERDAD ──
@@ -13270,7 +13270,13 @@ console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ═
         /* _SA va primero: es el guardián que revisa que el vocabulario cargado
            sea el NUEVO. Sin él en el extracto, el filtro no compila —y ese
            guardián existe justo porque el navegador puede traer el viejo. */
-        ['_SA', '_unoPorProductoQR', '_enSucQR', '_areaDeReceta', '_delAreaQR']
+        /* La regla de "¿de qué sucursal es esto?" ya no vive en esta pantalla:
+           es la de `/insumo-label.js`, la misma de inventarios y el escandallo.
+           Se carga aquí para que la prueba ejerza la verdad compartida —no una
+           copia local que podría haber quedado con el criterio invertido. */
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'insumo-label.js'), 'utf8'), ctx,
+                        { filename: 'insumo-label.js' });
+        ['_SA', '_unoPorProductoQR', '_enSucQR', '_enSucRecetaQR', '_areaDeReceta', '_delAreaQR']
             .forEach(f => vm.runInContext(decl(f), ctx, { filename: 'entrada.html' }));
         return ctx;
     }
@@ -13285,31 +13291,65 @@ console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ═
     ];
     test('el colaborador de la sucursal 2 ve UN Negroni, no cuatro', () => {
         const c = qr({ suc: 'suc_2' });
-        const r = c._unoPorProductoQR(NEGRONI.filter(x => c._enSucQR(x)));
+        const r = c._unoPorProductoQR(NEGRONI.filter(x => c._enSucRecetaQR(x)));
         return eq(r.length, 1, r.length + ' renglones');
     });
     /* Y tiene que ser LA SUYA, no la maestra: la copia es la que puede tener
        los gramajes de esa sucursal. */
     test('…y es la copia de SU sucursal, no la maestra', () => {
         const c = qr({ suc: 'suc_2' });
-        const r = c._unoPorProductoQR(NEGRONI.filter(x => c._enSucQR(x)));
+        const r = c._unoPorProductoQR(NEGRONI.filter(x => c._enSucRecetaQR(x)));
         return eq(r[0].id, 'r_s2', r[0].id);
     });
     test('la copia de otra sucursal no se le ofrece', () => {
         const c = qr({ suc: 'suc_2' });
-        return eq(NEGRONI.filter(x => c._enSucQR(x)).map(x => x.id).indexOf('r_s3'), -1, 'fuera');
+        return eq(NEGRONI.filter(x => c._enSucRecetaQR(x)).map(x => x.id).indexOf('r_s3'), -1, 'fuera');
     });
-    /* Una receta sin sucursal es del negocio entero (la maestra, o una vieja
-       que nunca se asignó): si se cayera, el catálogo quedaría vacío para quien
-       nunca separó por sucursal. */
-    test('una receta sin sucursal sigue viéndose en todas', () =>
-        eq(qr({ suc: 'suc_9' })._enSucQR({ id: 'r_x', nombre: 'Café' }), true, 'se ve'));
-    test('lo pausado en esa sucursal no aparece', () =>
-        eq(qr({ suc: 'suc_2' })._enSucQR({ id: 'r_y', inactivaEn: ['suc_2'] }), false, 'pausada'));
-    test('…pero sí en las demás', () =>
-        eq(qr({ suc: 'suc_3' })._enSucQR({ id: 'r_y', inactivaEn: ['suc_2'] }), true, 'activa'));
+    /* Una receta vieja sin sucursal vive en MATRIZ. No es un detalle: es la
+       regla legacy que `_recetaEnSuc` sostiene en todo el sistema desde antes
+       del QR, para que a quien nunca separó por sucursal no se le vacíe el
+       catálogo. Lo que aquí cambió es que el QR ya no la lee como "está en
+       TODAS": con ese criterio, una sucursal nueva heredaba el menú entero del
+       negocio además del suyo. */
+    test('una receta vieja sin sucursal vive en Matriz', () =>
+        eq(qr({ suc: 'suc_principal' })._enSucRecetaQR({ id: 'r_x', nombre: 'Café' }), true, 'se ve'));
+    test('…y no se cuela en las demás sucursales', () =>
+        eq(qr({ suc: 'suc_9' })._enSucRecetaQR({ id: 'r_x', nombre: 'Café' }), false, 'ajena'));
+    /* Un INSUMO sin asignar es otra cosa: no vive en ninguna sucursal, sus
+       copias sirven a cada una. Confundir los dos casos es lo que hacía que el
+       QR ofreciera los 1,000 maestros del negocio en una sucursal de 200. */
+    test('un insumo sin asignar no es de ninguna sucursal', () =>
+        eq(qr({ suc: 'suc_2' })._enSucQR({ id: 'i_x', nombre: 'Tónica', activo: '1' }), false, 'de ninguna'));
+    test('…y el de ESA sucursal sí', () =>
+        eq(qr({ suc: 'suc_2' })._enSucQR({ id: 'i_y', activo: '1', sucursales: ['suc_2'] }), true, 'suya'));
+    /* La «pausa por sucursal» se retiró a propósito en todo el sistema (ver
+       `_insumoPausadoEn`): era redundante con el activar/desactivar del editor y
+       dejaba productos atorados invisibles. El QR era el último sitio que
+       seguía escondiendo por `inactivaEn`, así que un insumo pausado hace meses
+       se veía en inventarios pero no en el celular. Ahora lo que esconde es la
+       baja de verdad. */
+    test('la pausa retirada ya no esconde nada en el QR tampoco', () =>
+        eq(qr({ suc: 'suc_2' })._enSucQR({ id: 'i_z', activo: '1', sucursales: ['suc_2'], inactivoEn: ['suc_2'] }), true, 'se ve'));
+    test('…pero un insumo dado de baja no se ofrece', () =>
+        eq(qr({ suc: 'suc_2' })._enSucQR({ id: 'i_b', activo: '0', sucursales: ['suc_2'] }), false, 'de baja'));
+    test('…ni una receta dada de baja', () =>
+        eq(qr({ suc: 'suc_2' })._enSucRecetaQR({ id: 'r_b', status: 'inactiva', sucursales: ['suc_2'] }), false, 'de baja'));
     test('la carga de recetas ya pasa por el deduplicador', () =>
         eq(decl('_cargarRecetas').indexOf('_unoPorProductoQR(') > -1, true, 'dedup'));
+    /* Las dos reglas se parecen tanto que se confunden al leer, y preguntarle
+       por una receta a la regla de insumos la borra del QR: una receta vieja sin
+       sucursal desaparecería de Matriz. El cargador no se puede correr aquí
+       (pide la RPC), así que lo que se vigila es a quién le pregunta. */
+    test('…y le pregunta a la regla de RECETAS, no a la de insumos', () => {
+        const d = decl('_cargarRecetas');
+        return eq(d.indexOf('_enSucRecetaQR(') > -1 && d.indexOf('_enSucQR(') === -1, true, 'la suya');
+    });
+    test('…y la app móvil igual', () => {
+        const mv = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
+        const i = mv.indexOf('RECETAS = unoPorProducto(');
+        const linea = mv.slice(i, mv.indexOf('\n', i));
+        return eq(/enSucReceta\(/.test(linea) && !/[^a-zA-Z]enSuc\(/.test(linea), true, 'la suya');
+    });
 
     /* ── 2) CADA ÁREA VE LO SUYO ── */
     const CARTA = [
@@ -14897,9 +14937,14 @@ console.log('\n══ BH6 · Checklist impreso e insumos por sucursal ══');
        catálogo quedaría con insumos partidos de dos maneras distintas, y nadie
        sabría cuál es la buena. */
     test('…creando una copia por sucursal, ligada al maestro', () => {
-        const t = dIj('_forkInsumo');
-        return eq(t.indexOf('copia.origenId   = ins.id') > -1 &&
-                  t.indexOf('copia.sucursales = [suc]') > -1, true, 'copias');
+        /* El molde de la copia se mudó a `_copiaInsParaSuc`: lo comparte con las
+           otras tres formas de importar (ver BE21). Aquí se vigila que el forkeo
+           siga pidiéndoselo a él y que el molde siga ligando al maestro; que la
+           copia salga bien se prueba CORRIÉNDOLA en BE21. */
+        const t = dIj('_forkInsumo'), molde = dIj('_copiaInsParaSuc');
+        return eq(t.indexOf('_copiaInsParaSuc(ins, suc)') > -1 &&
+                  molde.indexOf('copia.origenId   = master.id') > -1 &&
+                  molde.indexOf('copia.sucursales = [real]') > -1, true, 'copias');
     });
     /* Dejar el maestro en una de ellas haría que esa sucursal viera dos veces
        el mismo producto. */
@@ -14949,9 +14994,11 @@ console.log('\n══ BH6 · Checklist impreso e insumos por sucursal ══');
        Un insumo NUEVO ya nace maestro + copia en su sucursal, igual que las
        recetas. Si eso se rompiera, el catálogo volvería a llenarse de registros
        compartidos y el barrido habría que correrlo para siempre. */
+    /* El molde de la copia es el mismo para las cinco formas de traer un insumo
+       a una sucursal (ver BE21): aquí se vigila que el alta siga pidiéndoselo a
+       él, y en BE21 se CORRE el alta para ver que la copia sale bien. */
     test('un insumo nuevo sigue naciendo maestro + copia de su sucursal', () =>
-        eq(ijs.indexOf('_copiaNueva.origenId = insumo.id') > -1 &&
-           ijs.indexOf('_copiaNueva.sucursales = [_sucCopiaNueva]') > -1, true, 'automático'));
+        eq(ijs.indexOf('_copiaNueva = _copiaInsParaSuc(insumo, _sucCopiaNueva)') > -1, true, 'automático'));
     /* Inventarios y mermas referencian el id canónico —el del maestro, que se
        conserva—: por eso esto es seguro a media operación. */
     test('…sin tocar lo ya capturado, y diciéndolo', () =>
@@ -27942,6 +27989,362 @@ console.log('\n══ BE20 · Ventas: un ingreso, una sola alta ══');
     });
 }
 
+/* ═══════════ SUITE BE21 · INSUMOS: CADA SUCURSAL, SU FICHA ══════════════════
+   De la auditoría `docs/auditoria-insumos-sucursales-2026-10-14.md`. Su script
+   reprodujo 23 defectos EJECUTANDO las funciones reales de `recetas/insumos.js`
+   —no una imitación—, así que lo que sigue parte de hechos, no de sospechas.
+
+   Aquel script AFIRMA el comportamiento con el fallo: sirve como evidencia del
+   «antes» y debe seguir fallando a medida que se arregla cada cosa. Estas
+   pruebas afirman lo contrario —el contrato correcto— y son las que tienen que
+   pasar.
+
+   El modelo que se defiende: el negocio tiene MAESTROS únicos; cada sucursal
+   importa una COPIA con identidad propia, ligada al maestro y editable sola.
+   Tocar la copia de una sucursal no puede alterar la ficha de otra.            */
+async function suiteInsumosSucursales() {
+console.log('\n══ BE21 · Insumos: cada sucursal, su ficha ══');
+
+    const ROOT = RAIZ;
+    const leer = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+    /* Se extrae la función REAL del archivo de producción y se corre tal cual.
+       Copiar su lógica aquí sería escribir una prueba que sobrevive al bug. */
+    const fn = (file, name) => {
+        const s = leer(file), p = s.indexOf('function ' + name + '(');
+        if (p < 0) throw new Error('No existe ' + name + ' en ' + file);
+        const ini = s.slice(Math.max(0, p - 6), p) === 'async ' ? p - 6 : p;
+        const abre = s.indexOf('{', p);
+        let prof = 0;
+        for (let i = abre; i < s.length; i++) {
+            if (s[i] === '{') prof++;
+            else if (s[i] === '}' && --prof === 0) return s.slice(ini, i + 1);
+        }
+        throw new Error('Sin cierre: ' + name);
+    };
+    const contexto = (catalogo, sucursal) => {
+        const nodos = {}, almacen = { etaax_sucursal_activa: sucursal || 's1' };
+        let n = 0;
+        const c = {
+            console: { log(){}, warn(){}, error(){} }, Date, JSON, Math, parseFloat, isNaN, Object, Array, String, Number,
+            catalogo: JSON.parse(JSON.stringify(catalogo)), globalMode: false, escrituras: [], avisos: [],
+            localStorage: { getItem: k => almacen[k] || null, setItem: (k, v) => { almacen[k] = String(v); } },
+            document: {
+                getElementById(id) { return nodos[id] || (nodos[id] = { value: '', style: {}, classList: { add(){}, remove(){} }, remove(){} }); },
+                querySelector(){ return null; }, querySelectorAll(){ return []; }, addEventListener(){}
+            },
+            genId: () => 'nuevo_' + (++n), alert: x => c.avisos.push(x), confirm: () => true,
+            clearTimeout(){}, setTimeout(){},
+            getInsumos: () => c.catalogo, setInsumos: a => { c.catalogo = a; },
+            getCatalogoInsumos: () => c.catalogo, getNegocioActivo: () => 'neg_ficticio',
+            _getSucActivaIns: () => almacen.etaax_sucursal_activa,
+            _catGlobalIns: () => c.globalMode, MATRIZ_ID_INS: 'suc_principal',
+            _sincronizarInsumosSupabase: async (neg, a) => { c.escrituras.push({ neg, ids: a.map(x => x.id) }); },
+            _avisarPadreIns(){}, filtrar(){}, init(){}, cerrarModalBtn(){}, renderReq(){},
+            _cgMarcarAgregado(){}, _usuarioActual: () => 'Candado', _registrarCambios(){},
+            _soloMode: true, _insumosSyncTimer: null, editandoId: null, tipoInsumoActual: 'licor',
+            fotoInsumoBase64: '', presentacionesTemp: [], FAMILIA_POR_TIPO: { licor: 'Bebidas' }
+        };
+        c.window = c; vm.createContext(c);
+        vm.runInContext(leer('insumo-label.js'), c, { filename: 'insumo-label.js' });
+        c.cargar = (file, ...nombres) => nombres.forEach(nm => vm.runInContext(fn(file, nm), c, { filename: file + ':' + nm }));
+        return c;
+    };
+    const maestro = { id: 'm', nombre: 'Tónica', tipo: 'licor', sucursalId: '', sucursales: [], createdAt: '2026-01-01', presentaciones: [] };
+    const copia = (suc) => ({ id: 'c_' + suc, nombre: 'Tónica', tipo: 'licor', origenId: 'm', sucursalId: suc,
+                              sucursales: [suc], createdAt: '2026-02-02', historial: [{ que: 'alta' }], presentaciones: [] });
+
+    /* ── EDITAR UNA COPIA NO LA CONVIERTE EN MAESTRO ───────────────────────
+       `insumo` se arma desde los campos del editor, así que todo lo que no sea
+       un campo del editor se perdía al guardar. La consecuencia no se ve al
+       guardar sino después: una copia sin `origenId` deja de ser copia y
+       aparece como un maestro más en el catálogo global del negocio. */
+    await testA('editar la ficha de una sucursal conserva su vínculo con el maestro', async () => {
+        const c = contexto([maestro, copia('s1'), copia('s2')], 's1');
+        c.cargar('recetas/insumos.js', 'guardarInsumo');
+        c.editandoId = 'c_s1';
+        c.document.getElementById('ins-nombre').value = 'Tónica premium';
+        c.presentacionesTemp = [{ contNeto: 750, umContenido: 'ML', precio: 20 }];
+        await c.guardarInsumo();
+        const editada = c.catalogo.find(x => x.id === 'c_s1');
+        eq(editada.origenId, 'm', 'perdió su vínculo: el global la mostraría como un maestro más');
+        eq(c.catalogo.filter(x => !x.origenId).length, 1, 'el catálogo global quedó con más de un maestro');
+        return eq(editada.nombre, 'Tónica premium', 'no guardó lo que sí venía del formulario');
+    });
+    await testA('…y conserva su fecha de alta y su historial', async () => {
+        const c = contexto([maestro, copia('s1')], 's1');
+        c.cargar('recetas/insumos.js', 'guardarInsumo');
+        c.editandoId = 'c_s1';
+        c.document.getElementById('ins-nombre').value = 'Otra cosa';
+        await c.guardarInsumo();
+        const e = c.catalogo.find(x => x.id === 'c_s1');
+        eq(e.createdAt, '2026-02-02', 'la ficha cambió de fecha de alta al editarla');
+        return eq(!!(e.historial && e.historial.length), true, 'se borró el historial de la ficha');
+    });
+    await testA('…y editar en una sucursal no toca la ficha de la otra', async () => {
+        const c = contexto([maestro, copia('s1'), copia('s2')], 's1');
+        c.cargar('recetas/insumos.js', 'guardarInsumo');
+        c.editandoId = 'c_s1';
+        c.document.getElementById('ins-nombre').value = 'Solo en S1';
+        await c.guardarInsumo();
+        const otra = c.catalogo.find(x => x.id === 'c_s2');
+        eq(otra.nombre, 'Tónica', 'cambió la ficha de la otra sucursal');
+        return eq(otra.sucursalId, 's2', 'le movieron la sucursal a la ficha ajena');
+    });
+
+    /* ── IMPORTAR A UNA SUCURSAL ES COPIAR, NO COMPARTIR ───────────────────
+       El caso que reportó Edwin: cambia la medida de una copa en una sucursal
+       y cambia en la otra. No era un guardado flojo — «Copiar aquí» no copiaba
+       nada: sumaba la sucursal al array `sucursales` del MISMO registro. Con
+       una sola ficha vista desde dos lados no hay nada que pueda diferir.
+
+       Las pruebas corren los manejadores REALES de los botones (`ignAgregar`
+       del catálogo de otras sucursales y `cgAgregar` del catálogo ETAAX). */
+    const IMP = ['_effSucIns', '_copiaInsParaSuc', '_copiaDeEnSuc', '_importarMaestroASuc'];
+
+    await testA('«Copiar aquí» le da a la sucursal una ficha propia (no la ajena)', async () => {
+        const c = contexto([maestro, copia('s1')], 's2');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'ignAgregar');
+        c.ignAgregar('c_s1');
+        eq(c.catalogo.length, 3, 'no creó ficha: la sucursal quedó mirando la de la otra');
+        const s1 = c.catalogo.find(x => x.id === 'c_s1');
+        eq(JSON.stringify(s1.sucursales), '["s1"]', 'le metió otra sucursal a la ficha de S1');
+        const nueva = c.catalogo.find(x => x.id !== 'm' && x.id !== 'c_s1');
+        eq(JSON.stringify(nueva.sucursales), '["s2"]', 'la ficha nueva no vive en la sucursal que la pidió');
+        eq(nueva.origenId, 'm', 'la ficha nueva no quedó ligada al maestro');
+        return eq(c.catalogo.filter(x => !x.origenId).length, 1, 'el catálogo global quedó con más de un maestro');
+    });
+    await testA('…y hacerlo dos veces no deja dos fichas en la misma sucursal', async () => {
+        const c = contexto([maestro, copia('s1')], 's2');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'ignAgregar');
+        c.ignAgregar('c_s1'); c.ignAgregar('c_s1');
+        return eq(c.catalogo.length, 3, 'el segundo clic dejó el insumo dos veces en la sucursal');
+    });
+    await testA('importar el MISMO insumo de ETAAX en dos sucursales deja dos fichas distintas', async () => {
+        const c = contexto([], 's1');
+        c._cgTodos = [JSON.parse(JSON.stringify(maestro))];
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'cgAgregar');
+        await c.cgAgregar('m');
+        c.localStorage.setItem('etaax_sucursal_activa', 's2');
+        await c.cgAgregar('m');
+        const cops = c.catalogo.filter(x => x.origenId === 'm');
+        eq(cops.length, 2, 'las dos sucursales terminaron con una sola ficha compartida');
+        eq(new Set(cops.map(x => x.id)).size, 2, 'las dos fichas comparten el mismo id');
+        eq(JSON.stringify(cops.map(x => x.sucursales[0]).sort()), '["s1","s2"]', 'alguna ficha no quedó en su sucursal');
+        const m = c.catalogo.find(x => x.id === 'm');
+        return eq(JSON.stringify(m.sucursales), '[]', 'el maestro del negocio se quedó con sucursal: se vería doble');
+    });
+    await testA('…y volver a importarlo en la misma sucursal no agrega otra ficha', async () => {
+        const c = contexto([], 's1');
+        c._cgTodos = [JSON.parse(JSON.stringify(maestro))];
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'cgAgregar');
+        await c.cgAgregar('m'); await c.cgAgregar('m');
+        return eq(c.catalogo.length, 2, 'el catálogo ETAAX duplicó el insumo en la sucursal');
+    });
+    await testA('borrar la ficha de una sucursal no borra la de la otra', async () => {
+        const c = contexto([maestro, copia('s1')], 's2');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'ignAgregar');
+        c.ignAgregar('c_s1');
+        const idS2 = c.catalogo.find(x => x.id !== 'm' && x.id !== 'c_s1').id;
+        c.cargar('recetas/insumos.js', 'eliminarInsumo');
+        c._tombAdd = () => {}; c._borrarInsumosSupabase = async () => {};
+        let hecho; c._pedirClaveAdmin = (msg, cb) => { hecho = cb(); };
+        c.eliminarInsumo(idS2); await hecho;
+        return eq(JSON.stringify(c.catalogo.map(x => x.id).sort()), '["c_s1","m"]',
+            'borrar en una sucursal se llevó el insumo de la otra');
+    });
+    /* La parte peligrosa del arreglo: al dejar el maestro sin membresía hay que
+       darle su copia a las sucursales que lo veían POR esa membresía. Soltarla
+       sin copiar las dejaría sin el insumo, con sus inventarios apuntando a un
+       registro que ya no ven. */
+    await testA('un insumo compartido por membresía vieja le deja copia a cada sucursal', async () => {
+        const viejo = Object.assign(JSON.parse(JSON.stringify(maestro)), { sucursales: ['s1', 's3'] });
+        const c = contexto([viejo], 's2');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'ignAgregar');
+        c.ignAgregar('m');
+        eq(JSON.stringify(c.catalogo.filter(x => x.origenId === 'm').map(x => x.sucursales[0]).sort()),
+            '["s1","s2","s3"]', 'alguna sucursal se quedó sin su copia al soltar la membresía');
+        const m = c.catalogo.find(x => x.id === 'm');
+        eq(JSON.stringify(m.sucursales), '[]', 'el maestro conservó membresía propia');
+        return eq(JSON.stringify(m._memPreMigra), '["s1","s3"]', 'no guardó dónde vivía (sin eso no hay vuelta atrás)');
+    });
+    /* El modal del escandallo tiene su propia memoria y no se entera solo de lo
+       que agrega esta pantalla: si el aviso no lleva el REGISTRO, el padre no
+       tiene qué injertar y el insumo recién importado no aparece en la receta.
+       Se prueba con un espía, no mirando dónde está escrita la llamada. */
+    await testA('el padre recibe la ficha recién importada, no el maestro', async () => {
+        const c = contexto([maestro, copia('s1')], 's2');
+        const visto = [];
+        c._avisarPadreIns = (arr) => { (arr || []).forEach(x => visto.push(x && x.id)); };
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'ignAgregar');
+        c.ignAgregar('c_s1');
+        const nueva = c.catalogo.find(x => x.id !== 'm' && x.id !== 'c_s1');
+        return eq(visto.indexOf(nueva.id) > -1, true, 'el escandallo no se enteró de la ficha nueva');
+    });
+    await testA('…y también cuando el insumo ya estaba en el negocio', async () => {
+        const c = contexto([], 's1');
+        const visto = [];
+        c._cgTodos = [JSON.parse(JSON.stringify(maestro))];
+        c._avisarPadreIns = (arr) => { (arr || []).forEach(x => visto.push(x && x.id)); };
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'cgAgregar');
+        await c.cgAgregar('m');                       // rama "nuevo en el negocio"
+        await c.cgAgregar('m');                       // rama "ya lo tenía esta sucursal"
+        const cop = c.catalogo.find(x => x.origenId === 'm');
+        eq(visto.length, 2, 'una de las dos ramas del catálogo ETAAX se quedó callada');
+        return eq(visto.every(id => id === cop.id), true, 'avisó del maestro en vez de la ficha de la sucursal');
+    });
+
+    /* ── EL ALTA MANUAL, CORRIDA DE VERDAD ──────────────────────────────────
+       Un insumo nuevo nace MAESTRO del negocio + ficha de la sucursal donde se
+       capturó. Si eso se rompiera, el catálogo volvería a llenarse de registros
+       compartidos y no habría arreglo que alcanzara. */
+    await testA('dar de alta un insumo deja maestro global + ficha de su sucursal', async () => {
+        const c = contexto([], 's1');
+        c.cargar('recetas/insumos.js', ...IMP, '_duplicadoDeIns', 'guardarInsumo');
+        c.document.getElementById('ins-nombre').value = 'Ginebra';
+        await c.guardarInsumo();
+        eq(c.catalogo.length, 2, 'no nacieron las dos fichas (maestro + sucursal)');
+        const m = c.catalogo.find(x => !x.origenId), cop = c.catalogo.find(x => x.origenId);
+        eq(JSON.stringify(m.sucursales), '[]', 'el maestro nació con sucursal: la sucursal lo vería doble');
+        eq(cop.origenId, m.id, 'la ficha de la sucursal no quedó ligada al maestro');
+        return eq(JSON.stringify(cop.sucursales), '["s1"]', 'la ficha no nació en la sucursal donde se capturó');
+    });
+    /* ── DAR DE ALTA LO QUE YA EXISTE ───────────────────────────────────────
+       Pasa seguido: dos personas capturando a la vez, o alguien que no vio el
+       renglón entre cientos. Antes nacía un segundo maestro en silencio y de
+       ahí en adelante media operación costeaba con una ficha y media con la
+       otra. El aviso no prohíbe —dos productos pueden llamarse igual—, pero
+       nadie se entera por accidente. */
+    await testA('dar de alta un insumo que ya existe avisa antes de duplicarlo', async () => {
+        const c = contexto([maestro, copia('s1')], 's1');
+        let preguntado = false;
+        c.confirm = () => { preguntado = true; return false; };
+        c.cargar('recetas/insumos.js', ...IMP, '_duplicadoDeIns', '_dondeViveIns', '_sucNomIns', '_copiasDe', 'guardarInsumo');
+        c.document.getElementById('ins-nombre').value = 'Tónica';
+        await c.guardarInsumo();
+        eq(preguntado, true, 'lo dio de alta sin avisar que ya existía');
+        return eq(c.catalogo.length, 2, 'se canceló el alta y aun así duplicó el insumo');
+    });
+    await testA('…y si el capturista dice que sí, lo da de alta igual', async () => {
+        const c = contexto([maestro, copia('s1')], 's1');
+        c.confirm = () => true;
+        c.cargar('recetas/insumos.js', ...IMP, '_duplicadoDeIns', '_dondeViveIns', '_sucNomIns', '_copiasDe', 'guardarInsumo');
+        c.document.getElementById('ins-nombre').value = 'Tónica';
+        await c.guardarInsumo();
+        return eq(c.catalogo.length, 4, 'el aviso se volvió una prohibición: no dejó capturar');
+    });
+    await testA('…y un nombre distinto no molesta a nadie', async () => {
+        const c = contexto([maestro, copia('s1')], 's1');
+        let preguntado = false;
+        c.confirm = () => { preguntado = true; return true; };
+        c.cargar('recetas/insumos.js', ...IMP, '_duplicadoDeIns', '_dondeViveIns', '_sucNomIns', '_copiasDe', 'guardarInsumo');
+        c.document.getElementById('ins-nombre').value = 'Ginebra';
+        await c.guardarInsumo();
+        eq(preguntado, false, 'avisa de duplicado cuando no hay ninguno: el aviso se vuelve ruido');
+        return eq(c.catalogo.length, 4, 'no dio de alta el insumo nuevo');
+    });
+
+    /* ── LOS CUATRO LECTORES VEN LO MISMO ──────────────────────────────────
+       El fixture de la auditoría: 1,000 maestros del negocio y copias por
+       sucursal —S1 con 200, S2 con 500, S3 con 100—. Cada sucursal tiene que
+       ver SUS copias y nada más. Dos de los cuatro lectores tenían su propia
+       versión de la regla, con el criterio al revés ("sin sucursal = en
+       todas"), y ofrecían los 1,000 maestros en cualquier sucursal: el barman
+       de una barra de 200 productos buscaba entre mil.
+
+       Se corren los CUATRO lectores reales sobre el mismo catálogo. Probar uno
+       no sirve: el bug era justamente que no coincidían entre sí.             */
+    const FIXTURE = (() => {
+        const lista = [];
+        for (let i = 0; i < 1000; i++)
+            lista.push({ id: 'm' + i, nombre: 'Producto ' + i, activo: '1', sucursales: [], area: 'barra' });
+        [['s1', 200], ['s2', 500], ['s3', 100]].forEach(([suc, n]) => {
+            for (let i = 0; i < n; i++)
+                lista.push({ id: suc + '_' + i, origenId: 'm' + i, nombre: 'Producto ' + i,
+                             activo: '1', sucursales: [suc], sucursalId: suc, area: 'barra' });
+        });
+        return lista;
+    })();
+    const ESPERADO = { s1: 200, s2: 500, s3: 100 };
+    /* Un contexto por lector, con lo mínimo que cada uno pide y la regla
+       compartida cargada de verdad (no imitada). */
+    const lector = (archivo, nombres, pre) => {
+        const ctx = { console: { log(){}, warn(){}, error(){} }, JSON, Object, Array, String, Boolean, Number, parseFloat, isNaN, Math, Date };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'insumo-label.js'), 'utf8'), ctx, { filename: 'insumo-label.js' });
+        if (pre) vm.runInContext(pre, ctx);
+        const txt = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
+        nombres.forEach((nm) => {
+            const p = txt.indexOf('function ' + nm + '(');
+            if (p < 0) throw new Error('No existe ' + nm + ' en ' + archivo);
+            const abre = txt.indexOf('{', p);
+            let prof = 0;
+            for (let i = abre; i < txt.length; i++) {
+                if (txt[i] === '{') prof++;
+                else if (txt[i] === '}' && --prof === 0) {
+                    vm.runInContext(txt.slice(p, i + 1), ctx, { filename: archivo + ':' + nm });
+                    return;
+                }
+            }
+            throw new Error('Sin cierre: ' + nm);
+        });
+        return ctx;
+    };
+    const almacen = (suc) => 'var localStorage={_d:{etaax_sucursal_activa:' + JSON.stringify(suc) +
+        '},getItem:function(k){return this._d[k]||null;},setItem:function(k,v){this._d[k]=String(v);}};' +
+        'var sessionStorage={getItem:function(){return null;}};';
+
+    Object.keys(ESPERADO).forEach((suc) => {
+        test('el QR de ' + suc + ' ofrece solo sus ' + ESPERADO[suc] + ' productos', () => {
+            const c = lector('entrada.html', ['_enSucQR', '_unoPorProductoQR'], 'var SUC=' + JSON.stringify(suc) + ';');
+            const vistos = c._unoPorProductoQR(FIXTURE.filter(x => x.activo !== '0' && c._enSucQR(x)));
+            return eq(vistos.length, ESPERADO[suc], 'ofreció ' + vistos.length + ' en vez de ' + ESPERADO[suc]);
+        });
+        test('…y la app móvil de ' + suc + ' también', () => {
+            const c = lector('app-movil/app.js', ['enSuc', 'unoPorProducto'], 'var SUC=' + JSON.stringify(suc) + ';');
+            const vistos = c.unoPorProducto(FIXTURE.filter(x => x.activo !== '0' && c.enSuc(x)));
+            return eq(vistos.length, ESPERADO[suc], 'ofreció ' + vistos.length);
+        });
+        test('…y el inventario de ' + suc, () => {
+            const c = lector('recetas/inventarios.js', ['_scopeSucInsumos'], almacen(suc));
+            return eq(c._scopeSucInsumos(FIXTURE).length, ESPERADO[suc], 'alcance distinto');
+        });
+        test('…y el escandallo de ' + suc, () => {
+            const c = lector('app.js', ['_calcCatalogoInsumosScope', '_unoPorProducto'],
+                almacen(suc) + 'var getCatalogoInsumos=function(){return CAT;};');
+            c.CAT = FIXTURE;
+            return eq(c._calcCatalogoInsumosScope().length, ESPERADO[suc], 'alcance distinto');
+        });
+    });
+    /* El QR ofrece la ficha de ESA sucursal, no el maestro: la copia es la que
+       trae el contenido, el empaque y el costo de ahí. */
+    test('y lo que ofrece es la ficha de la sucursal, no el maestro', () => {
+        const c = lector('entrada.html', ['_enSucQR', '_unoPorProductoQR'], 'var SUC="s2";');
+        const vistos = c._unoPorProductoQR(FIXTURE.filter(x => x.activo !== '0' && c._enSucQR(x)));
+        return eq(vistos.every(x => x.origenId && x.sucursales[0] === 's2'), true, 'colgó un maestro en la lista');
+    });
+
+    /* Complemento de las pruebas de arriba, no sustituto: que no vuelva a
+       existir una SEGUNDA forma de importar. El bug no fue que la puerta
+       estuviera mal escrita, fue que había cuatro puertas distintas. */
+    test('importar a una sucursal tiene una sola puerta', () => {
+        const ign = fn('recetas/insumos.html', 'ignAgregar');
+        const cg  = fn('recetas/insumos.html', 'cgAgregar');
+        eq(/_importarMaestroASuc/.test(ign), true, 'ignAgregar dejó de usar la puerta única');
+        eq(/_importarMaestroASuc/.test(cg), true, 'cgAgregar dejó de usar la puerta única');
+        eq(/\.sucursales\s*=/.test(ign), false, 'ignAgregar volvió a escribir membresía a mano');
+        return eq(/(_ex|maestro)\.sucursales\s*=\s*s\b/.test(cg), false, 'cgAgregar volvió a compartir el registro');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -27960,4 +28363,4 @@ suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
-    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(resumen);
+    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(suiteInsumosSucursales).then(resumen);

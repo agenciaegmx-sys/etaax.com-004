@@ -358,12 +358,26 @@ async function cargarInsumos() {
     }));
     INSUMOS.sort(function (a, b) { return (a.nombre || '').localeCompare(b.nombre || ''); });
 }
+/* La MISMA regla de `/insumo-label.js` que usa el resto del sistema. Aquí vivía
+   otra copia con el criterio invertido ("sin sucursal = en todas"), así que la
+   app móvil repetía el defecto del QR: ofrecía los maestros del negocio entero
+   en cualquier sucursal. Recetas e insumos se preguntan por separado porque no
+   comparten criterio (ver entrada.html). */
 function enSuc(x) {
     if (!SUC || !x) return true;
-    if ((x.inactivoEn || []).indexOf(SUC) >= 0 || (x.inactivaEn || []).indexOf(SUC) >= 0) return false;
+    if (typeof window._insumoActivoEnSuc === 'function') return window._insumoActivoEnSuc(x, SUC);
     var ss = (x.sucursales && x.sucursales.length) ? x.sucursales : (x.sucursalId ? [x.sucursalId] : null);
-    if (!ss || !ss.length) return true;
-    return ss.indexOf(SUC) >= 0;
+    if (!ss || !ss.length) return false;                   // maestro sin asignar: de ninguna
+    for (var i = 0; i < ss.length; i++) { if ((ss[i] || 'suc_principal') === SUC) return true; }
+    return false;
+}
+function enSucReceta(x) {
+    if (!SUC || !x) return true;
+    if (typeof window._recetaActivaEnSuc === 'function') return window._recetaActivaEnSuc(x, SUC);
+    var ss = (x.sucursales && x.sucursales.length) ? x.sucursales : (x.sucursalId ? [x.sucursalId] : null);
+    if (!ss || !ss.length) return SUC === 'suc_principal'; // receta legacy = Matriz
+    for (var i = 0; i < ss.length; i++) { if ((ss[i] || 'suc_principal') === SUC) return true; }
+    return false;
 }
 /* Un producto vive como MAESTRO + una COPIA por sucursal. Sin esto el buscador
    enseña el mismo tequila cuatro veces y no hay forma de saber cuál tocar. */
@@ -712,7 +726,7 @@ function metaIns(x) {
 async function cargarRecetas() {
     try {
         var rr = await _supabase.rpc('entrada_recetas', { p_neg: NEG, p_token: TOKEN });
-        RECETAS = unoPorProducto((rr.data || []).filter(function (x) { return x && x.id && enSuc(x); }));
+        RECETAS = unoPorProducto((rr.data || []).filter(function (x) { return x && x.id && enSucReceta(x); }));
     } catch (e) { RECETAS = []; }
 }
 function pintarSugs(lista, q) {

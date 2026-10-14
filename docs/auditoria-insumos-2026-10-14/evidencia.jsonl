@@ -1,0 +1,28 @@
+{"tipo":"CONTROL","caso":"Catálogo/inventario con sucursal explícita y copias sanas","evidencia":{"s1":200,"s2":500,"s3":100}}
+{"tipo":"DEFECTO","caso":"QR incluye los maestros globales no asignados","evidencia":{"esperado":{"s1":200,"s2":500,"s3":100},"observado":{"s1":1000,"s2":1000,"s3":1000}}}
+{"tipo":"DEFECTO","caso":"App móvil repite el filtro abierto del QR","evidencia":{"esperado":200,"observado":1000}}
+{"tipo":"DEFECTO","caso":"Sin sucursal, inventario devuelve maestros y todas las copias","evidencia":{"observado":1800}}
+{"tipo":"DEFECTO","caso":"Scope del inventario depende de pestaña, no de invActual","evidencia":{"sucursalInventario":"s2","sucursalPestana":"s1","esperado":500,"observado":200}}
+{"tipo":"DEFECTO","caso":"QR vuelve a ofrecer maestro cuando su copia está inactiva","evidencia":{"idOfrecido":"m"}}
+{"tipo":"DEFECTO","caso":"QR no normaliza la membresía vacía de Matriz","evidencia":{"catalogoAcepta":true,"qrAceptaCopia":false}}
+{"tipo":"DEFECTO","caso":"Editor pierde origenId y la copia pasa al global","evidencia":{"id":"c_s1","origenId":null,"maestrosVisibles":2}}
+{"tipo":"DEFECTO","caso":"Copiar aquí comparte la misma copia entre sucursales","evidencia":{"id":"c_s1","sucursales":["s1","s2"],"registros":2}}
+{"tipo":"DEFECTO","caso":"Eliminar copia compartida por importador la quita de ambas sucursales","evidencia":{"restantes":["m"]}}
+{"tipo":"DEFECTO","caso":"Importar ETAAX en dos sucursales conserva un solo ID compartido","evidencia":{"id":"m","origenId":null,"sucursales":["s1","s2"]}}
+{"tipo":"DEFECTO","caso":"Alta manual repetida no alerta duplicado","evidencia":{"maestros":2,"copiasSucursal":2,"alertas":0}}
+{"tipo":"CONTROL","caso":"Eliminar una copia bien formada respeta maestro y otra sucursal","evidencia":{"restantes":["m","c_s2"]}}
+{"tipo":"DEFECTO","caso":"Resolver revive maestro después de eliminar copia local","evidencia":{"sucursal":"s1","idResuelto":"m"}}
+{"tipo":"DEFECTO","caso":"Renombrar copia hace que resolver y buscador ofrezcan maestro","evidencia":{"idSolicitado":"c_s1","idResuelto":"m"}}
+{"tipo":"DEFECTO","caso":"Lecturas crudas usan empaque/contenido del maestro","evidencia":{"cajaLocal":12,"cajaUsada":24,"mlLocal":750,"mlUsados":1000}}
+{"tipo":"DEFECTO","caso":"CSV desde s1 modifica ficha de s2 por nombre/variedad","evidencia":{"idModificado":"c_s2","sucursal":"s2","presentacionesRestantes":0}}
+{"tipo":"DEFECTO","caso":"Archivar requisición S1 limpia pedido S2 y guarda historial mezclado","evidencia":{"pedidoS2":"","idsArchivados":["c_s1","c_s2"],"sucursalArchivada":null}}
+{"tipo":"DEFECTO","caso":"Ruta antigua actualizarEnGlobal sobrescribe membresía del destino","evidencia":{"idDestino":"c_s2","sucursalId":"s2","sucursales":["s1"]}}
+{"tipo":"DEFECTO","caso":"Debounce de setInsumos sincroniza también registros ajenos sin modificar","evidencia":{"registroEditado":"c_s1","idsEnviados":["m","c_s1","c_s2"]}}
+{"tipo":"CONTROL","caso":"Fork moderno crea copias con IDs y presentaciones independientes","evidencia":{"ids":["nuevo_1","nuevo_2"],"precioOtraSucursal":100}}
+{"tipo":"DEFECTO","caso":"Índice de copias queda viejo al agregar con la misma referencia","evidencia":{"copiasReales":1,"copiasIndexadas":0}}
+{"tipo":"DEFECTO","caso":"Descartar novedad global en S1 la oculta también en S2 en este dispositivo","evidencia":{"pendientesS2":0}}
+{"tipo":"DEFECTO","caso":"Cambios de S1 no avisan a S2 aunque comparten maestro","evidencia":{"avisosS2":0}}
+{"tipo":"DEFECTO","caso":"Cambiar precio en presentación 2 no genera diff de novedades","evidencia":{"precioAntes":500,"precioDespues":999,"cambiosDetectados":0}}
+{"tipo":"CONTROL","caso":"Área explícita cocina queda fuera de barra","evidencia":{"cocinaVisible":false}}
+{"tipo":"DEFECTO","caso":"Insumo sin área ni familia pasa filtro de cualquier colaborador","evidencia":{"barraVisible":true}}
+{"controles":4,"defectosReproducidos":23,"red":"ninguna","datos":"ficticios","base":"49c6d87"}

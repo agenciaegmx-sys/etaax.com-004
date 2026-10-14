@@ -381,6 +381,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
 <script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única -->
+<script src="/insumo-label.js?v=b911b699"></script><!-- de qué sucursal es un insumo: la MISMA regla del resto -->
 <script>
 
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
@@ -495,12 +496,36 @@ function _delAreaQR(x, esReceta){
        dice si es producción de barra o de cocina. */
     return _SA().veInsumo(AREA_COLAB, x);
 }
+/* ── DE QUÉ SUCURSAL ES ESTO ─────────────────────────────────────────────────
+   La regla vive en `/insumo-label.js`, igual que en inventarios, el escandallo
+   y la carta. Aquí había una COPIA con el criterio al revés: "sin sucursal = en
+   todas". Y como los maestros del negocio no tienen sucursal, el QR ofrecía el
+   catálogo COMPLETO: en una sucursal de 200 productos salían los 1,000 del
+   negocio, con el maestro y su copia revueltos. Un insumo sin asignar no es de
+   todas las sucursales — no es de ninguna: para eso están sus copias.
+
+   Insumos y recetas NO comparten criterio y por eso son dos funciones: una
+   receta vieja sin sucursal sí vive en Matriz (dato legacy que no se oculta),
+   un insumo sin asignar no.
+
+   Si el archivo compartido no cargó, se filtra igual con el criterio correcto
+   en lugar de abrir la puerta: enseñar de más en una sucursal ajena es peor que
+   enseñar de menos, y lo de menos se ve y se reclama. */
 function _enSucQR(x){
     if (!SUC || !x) return true;
-    if ((x.inactivoEn||[]).indexOf(SUC) >= 0 || (x.inactivaEn||[]).indexOf(SUC) >= 0) return false; // pausado ahí
+    if (typeof window._insumoActivoEnSuc === 'function') return window._insumoActivoEnSuc(x, SUC);
     var ss = (x.sucursales && x.sucursales.length) ? x.sucursales : (x.sucursalId ? [x.sucursalId] : null);
-    if (!ss || !ss.length) return true;
-    return ss.indexOf(SUC) >= 0;
+    if (!ss || !ss.length) return false;                   // maestro sin asignar: de ninguna
+    for (var i = 0; i < ss.length; i++) { if ((ss[i] || 'suc_principal') === SUC) return true; }
+    return false;
+}
+function _enSucRecetaQR(x){
+    if (!SUC || !x) return true;
+    if (typeof window._recetaActivaEnSuc === 'function') return window._recetaActivaEnSuc(x, SUC);
+    var ss = (x.sucursales && x.sucursales.length) ? x.sucursales : (x.sucursalId ? [x.sucursalId] : null);
+    if (!ss || !ss.length) return SUC === 'suc_principal'; // receta legacy = Matriz
+    for (var i = 0; i < ss.length; i++) { if ((ss[i] || 'suc_principal') === SUC) return true; }
+    return false;
 }
 /* La sesión ya NO expira: registrar entradas o contar existencias puede tomar lo que
    tome, y echar al colaborador a media captura no protege nada. El contador pasa a ser
@@ -745,7 +770,7 @@ async function _cargarRecetas(opts){
            adivinar cuál tocar. (Necesita los campos que agrega la v61: sin
            ellos `_enSucQR` no puede decidir y deja pasar todo.) */
         RECETAS = _unoPorProductoQR(
-            (rr.data || []).filter(function(x){ return x && x.id && _enSucQR(x); })
+            (rr.data || []).filter(function(x){ return x && x.id && _enSucRecetaQR(x); })
         );
         RECETAS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
     } catch(e) { RECETAS = []; }
