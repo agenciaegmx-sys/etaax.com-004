@@ -26988,6 +26988,56 @@ console.log('\n══ BE17 · «Actualizamos el sistema, ve las novedades» ═�
         return eq(a.N.pendiente(), true, 'no hay forma de volver a verlo sin borrar datos a mano');
     });
 
+    /* ── 3·5 · «CADA INICIO DE SESIÓN» ES CADA INICIO DE SESIÓN ────────────
+       «Omitir» calla el anuncio en la sesión en curso, y esa marca vive en
+       `sessionStorage` — que no muere al cerrar sesión, solo al cerrar la
+       pestaña. Sin soltarla al salir, quien omitía el anuncio una vez no lo
+       volvía a ver aunque entrara al día siguiente en la misma ventana, con la
+       ventana de tres días todavía abierta. */
+    test('omitir calla el anuncio en esta sesión, no para siempre', () => {
+        const a = arranca({ hace: 1 });
+        eq(a.N.quizas({ sesion: true }), true, 'no sale al entrar');
+        a.N.cerrar();                                   // «Omitir novedades»
+        eq(a.N.quizas({ sesion: true }), false, 'vuelve a salir en la misma sesión: eso es ruido');
+        a.N.nuevaSesion();                              // vuelve a entrar
+        return eq(a.N.quizas({ sesion: true }), true,
+                  'no vuelve a salir aunque sea una sesión nueva');
+    });
+    test('…y sale aunque todavía no se haya elegido negocio', () => {
+        /* La lista de sucursales es la PRIMERA pantalla tras entrar, y ahí
+           `etaax_ctx` aún no existe: si el aviso lo exige, no se asoma nunca
+           para quien entra con el correo principal. */
+        const a = arranca({ sesion: false, hace: 1 });
+        eq(a.N.quizas(), false, 'sin que nadie afirme la sesión, no debe asomarse');
+        return eq(a.N.quizas({ sesion: true }), true,
+                  'el hub afirma que hay sesión y aun así no sale');
+    });
+
+    /* EL ANUNCIO ES DE LA ENTRADA, NO DE CADA PANTALLA. Abrir Inventarios para
+       contar existencias no es iniciar sesión: es estar trabajando, y ahí un
+       recuadro que cubre la pantalla interrumpe. */
+    test('el anuncio no se asoma solo dentro de una herramienta', () => {
+        const a = arranca({ hace: 1 });
+        a.C.location.pathname = '/recetas/inventarios.html';
+        return eq(a.N.arrancar() !== 'presentacion', true,
+                  'se abre encima de alguien que está contando existencias');
+    });
+    test('…pero sí en el hub, que es por donde se entra', () => {
+        const a = arranca({ hace: 1 });
+        a.C.location.pathname = '/hub.html';
+        return eq(a.N.arrancar(), 'presentacion', 'no se ofrece ni al recargar la entrada');
+    });
+    /* …y donde se abra a mano, con los colores de esa pantalla: fuera del hub
+       el botón principal caía al verde de respaldo. */
+    test('el anuncio toma la paleta del módulo donde se abra', () => {
+        const css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8');
+        const i = css.indexOf('body.etx-modulos-ui #etx-nov{');
+        eq(i > -1, true, 'en las páginas de módulo el anuncio se vería verde');
+        const bloque = css.slice(i, css.indexOf('}', i));
+        return eq(/--etx-nov-accion:var\(--etx-ui-terra\)/.test(bloque), true,
+                  'su botón principal no toma el terracota del módulo');
+    });
+
     /* ── 3bis · El interruptor, apagado hasta el día del push ───────────── */
     /* El interruptor se encendió el día de publicar ETAAX 2.0. Lo que esta
        prueba cuida ya no es el valor con el que viene —eso cambia en cada
@@ -27077,14 +27127,21 @@ console.log('\n══ BE17 · «Actualizamos el sistema, ve las novedades» ═�
         return eq(a.N.arrancar(), 'presentacion',
                   'se anuncia lo mismo dos veces: una esquina y un recuadro');
     });
-    /* El avisito vuelve a su sitio en cuanto la presentación se calla — ya no
-       porque «se haya visto» (dentro de la ventana sale igual), sino porque en
-       esta sesión ya se ofreció y se cerró. Lo que no puede pasar nunca es que
-       salgan los dos. */
-    test('…y cuando la presentación se calla, el avisito vuelve a ser el de siempre', () => {
+    /* MIENTRAS LA GRANDE ESTÁ VIGENTE, EL AVISITO CALLA EN TODAS PARTES. No
+       solo donde sale la presentación: si no, quien ya la vio en el hub se
+       encuentra la misma noticia en chico en cada herramienta que abre. */
+    test('…y mientras la grande está vigente, el avisito no repite la noticia', () => {
         const a = arranca({ hace: 1 });
-        a.N.abrir(0);
-        a.N.cerrar();                       // aplazada en esta sesión
+        a.N.abrir(0); a.N.cerrar();                     // ya la vio y la cerró
+        eq(a.N.arrancar(), '', 'el avisito repite en el hub lo que acaba de leerse');
+        a.C.location.pathname = '/recetas/inventarios.html';
+        return eq(a.N.arrancar(), '', 'el avisito repite la noticia dentro de cada herramienta');
+    });
+    /* …y cuando la ventana de tres días pasa, el avisito recupera su trabajo:
+       anunciar cada publicación, que es para lo que está. */
+    test('…y pasada la ventana, el avisito vuelve a ser el de siempre', () => {
+        const a = arranca({ hace: 1 });
+        a.N.anunciar(false);                            // la grande ya no aplica
         return eq(a.N.arrancar(), 'avisito', 'se quedó sin el aviso automático de cada publicación');
     });
     test('sin sesión no sale ninguna de las dos… salvo el avisito, que no lee nada', () => {
@@ -27189,8 +27246,12 @@ console.log('\n══ BE17 · «Actualizamos el sistema, ve las novedades» ═�
     test('el hub lo ofrece al entrar, no al cargar la pantalla de acceso', () => {
         const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
         const i = h.indexOf('function showView(id)');
-        const cuerpo = h.slice(i, i + 900);
-        eq(/EtaaxNovedades\.quizas\(\)/.test(cuerpo), true, 'el hub no lo pide nunca');
+        const cuerpo = h.slice(i, i + 1600);
+        /* Y lo pide AFIRMANDO que hay sesión: el aviso no puede quedarse
+           adivinándolo por `etaax_ctx`, que no existe hasta elegir un negocio —
+           ahí vivía el «solo me salió una vez». */
+        eq(/EtaaxNovedades\.quizas\(\{ sesion: true \}\)/.test(cuerpo), true,
+           'el hub no lo pide, o no le dice que ya hay sesión');
         return eq(/viewNegocios' \|\| id === 'viewModulos'/.test(cuerpo), true,
                   'lo pediría también en la vista de acceso');
     });

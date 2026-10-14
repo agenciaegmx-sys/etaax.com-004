@@ -25,7 +25,7 @@
    presentación, el avisito vuelve a ser el de siempre.
    ============================================================ */
 (function () {
-    var FECHA = '2026-10-13';          /* ETAAX_DEPLOY — la estampa el hook */
+    var FECHA = '2026-10-14';          /* ETAAX_DEPLOY — la estampa el hook */
 
     /* DOS marcas, a propósito:
 
@@ -128,9 +128,23 @@
        comentario de arriba. */
     function _arrancar() {
         /* La presentación va primero, y si sale, el avisito se calla. */
-        if (ANUNCIAR && _anuncioVigente() && _haySesion() && !_aplazada()) {
-            setTimeout(function(){ quizas(); }, 900);
-            return 'presentacion';
+        /* SOLO DESDE LA ENTRADA. Se ofrece en el hub, que es por donde se
+           inicia sesión; en una herramienta no, porque abrir Inventarios para
+           contar existencias no es entrar al sistema — es estar trabajando, y
+           ahí un recuadro que cubre la pantalla no es una noticia, es una
+           interrupción. El hub lo pide a mano con `quizas({sesion:true})`; esto
+           cubre una recarga de esa misma pantalla. */
+        if (ANUNCIAR && _anuncioVigente() && _haySesion()) {
+            if (_esLaEntrada() && !_aplazada()) {
+                setTimeout(function(){ quizas({ sesion: true }); }, 900);
+                return 'presentacion';
+            }
+            /* Mientras la actualización grande está vigente, el avisito calla en
+               TODAS las pantallas, no solo donde sale la presentación. Si no,
+               quien ya la vio en el hub se encuentra el mismo anuncio en chico
+               en cada herramienta que abre: la misma noticia dos veces, que es
+               como se le enseña a alguien a cerrar los avisos sin leerlos. */
+            return '';
         }
         if (_diasDesde(FECHA) > VIGENCIA_DIAS) return '';   // ya es historia
         if (_yaSes(SESION) === FECHA) return '';  // ya se dio por enterado en esta sesión
@@ -732,6 +746,16 @@
         }
     }
 
+    /* EMPIEZA UNA SESIÓN. «Omitir» calla el anuncio en la sesión en curso, y esa
+       marca vive en `sessionStorage` — que NO muere al cerrar sesión, solo al
+       cerrar la pestaña. Sin esto, quien omitía el anuncio y volvía a entrar no
+       lo veía nunca más, aunque la ventana de tres días siguiera abierta. El hub
+       lo llama al dejar entrar a alguien. */
+    function nuevaSesion() {
+        try { sessionStorage.removeItem(APLAZAR); } catch (e) {}
+        abierta = false;
+    }
+
     function cerrar() {
         var f = document.getElementById('etx-nov');
         if (f && f.parentNode) f.parentNode.removeChild(f);
@@ -762,7 +786,15 @@
            dos veces en la MISMA sesión —ahí sí sería ruido—, y para eso está
            `_aplazada()`, que vive en sessionStorage y muere con la pestaña. */
         if (!_anuncioVigente()) return false;
-        if (opc.sesion === false || !_haySesion()) return false;
+        /* QUIÉN SABE SI HAY SESIÓN. Adivinarlo por `etaax_ctx` fallaba justo en
+           la pantalla donde más importa: esa clave se escribe al ELEGIR un
+           negocio, así que quien acababa de entrar y seguía en la lista de
+           sucursales no tenía ninguna y el anuncio no se asomaba. El hub sí lo
+           sabe —acaba de dejar entrar a alguien—, así que cuando lo afirma se le
+           cree; el rastreo por almacenamiento queda de respaldo para las páginas
+           que no avisan. */
+        if (opc.sesion === false) return false;
+        if (opc.sesion !== true && !_haySesion()) return false;
         if (abierta || _aplazada()) return false;
         return avisar();
     }
@@ -771,6 +803,11 @@
        encima de la contraseña. `etaax_ctx` lo escribe el hub al elegir negocio
        y lo exige el page-guard en todo módulo; la sesión del hub vive aparte,
        por pestaña. Con cualquiera de las dos, hay quien lea. */
+    /* ¿Esta pantalla es la de entrar? El hub —y nada más—. */
+    function _esLaEntrada() {
+        var p = (window.location && window.location.pathname) || '';
+        return p === '/' || /\/hub\.html$/.test(p);
+    }
     function _haySesion() {
         try { if (JSON.parse(localStorage.getItem('etaax_ctx') || 'null')) return true; } catch (e) {}
         try { if (JSON.parse(sessionStorage.getItem('etaax_sesion_hub') || 'null')) return true; } catch (e) {}
@@ -798,6 +835,7 @@
                               lista: function () { return NOVEDADES.slice(); },
                               pendiente: _pendiente,
                               quizas: quizas,
+                              nuevaSesion: nuevaSesion,
                               avisar: avisar,
                               abrir: abrir,
                               vista: _vista,

@@ -220,6 +220,19 @@ body.etx-modulos-ui .ev-btn.danger {
   background:transparent;border-color:var(--etx-ui-rojo);color:var(--etx-ui-rojo);
 }
 
+/* El anuncio de novedades se puede abrir desde el menú de la cuenta en
+   cualquier pantalla. Sus colores salen de `--etx-nov-*`, que en el hub define
+   `hub-paleta.css`; aquí no llegaba y el botón principal caía al verde de
+   respaldo — el único verde que quedaba en todo el sistema. */
+body.etx-modulos-ui #etx-nov{
+  --etx-nov-marca:var(--etx-ui-cyan);
+  --etx-nov-accion:var(--etx-ui-terra);
+  --etx-nov-accion-hover:var(--etx-ui-terra);
+  --etx-nov-ring:var(--etx-ui-cyan-line);
+  --etx-nov-tinte:var(--etx-ui-cyan-tint);
+  --etx-nov-ink:#0f0e0c;
+}
+
 /* ═══ LOS CAMPOS Y BUSCADORES ═════════════════════════════════════════════
    Cada pantalla tenía su propio buscador: distinto fondo, distinto borde y
    distinto color al escribir. Aquí se igualan SOLO los colores —el foco en

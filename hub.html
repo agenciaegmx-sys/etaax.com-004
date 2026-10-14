@@ -2022,7 +2022,11 @@ function showView(id) {
        Aquí ya se sabe que alguien pasó. El propio aviso decide si toca (una vez
        por persona y por versión, y nada de insistir en la misma pestaña). */
     if ((id === 'viewNegocios' || id === 'viewModulos') && window.EtaaxNovedades && EtaaxNovedades.quizas) {
-        setTimeout(function () { EtaaxNovedades.quizas(); }, 700);
+        /* `sesion:true` porque a estas dos vistas solo se llega habiendo
+           entrado: el hub lo sabe de primera mano. Antes el aviso lo adivinaba
+           por `etaax_ctx`, que no existe hasta elegir un negocio, así que en la
+           lista de sucursales —la primera pantalla tras entrar— no salía. */
+        setTimeout(function () { EtaaxNovedades.quizas({ sesion: true }); }, 700);
     }
 }
 
@@ -2507,6 +2511,11 @@ async function _salirDeSubpagina() {
 
 function _clearSesion() {
     _sesion = null;
+    /* Al cerrar sesión se suelta el «Omitir» del anuncio: esa marca vive en
+       `sessionStorage`, que no muere al salir sino al cerrar la pestaña, así que
+       sin esto quien lo omitía una vez no lo volvía a ver aunque entrara de
+       nuevo al día siguiente en la misma ventana. */
+    if (window.EtaaxNovedades && EtaaxNovedades.nuevaSesion) EtaaxNovedades.nuevaSesion();
     _clearQuickSes();
     if (typeof _etaaxWipeCache === 'function') _etaaxWipeCache();
     sessionStorage.removeItem('etaax_sesion_hub');
