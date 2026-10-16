@@ -1,0 +1,189 @@
+/* Cortes de caja: misma paleta de Gastos diarios, sin redefinir los colores
+   semánticos globales ni intervenir en los cálculos del formulario. */
+:is(#dxOv_cortes,#modalCorte,#modalVerCorte) {
+  --c-panel:var(--etx-ui-panel,#171611);--c-line:var(--etx-ui-line,#3a3830);
+  --c-muted:var(--etx-ui-muted,#b5afa3);--c-cyan:var(--etx-ui-cyan,#8ce4ee);
+  --c-terra:var(--etx-ui-terra,#fb9b6f);--c-input:#211f19;
+  --c-selected:#1d3236;--c-action-ink:#13110e;
+  color:var(--text);font-family:'DM Sans',sans-serif;
+}
+[data-theme="light"] :is(#dxOv_cortes,#modalCorte,#modalVerCorte) {
+  --c-input:#f7f5f0;--c-selected:#e8f3f4;--c-action-ink:#fff;
+}
+/* Al restaurar, el dock puede dejar display:flex inline. La clase que usan
+   cerrarModal/guardarCorte sigue siendo la que decide si la ventana está abierta. */
+:is(#dxOv_cortes,#modalCorte,#modalVerCorte):not(.open) {display:none!important;}
+:is(#dxOv_cortes,#modalCorte,#modalVerCorte) .c-ui-icon {display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;vertical-align:middle;}
+:is(#dxOv_cortes,#modalCorte,#modalVerCorte) .etx-ic {width:20px;height:20px;--green:var(--c-cyan);--etx-color:currentColor;}
+#dxOv_cortes .dx-win {min-width:0;background:var(--c-panel);border-color:var(--c-line);border-radius:18px;}
+#dxOv_cortes .dx-win-hdr {padding:22px 24px;background:var(--c-panel);border-color:var(--c-line);gap:14px;flex-wrap:wrap;}
+#dxOv_cortes .dx-win-title,:is(#modalCorte,#modalVerCorte) .modal-header h2 {
+  display:flex;align-items:center;gap:12px;font-family:inherit;font-size:25px;font-weight:700;
+  letter-spacing:-.7px;line-height:1.25;text-transform:none;min-width:0;
+}
+.c-title-plate {width:46px;height:46px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--etx-ui-cyan-line);border-radius:13px;background:var(--c-selected);flex-shrink:0;color:var(--text);}
+.c-title-copy {display:block;overflow-wrap:anywhere;}
+.c-title-daily::before {content:'Operación diaria';display:block;margin-bottom:7px;color:var(--c-muted);text-transform:uppercase;font-size:9px;letter-spacing:2.5px;font-weight:400;}
+.c-title-accent {color:var(--c-terra);}
+#dxOv_cortes .dx-win-body {padding:20px 24px 24px;background:var(--c-panel);}
+:is(#dxOv_cortes,#modalCorte,#modalVerCorte) button {
+  font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  border-radius:9px;transition:background .16s,border-color .16s,color .16s;
+}
+:is(#dxOv_cortes,#modalCorte,#modalVerCorte) :is(.btn-ghost,.etx-min-btn,.etx-close-btn,.modal-close,.dx-win-close) {
+  min-height:42px;padding:10px 13px!important;border:1px solid var(--c-line)!important;
+  background:transparent!important;color:var(--text)!important;font-size:13px!important;line-height:1.3;
+}
+:is(#dxOv_cortes,#modalCorte,#modalVerCorte) :is(.btn-ghost,.etx-min-btn,.etx-close-btn,.modal-close,.dx-win-close):hover {border-color:var(--c-cyan)!important;background:var(--c-input)!important;}
+:is(#dxOv_cortes,#modalCorte) .btn-primary {
+  min-height:44px;padding:11px 17px;background:var(--c-terra);color:var(--c-action-ink);
+  border:1px solid transparent;font-size:14px;font-weight:600;opacity:1;
+}
+:is(#dxOv_cortes,#modalCorte) .btn-primary .etx-ic {--green:var(--c-action-ink);}
+:is(#dxOv_cortes,#modalCorte) .btn-primary:not(:disabled):hover {filter:brightness(1.08);}
+:is(#dxOv_cortes,#modalCorte,#modalVerCorte) button:disabled {opacity:.5;cursor:not-allowed;}
+:is(#dxOv_cortes,#modalCorte,#modalVerCorte) :is(button,input,select,textarea,summary,[tabindex]):focus-visible {outline:2px solid var(--c-cyan);outline-offset:3px;}
+#dxOv_cortes #cor_dxp {gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+#dxOv_cortes .dxp-tabs {border:1px solid var(--c-line);border-radius:10px;background:transparent;padding:4px;}
+#dxOv_cortes .dxp-tab {padding:9px 12px;color:var(--text);border:0;border-radius:7px;background:transparent;font-size:12px;}
+#dxOv_cortes .dxp-tab.active {background:var(--c-selected);color:var(--c-cyan);}
+#dxOv_cortes :is(#cor_val,#cor_end),#modalCorte :is(.fg input,.fg select,.fg textarea,.pago-input,#iexConcepto,#iexOrigen,#iexMonto) {
+  min-height:42px;border:1px solid var(--c-line);border-radius:9px;background:var(--c-input);
+  color:var(--text);font-family:inherit;font-size:13px;padding:10px 12px;box-sizing:border-box;
+}
+:is(#dxOv_cortes,#modalCorte) input:is([type="date"],[type="month"]) {color-scheme:dark;}
+[data-theme="light"] :is(#dxOv_cortes,#modalCorte) input:is([type="date"],[type="month"]) {color-scheme:light;}
+#dxOv_cortes .dxp-semana {color:var(--c-muted);}
+#dxOv_cortes .summary-grid {grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important;gap:10px;margin-bottom:20px;}
+#dxOv_cortes .sum-card {padding:17px 15px;background:var(--c-input);border:1px solid var(--c-line);border-radius:12px;min-width:0;}
+#dxOv_cortes .sum-card-label {font-size:9px;letter-spacing:1.4px;line-height:1.6;color:var(--c-muted);}
+#dxOv_cortes .sum-card-val {font-family:inherit;font-size:25px;font-weight:700;letter-spacing:-.7px;line-height:1.3;color:var(--text);overflow-wrap:anywhere;}
+#dxOv_cortes #sumTotal {color:var(--c-terra);}
+#dxOv_cortes .sum-card-sub {font-size:11px;line-height:1.5;margin-top:10px;color:var(--c-muted);}
+#dxOv_cortes .dxm {border-color:var(--c-line);border-radius:12px;background:var(--c-panel);padding:16px;min-width:0;}
+#dxOv_cortes .dxm-hd {gap:10px;flex-wrap:wrap;border-color:var(--c-line);}
+#dxOv_cortes .dxm-lbl {display:flex;align-items:center;gap:8px;color:var(--text);letter-spacing:0;font-size:13px;text-transform:none;font-weight:600;}
+#dxOv_cortes .dxm-row {gap:8px;padding:7px 0;}
+#dxOv_cortes .dxm-row .n {display:flex;align-items:center;gap:7px;color:var(--c-muted);min-width:0;}
+#dxOv_cortes .dxm-row .n .etx-ic {width:16px;height:16px;}
+#dxOv_cortes :is(.dxm-tot,.dxm-row .v) {font-family:inherit;font-weight:600;font-size:16px;letter-spacing:0;}
+#dxOv_cortes .card {background:var(--c-panel);border:1px solid var(--c-line);border-radius:12px;overflow:hidden;}
+#dxOv_cortes .card-header {padding:14px;border-bottom:1px solid var(--c-line);gap:12px;flex-wrap:wrap;}
+#dxOv_cortes .card-header>div {flex-wrap:wrap;}
+#dxOv_cortes .card-header h2 {font-family:inherit;font-size:14px;letter-spacing:0;text-transform:none;}
+#dxOv_cortes .cortes-table {font-size:12px;}
+#dxOv_cortes .cortes-table th {background:var(--c-input);font-size:9px;color:var(--c-muted);letter-spacing:1px;padding:13px 12px;border-color:var(--c-line);}
+#dxOv_cortes .cortes-table td {padding:16px 12px;border-color:var(--c-line);}
+#dxOv_cortes .cortes-table .num-col {font-family:inherit;font-size:12px;letter-spacing:0;font-variant-numeric:tabular-nums;}
+#dxOv_cortes .empty-state {padding:45px 20px;color:var(--c-muted);font-size:14px;line-height:1.6;}
+#dxOv_cortes .empty-state-icon {color:var(--c-cyan);opacity:1;margin-bottom:14px;}
+#dxOv_cortes .empty-state-icon .etx-ic {width:36px;height:36px;}
+#dxOv_cortes .btn-row {min-width:36px;min-height:34px;border-color:var(--c-line);}
+
+/* Captura y lectura mantienen todas sus secciones; el cuerpo desplaza y las
+   acciones originales permanecen accesibles en la cabecera y el pie. */
+:is(#modalCorte,#modalVerCorte) {padding:16px;overflow:hidden;}
+:is(#modalCorte,#modalVerCorte) .modal-corte {display:flex;flex-direction:column;max-width:920px;max-height:calc(100dvh - 32px);overflow:hidden;background:var(--c-panel);border-color:var(--c-line);border-radius:18px;}
+:is(#modalCorte,#modalVerCorte) .modal-header {padding:22px 24px;gap:14px;flex-wrap:wrap;flex-shrink:0;border-color:var(--c-line);}
+:is(#modalCorte,#modalVerCorte) .modal-header h2 {font-size:24px;}
+:is(#modalCorte,#modalVerCorte) .modal-body {padding:24px;overflow-y:auto;min-height:0;gap:24px;scrollbar-width:thin;scrollbar-color:var(--c-line) transparent;}
+:is(#modalCorte,#modalVerCorte) .modal-body>* {flex-shrink:0;}
+#modalCorte .corte-sec {gap:16px;min-width:0;}
+#modalCorte .corte-sec + .corte-sec {border-top:1px solid var(--c-line);padding-top:24px;}
+#modalCorte .corte-sec-title {color:var(--text);font-size:15px;letter-spacing:0;font-weight:600;text-transform:none;gap:10px;}
+#modalCorte .corte-sec-title::before {content:attr(data-paso);border:1px solid var(--c-line);border-radius:5px;color:var(--c-cyan);font-size:10px;font-weight:400;padding:4px 5px;letter-spacing:1px;}
+#modalCorte .corte-sec-title::after {display:none;}
+#modalCorte .fg {gap:8px;min-width:0;}
+#modalCorte .fg label {font-size:12px;letter-spacing:0;text-transform:none;color:var(--text);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+#modalCorte :is(.fg-row-2,.fg-row-3) {gap:14px;}
+#modalCorte .calc-val {font-family:inherit;font-size:16px;font-weight:600;letter-spacing:0;min-height:42px;border-radius:9px;border-color:var(--c-line);background:var(--c-input);}
+#modalCorte #btnPosIncluyeProp {min-height:36px;font-size:10px!important;padding:7px 10px!important;line-height:1.4;}
+#modalCorte .pago-tbl {border-collapse:separate;border-spacing:0;font-size:13px;}
+#modalCorte .c-payment-caption {display:flex;align-items:center;gap:8px;font-family:inherit!important;font-size:14px!important;font-weight:600;letter-spacing:0!important;}
+#modalCorte .pago-tbl .pago-input {width:100%;}
+#modalCorte #tarjetaCuentasBox {max-width:100%;overflow-x:auto;}
+#modalCorte .pago-tbl td {border-color:var(--c-line);padding:12px 6px;min-width:0;}
+#modalCorte .pago-tbl .pago-label {font-size:13px!important;white-space:normal!important;line-height:1.5;width:24%;}
+#modalCorte .pago-label>.c-ui-icon {margin-right:7px;}
+#modalCorte .pago-tbl .pago-neto {font-family:inherit;font-size:14px;font-weight:600;letter-spacing:0;}
+#modalCorte :is(.pago-input.prop,#totPropRow) {color:var(--accent-text,var(--accent))!important;}
+#modalCorte .pago-input.prop {border-color:rgba(245,200,66,.35);}
+#modalCorte :is(.cta-tag,.cta-sub) {font-size:10.5px;line-height:1.4;white-space:normal;}
+#modalCorte .cta-tag {background:var(--etx-ui-cyan-tint);border-color:var(--etx-ui-cyan-line);color:var(--c-cyan);}
+#modalCorte :is(#taModoS,#taModoD,#taModoBS,#taModoBD) {min-height:36px;background:transparent!important;border-color:var(--c-line)!important;color:var(--c-muted)!important;padding:7px 8px!important;}
+#modalCorte :is(#taModoS,#taModoD,#taModoBS,#taModoBD).c-selected {background:var(--c-selected)!important;color:var(--c-cyan)!important;border-color:var(--c-cyan)!important;box-shadow:inset 0 -2px var(--c-cyan);}
+#modalCorte #btnPropRetiro {min-height:48px;padding:12px!important;font-size:12px!important;line-height:1.5;}
+#modalCorte #btnPropRetiro.c-selected {color:var(--accent-text,var(--accent))!important;}
+#modalCorte :is(#btnPropRetiro,#btnCorteGasto,#btnCorteAnticipo) .etx-ic {--green:currentColor;}
+#modalCorte .c-totales {grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+#modalCorte .c-totales>div {gap:10px;flex-wrap:wrap;padding:14px!important;}
+#modalCorte :is(#totVenta,#totPropina) {font-family:inherit!important;font-size:25px!important;font-weight:700;letter-spacing:-.5px!important;}
+#modalCorte details {padding:12px 14px;border:1px solid var(--c-line);border-radius:10px;}
+#modalCorte details summary {color:var(--text)!important;font-size:12px!important;letter-spacing:0!important;text-transform:none!important;line-height:1.5;}
+#modalCorte details summary .c-ui-icon {margin-right:7px;}
+#modalCorte details[open] {border-color:var(--etx-ui-cyan-line);}
+#modalCorte #gastosGate {border-color:var(--c-line)!important;gap:12px;flex-wrap:wrap;background:var(--c-input)!important;}
+#modalCorte #gastosGate>span {display:flex;align-items:center;gap:7px;color:var(--c-muted)!important;}
+#modalCorte :is(#gastosGate,#gastosDesgloseBox) button {min-height:38px;color:var(--text)!important;border-color:var(--c-line)!important;padding:8px 12px!important;}
+#modalCorte .resguardo-box {padding:18px;border-radius:12px;}
+#modalCorte .resguardo-item .ri-lbl {font-size:10px;letter-spacing:.5px;color:var(--c-muted);}
+#modalCorte .resguardo-item .ri-val {font-family:inherit;font-size:18px;font-weight:600;letter-spacing:0;}
+#modalCorte .resguardo-result .rr-val {font-family:inherit;font-size:26px;font-weight:700;letter-spacing:-.5px;}
+#modalCorte .resguardo-result .rr-lbl {color:var(--c-muted);letter-spacing:1px;}
+#modalCorte .resguardo-eq {gap:12px;flex-basis:100%;}
+#modalCorte .resguardo-result {width:100%;padding-top:12px;border-top:1px solid var(--c-line);}
+#modalCorte .c-mov-form {align-items:stretch;}
+#modalCorte .c-mov-form :is(input,select) {min-height:42px;border-radius:9px!important;background:var(--c-input)!important;border-color:var(--c-line)!important;}
+#modalCorte #iexOrigen {min-width:0;max-width:100%;}
+#modalCorte [onclick="agregarIngresoExtra()"] {background:var(--c-selected)!important;color:var(--c-cyan)!important;border-color:var(--etx-ui-cyan-line)!important;min-height:42px;}
+#modalCorte :is(#btnCorteGasto,#btnCorteAnticipo) {min-height:46px;padding:12px!important;line-height:1.5;}
+#modalCorte .ingreso-row {background:var(--c-input);border-color:var(--c-line);padding:12px;gap:10px;flex-wrap:wrap;}
+#modalCorte .ir-concepto {overflow-wrap:anywhere;min-width:100px;}
+#modalCorte :is(.ir-monto,#iexTotal,#iexTotalBanco) {font-family:inherit!important;font-size:16px!important;font-weight:600;letter-spacing:0!important;}
+#modalCorte .ingreso-row button {min-width:32px;min-height:32px;}
+#modalCorte .c-upload {padding:24px 16px!important;border:1px dashed var(--c-cyan)!important;border-radius:12px!important;background:var(--etx-ui-cyan-tint);}
+#modalCorte .c-upload>div {color:var(--c-muted)!important;}
+#modalCorte .c-upload>div:first-of-type {color:var(--text)!important;margin-bottom:8px;}
+#modalCorte .c-upload .etx-ic {width:30px;height:30px;}
+#modalCorte #btnQrCorte {min-height:44px;padding:10px 14px!important;border:1px solid var(--c-line)!important;border-radius:9px!important;color:var(--text)!important;}
+#modalCorte #fNotas {min-height:86px;}
+#modalCorte .modal-footer {flex-shrink:0;padding:18px 24px;border-color:var(--c-line);background:var(--c-panel);}
+#modalVerCorte #verCorteBody {gap:20px!important;}
+#modalVerCorte #verCorteBody>div {min-width:0;overflow-wrap:anywhere;}
+#modalVerCorte .c-detail-title {display:flex;align-items:center;gap:8px;color:var(--text)!important;font-size:14px!important;font-weight:600;letter-spacing:0!important;text-transform:none!important;border-color:var(--c-line)!important;padding-bottom:12px!important;}
+#modalVerCorte [style*="font-family:Bebas"] {font-family:inherit!important;letter-spacing:0!important;font-weight:600;}
+#modalVerCorte #verCorteBody>div:has(>table) {overflow-x:auto;}
+#modalVerCorte :is(td,table+div) .c-ui-icon {margin-right:5px;}
+#modalVerCorte :is(td,table+div) .etx-ic {width:15px;height:15px;}
+@media(max-width:700px) {
+  #dxOv_cortes .summary-grid {grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  #dxOv_cortes #cardMetaSem {grid-column:1/-1;}
+  #dxOv_cortes .cortes-table {min-width:900px;}
+  #dxOv_cortes .dx-metodos {grid-template-columns:1fr;}
+}
+@media(max-width:600px) {
+  #dxOv_cortes .dx-win-hdr,#dxOv_cortes .dx-win-body {padding:16px;}
+  #dxOv_cortes .dx-win-title,:is(#modalCorte,#modalVerCorte) .modal-header h2 {font-size:22px;}
+  #dxOv_cortes .sum-card {padding:14px 12px;}
+  #dxOv_cortes .sum-card-val {font-size:23px;}
+  :is(#modalCorte,#modalVerCorte) {padding:8px;}
+  :is(#modalCorte,#modalVerCorte) .modal-corte {max-height:calc(100dvh - 16px);border-radius:14px;}
+  :is(#modalCorte,#modalVerCorte) .modal-header {padding:16px;}
+  :is(#modalCorte,#modalVerCorte) .modal-body {padding:20px 16px;}
+  #modalCorte .modal-footer {padding:14px 16px;}
+  #modalCorte .corte-sec>.pago-tbl,#modalCorte .corte-sec>.pago-tbl tbody {display:block;}
+  #modalCorte .corte-sec>.pago-tbl tr {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:16px 0;border-bottom:1px solid var(--c-line);}
+  #modalCorte .corte-sec>.pago-tbl td {display:block;min-width:0!important;padding:0!important;border:0;width:auto!important;}
+  #modalCorte .corte-sec>.pago-tbl :is(.pago-label,.pago-neto,[colspan="2"]) {grid-column:1/-1;}
+  #modalCorte #tarjetaCuentasBox .pago-tbl {min-width:520px;}
+  #modalCorte .pago-label>div:has(>button) {max-width:260px;}
+  #modalCorte .c-totales {grid-template-columns:1fr!important;}
+  #modalCorte .resguardo-result {width:100%;padding-top:12px;border-top:1px solid var(--c-line);}
+  #modalCorte .c-mov-form :is(#iexConcepto,#iexOrigen) {width:100%;flex-basis:100%;}
+  #modalCorte #iexMonto {flex:1;}
+  #modalVerCorte #verCorteBody>div[style*="display:grid"] {grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  #modalVerCorte #verCorteBody table {min-width:360px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  :is(#dxOv_cortes,#modalCorte,#modalVerCorte) button {transition:none!important;}
+}

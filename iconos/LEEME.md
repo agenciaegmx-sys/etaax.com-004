@@ -70,6 +70,17 @@ de los cuatro módulos. No modifica sus enlaces ni sus controles.
 
 ## Lo que todavía no sale de aquí
 
+`administrativo/oscuro/` contiene los iconos usados en Gastos diarios, del
+repositorio `agenciaegmx-sys/iconos-etaax`, commit
+`24dc51ba25a4072a8136bb30192fbd07086e41f8`. Usan el prefijo `adm-` y conservan
+la geometría original. El acento cian se aplica solo a los iconos de esta vista;
+los estados de pago y las advertencias conservan sus colores semánticos.
+
+`cortes-caja/oscuro/` contiene los 40 iconos de cortes del mismo repositorio,
+commit `021333e2ae4ed842d88e707de1332bf8cfe351bd`. Usan el prefijo `cor-`.
+La integración utiliza los SVG de esta familia con la paleta de Gastos diarios;
+conserva los cálculos y conexiones de la aplicación.
+
 Los otros 13 iconos siguen viniendo de las dos maquetas HTML del repo
 `iconos-etaax`. Conforme Edwin vaya soltando los `.svg` definitivos aquí, cada
 uno reemplaza al provisional. El candado avisa si un `.svg` cambia y nadie
