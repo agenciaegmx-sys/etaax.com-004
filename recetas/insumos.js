@@ -2838,7 +2838,7 @@
                // el catálogo del negocio y el de ETAAX (con estilos en línea).
                '.modal-overlay,#modalCatalogoGlobal,#modalInsumosNeg{background:transparent!important;padding:0!important;align-items:stretch!important}' +
                '.modal-overlay > *,#modalCatalogoGlobal > *,#modalInsumosNeg > *{max-width:none!important;width:100%!important;height:100vh!important;' +
-                   'max-height:100vh!important;border-radius:0!important;border:0!important;resize:none!important;margin:0!important}' +
+                   'max-height:100vh!important;min-width:0!important;border-radius:0!important;border:0!important;resize:none!important;margin:0!important}' +
                // La ventana de afuera ya trae Minimizar/Cerrar: adentro sobran,
                // incluido el "✕ Cerrar" gris propio de cada catálogo.
                '.etx-hd-btns{display:none!important}' +

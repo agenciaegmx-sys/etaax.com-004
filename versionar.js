@@ -34,10 +34,10 @@ const COMPARTIDOS = [
     'etaax-sidebar.js', 'etaax-sidebar.css', 'etaax-modulos-ui.js', 'etaax-modulos-ui.css',
     'hub-modulos.js', 'hub-modulos.css', 'hub-paleta.css', 'hub-globales.css', 'hub-interacciones.js',
     'novedades.js', 'theme.js', 'ctx-bar.js', 'global-nav.js', 'financiero/nav.js',
-    'security.js', 'page-guard.js', 'negocio-tab.js', 'presencia.js', 'modal-drag.js',
+    'security.js', 'page-guard.js', 'negocio-tab.js', 'embed.js', 'presencia.js', 'modal-drag.js',
     'modal-dock.js', 'precios.js', 'datos-pago.js', 'negocio-tipos.js', 'insumo-label.js',
     'reporte-marca.js', 'carta-tema.js', 'nav-pref.js', 'styles.css',
-    'portal-operativo.css', 'portal-operativo.js', 'staff-area.js',
+    'portal-operativo.css', 'portal-operativo.js', 'staff-area.js', 'recetas/inventarios.js', 'recetas/insumos.js',
     'administrativo/gastos-ui.css', 'administrativo/gastos-ui.js',
     'administrativo/cortes-ui.css', 'administrativo/cortes-ui.js'
 ].filter(f => fs.existsSync(path.join(RAIZ, f)));

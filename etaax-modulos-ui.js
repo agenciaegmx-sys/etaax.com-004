@@ -1,7 +1,8 @@
 /* Diseño compartido del espacio de sucursal. No cambia capturas ni cálculos. */
 (function () {
     'use strict';
-    var embebido = document.documentElement.classList.contains('embed') || new URLSearchParams(location.search).get('embed') === '1';
+    var parametros = new URLSearchParams(location.search);
+    var embebido = document.documentElement.classList.contains('embed') || parametros.get('embed') === '1' || parametros.get('solo') === '1' || (window.parent && window.parent !== window);
     document.body.classList.add('etx-module-cards');
     if (!embebido) {
         document.body.classList.add('etx-modulos-ui');

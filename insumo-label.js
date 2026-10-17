@@ -103,11 +103,12 @@
     // referenciado por todos ve el dato de su sucursal. Sin copias, se comporta idéntico a
     // antes (100% backward-compatible). El índice de copias es independiente de la sucursal;
     // la variante se elige en cada llamada según la sucursal activa (no requiere reindexar).
-    window._makeInsumoResolver = function (getArr, getSig) {
+    window._makeInsumoResolver = function (getArr, getSig, getSucursal) {
         var _ix = null, _byCanon = null, _key = null;
-        function _sucAct() { try { return localStorage.getItem('etaax_sucursal_activa') || ''; } catch (e) { return ''; } }
+        function _sucAct() { try { return getSucursal ? getSucursal() : (localStorage.getItem('etaax_sucursal_activa') || ''); } catch (e) { return ''; } }
         function _eff(s) { return s || 'suc_principal'; }
-        return function (id) {
+        return function (id, sucursal) {
+            var suc = sucursal === undefined ? _sucAct() : sucursal;
             var k = getSig ? getSig() : getArr();
             if (_ix === null || k !== _key) {
                 _ix = {}; _byCanon = {};
@@ -115,15 +116,9 @@
                 _arr.forEach(function (x) { if (x && x.id) _ix[x.id] = x; });
                 _arr.forEach(function (x) {
                     if (!x || !x.id || !x.origenId) return;   // COPIA por sucursal
-                    /* Mismo criterio que el resolver de recetas: una «copia»
-                       que se llama DISTINTO que su maestro no es una copia,
-                       es otro producto con el parentesco mal puesto —y
-                       devolverla en lugar del maestro le cambia el producto a
-                       quien preguntó. Pasa al duplicar un registro para crear
-                       otro parecido, que es lo más natural del mundo. */
-                    var _m = _ix[x.origenId];
-                    var _nm = function (o) { return String((o && o.nombre) || '').trim().toLowerCase(); };
-                    if (_m && _nm(_m) && _nm(x) && _nm(_m) !== _nm(x)) return;
+                    // La identidad la da origenId. Una sucursal puede cambiar
+                    // el nombre sin perder su ficha; duplicarInsumo ya retira
+                    // origenId cuando se crea un producto distinto.
                     var mem = window._insumoSucursales ? window._insumoSucursales(x) : (x.sucursalId ? [x.sucursalId] : []);
                     var bag = (_byCanon[x.origenId] = _byCanon[x.origenId] || {});
                     mem.forEach(function (m) { bag[_eff(m)] = x; });
@@ -132,9 +127,10 @@
             }
             if (!id) return null;
             var base = _ix[id] || null;
+            if (base && base.origenId && window._insumoEnSuc(base, _eff(suc))) return base;
             var canonical = (base && base.origenId) || id; // si te pasan el id de una copia, usa su canónico
             var byS = _byCanon[canonical];
-            if (byS) { var v = byS[_eff(_sucAct())]; if (v) return v; } // copia de la sucursal activa
+            if (byS) { var v = byS[_eff(suc)]; if (v) return v; } // copia de la sucursal del documento
             return _ix[canonical] || base;                              // si no, el maestro
         };
     };

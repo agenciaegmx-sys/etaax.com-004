@@ -18,7 +18,7 @@
    le ocurra borrar los datos del sitio.
    ══════════════════════════════════════════════════════════════════════════ */
 
-var CACHE = 'etaax-movil-v5';
+var CACHE = 'etaax-movil-v6';
 
 /* Las rutas de ARRIBA (../) son del proyecto, no de esta carpeta: la app
    reutiliza el cliente de Supabase y el vocabulario de áreas en vez de tener
@@ -42,7 +42,7 @@ var CASCARA = [
        captura rechazada anunciada como guardada. Con la versión atada al
        contenido, esa pareja no puede existir. */
     '../staff-area.js?v=f7366b4c',
-    '../insumo-label.js?v=b911b699'
+    '../insumo-label.js?v=789551ec'
 ];
 
 self.addEventListener('install', function (e) {

@@ -1762,6 +1762,132 @@ console.log('\n══ SUITE J · Insumos duplicados en el inventario ══');
     setVar(B, '_cacheInsumosInv', null);
 })();
 
+/* Regresión: la identidad del catálogo y la del conteo deben converger antes
+   de pintar o sumar. Se ejecuta el constructor real, no un filtro de maqueta. */
+console.log('\n══ J2 · Filas fantasma, renombres y reportes ══');
+{
+    const R = crearContexto();
+    cargarJS(R, 'etaax-core.js'); cargarJS(R, 'insumo-label.js');
+    cargarJS(R, 'recetas/inventarios.js');
+    const master = { id:'m', nombre:'Ron', familia:'Bebidas', categoria:'Destilados', area:'barra',
+        sucursales:['s1'], activo:'1', presentaciones:[{ contNeto:1000, umContenido:'ML', costoUnitario:300 }] };
+    const local = {...master, id:'c1', origenId:'m', nombre:'Ron de la casa', sucursales:['s1']};
+    const ajeno = {...master, id:'c2', origenId:'m', nombre:'Ron otra sucursal', sucursales:['s2']};
+    const fila = (id, n, extra={}) => ({insumoId:id, nombre:'Nombre anterior', tipo:'copa', copaML:50,
+        contNeto:1000, cerradasBarra:n, cerradasBodega:0, pesos:[], entradas:[], ...extra});
+    const montar = (fs, cat=[master,local,ajeno]) => {
+        R._storage.etaax_sucursal_activa='s2';
+        setVar(R,'_cacheInsumosInv',JSON.parse(JSON.stringify(cat)));
+        setVar(R,'_cacheInv',[]); setVar(R,'_cacheEL',[]);
+        setVar(R,'invActual',{id:'inv',sucursalId:'s1',area:'barra',fecha:'2026-10-16',filas:fs,entradasLog:[],cancelaciones:[]});
+        setVar(R,'filasCaptura',[]);
+    };
+    const filas=()=>vm.runInContext('filasCaptura',R);
+    test('maestro y copia asignados a la misma sucursal generan UNA fila',()=>{
+        montar([]); R.cargarProductosCaptura(); return eq(filas().length,1);
+    });
+    test('manda la sucursal del inventario aunque el navegador apunte a otra',()=>
+        eq(filas()[0].nombre,'Ron de la casa'));
+    test('renombrar la ficha local conserva el vínculo por ID',()=>
+        eq(R._insumoResolver('m').id,'c1') && eq(R._canonInsumoId('c1'),'m'));
+    test('una fila registrada en cero no desplaza la hermana con conteo',()=>{
+        montar([fila('m',0,{registrado:true}),fila('c1',3)]); R.cargarProductosCaptura();
+        return eq(filas().length,1) && eq(filas()[0].cerradasBarra,3);
+    });
+    test('abrir el inventario no modifica los snapshots guardados',()=>
+        eq(vm.runInContext('invActual.filas[1].nombre',R),'Nombre anterior'));
+    test('reconstruir repetidamente no añade filas',()=>{
+        R.cargarProductosCaptura(); R.cargarProductosCaptura(); return eq(filas().length,1);
+    });
+    test('un huérfano registrado en cero desaparece, el cero del producto vigente permanece',()=>{
+        montar([fila('borrado',0,{registrado:true}),fila('c1',0,{registrado:true})]); R.cargarProductosCaptura();
+        return eq(filas().length,1) && eq(filas()[0].registrado,true);
+    });
+    test('se conserva la historia de un producto retirado con existencia anterior',()=>{
+        montar([fila('borrado',0,{existenciaAnterior:12})]); R.cargarProductosCaptura();
+        return eq(filas().some(f=>f.insumoId==='borrado'),true);
+    });
+    test('se conserva un producto retirado con movimiento manual y físico cero',()=>{
+        montar([fila('borrado',0)]);
+        vm.runInContext("invActual.entradasLog=[{insumoId:'borrado',cantidad:2}]",R);
+        R.cargarProductosCaptura(); return eq(filas().some(f=>f.insumoId==='borrado'),true);
+    });
+    test('el respaldo conserva las filas retiradas antes del guardado normal',()=>{
+        montar([fila('borrado',0,{registrado:true}),fila('c1',2)]); R.cargarProductosCaptura();
+        return eq(vm.runInContext('invActual.respaldoIdentidad.filas.length',R),2);
+    });
+    test('un insumo retirado consumido en una receta no desaparece por tener físico cero',()=>{
+        montar([fila('borrado',0)]);
+        setVar(R,'_cacheRecetasInv',[{id:'r1',nombre:'Trago',tipo:'bebidas',ingredientes:[{insumoId:'borrado',cantidad:50,unidad:'ML'}]}]);
+        vm.runInContext("invActual.cocktailsVendidos={r1:2}",R);
+        R.cargarProductosCaptura(); const tiene=filas().some(f=>f.insumoId==='borrado');
+        setVar(R,'_cacheRecetasInv',[]); return eq(tiene,true);
+    });
+    test('entradas del maestro y de la copia corresponden al mismo conteo',()=>{
+        montar([fila('c1',2,{entradas:[1]})]); R.cargarProductosCaptura();
+        vm.runInContext("invActual.entradasLog=[{insumoId:'m',cantidad:3,sucursalId:'s1'},{insumoId:'c1',cantidad:2,sucursalId:'s1'},{insumoId:'c2',cantidad:40,sucursalId:'s2'}]",R);
+        return eq(R.getEntradasBottles('c1'),6) && eq(R.getEntradasBottles('m'),6)
+            && eq(R._entradasDeInsumo('c1').length,2);
+    });
+    test('la referencia del conteo se toma de su sucursal, no de otra pestaña',()=>{
+        montar([]);
+        setVar(R,'_cacheInv',[
+            {id:'p1',sucursalId:'s1',area:'barra',cerrado:true,fecha:'2026-10-10',filas:[fila('m',0,{registrado:true}),fila('c1',2)]},
+            {id:'p2',sucursalId:'s2',area:'barra',cerrado:true,fecha:'2026-10-15',filas:[fila('c2',9)]}
+        ]);
+        return eq(R._refFilaInsumo('m').cerradasBarra,2);
+    });
+    test('catálogo aún no cargado no borra el conteo guardado',()=>{
+        montar([fila('borrado',4)],[]); R.cargarProductosCaptura(); return eq(filas()[0].cerradasBarra,4);
+    });
+    test('aunque ningún insumo actual sea del área, se conserva el movimiento histórico',()=>{
+        montar([fila('borrado',4)],[{...master,area:'cocina'}]); R.cargarProductosCaptura();
+        return eq(filas().length,1) && eq(filas()[0].cerradasBarra,4);
+    });
+    test('dos productos distintos con el mismo nombre NO se fusionan',()=>{
+        montar([],[master,{...master,id:'otro'}]); R.cargarProductosCaptura(); return eq(filas().length,2);
+    });
+    test('el reporte usa el cero más reciente, sin resucitar el ID maestro viejo',()=>{
+        montar([]); R._storage.etaax_sucursal_activa='s1';
+        setVar(R,'_cacheInv',[
+            {id:'viejo',sucursalId:'s1',cerrado:true,fecha:'2026-10-10',filas:[fila('m',4)]},
+            {id:'nuevo',sucursalId:'s1',cerrado:true,fecha:'2026-10-16',filas:[fila('c1',0,{registrado:true})]}
+        ]);
+        return eq(R._datosReporteExistencias('todas').length,0);
+    });
+    test('dos conteos del mismo día usan el último cierre, incluso cuando es cero',()=>{
+        montar([]); R._storage.etaax_sucursal_activa='s1';
+        setVar(R,'_cacheInv',[
+            {id:'a',sucursalId:'s1',cerrado:true,fecha:'2026-10-16',cierreOperativo:'2026-10-16T12:00',filas:[fila('m',4)]},
+            {id:'b',sucursalId:'s1',cerrado:true,fecha:'2026-10-16',cierreOperativo:'2026-10-16T20:00',filas:[fila('c1',0,{registrado:true})]}
+        ]);
+        return eq(R._datosReporteExistencias('todas').length,0);
+    });
+    test('guardar y volver a cargar no revive aliases y conserva el respaldo',()=>{
+        montar([fila('m',0,{registrado:true}),fila('c1',3)]); R.cargarProductosCaptura();
+        R.guardarInventario(); R.cargarProductosCaptura();
+        return eq(filas().length,1) && eq(filas()[0].cerradasBarra,3)
+            && eq(vm.runInContext('invActual.respaldoIdentidad.filas.length',R),2);
+    });
+    test('una vista global conserva las existencias independientes de cada sucursal',()=>{
+        montar([], [master,local,{...ajeno,presentaciones:[{contNeto:1000,umContenido:'ML',costoUnitario:600}]}]);
+        setVar(R,'invActual',null); R._storage.etaax_sucursal_activa='';
+        setVar(R,'_cacheInv',[
+            {id:'s1',sucursalId:'s1',cerrado:true,fecha:'2026-10-16',filas:[fila('c1',3)]},
+            {id:'s2',sucursalId:'s2',cerrado:true,fecha:'2026-10-16',filas:[fila('c2',3)]}
+        ]);
+        const rows=R._datosReporteExistencias('todas');
+        return eq(rows.length,2) && eq(rows.find(r=>r.sucursalId==='s1').capital,900)
+            && eq(rows.find(r=>r.sucursalId==='s2').capital,1800);
+    });
+    test('el reporte y el capital no suman dos veces la misma identidad',()=>{
+        montar([]); const inv={sucursalId:'s1',filas:[fila('m',3),fila('c1',3)]};
+        const single={...inv,filas:[fila('c1',3)]};
+        R._calcCapitalesInv(inv); R._calcCapitalesInv(single);
+        return eq(R._rowsDeInventario(inv).length,1) && eq(inv.capitalCosto,single.capitalCosto);
+    });
+}
+
 /* ═══════════ SUITE I · COMPUESTOS EN EL DINERO DEL RESULTADO ═══════════
    El Resultado del Paso 5 y el reporte directivo daban totales distintos con las
    MISMAS existencias ($12,205 contra $12,919). No era un redondeo: el directivo
@@ -8497,7 +8623,7 @@ console.log('\n══ BD4 · Roles y Permisos: módulo de Recetas e Insumos ═�
 
     /* ── La navegación que se rompía ── */
     test('la pantalla sabe abrirse embebida', () =>
-        eq(per.indexOf('<script src="/embed.js"></script>') > -1, true, 'embed.js'));
+        eq(/<script src=\"\/embed\.js(?:\?v=[a-f0-9]+)?\"><\/script>/.test(per), true, 'embed.js'));
     test('…y embed.js va ANTES que page-guard, que es quien rebota al hub', () =>
         eq(per.indexOf('/embed.js') < per.indexOf('/page-guard.js'), true, 'orden'));
     test('el botón ya no navega a pelo dentro del iframe', () =>
@@ -28434,7 +28560,7 @@ console.log('\n══ BE21 · Insumos: cada sucursal, su ficha ══');
             return eq(vistos.length, ESPERADO[suc], 'ofreció ' + vistos.length);
         });
         test('…y el inventario de ' + suc, () => {
-            const c = lector('recetas/inventarios.js', ['_scopeSucInsumos'], almacen(suc));
+            const c = lector('recetas/inventarios.js', ['_sucursalInventario', '_scopeSucInsumos'], almacen(suc));
             return eq(c._scopeSucInsumos(FIXTURE).length, ESPERADO[suc], 'alcance distinto');
         });
         test('…y el escandallo de ' + suc, () => {

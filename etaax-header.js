@@ -63,7 +63,9 @@
             /* FIJA: queda arriba pase lo que pase con el scroll. El `body` gana
                un espacio equivalente para que no se le coma el primer renglón
                a la página (es la trampa clásica de una barra fija). */
-            '.etx-hd{position:fixed;top:0;left:0;right:0;z-index:900;',
+            /* Los overlays compartidos empiezan en 200. La navegación queda
+               sobre el contexto (190), pero siempre detrás de las ventanas. */
+            '.etx-hd{position:fixed;top:0;left:0;right:0;z-index:199;',
             '  display:flex;align-items:center;gap:18px;padding:10px 20px;',
             '  background:var(--s1,var(--surface,#141210));',
             '  border-bottom:1px solid var(--ui-borde,var(--border,#2e2c29));',
@@ -163,6 +165,9 @@
     }
 
     window.etaaxHeader = function (opc) {
+        // La ventana padre ya aporta navegación, Minimizar y Cerrar. También
+        // cubre los editores antiguos que se abren con solo=1, sin embed=1.
+        if (/[?&](embed|solo)=1(?:&|$)/.test(window.location.search || '') || (window.parent && window.parent !== window)) return null;
         opc = opc || {};
         // El hub prueba otra paleta; los módulos mantienen su marca habitual.
         marcaBase = opc.marcaBase || (opc.base || '') + '/marca';

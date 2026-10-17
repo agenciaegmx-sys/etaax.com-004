@@ -13,7 +13,7 @@
 (function () {
     try {
         var p = new URLSearchParams(window.location.search);
-        if (!p.has('embed')) return;
+        if (!p.has('embed') && p.get('solo') !== '1') return;
         // ── Sembrar el contexto de sesión desde la URL, ANTES de page-guard ──
         // Algunos navegadores/ajustes de privacidad NO comparten el storage del
         // iframe con la página padre; sin esto, page-guard rebotaría al hub.
@@ -29,7 +29,7 @@
         var css =
             /* Ocultar el cromo de navegación */
             'html.embed .top-bar,html.embed .ctx-bar,html.embed #ctxBar,' +
-            'html.embed nav.nav,html.embed .theme-toggle,html.embed .global-nav{display:none!important}' +
+            'html.embed nav.nav,html.embed .theme-toggle,html.embed .global-nav,html.embed #etaax-header{display:none!important}' +
             /* Contenido a pantalla completa del iframe */
             'html.embed .main-content{margin:0!important}' +
             'html.embed .app-shell{display:block!important}' +

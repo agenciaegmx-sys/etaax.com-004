@@ -60,39 +60,36 @@ function getInsumos() {
 }
 // Resolver id→insumo con la fábrica compartida (insumo-label.js): misma lógica que
 // insumos.js/app.js; fuente = getInsumos de este módulo.
-window._insumoResolver = window._makeInsumoResolver(getInsumos);
+function _sucursalInventario() {
+    return (typeof invActual !== 'undefined' && invActual && invActual.sucursalId)
+        || localStorage.getItem('etaax_sucursal_activa') || '';
+}
+window._insumoResolver = window._makeInsumoResolver(getInsumos, null, _sucursalInventario);
 // Resolver id→receta CANÓNICO por sucursal (mismo patrón): recetas/sub-recetas guardan el
 // id del maestro; si hay copia de receta para la sucursal activa, la devuelve transparente.
 if (typeof window._makeRecetaResolver === 'function') window._recetaResolver = window._makeRecetaResolver(getRecetas);
-// Id CANÓNICO de un insumo (maestro): si el id pertenece a una COPIA por sucursal, devuelve
-// el id del maestro (origenId); si no, el mismo id. Así las filas del inventario, las recetas
-// y los registros del QR empatan SIEMPRE por la misma identidad, aunque existan copias.
-/* ══ EL ID CANÓNICO DEPENDÍA DE DÓNDE ESTABAS PARADO ═══════════════════════
-   EL CASO: una sub-receta cuyo ingrediente apunta a la COPIA por sucursal de un
-   insumo, y el renglón del inventario que usa el MAESTRO. Producir el batch no
-   le descontaba NADA a ese insumo — el Limoncello se llevaba 1.75 LT de vodka y
-   el vodka seguía entero en el reporte. Con los vinos sí funcionaba, porque
-   esos ingredientes apuntan al maestro.
-
-   Por qué: el resolver, parado FUERA de la sucursal de la copia, devuelve el
-   MAESTRO — y el maestro no tiene `origenId`, así que este `|| id` se caía al
-   id que le habían pasado: el de la COPIA. O sea que el «id canónico» de una
-   copia era… ella misma. Parado DENTRO de esa sucursal sí daba el maestro.
-   Un identificador que cambia según dónde estés no identifica nada.
-
-   El arreglo es tomar el id del objeto que el resolver YA resolvió: si devolvió
-   la copia, su origenId; si devolvió el maestro, el id del maestro. El `|| id`
-   se queda solo para un insumo que ya no existe en el catálogo —ahí no hay nada
-   que resolver y conservar su id es mejor que devolver vacío. */
+// Identidad estable para enlazar filas antiguas (maestro) y locales (copia).
+// El nombre y la sucursal seleccionada no cambian el parentesco por ID.
 function _canonInsumoId(id) {
     if (!id) return id;
-    var r = (typeof window._insumoResolver === 'function') ? window._insumoResolver(id) : null;
-    return (r && (r.origenId || r.id)) || id;
+    // Identidad independiente de los nombres y del contexto de navegación.
+    // El resolver devuelve una ficha local; aquí necesitamos el parentesco real.
+    var r = _indiceInsumosInv()[id];
+    return (r && r.origenId) || id;
 }
-// Insumos acotados a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
+var _catIdentidadInv = null, _idxIdentidadInv = {};
+function _indiceInsumosInv() {
+    var cat = getInsumos();
+    if (_catIdentidadInv !== cat) {
+        _catIdentidadInv = cat; _idxIdentidadInv = {};
+        cat.forEach(function(x){ if (x && x.id) _idxIdentidadInv[x.id] = x; });
+    }
+    return _idxIdentidadInv;
+}
+// El documento manda en el catálogo; sin inventario se usa el contexto activo.
 // Sin esto, el inventario leía los insumos de TODAS las sucursales y los duplicaba.
 function _scopeSucInsumos(lista) {
-    const s = localStorage.getItem('etaax_sucursal_activa') || '';
+    const s = _sucursalInventario();
     // Inactivos GLOBALES fuera siempre (dados de baja en el negocio).
     lista = (lista || []).filter(x => x && x.activo !== '0');
     if (!s) return lista;
@@ -103,7 +100,7 @@ function _scopeSucInsumos(lista) {
 }
 // Inventarios de la SUCURSAL activa (independientes por sucursal). "Sin sucursal = ve todo".
 function _scopeSucInvs(lista) {
-    const s = localStorage.getItem('etaax_sucursal_activa') || '';
+    const s = _sucursalInventario();
     if (!s) return lista || [];
     return (lista || []).filter(x => (x && (x.sucursalId || 'suc_principal')) === s);
 }
@@ -226,12 +223,13 @@ async function _sbInitInv() {
         /* Entrar al negocio e ir DIRECTO a editar un inventario ganaba la carrera
            contra esta carga: las filas se armaban con el catálogo vacío y el
            inventario salía sin insumos (había que ir a Insumos y volver). Si el
-           inventario ya se abrió y quedó sin filas, se rearma ahora que sí hay
-           catálogo. */
+           inventario ya se abrió, se reconcilia desde la captura que está en
+           pantalla, conservando también lo tecleado antes del autoguardado. */
         try {
             if (typeof invActual !== 'undefined' && invActual && _cacheInsumosInv.length &&
-                typeof filasCaptura !== 'undefined' && (!filasCaptura || !filasCaptura.length) &&
+                typeof filasCaptura !== 'undefined' &&
                 typeof cargarProductosCaptura === 'function') {
+                if (filasCaptura.length) invActual.filas = filasCaptura.map(function(f){ return Object.assign({}, f); });
                 cargarProductosCaptura();
                 if (typeof pasoActual !== 'undefined' && typeof irAPaso === 'function') irAPaso(pasoActual || 1);
                 else if (typeof renderStep1 === 'function') renderStep1();
@@ -730,7 +728,7 @@ function _refFilaInsumo(insumoId) {
     if (pref) orden.push(pref);
     for (let i = refs.length - 1; i >= 0; i--) { if (!pref || refs[i].id !== pref.id) orden.push(refs[i]); }
     for (let k = 0; k < orden.length; k++) {
-        const fs = (orden[k].filas || []);
+        const fs = _filasUnicasInventario(orden[k].filas || []);
         const f = fs.find(x => x && x.insumoId === insumoId)
                || fs.find(x => x && _canonInsumoId(x.insumoId) === insumoId);
         if (f) return f;
@@ -2104,7 +2102,7 @@ function getCancelacionesCopas(insumoId) {
     const fila = _filaDe(insumoId);
     return (invActual?.cancelaciones || [])
         .filter(c => {
-            if (c.insumoId) return c.insumoId === insumoId;
+            if (c.insumoId) return _movimientoDelInsumo(c, insumoId);
             /* Si el renglón ya pegó con una RECETA, aquí no cuenta: sus insumos
                se descuentan por los ingredientes (ver cancelRecetasFila). Sin
                esta línea el fallback por nombre lo cazaría otra vez y el
@@ -2196,21 +2194,29 @@ function calcExistenciaTeorica(fila) {
 // Índice fila-por-insumo (se reconstruye si cambia el arreglo o su tamaño):
 // getEntradasBottles/getCancelacionesCopas se llaman POR FILA en el Paso 5 y el
 // reporte — con .find lineal eran O(filas²) y tardaban segundos con 200+ insumos.
-var _filaIdxCache = null, _filaIdxRef = null, _filaIdxLen = -1;
+var _filaIdxCache = null, _filaIdxRef = null, _filaIdxLen = -1, _filaIdxCatalogo = null;
 function _filaDe(insumoId) {
-    if (_filaIdxRef !== filasCaptura || _filaIdxLen !== filasCaptura.length || !_filaIdxCache) {
+    if (_filaIdxRef !== filasCaptura || _filaIdxLen !== filasCaptura.length || _filaIdxCatalogo !== getInsumos() || !_filaIdxCache) {
         _filaIdxCache = {};
-        filasCaptura.forEach(f => { if (f && f.insumoId) _filaIdxCache[f.insumoId] = f; });
+        filasCaptura.forEach(f => { if (f && f.insumoId) { _filaIdxCache[f.insumoId] = f; _filaIdxCache[_canonInsumoId(f.insumoId)] = f; } });
         _filaIdxRef = filasCaptura; _filaIdxLen = filasCaptura.length;
+        _filaIdxCatalogo = getInsumos();
     }
-    return _filaIdxCache[insumoId];
+    return _filaIdxCache[insumoId] || _filaIdxCache[_canonInsumoId(insumoId)];
+}
+
+function _movimientoDelInsumo(mov, insumoId) {
+    if (!mov || !mov.insumoId) return false;
+    var suc = _sucursalInventario();
+    if (suc && mov.sucursalId && mov.sucursalId !== suc) return false;
+    return _canonInsumoId(mov.insumoId) === _canonInsumoId(insumoId);
 }
 
 function getEntradasBottles(insumoId) {
     const fila    = _filaDe(insumoId);
     const deFilas = fila ? (fila.entradas || []).reduce((s, e) => s + (parseFloat(e)||0), 0) : 0;
     const deLog   = (invActual?.entradasLog || [])
-        .filter(e => e.insumoId === insumoId)
+        .filter(e => _movimientoDelInsumo(e, insumoId))
         .reduce((s, e) => s + (parseFloat(e.cantidad)||0), 0);
     return deFilas + deLog;
 }
@@ -2222,7 +2228,7 @@ function getEntradasBottles(insumoId) {
 // sucursal, y SOLO las no importadas aún (se marca importadoEnInv para no duplicar entre inventarios).
 // Sucursal activa ('' = matriz / sin sucursal). Helper local: inventarios.js no
 // carga los de ventas/gastos y las funciones de QR por sucursal lo necesitan.
-function _sucActiva() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
+function _sucActiva() { return _sucursalInventario(); }
 
 /* ══ EL CIERRE SON DOS COSAS DISTINTAS ═════════════════════════════════════
    · cerradoAt        — cuándo se le dio CLIC. Es rastro, para auditar.
@@ -2658,9 +2664,9 @@ function _esRefrescoCerveza(ins) {
     var txt = ((ins.categoria || '') + ' ' + (ins.subcategoria || '')).toLowerCase();
     return txt.indexOf('refresco') >= 0 || txt.indexOf('cerveza') >= 0 || txt.indexOf('soda') >= 0 || txt.indexOf('agua') >= 0;
 }
-function costoCopa(fila) {
+function costoCopa(fila, sucursal) {
     // Usa el costo ACTUAL del insumo (refleja ediciones); si no, el congelado en la fila.
-    var _ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId) : null;
+    var _ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId, sucursal) : null;
     var _p   = _ins && _ins.presentaciones && _ins.presentaciones[0];
     var cu       = (_p && parseFloat(_p.costoUnitario)) || fila.costoUnitario || 0;
     var costoPza = (_p && parseFloat(_p.costoPieza))    || fila.costoPieza    || 0;
@@ -2688,9 +2694,9 @@ function costoCopa(fila) {
 // presentación y costos), conservando las CANTIDADES CONTADAS. Así, editar un insumo (costo,
 // presentación, nombre…) se refleja en cualquier inventario —incluso ya finalizado— sin recapturar.
 // Si el insumo ya no existe o es compuesto, regresa la fila tal cual (su dato congelado).
-function _filaLive(fila) {
+function _filaLive(fila, sucursal) {
     if (!fila || !fila.insumoId || fila.esCompuesto) return fila;
-    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId) : null;
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId, sucursal) : null;
     if (!ins || ins.esCompuesto) return fila;
     var p = (ins.presentaciones && ins.presentaciones[0]) || {};
     var esFood = (ins.familia || '').toLowerCase().indexOf('aliment') >= 0;
@@ -2911,21 +2917,26 @@ function _existenciaArea(fila, area, ins) {
 
 function _datosReporteExistencias(area) {
     var invs = _scopeSucInvs(getInventarios()).filter(function(i){ return i && i.cerrado && (i.filas||[]).length; });
-    invs.sort(function(a,b){ return String(b.fecha||'').localeCompare(String(a.fecha||'')); }); // más reciente primero
+    invs.reverse().sort(function(a,b){
+        return String(b.fecha||'').localeCompare(String(a.fecha||'')) ||
+            String(_momentoCierre(b) || b.guardadoTs || '').localeCompare(String(_momentoCierre(a) || a.guardadoTs || ''));
+    }); // más reciente primero, también si hubo varios conteos el mismo día
     // Última fila registrada de cada insumo (de cualquier inventario).
     var porIns = {};
     invs.forEach(function(inv){
-        (inv.filas||[]).forEach(function(f){
-            if (!f || !f.insumoId || porIns[f.insumoId]) return;
-            porIns[f.insumoId] = { fila:f, fecha:inv.fecha };
+        _filasUnicasInventario(inv.filas || []).forEach(function(f){
+            var cid = _canonInsumoId(f.insumoId);
+            var suc = inv.sucursalId || 'suc_principal', clave = suc + '|' + cid;
+            if (porIns[clave]) return;
+            porIns[clave] = { fila:f, fecha:inv.fecha, insumoId:cid, sucursalId:suc };
         });
     });
     var insById = {}; getInsumos().forEach(function(x){ if (x && x.id) insById[x.id] = x; });
     // UNA fila por insumo, con su existencia en barra, en bodega y el total.
     var rows = [];
-    Object.keys(porIns).forEach(function(id){
-        var o = porIns[id], f = _filaLive(o.fila), ins = insById[id];
-        var cc     = costoCopa(f);
+    Object.keys(porIns).forEach(function(clave){
+        var o = porIns[clave], id = o.insumoId, f = _filaLive(o.fila, o.sucursalId), ins = window._insumoResolver(id, o.sucursalId) || insById[id];
+        var cc     = costoCopa(f, o.sucursalId);
         var barra  = _existenciaArea(f, 'barra',  ins);
         var bodega = _existenciaArea(f, 'bodega', ins);
         var total  = calcExistencia(f); // total real (incluye la botella abierta pesada)
@@ -2934,7 +2945,7 @@ function _datosReporteExistencias(area) {
         var copasBot = (f.tipo === 'copa' && f.contNeto > 0 && f.copaML > 0) ? f.contNeto / f.copaML : 0;
         var costoCompra = f.tipo === 'copa' ? cc * copasBot : cc; // costo de 1 botella/pza/unidad base
         rows.push({
-            insumoId: id, nombre: f.nombre || '—', familia: f.familia || f.categoria || 'Otros',
+            insumoId: id, sucursalId:o.sucursalId, nombre: f.nombre || '—', familia: f.familia || f.categoria || 'Otros',
             subcat: f.subcategoria || f.categoria || '',
             tipo: f.tipo, copaML: f.copaML, contNeto: f.contNeto, baseUnit: f.baseUnit,
             barra: barra, bodega: bodega, total: total,
@@ -3081,11 +3092,12 @@ function _renderReporteExistencias(){
 function _rowsDeInventario(inv) {
     var insById = {}; getInsumos().forEach(function(x){ if (x && x.id) insById[x.id] = x; });
     var rows = [];
-    (inv.filas || []).forEach(function(_f){
+    _filasUnicasInventario(inv.filas || []).forEach(function(_f){
         if (!_f || !_f.insumoId) return;
-        var f = _filaLive(_f);
-        var ins = insById[f.insumoId];
-        var cc = costoCopa(f);
+        var suc = inv.sucursalId || 'suc_principal';
+        var f = _filaLive(_f, suc);
+        var ins = window._insumoResolver(f.insumoId, suc) || insById[f.insumoId];
+        var cc = costoCopa(f, suc);
         var barra = _existenciaArea(f, 'barra', ins);
         var bodega = _existenciaArea(f, 'bodega', ins);
         var total = calcExistencia(f);
@@ -3808,9 +3820,9 @@ function _money2(v){ return (parseFloat(v)||0).toLocaleString('es-MX', { minimum
 // Calcular capital a costo / a carta de un inventario guardado (sus filas).
 function _calcCapitalesInv(inv) {
     var capCosto = 0, capCarta = 0;
-    (inv.filas || []).forEach(function(f){
+    _filasUnicasInventario(inv.filas || []).forEach(function(f){
         var exist = (f.existenciaFisica !== undefined && f.existenciaFisica !== null) ? f.existenciaFisica : calcExistencia(f);
-        capCosto += exist * costoCopa(f);
+        capCosto += exist * costoCopa(f, inv.sucursalId || 'suc_principal');
         capCarta += exist * (parseFloat(f.precioCarta) || 0);
     });
     inv.capitalCosto = capCosto;
@@ -4364,6 +4376,10 @@ window._compartirPDF = _compartirPDF;
 // Fuerza un render nuevo del Paso 5 (estilo "renderizar" de Premiere) — por si
 // el usuario editó pasos anteriores y quiere refrescar el resultado a mano.
 function recalcularResultado() {
+    var inventarioRecalculado = invActual;
+    // Reconciliar desde lo que está en pantalla, incluso antes del debounce
+    // de guardado: una recarga del catálogo no puede restaurar el conteo viejo.
+    if (invActual && filasCaptura.length) invActual.filas = filasCaptura.map(function(f){ return Object.assign({}, f); });
     /* Antes solo re-pintaba: los parámetros del insumo (tamaño de copa, peso de
        la botella, contenido, costos) se quedaban como estaban cuando se creó la
        fila, y solo se refrescaban al CERRAR y volver a abrir el inventario. Por
@@ -4399,7 +4415,8 @@ function recalcularResultado() {
     // Y traer lo ÚLTIMO de la nube: es lo que promete el botón. Si llegó algo nuevo,
     // se rearman las filas y se vuelve a pintar.
     _asegurarCatalogoInv(true).then(function (llego) {
-        if (!llego || !invActual) return;
+        if (!llego || !invActual || invActual !== inventarioRecalculado) return;
+        if (filasCaptura.length) invActual.filas = filasCaptura.map(function(f){ return Object.assign({}, f); });
         try { cargarProductosCaptura(); } catch (e) { return; }
         window._step5Dirty = true; window._step5Force = true;
         if (typeof renderStepContent === 'function') renderStepContent();
@@ -4961,7 +4978,7 @@ async function _asegurarCatalogoInv(forzar) {
    Y si hay VARIAS (un inventario que YA se dañó con el duplicado), gana la que trae
    captura de verdad: quedarse con la vacía sería borrarle el conteo al dueño justo
    al abrir el inventario para repararlo. */
-function _filaConDatos(f) {
+function _filaConMovimiento(f) {
     if (!f) return false;
     if ((parseFloat(f.cerradasBodega) || 0) > 0 || (parseFloat(f.cerradasBarra) || 0) > 0) return true;
     if ((f.pesos || []).some(function (p) { return (parseFloat(p) || 0) > 0; })) return true;
@@ -4969,7 +4986,7 @@ function _filaConDatos(f) {
     if ((f.entradas || []).some(function (e) { return (parseFloat(e) || 0) > 0; })) return true;
     if ((parseFloat(f.ventasCopasDirectas) || 0) > 0 || (parseFloat(f.ventasBotella) || 0) > 0) return true;
     if ((parseFloat(f.cortesiaCopas) || 0) > 0 || (parseFloat(f.mermaCopas) || 0) > 0 || (parseFloat(f.mermaBase) || 0) > 0) return true;
-    if (f.nivelPct != null && f.nivelPct !== '') return true;
+    if ((parseFloat(f.nivelPct) || 0) > 0) return true;
     return false;
 }
 function _filaGuardadaDe(cid) {
@@ -4977,24 +4994,70 @@ function _filaGuardadaDe(cid) {
         return f && f.insumoId && (_canonInsumoId(f.insumoId) || f.insumoId) === cid;
     });
     if (cands.length <= 1) return cands[0];
-    return cands.find(_filaConDatos) || cands[0];
+    // «Registrado en cero» es una captura válida, pero no debe desplazar
+    // la fila hermana que sí contiene cantidades (el otro helper incluye registrado).
+    return cands.find(_filaConMovimiento) || cands.find(_filaConDatos) || cands[0];
+}
+
+function _filasUnicasInventario(filas) {
+    var grupos = {}, orden = [];
+    (filas || []).forEach(function(f){
+        if (!f || !f.insumoId) return;
+        var id = _canonInsumoId(f.insumoId);
+        if (!grupos[id]) { grupos[id] = []; orden.push(id); }
+        grupos[id].push(f);
+    });
+    return orden.map(function(id){
+        var fs = grupos[id];
+        return fs.find(_filaConMovimiento) || fs.find(_filaConDatos) || fs[0];
+    });
+}
+
+function _catalogoUnicoInv() {
+    var porId = {}, orden = [];
+    _scopeSucInsumos(getInsumos()).forEach(function(ins){
+        if (!ins.id) return;
+        var cid = _canonInsumoId(ins.id);
+        if (!porId[cid]) { porId[cid] = ins; orden.push(cid); }
+        // Datos legacy pueden traer maestro Y copia asignados a la sucursal.
+        // La ficha local tiene sus cambios; nunca crear dos filas del mismo ID.
+        else if (ins.origenId && !porId[cid].origenId) porId[cid] = ins;
+    });
+    return orden.map(function(id){ return porId[id]; });
+}
+function _filaHistoricaNecesaria(f, movQR) {
+    if (_filaConMovimiento(f) || (parseFloat(f.existenciaAnterior) || 0) !== 0 ||
+        (parseFloat(f.existenciaFisica) || 0) !== 0) return true;
+    var id = _canonInsumoId(f.insumoId);
+    if (movQR[id]) return true;
+    // Físico cero no implica inactividad: pudo consumirse en recetas/batches.
+    if (consumoRecetasFila(f) > 0 || _consumoBaseProd(f) > 0) return true;
+    // Incluye movimientos manuales y cancelaciones aunque el físico sea cero.
+    return ['entradasLog', 'cancelaciones'].some(function(campo){
+        return ((invActual && invActual[campo]) || []).some(function(x){
+            return x && !x.borrada && _movimientoDelInsumo(x, id);
+        });
+    });
 }
 
 function cargarProductosCaptura() {
+    _consumoDirty = true; _cancelDirty = true; window._step5Dirty = true;
     // Solo insumos de la sucursal activa Y del ÁREA de este inventario. Sin área → no
     // entra (qué hace la canela en un inventario de barra 😅). PERO sí entran: lo YA
     // capturado en este inventario, y los que tienen un MOVIMIENTO del QR (merma/entrada/
     // salida) en su periodo+sucursal — así su merma siempre se refleja en el reporte.
     const _movQR = _insumosConMovimientoQR();
-    const insumos = _scopeSucInsumos(getInsumos()).filter(function(ins){
+    const insumos = _catalogoUnicoInv().filter(function(ins){
         var _cid = ins.origenId || ins.id; // id canónico (copia → maestro)
         if (_insumoEnAreaInv(ins)) return true;
         if (_movQR[_cid]) return true; // tiene merma/entrada del QR en este periodo → incluir
-        var f = (invActual && (invActual.filas || []).find(function(x){ return x.insumoId === _cid; }));
+        var f = _filaGuardadaDe(_cid);
         return !!(f && _filaConDatos(f));
     });
-    if (!insumos.length) {
-        filasCaptura = [];
+    if (!getInsumos().length) {
+        // Una carga pendiente/fallida no significa catálogo vacío. Mantener
+        // los conteos guardados mientras llega la respuesta, incluso sin fichas.
+        filasCaptura = (invActual && invActual.filas || []).slice();
         // El catálogo puede no haber llegado todavía: entrar al negocio e ir DIRECTO
         // a un inventario le gana la carrera al pull de Supabase y el Paso 1 salía
         // vacío ("Sin insumos en catálogo") hasta que ibas a Insumos y volvías. Si de
@@ -5015,7 +5078,8 @@ function cargarProductosCaptura() {
         // Id CANÓNICO: la fila SIEMPRE se llavea por el maestro (origenId||id), así empata
         // con lo ya capturado y con las recetas, aunque `ins` sea una copia por sucursal.
         const _cid = ins.origenId || ins.id;
-        const existe = _filaGuardadaDe(_cid);
+        const guardada = _filaGuardadaDe(_cid);
+        const existe = guardada && Object.assign({}, guardada);
         if (existe) {
             // Sub-receta convertida a insumo: visible por DEFAULT (se captura la
             // existencia del prebatch); solo se oculta si el dueño lo marcó con el
@@ -5102,19 +5166,25 @@ function cargarProductosCaptura() {
             ventasCopasDirectas: 0, ventasBotella: 0, mermaBase: 0,
         };
     });
-    /* Salvaguarda: conservar filas YA capturadas cuyo insumo no esté en el scope
-       actual (ej. se capturó en otra sucursal/contexto) → nunca perder lo registrado.
-       La comparación va por id CANÓNICO. Con ids crudos, una fila guardada bajo el id
-       de la COPIA no empataba con la del catálogo (que usa el MAESTRO) y se colaba
-       como un SEGUNDO renglón del mismo insumo: el nuevo en ceros y el viejo con los
-       datos, mientras en el catálogo solo existe un producto. */
+    // Conservar historia con cantidades/movimientos; no revivir una ficha que
+    // salió del catálogo/área y solo arrastra «registrado» con todas las cifras a cero.
+    // No se empata por nombre: dos productos distintos pueden llamarse igual.
     (invActual && invActual.filas || []).forEach(function(sf){
         if (!sf || !sf.insumoId) return;
         var cid = _canonInsumoId(sf.insumoId) || sf.insumoId;
         if (filasCaptura.some(function(f){ return (_canonInsumoId(f.insumoId) || f.insumoId) === cid; })) return;
-        if (!sf.entradas) sf.entradas = ['','','','',''];
-        filasCaptura.push(sf);
+        var elegida = _filaGuardadaDe(cid) || sf;
+        if (!_filaHistoricaNecesaria(elegida, _movQR)) return;
+        filasCaptura.push(Object.assign({}, elegida, { entradas:elegida.entradas || ['','','','',''] }));
     });
+    // Si se retiraron aliases o filas obsoletas, conservar el original dentro
+    // del documento. Se persiste únicamente con el guardado normal, una vez.
+    // Permite revisar un inventario ya dañado sin borrar su evidencia anterior.
+    if (invActual && !invActual.respaldoIdentidad && (_filasUnicasInventario(invActual.filas).length < (invActual.filas || []).length || (invActual.filas || []).some(function(f){
+        return f && !filasCaptura.some(function(actual){ return actual.insumoId === f.insumoId; });
+    }))) {
+        invActual.respaldoIdentidad = { version:1, fecha:new Date().toISOString(), filas:JSON.parse(JSON.stringify(invActual.filas)) };
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -9652,7 +9722,7 @@ function _step5TablasHTML() {
 }
 // Entradas de un insumo, con fecha (de la cola de entradas del inventario).
 function _entradasDeInsumo(insumoId) {
-    return ((invActual && invActual.entradasLog) || []).filter(function(e){ return e.insumoId === insumoId; })
+    return ((invActual && invActual.entradasLog) || []).filter(function(e){ return _movimientoDelInsumo(e, insumoId); })
         .map(function(e){ return { cantidad: parseFloat(e.cantidad)||0, fecha: e.fecha||'', tipo: e.tipo||'' }; });
 }
 // Vista GALERÍA del resultado: una tarjeta de desglose por insumo.
