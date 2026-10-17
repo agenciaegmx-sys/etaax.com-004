@@ -1,0 +1,247 @@
+/* Staff: continuidad de Gastos/Cortes. Solo presentación; ningún selector
+   fuerza a mostrarse controles sujetos a permisos, rol o sucursal. */
+:is(.etx-staff-page,.etx-permisos-page,.s-staff-tool) {
+  --s-panel:var(--etx-ui-panel,#171611);--s-line:var(--etx-ui-line,#3a3830);
+  --s-muted:var(--etx-ui-muted,#b5afa3);--s-cyan:var(--etx-ui-cyan,#8ce4ee);
+  --s-terra:var(--etx-ui-terra,#fb9b6f);--s-input:#211f19;--s-selected:#1d3236;--s-ink:#13110e;
+  font-family:'DM Sans',sans-serif;
+}
+[data-theme="light"] :is(.etx-staff-page,.etx-permisos-page,.s-staff-tool),
+:is(.etx-staff-page,.etx-permisos-page)[data-theme="light"] {--s-input:#f7f5f0;--s-selected:#e8f3f4;--s-ink:#fff;}
+:is(.etx-staff-page,.etx-permisos-page) .main-content {min-width:0;}
+:is(.etx-staff-page,.etx-permisos-page) #mainContent > .header {padding:26px 24px;border-color:var(--s-line);background:transparent;}
+:is(.etx-staff-page,.etx-permisos-page) .brand {gap:6px;}
+:is(.etx-staff-page,.etx-permisos-page) .brand-label {color:var(--s-muted);font-size:9px;letter-spacing:2.5px;}
+body:is(.etx-staff-page,.etx-permisos-page) #mainContent .brand-title {font:700 30px/1.2 'DM Sans',sans-serif;letter-spacing:-.7px;color:var(--s-terra);text-transform:none;}
+:is(.etx-staff-page,.etx-permisos-page) .wrap {width:100%;min-width:0;max-width:1480px;box-sizing:border-box;padding:28px 24px;margin:0 auto;}
+.etx-staff-page #mainContent :is(.card,.card-body,.tabla-wrap) {min-width:0;max-width:100%;}
+.s-ui-icon {display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;vertical-align:middle;}
+:is(.etx-staff-page,.etx-permisos-page,.s-staff-tool) .s-ui-icon .etx-ic {width:20px;height:20px;--green:var(--s-cyan);--etx-color:currentColor;}
+:is(.etx-staff-page,.etx-permisos-page) :is(button,input,select,textarea,a,[tabindex]):focus-visible,
+.s-staff-tool button:focus-visible {outline:2px solid var(--s-cyan)!important;outline-offset:3px;}
+:is(.etx-staff-page,.etx-permisos-page) button {font-family:inherit;transition:background .16s,border-color .16s,color .16s;}
+:is(.etx-staff-page,.etx-permisos-page) button:disabled {opacity:.5;cursor:not-allowed;}
+:is(.etx-staff-page,.etx-permisos-page) :is(.btn-primary,.btn-ghost,.btn-row,.btn-save,.btn-reset,.np-btn,.rm-btn) {align-items:center;justify-content:center;gap:8px;border-radius:9px;font-family:inherit;font-size:13px;min-height:42px;padding:10px 14px;line-height:1.4;}
+.etx-staff-page :is(.btn-primary,.btn-ghost,.btn-row,.np-btn),.etx-permisos-page :is(.btn-save,.btn-reset,.rm-btn) {display:inline-flex;}
+:is(.etx-staff-page,.etx-permisos-page) :is(.btn-ghost,.btn-row,.btn-reset,.np-btn-ghost,.rm-btn) {background:transparent;color:var(--text);border:1px solid var(--s-line);}
+:is(.etx-staff-page,.etx-permisos-page) :is(.btn-ghost,.btn-row,.btn-reset,.np-btn-ghost,.rm-btn):hover {background:var(--s-input);border-color:var(--s-cyan);color:var(--text);}
+.etx-staff-page .btn-primary,.etx-staff-page #np_overlay .np-btn-primary,.etx-permisos-page .btn-save,.etx-permisos-page .rm-btn.ok,
+.etx-staff-page #emptyState [onclick^="desbloquearCatalogo"],.etx-permisos-page #permLockOverlay [onclick="_gatePermisos()"] {background:var(--s-terra)!important;color:var(--s-ink)!important;border:1px solid transparent!important;font-weight:600;min-height:44px;}
+:is(.etx-staff-page,.etx-permisos-page) :is(.btn-primary,.np-btn-primary,.btn-save,.rm-btn.ok) .etx-ic {--green:var(--s-ink);}
+:is(.etx-staff-page,.etx-permisos-page) :is(.btn-primary,.np-btn-primary,.btn-save,.rm-btn.ok):not(:disabled):hover {filter:brightness(1.07);opacity:1;}
+/* Catálogo y filtros */
+.etx-staff-page #mainContent .card {background:var(--s-panel);border:1px solid var(--s-line);border-radius:14px;overflow:hidden;}
+.etx-staff-page .card-header {padding:20px;border-color:var(--s-line);}
+.etx-staff-page .controls-bar {gap:10px;align-items:center;}
+.etx-staff-page .filtros-bar {flex-basis:100%;gap:10px;min-width:0;}
+.etx-staff-page .search-wrap {min-width:0;flex:1 1 260px;}
+.etx-staff-page .search-icon {left:12px;display:flex;color:var(--s-muted);pointer-events:none;}
+.etx-staff-page .search-icon .etx-ic {width:18px;height:18px;}
+.etx-staff-page :is(.filtros-bar select,.search-wrap input) {background:var(--s-input);color:var(--text);border:1px solid var(--s-line);border-radius:9px;min-height:44px;font:13px 'DM Sans',sans-serif;max-width:100%;box-sizing:border-box;}
+.etx-staff-page .search-wrap input {width:100%;padding:11px 12px 11px 40px;}
+.etx-staff-page .filtros-bar select {padding:10px 32px 10px 12px;flex:0 1 auto;}
+.etx-staff-page #btnAgregarColaborador {margin-left:auto;}
+.etx-staff-page .puesto-chips {padding:14px 20px;gap:8px;border-color:var(--s-line);}
+.etx-staff-page .puesto-chip {background:transparent;border-color:var(--s-line);color:var(--s-muted);min-height:34px;font-size:12px;padding:6px 12px;}
+.etx-staff-page .puesto-chip.selected {color:var(--s-cyan);border-color:var(--s-cyan);background:var(--s-selected);}
+.etx-staff-page .puesto-chip-count {color:inherit;background:var(--s-input);}
+.etx-staff-page .tabla-wrap {overflow-x:auto;}
+.etx-staff-page #staffTable {width:100%;min-width:1000px;}
+.etx-staff-page #staffTable th {background:var(--s-input);color:var(--s-muted);font-size:9px;letter-spacing:1.3px;padding:14px 12px;white-space:nowrap;border-color:var(--s-line);}
+.etx-staff-page #staffTable td {font-family:inherit;font-size:12px;padding:14px 12px;border-color:var(--s-line);}
+.etx-staff-page #staffTable tr:hover td {background:var(--s-input);}
+.etx-staff-page #staffTable td strong {font-weight:600;}
+.etx-staff-page #staffTable .btn-row {min-width:38px;min-height:36px;padding:6px;}
+.etx-staff-page .rol-badge {display:inline-flex;align-items:center;gap:5px;border-radius:7px;padding:5px 8px;font-size:10px;letter-spacing:0;white-space:nowrap;}
+.etx-staff-page .rol-badge .etx-ic {width:15px;height:15px;--green:currentColor;}
+.etx-staff-page .estado-chip {border-radius:6px;padding:5px 8px;font-size:9px;letter-spacing:.5px;white-space:nowrap;}
+.etx-staff-page #emptyState {padding:48px 20px;color:var(--s-muted);line-height:1.7;}
+.etx-staff-page #emptyState .empty-state-icon {color:var(--s-cyan);opacity:1;margin-bottom:16px;}
+.etx-staff-page #emptyState .etx-ic {width:36px;height:36px;}
+.etx-staff-page #emptyState button .etx-ic {width:20px;height:20px;--green:var(--s-ink);}
+/* Ventanas: los pies siguen visibles mientras se desplaza el contenido. */
+.etx-staff-page :is(#modalStaff,#modalBajas,#np_overlay) {padding:16px;}
+.etx-staff-page :is(#modalStaff,#modalBajas,#np_overlay):not(.open) {display:none!important;}
+.etx-staff-page :is(#modalStaff,#modalBajas,#np_overlay) .modal {background:var(--s-panel);border:1px solid var(--s-line);border-radius:18px;display:flex;flex-direction:column;max-height:calc(100dvh - 32px);min-width:0;overflow:hidden;}
+.etx-staff-page #modalStaff .modal {max-width:800px;}
+.etx-staff-page #np_overlay .modal {max-width:560px;}
+.etx-staff-page :is(.modal-header,.modal-footer) {background:var(--s-panel);border-color:var(--s-line);padding:20px 24px;gap:12px;flex-shrink:0;}
+.etx-staff-page .modal-header {flex-wrap:wrap;}
+.etx-staff-page .modal-header h2 {display:flex;align-items:center;gap:12px;flex:1;min-width:0;font:700 23px/1.25 'DM Sans',sans-serif;letter-spacing:-.5px;text-transform:none;}
+.s-title-plate {width:44px;height:44px;border:1px solid var(--etx-ui-cyan-line,#537e83);background:var(--s-selected);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+.s-title-copy {overflow-wrap:anywhere;}
+.etx-staff-page :is(.modal-close,.etx-min-btn),.s-staff-tool :is(.tm-x,.tm-back,.etx-min-btn) {min-height:40px;background:transparent!important;border:1px solid var(--s-line)!important;border-radius:9px!important;color:var(--text)!important;font:12px 'DM Sans',sans-serif!important;padding:9px 12px!important;align-items:center;justify-content:center;gap:6px;}
+.etx-staff-page :is(.modal-close,.etx-min-btn) {display:inline-flex;}
+.etx-staff-page .modal-close {width:auto!important;min-width:40px;flex-shrink:0;}
+.etx-staff-page :is(.modal-close,.etx-min-btn):hover,.s-staff-tool :is(.tm-x,.tm-back,.etx-min-btn):hover {border-color:var(--s-cyan)!important;background:var(--s-input)!important;}
+.etx-staff-page .modal-body {padding:24px;overflow-y:auto;min-height:0;max-height:none;scrollbar-width:thin;scrollbar-color:var(--s-line) transparent;}
+.etx-staff-page .modal-footer {flex-wrap:wrap;}
+.etx-staff-page .modal-section {display:flex;align-items:center;font-size:15px;text-transform:none;letter-spacing:0;color:var(--text);font-weight:600;gap:10px;margin:28px 0 18px;padding-top:24px;border-top:1px solid var(--s-line);border-bottom:0;}
+.etx-staff-page .modal-section:first-child {padding-top:0;border-top:0;margin-top:0;}
+.etx-staff-page .modal-section::before {content:attr(data-paso);font-size:10px;letter-spacing:1px;color:var(--s-cyan);border:1px solid var(--s-line);border-radius:5px;padding:4px 5px;font-weight:400;}
+.etx-staff-page .modal-section::after {display:none;}
+.etx-staff-page .form-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 16px;}
+.etx-staff-page .form-group {min-width:0;gap:8px;}
+.etx-staff-page .form-group label,.etx-staff-page #np_overlay .np-grp label {font-size:12px;letter-spacing:0;text-transform:none;color:var(--text);line-height:1.5;}
+.etx-staff-page .form-group > label:has(.s-ui-icon) {display:flex;align-items:center;gap:7px;}
+.etx-staff-page :is(.form-group,.np-grp) :is(input:not([type="checkbox"]):not([type="file"]):not([type="hidden"]),select,textarea),.etx-staff-page #fNotas {width:100%;max-width:100%;min-width:0;background:var(--s-input);border:1px solid var(--s-line);border-radius:9px;padding:11px 12px;min-height:43px;box-sizing:border-box;color:var(--text);font:13px/1.5 'DM Sans',sans-serif;}
+.etx-staff-page :is(input,select) {color-scheme:dark;}
+[data-theme="light"] .etx-staff-page :is(input,select) {color-scheme:light;}
+.etx-staff-page input::placeholder,.etx-staff-page textarea::placeholder {color:var(--s-muted);opacity:.85;}
+.etx-staff-page #np_overlay .np-inw.suf input {padding-right:46px;}
+.etx-staff-page #np_overlay .np-inw.pre input {padding-left:26px;}
+.etx-staff-page :is(.form-hint,.np-hint,#fotoHint) {font-size:11px;line-height:1.6;color:var(--s-muted);}
+.etx-staff-page #modalStaff label:has(input[type="checkbox"]) {flex-wrap:wrap;gap:6px;}
+.etx-staff-page #modalStaff input[type="checkbox"] {accent-color:var(--s-cyan)!important;flex-shrink:0;width:17px!important;height:17px;}
+.etx-staff-page :is(#btnModUsuario,#btnModPwd,#btnModSalarioBase,#btnModSueldoDiario) {display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:5px 8px!important;letter-spacing:0!important;border-color:var(--s-line)!important;color:var(--s-muted)!important;text-transform:none;}
+.etx-staff-page :is(#btnModUsuario,#btnModPwd,#btnModSalarioBase,#btnModSueldoDiario) .etx-ic {width:14px;height:14px;}
+.etx-staff-page :is(#btnModUsuario,#btnModPwd,#btnModSalarioBase,#btnModSueldoDiario).s-unlocked {color:var(--green)!important;border-color:var(--green)!important;}
+.etx-staff-page .s-unlocked .etx-ic {--green:currentColor!important;}
+.etx-staff-page #np_overlay .np-grp label {display:flex;align-items:center;gap:8px;}
+.etx-staff-page input[readonly] {opacity:.85;}
+.etx-staff-page .pwd-wrap input {padding-right:44px!important;}
+.etx-staff-page #fotoPrev {width:84px!important;height:84px!important;border-color:var(--s-line)!important;}
+.etx-staff-page #fotoPrev .etx-ic {width:32px;height:32px;}
+.etx-staff-page #sueldoPreviewTxt {padding:14px 16px!important;border-radius:10px!important;line-height:1.8;background:var(--s-input)!important;}
+.etx-staff-page #sueldoPreviewTxt .s-ui-icon {margin-right:7px;}
+.etx-staff-page .file-drop {border:1px dashed var(--s-cyan);background:var(--s-selected);border-radius:12px;padding:24px 16px;}
+.etx-staff-page .file-drop .etx-ic {width:30px;height:30px;}
+.etx-staff-page #fNotas {min-height:100px;resize:vertical;}
+.etx-staff-page #bonosLista input,.etx-staff-page #bonosLista select {min-height:40px;}
+.etx-staff-page .st-menu {background:var(--s-panel)!important;border-color:var(--s-line)!important;padding:6px!important;border-radius:12px!important;}
+.etx-staff-page .st-menu > div {min-height:40px;padding:10px!important;}
+.etx-staff-page .st-menu .etx-ic {width:18px;height:18px;--green:currentColor;}
+/* Bajas, ficha y visor de documentos */
+.etx-staff-page .s-baja-row {padding:16px!important;border:1px solid var(--s-line)!important;border-radius:11px;margin:12px 0;flex-wrap:wrap;background:var(--s-input);}
+.etx-staff-page .s-baja-row > div {flex-basis:220px!important;}
+.etx-staff-page .s-reactivar {color:var(--green)!important;border-color:var(--green)!important;}
+.etx-staff-page .s-reactivar .etx-ic {--green:currentColor;}
+.etx-staff-page #expOverlay,.etx-staff-page #docVisor {padding:16px!important;}
+.etx-staff-page .s-exp-card {background:var(--s-panel)!important;border-color:var(--s-line)!important;}
+.etx-staff-page .s-exp-header {background:var(--s-panel)!important;border-color:var(--s-line)!important;}
+.etx-staff-page .s-exp-header > div:nth-child(2) {min-width:0!important;overflow-wrap:anywhere;}
+.etx-staff-page .s-exp-grid {grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:16px!important;}
+.etx-staff-page .s-exp-section {background:var(--s-input)!important;border-color:var(--s-line)!important;min-width:0;}
+.etx-staff-page .s-exp-section-title {display:flex;align-items:center;gap:8px;color:var(--text)!important;font-size:13px!important;letter-spacing:0!important;text-transform:none!important;font-weight:600;margin:4px 0 8px;}
+.etx-staff-page .s-exp-section > div:first-child {flex-wrap:wrap;}
+.etx-staff-page .s-exp-section #expNomina > div {border-color:var(--s-line)!important;}
+.etx-staff-page .s-exp-section > div:not(:first-child) {border-color:var(--s-line)!important;}
+.etx-staff-page #docVisor > div {background:var(--s-panel)!important;border-color:var(--s-line)!important;border-radius:16px!important;max-height:calc(100dvh - 32px);overflow:auto;}
+.etx-staff-page #docVisor > div > div:first-child {flex-wrap:wrap;}
+.etx-staff-page #docVisor button {display:inline-flex;align-items:center;gap:7px;min-height:40px;border-color:var(--s-line)!important;}
+/* Roles: selección cian; habilitación y avisos conservan semáforo. */
+.etx-permisos-page .suc-bar {gap:8px;margin-bottom:20px;}
+.etx-permisos-page .suc-tab {min-height:40px;padding:9px 14px;border:1px solid var(--s-line);background:transparent;color:var(--s-muted);border-radius:9px;}
+.etx-permisos-page .suc-tab.active {background:var(--s-selected);border-color:var(--s-cyan);color:var(--s-cyan);}
+.etx-permisos-page .suc-tab .s-ui-icon {margin-right:6px;}
+.etx-permisos-page .suc-nota {background:var(--s-input);border-left-color:var(--s-cyan);color:var(--s-muted);border-radius:9px;padding:14px 16px;line-height:1.7;margin:0 0 24px;}
+.etx-permisos-page .roles-tabs {gap:8px;margin-bottom:24px;}
+.etx-permisos-page .rol-tab {min-height:46px;padding:11px 14px;border-radius:10px;background:var(--s-input)!important;border:1px solid var(--s-line)!important;color:var(--text)!important;font-size:12px;gap:8px;}
+.etx-permisos-page .rol-tab.active {background:var(--s-selected)!important;color:var(--s-cyan)!important;border-color:var(--s-cyan)!important;box-shadow:inset 0 -2px 0 var(--s-cyan);}
+.etx-permisos-page .rol-tab:hover {border-color:var(--s-cyan)!important;}
+.etx-permisos-page .rol-tab [onclick="nuevoRol()"],.etx-permisos-page [onclick="nuevoRol()"] {border-style:dashed!important;color:var(--s-cyan)!important;}
+.etx-permisos-page .rol-tab-icon {display:flex;}
+.etx-permisos-page .save-bar {background:var(--s-panel);border:1px solid var(--s-line);border-radius:12px;padding:16px;gap:12px;margin-bottom:28px;flex-wrap:wrap;}
+.etx-permisos-page .save-bar-info {font-size:12px;color:var(--s-muted);}
+.etx-permisos-page .hdr-acts {gap:8px;flex-wrap:wrap;}
+.etx-permisos-page .admin-lock-note {background:var(--s-input);border-color:var(--s-line);line-height:1.7;}
+.etx-permisos-page .admin-lock-note .s-ui-icon {margin-right:7px;}
+.etx-permisos-page .grupo-label {font-size:10px;color:var(--s-muted);letter-spacing:1.8px;}
+.etx-permisos-page .mod-card {background:var(--s-panel);border-color:var(--s-line);border-radius:12px;overflow:hidden;}
+.etx-permisos-page .mod-card.active-perm {border-color:var(--green);}
+.etx-permisos-page .mod-head {padding:18px 20px;gap:14px;min-height:82px;}
+.etx-permisos-page .mod-icon {display:flex;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--s-line);border-radius:11px;background:var(--s-input);flex-shrink:0;}
+.etx-permisos-page .mod-icon .etx-ic {width:23px;height:23px;}
+.etx-permisos-page .mod-info {min-width:0;}
+.etx-permisos-page .mod-label {font-size:14px;font-weight:600;}
+.etx-permisos-page .mod-sub {font-size:11px;color:var(--s-muted);line-height:1.6;}
+.etx-permisos-page .mod-count {font-size:10px;white-space:nowrap;}
+.etx-permisos-page .mod-body {border-color:var(--s-line);padding:0 20px 16px 76px;}
+.etx-permisos-page .subperm-row {padding:14px 0;border-color:var(--s-line);gap:16px;}
+.etx-permisos-page .subperm-info {min-width:0;}
+.etx-permisos-page .subperm-label {font-size:12px;line-height:1.5;}
+.etx-permisos-page .subperm-sub {font-size:11px;color:var(--s-muted);line-height:1.6;}
+.etx-permisos-page .toggle-wrap {flex-shrink:0;}
+.etx-permisos-page .toggle input:focus-visible + .toggle-slider {outline:2px solid var(--s-cyan);outline-offset:4px;}
+.etx-permisos-page .rm-bg {padding:16px;}
+.etx-permisos-page .rm-bg:not(.on) {display:none!important;}
+.etx-permisos-page .rm-card {max-width:560px;border:1px solid var(--s-line);border-radius:18px;background:var(--s-panel);max-height:calc(100dvh - 32px);}
+.etx-permisos-page :is(.rm-hd,.rm-ft) {padding:20px 24px;border-color:var(--s-line);flex-shrink:0;}
+.etx-permisos-page .rm-kicker {color:var(--s-muted);font-size:9px;letter-spacing:2px;gap:8px;}
+.etx-permisos-page #rmKickIcon {display:flex;}
+.etx-permisos-page .rm-title {font:700 24px/1.3 'DM Sans',sans-serif;letter-spacing:-.5px;margin-top:10px;overflow-wrap:anywhere;}
+.etx-permisos-page .rm-body {padding:24px;min-height:0;scrollbar-width:thin;scrollbar-color:var(--s-line) transparent;}
+.etx-permisos-page .rm-field {margin-bottom:20px;}
+.etx-permisos-page .rm-lbl {font-size:12px;letter-spacing:0;text-transform:none;color:var(--text);margin-bottom:9px;}
+.etx-permisos-page :is(.rm-in,.rm-sel) {background:var(--s-input);border-color:var(--s-line);border-radius:9px;min-height:44px;font:13px/1.5 'DM Sans',sans-serif;padding:11px 12px;color:var(--text);color-scheme:dark;}
+[data-theme="light"] .etx-permisos-page :is(.rm-in,.rm-sel) {color-scheme:light;}
+.etx-permisos-page .rm-emojis {gap:8px;}
+.etx-permisos-page .rm-emo {width:44px;height:44px;border-color:var(--s-line);border-radius:10px;background:var(--s-input);color:var(--text);display:flex;align-items:center;justify-content:center;}
+.etx-permisos-page .rm-emo.sel {background:var(--s-selected);border-color:var(--s-cyan);transform:none;box-shadow:inset 0 -2px 0 var(--s-cyan);}
+.etx-permisos-page .rm-hint {color:var(--s-muted);font-size:11px;line-height:1.7;}
+.etx-permisos-page .rm-prev {background:var(--s-selected);border-color:var(--s-cyan);padding:14px;border-radius:10px;color:var(--text);}
+.etx-permisos-page .rm-ft {flex-wrap:wrap;gap:10px;}
+.etx-permisos-page .rm-btn.peligro {background:var(--red);border-color:var(--red);color:#fff;}
+.etx-permisos-page #permLockOverlay {padding:24px;box-sizing:border-box;}
+.etx-permisos-page #permLockOverlay > div:last-child {flex-wrap:wrap;justify-content:center;}
+.etx-permisos-page #permLockOverlay a,.etx-permisos-page #permLockOverlay button {display:inline-flex!important;align-items:center;justify-content:center;gap:8px;padding:11px 16px!important;border-radius:9px!important;min-height:44px;}
+/* Marco flotante del catálogo; los estados de Volver/Cerrar siguen en el hub. */
+.s-staff-tool {padding:16px;}
+.s-staff-tool:not(.on) {display:none!important;}
+.s-staff-tool .tool-modal {background:var(--s-panel);border-color:var(--s-line);border-radius:18px;min-width:0;min-height:0;max-height:calc(100dvh - 32px);}
+.s-staff-tool .tool-modal-hd {background:var(--s-panel);border-color:var(--s-line);gap:12px;padding:18px 22px;flex-wrap:wrap;}
+.s-staff-tool .tm-ic {width:42px;height:42px;display:flex;align-items:center;justify-content:center;border:1px solid var(--etx-ui-cyan-line,#537e83);border-radius:12px;background:var(--s-selected);}
+.s-staff-tool .tm-tt {font:700 21px/1.3 'DM Sans',sans-serif;letter-spacing:-.4px;text-transform:none;min-width:0;flex:1;}
+.s-staff-tool .tm-back {color:var(--s-cyan)!important;}
+/* El dock aplica display:inline-flex!important al botón Cerrar. La decisión
+   del hub de ocultarlo al entrar en Permisos debe seguir teniendo prioridad. */
+.s-staff-tool #tmClose[style*="display: none"],.s-staff-tool #tmClose[style*="display:none"] {display:none!important;}
+@media(max-width:850px) {
+  .etx-staff-page .controls-bar > button {flex:1 1 auto;}
+  .etx-staff-page #btnAgregarColaborador {margin-left:0;}
+  .etx-permisos-page .save-bar > .hdr-acts {width:100%;}
+}
+@media(max-width:600px) {
+  :is(.etx-staff-page,.etx-permisos-page) #mainContent > .header {padding:20px 16px;}
+  :is(.etx-staff-page,.etx-permisos-page) .wrap {padding:20px 12px;}
+  body:is(.etx-staff-page,.etx-permisos-page) #mainContent .brand-title {font-size:25px;}
+  .etx-staff-page .card-header {padding:14px;}
+  .etx-staff-page .puesto-chips {padding:12px 14px;}
+  .etx-staff-page .filtros-bar select {flex:1 1 130px;min-width:0;}
+  .etx-staff-page .search-wrap {flex-basis:100%;}
+  .etx-staff-page :is(#modalStaff,#modalBajas,#np_overlay),.etx-permisos-page .rm-bg,.s-staff-tool {padding:8px;}
+  .etx-staff-page :is(#modalStaff,#modalBajas,#np_overlay) .modal,.etx-permisos-page .rm-card,.s-staff-tool .tool-modal {max-height:calc(100dvh - 16px);border-radius:14px;}
+  .etx-staff-page :is(.modal-header,.modal-body,.modal-footer),.etx-permisos-page :is(.rm-hd,.rm-body,.rm-ft) {padding:16px;}
+  .etx-staff-page .modal-header h2 {font-size:20px;flex-basis:100%;}
+  .etx-staff-page .modal-header .etx-min-btn {margin-left:auto;}
+  .etx-staff-page .form-grid {grid-template-columns:minmax(0,1fr);}
+  .etx-staff-page #bonosLista > div:has(button) {display:grid!important;grid-template-columns:minmax(0,1fr) 40px;gap:8px;}
+  .etx-staff-page #bonosLista > div:has(button) > input:first-child {grid-column:1/-1;}
+  .etx-staff-page #bonosLista > div:has(button) > :is(input,select) {width:100%!important;}
+  .etx-staff-page #bonosLista > div:has(button) > select {grid-column:1;}
+  .etx-staff-page #bonosLista > div:has(button) > button {grid-column:2;grid-row:2/4;}
+  .etx-staff-page .modal-footer .btn-primary {flex:1;}
+  .etx-staff-page #expOverlay,.etx-staff-page #docVisor {padding:8px!important;}
+  .etx-staff-page .s-exp-header {padding:18px 16px!important;gap:14px!important;}
+  .etx-staff-page .s-exp-header > div:first-child {width:64px!important;height:64px!important;}
+  .etx-staff-page .s-exp-header > div:last-child {flex-basis:100%;}
+  .etx-staff-page .s-exp-grid {grid-template-columns:minmax(0,1fr)!important;padding:16px!important;}
+  .etx-permisos-page .rol-tab {padding:10px 11px;}
+  .etx-permisos-page .mod-head {padding:14px 12px;gap:9px;flex-wrap:wrap;}
+  .etx-permisos-page .mod-icon {width:36px;height:36px;}
+  .etx-permisos-page .mod-info {flex:1 1 120px;}
+  .etx-permisos-page .mod-body {padding:0 14px 12px;}
+  .etx-permisos-page .mod-sub {font-size:10px;}
+  .etx-permisos-page .mod-count {margin-left:45px;}
+  .etx-permisos-page .mod-chev {margin-left:auto;}
+  .etx-permisos-page .subperm-row {padding:12px 0;}
+  .s-staff-tool .tool-modal-hd {padding:12px;gap:8px;}
+  .s-staff-tool .tm-tt {font-size:18px;flex-basis:calc(100% - 60px);}
+  .s-staff-tool .etx-min-btn {margin-left:auto;}
+}
+@media(prefers-reduced-motion:reduce) {
+  :is(.etx-staff-page,.etx-permisos-page) *, .s-staff-tool * {transition:none!important;scroll-behavior:auto!important;}
+}
+@media(max-width:400px) {
+  .etx-staff-page .filtros-bar select {flex-basis:100%;}
+}
