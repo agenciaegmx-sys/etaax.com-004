@@ -41,6 +41,8 @@ const COMPARTIDOS = [
     'administrativo/gastos-ui.css', 'administrativo/gastos-ui.js',
     'administrativo/cortes-ui.css', 'administrativo/cortes-ui.js',
     'administrativo/nominas-ui.css', 'administrativo/nominas-ui.js',
+    'administrativo/fijos-ui.css', 'administrativo/fijos-ui.js',
+    'administrativo/movimientos-ui.css', 'administrativo/movimientos-ui.js',
     'admin-guard-ui.css', 'admin-guard-ui.js'
 ].filter(f => fs.existsSync(path.join(RAIZ, f)));
 

@@ -1,0 +1,82 @@
+/* Movimientos: paleta de Gastos/Cortes. Verde = entrada, rojo = retiro;
+   las cifras y advertencias conservan los colores semánticos originales. */
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) {--m-panel:var(--etx-ui-panel,#171611);--m-line:var(--etx-ui-line,#3a3830);--m-muted:var(--etx-ui-muted,#b5afa3);--m-cyan:var(--etx-ui-cyan,#8ce4ee);--m-terra:var(--etx-ui-terra,#fb9b6f);--m-input:#211f19;--m-selected:#1d3236;--m-ink:#13110e;font-family:'DM Sans',sans-serif;color:var(--text);padding:16px;}
+[data-theme="light"] :is(#dxOv_depositos,#modalDeposito,#depOverlay) {--m-input:#f7f5f0;--m-selected:#e8f3f4;--m-ink:#fff;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay):not(.open) {display:none!important;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(.dx-win,.modal-corte,.cj-panel) {display:flex;flex-direction:column;min-width:0;max-height:calc(100dvh - 32px);overflow:hidden;background:var(--m-panel);border:1px solid var(--m-line);border-radius:18px;}
+#modalDeposito .modal-corte {max-width:760px!important;}
+#depOverlay .cj-panel {width:min(1080px,100%);}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(.dx-win-hdr,.modal-header,.cj-header) {padding:22px 24px;background:var(--m-panel);border-color:var(--m-line);gap:14px;flex-wrap:wrap;flex-shrink:0;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(.dx-win-title,.modal-header h2,.cj-title) {display:flex;align-items:center;gap:12px;font:700 24px/1.3 'DM Sans',sans-serif;letter-spacing:-.6px;text-transform:none;min-width:0;color:var(--text);}
+.m-title-plate {display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:46px;height:46px;border:1px solid var(--etx-ui-cyan-line,#537e83);border-radius:13px;background:var(--m-selected);}
+.m-title-copy {display:block;overflow-wrap:anywhere;}.m-title-accent {color:var(--m-terra);}
+.m-title-daily::before {content:'Operación diaria';display:block;margin-bottom:7px;color:var(--m-muted);font-size:9px;letter-spacing:2.5px;font-weight:400;text-transform:uppercase;}
+.m-ui-icon {display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;vertical-align:middle;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) .etx-ic {width:20px;height:20px;--green:var(--m-cyan);--etx-color:currentColor;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(.dx-win-body,.modal-body,.cj-body) {padding:24px;overflow-y:auto;min-height:0;scrollbar-width:thin;scrollbar-color:var(--m-line) transparent;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) button {font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:9px;transition:background .16s,border-color .16s;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(.btn-ghost,.btn-deposito,.etx-min-btn,.etx-close-btn,.modal-close,.dx-win-close) {min-height:42px;padding:10px 13px!important;background:transparent!important;color:var(--text)!important;border:1px solid var(--m-line)!important;font-size:13px!important;line-height:1.3;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(.btn-ghost,.btn-deposito,.etx-min-btn,.modal-close,.dx-win-close):hover {background:var(--m-input)!important;border-color:var(--m-cyan)!important;}
+#dxOv_depositos #btnDepositar {color:var(--green)!important;border-color:var(--green-dim,rgba(61,190,122,.4))!important;}
+#dxOv_depositos #btnRetirar {color:var(--red)!important;border-color:rgba(224,90,58,.4)!important;}
+#dxOv_depositos #btnApartarPrev {background:var(--m-selected)!important;border-color:var(--etx-ui-cyan-line,#537e83)!important;color:var(--m-cyan)!important;}
+#dxOv_depositos :is(#btnDepositar,#btnRetirar) .etx-ic {--green:currentColor;}
+#dxOv_depositos #btnNuevoDepCard,#modalDeposito [onclick="guardarDeposito()"],#depOverlay .cj-header .btn-deposito {min-height:44px;padding:11px 17px!important;background:var(--m-terra)!important;color:var(--m-ink)!important;border:1px solid transparent!important;font-size:14px!important;font-weight:600;}
+:is(#dxOv_depositos #btnNuevoDepCard,#modalDeposito [onclick="guardarDeposito()"],#depOverlay .cj-header .btn-deposito) .etx-ic {--green:currentColor;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(button,input,select,textarea,[tabindex]):focus-visible {outline:2px solid var(--m-cyan);outline-offset:3px;}
+:is(#dxOv_depositos,#modalDeposito,#depOverlay) button:disabled {opacity:.5;cursor:not-allowed;}
+#dxOv_depositos #dep_dxp {gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+#dxOv_depositos .dxp-tabs {border:1px solid var(--m-line);border-radius:10px;background:transparent;padding:4px;flex-wrap:wrap;gap:3px;max-width:100%;box-sizing:border-box;}
+#dxOv_depositos .dxp-tab {padding:9px 12px;color:var(--text);border:0;border-radius:7px;background:transparent;font-size:12px;}
+#dxOv_depositos .dxp-tab.active {background:var(--m-selected);color:var(--m-cyan);}
+#dxOv_depositos .dxp-semana {color:var(--m-muted);}
+#dxOv_depositos :is(#dep_val,#dep_end,#depFiltroCat),#modalDeposito .fg :is(input,select,textarea) {min-height:42px;border:1px solid var(--m-line);border-radius:9px;background:var(--m-input);color:var(--text);font-family:inherit;font-size:13px;padding:10px 12px;box-sizing:border-box;min-width:0;max-width:100%;}
+:is(#dxOv_depositos,#modalDeposito) :is(input,select) {color-scheme:dark;}
+[data-theme="light"] :is(#dxOv_depositos,#modalDeposito) :is(input,select) {color-scheme:light;}
+#dxOv_depositos #depFiltroCat {background:var(--m-input)!important;border-color:var(--m-line)!important;padding:10px 12px!important;font-size:12px!important;}
+#dxOv_depositos .m-toolbar {gap:10px!important;margin-bottom:20px!important;}
+#dxOv_depositos .m-toolbar [onclick^="dxImprimir"] {margin-left:auto;}
+#dxOv_depositos .card {border:1px solid var(--m-line);border-radius:12px;background:var(--m-panel);overflow:hidden;}
+#dxOv_depositos .card-header {padding:16px;gap:12px;flex-wrap:wrap;border-color:var(--m-line);}
+#dxOv_depositos .card-header h2 {display:flex;align-items:center;gap:8px;font-family:inherit;font-size:14px;letter-spacing:0;text-transform:none;}
+#dxOv_depositos .cortes-table th {background:var(--m-input);font-size:9px;color:var(--m-muted);letter-spacing:1px;padding:13px 12px;border-color:var(--m-line);}
+#dxOv_depositos .cortes-table td {padding:16px 12px;border-color:var(--m-line);font:12px 'DM Sans',sans-serif;}
+#dxOv_depositos .empty-state {padding:48px 20px!important;color:var(--m-muted);font-size:14px;line-height:1.6;}
+#dxOv_depositos .empty-state-icon {color:var(--m-cyan);opacity:1;margin-bottom:16px;}
+#dxOv_depositos .empty-state-icon .etx-ic {width:36px;height:36px;}
+#dxOv_depositos #depTbody td:nth-child(2) > span {display:inline-flex;align-items:center;gap:5px;border:1px solid var(--m-line);background:transparent!important;border-radius:7px!important;line-height:1.5;white-space:nowrap;}
+#dxOv_depositos #depTbody td:nth-child(2) .etx-ic {width:15px;height:15px;--green:currentColor;}
+#dxOv_depositos #depFooter {padding:14px 16px!important;border-color:var(--m-line)!important;gap:12px 20px!important;flex-wrap:wrap;}
+#dxOv_depositos #depFooter > span {display:inline-flex;align-items:center;gap:6px;}
+#dxOv_depositos #depTotal {font:700 22px 'DM Sans',sans-serif!important;letter-spacing:-.5px!important;}
+:is(#dxOv_depositos,#depOverlay) .btn-row {min-width:36px;min-height:34px;border:1px solid var(--m-line);}
+:is(#dxOv_depositos,#depOverlay) .btn-row .etx-ic {width:16px;height:16px;--green:currentColor;}
+#modalDeposito .modal-body {gap:24px;}
+#modalDeposito .corte-sec {gap:18px;min-width:0;}
+#modalDeposito .corte-sec-title {color:var(--text);font-size:15px;letter-spacing:0;font-weight:600;text-transform:none;gap:10px;}
+#modalDeposito .corte-sec-title::after {display:none;}
+#modalDeposito .fg {gap:8px;min-width:0;}
+#modalDeposito .fg label {display:flex;align-items:center;gap:7px;font-size:12px;letter-spacing:0;text-transform:none;color:var(--text);}
+#modalDeposito .fg-row-2 {gap:14px;grid-template-columns:repeat(2,minmax(0,1fr));}
+#modalDeposito #depMovHint {padding:14px;border:1px solid var(--m-line);border-radius:10px;background:var(--m-input);font-size:12px!important;color:var(--m-muted)!important;line-height:1.6!important;margin:0!important;}
+#modalDeposito #depMovHint > .m-ui-icon {margin-right:6px;}
+#modalDeposito #depNotas {min-height:96px;}
+#modalDeposito .modal-footer {padding:18px 24px;background:var(--m-panel);border-color:var(--m-line);flex-shrink:0;gap:10px;flex-wrap:wrap;}
+#depOverlay .cj-body {gap:20px;}
+#depOverlay .m-kpis {grid-template-columns:repeat(3,minmax(0,1fr))!important;margin-bottom:0!important;}
+#depOverlay .m-kpis > div {background:var(--m-input)!important;border-color:var(--m-line)!important;padding:16px!important;min-width:0;}
+#depOverlay .m-kpis > div > div:first-child {display:flex;align-items:center;gap:7px;font-size:10px!important;letter-spacing:.5px!important;color:var(--m-muted)!important;line-height:1.5;}
+#depOverlay .m-kpis > div > div:last-child {font:700 25px/1.3 'DM Sans',sans-serif!important;letter-spacing:-.5px!important;overflow-wrap:anywhere;}
+#depOverlay .m-cards {grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))!important;}
+#depOverlay .m-record {background:var(--m-input)!important;border-top-color:var(--m-line)!important;border-right-color:var(--m-line)!important;border-bottom-color:var(--m-line)!important;padding:16px!important;gap:12px!important;min-width:0;}
+#depOverlay .m-record > div {overflow-wrap:anywhere;min-width:0;}
+#depOverlay .m-record .m-ui-icon {margin-right:5px;}
+#depOverlay .m-record .etx-ic {width:16px;height:16px;--green:currentColor;}
+#depOverlay .m-record > div:last-child {border-color:var(--m-line)!important;}
+@media(max-width:800px) {#dxOv_depositos .cortes-table {min-width:1000px;}#depOverlay .m-kpis {grid-template-columns:1fr!important;}}
+@media(max-width:600px) {:is(#dxOv_depositos,#modalDeposito,#depOverlay) {padding:8px;}:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(.dx-win,.modal-corte,.cj-panel) {max-height:calc(100dvh - 16px);border-radius:14px;}:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(.dx-win-hdr,.modal-header,.cj-header,.dx-win-body,.modal-body,.cj-body) {padding:16px;}:is(#dxOv_depositos,#modalDeposito,#depOverlay) :is(.dx-win-title,.modal-header h2,.cj-title) {font-size:21px;}#dxOv_depositos .m-toolbar [onclick^="dxImprimir"] {margin-left:0;}#modalDeposito .fg-row-2 {grid-template-columns:1fr;}#modalDeposito .modal-footer {padding:14px 16px;}#depOverlay .m-cards {grid-template-columns:1fr!important;}}
+@media(max-width:360px) {#dxOv_depositos #dep_dxp > .dxp-tabs {width:100%;justify-content:space-between;}#dxOv_depositos .dxp-tab {padding:9px 10px;}}
+@media(prefers-reduced-motion:reduce) {:is(#dxOv_depositos,#modalDeposito,#depOverlay) button {transition:none!important;}}
+
+#depOverlay .m-record.m-withdrawal {border-left-color:var(--red)!important;}
+#depOverlay .m-record.m-withdrawal > div:first-child > div:last-child,#depOverlay .m-record.m-withdrawal > div:first-child > div:first-child > div:first-child {color:var(--red)!important;}

@@ -98,3 +98,11 @@ Las acciones comunes reutilizan los trazos de Administrativo. Los nuevos
 dibujos cubren sueldo, conceptos, asistencia, conceptos adicionales y el ojo
 de contraseña. `administrativo/nominas-ui.*` y `admin-guard-ui.*` solo decoran
 los controles existentes; no reemplazan reglas de pagos ni autorización.
+
+## Gastos fijos y movimientos de caja
+
+`gastos-fijos/oscuro/` (18 iconos, prefijo `fij-`) y
+`movimientos-caja/oscuro/` (25 iconos, prefijo `mov-`) se publicaron en
+`agenciaegmx-sys/iconos-etaax`, commit `1d958089f01a705b4396599f628e4436baeb5fd3`.
+Allí viven las dos variantes y la galería `etaax-fijos-movimientos-iconos.html`.
+La app importa una geometría por símbolo y adapta los colores al tema.
