@@ -106,3 +106,17 @@ los controles existentes; no reemplazan reglas de pagos ni autorización.
 `agenciaegmx-sys/iconos-etaax`, commit `1d958089f01a705b4396599f628e4436baeb5fd3`.
 Allí viven las dos variantes y la galería `etaax-fijos-movimientos-iconos.html`.
 La app importa una geometría por símbolo y adapta los colores al tema.
+
+## Caja fuerte, anticipos, ventas, mayores y recordatorios
+
+Fuentes publicadas en `agenciaegmx-sys/iconos-etaax`, commit
+`c5d3163872a97b7dbebeb5ba82d260882bcd8c90`, con galería
+`etaax-operacion-administrativa-iconos.html` y ambos temas.
+
+- `caja-fuerte/oscuro/`: 19 iconos; prefijo `cjf-`.
+- `anticipos-ventas/oscuro/`: 26 iconos; prefijo `ev-`.
+- `gastos-mayores/oscuro/`: 15 iconos; prefijo `gm-`.
+- `recordatorios/oscuro/`: 6 iconos; prefijo `rem-`.
+
+Las acciones comunes reutilizan los trazos del resto de Administrativo.
+`administrativo/operaciones-ui.*` integra su presentación en la aplicación.

@@ -10,7 +10,7 @@
         if (actual) actual.remove();
         el.querySelectorAll(':scope > .etx-emoji-slot').forEach(function (n) { n.remove(); });
         Array.from(el.childNodes).forEach(function (n) {
-            if (n.nodeType === 3) n.textContent = n.textContent.replace(/^[\s🔒🔓👁🙈\uFE0F]+/u, '');
+            if (n.nodeType === 3) n.textContent = n.textContent.replace(/^[\s🔒🔓🔐👁🙈\uFE0F]+/u, '');
         });
         var s = document.createElement('span'); s.className = 'a-ui-icon'; s.dataset.icono = nombre;
         s.setAttribute('aria-hidden', 'true'); s.innerHTML = window.etaaxIcono('aut-' + nombre, {tam:20});
