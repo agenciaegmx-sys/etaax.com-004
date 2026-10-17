@@ -1,0 +1,111 @@
+/* Nóminas: misma presentación de Gastos y Cortes. Selectores acotados;
+   no redefine los colores semánticos ni modifica la lógica de pago. */
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) {
+  --n-panel:var(--etx-ui-panel,#171611);--n-line:var(--etx-ui-line,#3a3830);
+  --n-muted:var(--etx-ui-muted,#b5afa3);--n-cyan:var(--etx-ui-cyan,#8ce4ee);
+  --n-terra:var(--etx-ui-terra,#fb9b6f);--n-input:#211f19;--n-selected:#1d3236;--n-ink:#13110e;
+  font-family:'DM Sans',sans-serif;color:var(--text);padding:16px;
+}
+[data-theme="light"] :is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) {--n-input:#f7f5f0;--n-selected:#e8f3f4;--n-ink:#fff;}
+/* Cerrar conserva autoridad sobre display:flex que puede dejar el dock. */
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector):not(.open) {display:none!important;}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(.modal,.dx-win) {background:var(--n-panel);border:1px solid var(--n-line);border-radius:18px;min-width:0;max-height:calc(100dvh - 32px);display:flex;flex-direction:column;overflow:hidden;}
+#modalPagoNom .modal {max-width:760px!important;}
+#modalSelPago.n-selector .modal {max-width:620px!important;}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(.modal-header,.dx-win-hdr) {background:var(--n-panel);padding:22px 24px;gap:14px;flex-wrap:wrap;flex-shrink:0;border-color:var(--n-line);}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(.modal-header h2,.dx-win-title) {display:flex;align-items:center;gap:12px;font:700 24px/1.3 'DM Sans',sans-serif;letter-spacing:-.6px;text-transform:none;min-width:0;}
+.n-title-plate {display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:46px;height:46px;border:1px solid var(--etx-ui-cyan-line,#537e83);border-radius:13px;background:var(--n-selected);}
+.n-title-copy {display:block;overflow-wrap:anywhere;}
+.n-title-daily::before {content:'Operación diaria';display:block;font-size:9px;letter-spacing:2.5px;font-weight:400;text-transform:uppercase;color:var(--n-muted);margin-bottom:7px;}
+.n-title-accent {color:var(--n-terra);}
+.n-ui-icon {display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;vertical-align:middle;}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) .etx-ic {width:20px;height:20px;--green:var(--n-cyan);--etx-color:currentColor;}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(.modal-body,.dx-win-body) {padding:24px;overflow-y:auto;min-height:0;max-height:none!important;scrollbar-width:thin;scrollbar-color:var(--n-line) transparent;}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) button {font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:9px;transition:background .16s,border-color .16s,color .16s;}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(.btn-ghost,.etx-min-btn,.etx-close-btn,.modal-close,.dx-win-close,#pnCptCalcBtn) {min-height:42px;padding:10px 13px!important;background:transparent!important;color:var(--text)!important;border:1px solid var(--n-line)!important;font-size:13px!important;line-height:1.3;}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(.btn-ghost,.etx-min-btn,.modal-close,.dx-win-close,#pnCptCalcBtn):hover {background:var(--n-input)!important;border-color:var(--n-cyan)!important;}
+:is(#dxOv_nominas,#modalPagoNom) :is(.btn-primary,#btnPagarNomina) {min-height:44px;padding:11px 17px!important;background:var(--n-terra)!important;color:var(--n-ink)!important;border:1px solid transparent!important;font-size:14px!important;font-weight:600;}
+:is(#dxOv_nominas,#modalPagoNom) :is(.btn-primary,#btnPagarNomina) .etx-ic {--green:var(--n-ink);}
+:is(#dxOv_nominas,#modalPagoNom) :is(.btn-primary,#btnPagarNomina):not(:disabled):hover {filter:brightness(1.08);}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(button,input,select,textarea,[tabindex]):focus-visible {outline:2px solid var(--n-cyan);outline-offset:3px;}
+:is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) button:disabled {opacity:.5;cursor:not-allowed;}
+#dxOv_nominas #nom_dxp {gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+#dxOv_nominas .dxp-tabs {border:1px solid var(--n-line);border-radius:10px;background:transparent;padding:4px;}
+#dxOv_nominas .dxp-tab {padding:9px 12px;color:var(--text);border:0;border-radius:7px;background:transparent;font-size:12px;}
+#dxOv_nominas .dxp-tab.active {background:var(--n-selected);color:var(--n-cyan);}
+#dxOv_nominas :is(#nom_val,#nom_end),#modalPagoNom .fg :is(input,select) {min-height:42px;border:1px solid var(--n-line);border-radius:9px;background:var(--n-input);color:var(--text);font-family:inherit;font-size:13px;padding:10px 12px;box-sizing:border-box;min-width:0;max-width:100%;}
+:is(#dxOv_nominas,#modalPagoNom) :is(input,select) {color-scheme:dark;}
+[data-theme="light"] :is(#dxOv_nominas,#modalPagoNom) :is(input,select) {color-scheme:light;}
+#dxOv_nominas .dxp-semana {color:var(--n-muted);}
+#dxOv_nominas .n-toolbar {display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px!important;}
+#dxOv_nominas .n-toolbar [onclick^="dxImprimir"] {margin-left:auto;}
+#dxOv_nominas .card {background:var(--n-panel);border:1px solid var(--n-line);border-radius:12px;overflow:hidden;}
+#dxOv_nominas .card-header {padding:16px;border-bottom:1px solid var(--n-line);gap:12px;flex-wrap:wrap;}
+#dxOv_nominas .card-header h2 {display:flex;align-items:center;gap:8px;font-family:inherit;font-size:14px;letter-spacing:0;text-transform:none;}
+#dxOv_nominas .gastos-table th {background:var(--n-input);font-size:9px;color:var(--n-muted);letter-spacing:1px;padding:13px 12px;border-color:var(--n-line);}
+#dxOv_nominas .gastos-table td {padding:16px 12px;border-color:var(--n-line);font-family:inherit;font-size:12px;}
+#dxOv_nominas .gastos-table .monto {font-family:inherit;font-weight:600;font-size:13px;letter-spacing:0;}
+#dxOv_nominas .gastos-table :is(.met-caja,.met-chica,.met-banco) {display:inline-flex;align-items:center;gap:6px;color:var(--n-muted);}
+#dxOv_nominas .n-status {display:inline-flex;align-items:center;gap:6px;border:1px solid var(--n-line);padding:5px 8px!important;border-radius:7px!important;background:transparent!important;letter-spacing:0!important;}
+#dxOv_nominas .n-status .etx-ic {width:15px;height:15px;--green:currentColor;}
+#dxOv_nominas .n-status-programado {color:var(--n-cyan)!important;}
+#dxOv_nominas .empty-state {padding:48px 20px!important;color:var(--n-muted);font-size:14px;line-height:1.6;}
+#dxOv_nominas .empty-state-icon {color:var(--n-cyan);opacity:1;margin-bottom:16px;}
+#dxOv_nominas .empty-state-icon .etx-ic {width:36px;height:36px;}
+#dxOv_nominas .btn-row {min-width:36px;min-height:34px;border-color:var(--n-line);}
+#modalSelPago.n-selector #selPagoBody {display:flex;flex-direction:column;gap:12px;}
+#modalSelPago.n-selector #selPagoBody > [onclick] {padding:18px!important;margin:0!important;background:var(--n-input)!important;border:1px solid var(--n-line)!important;border-radius:12px!important;gap:14px!important;min-height:76px;}
+#modalSelPago.n-selector #selPagoBody > [onclick]:hover {border-color:var(--n-cyan)!important;background:var(--n-selected)!important;}
+#modalSelPago.n-selector #selPagoBody > [onclick] > div:first-child {min-width:0;overflow-wrap:anywhere;}
+#modalSelPago.n-selector #selPagoBody > [onclick] > div:last-child {flex-shrink:0;}
+#modalSelPago.n-selector #selPagoBody > [onclick] > div:last-child > div:first-child {color:var(--n-terra)!important;font-size:17px;}
+#modalSelPago.n-selector #selPagoBody > [onclick] > div > div + div {color:var(--n-muted)!important;margin-top:5px;line-height:1.4;}
+#modalPagoNom .modal-body {display:flex;flex-direction:column;gap:24px;}
+#modalPagoNom .modal-body > * {flex-shrink:0;}
+#modalPagoNom .gs-sec {margin:0;min-width:0;}
+#modalPagoNom .gs-sec + .gs-sec {border-top:1px solid var(--n-line);padding-top:24px;}
+#modalPagoNom .gs-sec-title {color:var(--text);font-size:15px;letter-spacing:0;font-weight:600;text-transform:none;gap:10px;margin-bottom:18px;}
+#modalPagoNom .gs-sec-title::before {content:attr(data-paso);border:1px solid var(--n-line);border-radius:5px;color:var(--n-cyan);font-size:10px;font-weight:400;padding:4px 5px;letter-spacing:1px;}
+#modalPagoNom .gs-sec-title::after {display:none;}
+#modalPagoNom .fg {gap:8px;min-width:0;}
+#modalPagoNom .fg label {font-size:12px;letter-spacing:0;text-transform:none;color:var(--text);display:flex;align-items:center;gap:7px;}
+#modalPagoNom .fg-row-3 {gap:14px;grid-template-columns:repeat(3,minmax(0,1fr));}
+#modalPagoNom #pnSubtotal {opacity:1!important;}
+#modalPagoNom #pnPrimaDom {padding:14px!important;border-radius:10px!important;line-height:1.6;color:var(--accent-text,var(--accent))!important;}
+#modalPagoNom #pnPrimaDom .etx-ic {--green:currentColor;width:17px;height:17px;}
+#modalPagoNom #pnPrimaDom .n-ui-icon {margin-right:5px;}
+#modalPagoNom #pnPrimaChk {accent-color:var(--accent);flex-shrink:0;width:16px;height:16px;margin-top:4px!important;}
+#modalPagoNom #pnAsisBox {padding:14px!important;border-radius:10px!important;background:var(--n-input)!important;border-color:var(--n-line)!important;color:var(--n-muted)!important;line-height:1.6!important;}
+#modalPagoNom #pnCptMetodoWrap {margin-top:18px!important;}
+#modalPagoNom #pnCptFechaWrap + div {flex-wrap:wrap;margin-top:14px!important;}
+#modalPagoNom #pnCptList > div:has(button) {padding:12px!important;border-radius:10px!important;background:var(--n-input)!important;border-color:var(--n-line)!important;}
+#modalPagoNom #pnCptList > div > span:first-child {overflow-wrap:anywhere;}
+#modalPagoNom :is(#pnCptList,#pnTotalHint,#pnAsisBox) .n-ui-icon {margin-right:5px;}
+#modalPagoNom :is(#pnCptList,#pnTotalHint) .etx-ic {width:15px;height:15px;--green:currentColor;}
+#modalPagoNom #pnCptList button {min-width:34px;min-height:34px;border-radius:8px;border:1px solid var(--n-line)!important;}
+#modalPagoNom .n-total {border-radius:12px!important;border-color:var(--n-line)!important;background:var(--n-input)!important;padding:18px!important;flex-wrap:wrap;}
+#modalPagoNom .n-total > div:first-child > div:first-child {color:var(--n-muted)!important;}
+#modalPagoNom #pnTotal,#modalPagoNom .n-total > div:last-child > span {font-family:inherit!important;font-size:27px!important;font-weight:700;letter-spacing:-.5px!important;}
+#modalPagoNom #pnTotal {min-height:42px;max-width:100%;}
+#modalPagoNom .modal-footer {padding:18px 24px;background:var(--n-panel);border-color:var(--n-line);flex-shrink:0;gap:10px;flex-wrap:wrap;}
+@media(max-width:700px) {
+  #dxOv_nominas .gastos-table {min-width:650px;}
+  #modalPagoNom .fg-row-3 {grid-template-columns:repeat(2,minmax(0,1fr));}
+  #modalPagoNom .gs-sec:first-child .fg:first-child {grid-column:1/-1;}
+}
+@media(max-width:600px) {
+  :is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) {padding:8px;}
+  :is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(.modal,.dx-win) {max-height:calc(100dvh - 16px);border-radius:14px;}
+  :is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(.modal-header,.dx-win-hdr,.modal-body,.dx-win-body) {padding:16px;}
+  :is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) :is(.modal-header h2,.dx-win-title) {font-size:21px;}
+  #dxOv_nominas .n-toolbar [onclick^="dxImprimir"] {margin-left:0;}
+  #modalPagoNom .modal-footer {padding:14px 16px;}
+  #modalPagoNom .modal-footer .btn-primary {flex-basis:100%;}
+  #modalSelPago.n-selector #selPagoBody > [onclick] {padding:14px!important;}
+}
+@media(max-width:360px) {
+  #dxOv_nominas .dxp-tabs {width:100%;justify-content:space-between;}
+  #dxOv_nominas .dxp-tab {padding:9px 10px;}
+  #modalPagoNom .fg-row-3 {grid-template-columns:1fr;}
+}
+@media(prefers-reduced-motion:reduce) { :is(#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector) button {transition:none!important;} }

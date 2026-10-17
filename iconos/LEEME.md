@@ -85,3 +85,16 @@ Los otros 13 iconos siguen viniendo de las dos maquetas HTML del repo
 `iconos-etaax`. Conforme Edwin vaya soltando los `.svg` definitivos aquí, cada
 uno reemplaza al provisional. El candado avisa si un `.svg` cambia y nadie
 regenera.
+
+## Nóminas y autorización
+
+`nominas/oscuro/` (27 iconos, prefijo `nom-`) y `autorizacion/oscuro/`
+(5 iconos, prefijo `aut-`) vienen de `agenciaegmx-sys/iconos-etaax`,
+commit `e870966e3d027a9fb5485ded4de11a85327937c1`. Allí se conservan también las variantes
+claras y la galería `etaax-nominas-iconos.html`. La app normaliza una geometría
+por icono y adapta trazo/acento a ambos temas con el sprite compartido.
+
+Las acciones comunes reutilizan los trazos de Administrativo. Los nuevos
+dibujos cubren sueldo, conceptos, asistencia, conceptos adicionales y el ojo
+de contraseña. `administrativo/nominas-ui.*` y `admin-guard-ui.*` solo decoran
+los controles existentes; no reemplazan reglas de pagos ni autorización.

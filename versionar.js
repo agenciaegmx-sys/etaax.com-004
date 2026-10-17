@@ -39,7 +39,9 @@ const COMPARTIDOS = [
     'reporte-marca.js', 'carta-tema.js', 'nav-pref.js', 'styles.css',
     'portal-operativo.css', 'portal-operativo.js', 'staff-area.js', 'recetas/inventarios.js', 'recetas/insumos.js',
     'administrativo/gastos-ui.css', 'administrativo/gastos-ui.js',
-    'administrativo/cortes-ui.css', 'administrativo/cortes-ui.js'
+    'administrativo/cortes-ui.css', 'administrativo/cortes-ui.js',
+    'administrativo/nominas-ui.css', 'administrativo/nominas-ui.js',
+    'admin-guard-ui.css', 'admin-guard-ui.js'
 ].filter(f => fs.existsSync(path.join(RAIZ, f)));
 
 const huella = (f) =>

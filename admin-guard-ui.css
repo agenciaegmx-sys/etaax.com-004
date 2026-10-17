@@ -1,0 +1,39 @@
+/* Presentación compartida de autorización. Los errores y las acciones
+   destructivas mantienen rojo; la confirmación conserva verde. */
+#modalAdminGuard,.etaax-ui-ov.a-authorized {
+  --a-panel:var(--etx-ui-panel,#171611);--a-line:var(--etx-ui-line,#3a3830);
+  --a-text:var(--text,#f0ece4);--a-muted:var(--etx-ui-muted,#b5afa3);
+  --a-cyan:var(--etx-ui-cyan,#8ce4ee);--a-terra:var(--etx-ui-terra,#fb9b6f);
+  --a-input:#211f19;--a-selected:#1d3236;--a-ink:#13110e;
+  font-family:'DM Sans',system-ui,sans-serif;
+}
+[data-theme="light"] :is(#modalAdminGuard,.etaax-ui-ov.a-authorized) {--a-panel:var(--surface,#fff);--a-line:var(--border,#d4d0c7);--a-text:var(--text,#191a17);--a-muted:#69655b;--a-cyan:#247681;--a-input:#f7f5f0;--a-selected:#e8f3f4;--a-ink:#fff;}
+#modalAdminGuard > div {width:min(440px,100%)!important;background:var(--a-panel)!important;border-color:var(--a-line)!important;border-radius:18px!important;box-shadow:0 24px 70px rgba(0,0,0,.45);max-height:calc(100dvh - 32px);overflow-y:auto!important;}
+#modalAdminGuard > div > div {padding:22px 24px!important;border-color:var(--a-line)!important;}
+#modalAdminGuard > div > div:first-child > div:first-child {display:flex;align-items:center;gap:10px;color:var(--a-muted)!important;font-size:10px!important;letter-spacing:1.7px!important;margin-bottom:14px!important;}
+.a-ui-icon {display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;vertical-align:middle;}
+:is(#modalAdminGuard,.a-authorized) .etx-ic {width:20px;height:20px;--green:var(--a-cyan);--etx-color:currentColor;}
+#modalAdminGuard > div > div:first-child .a-ui-icon {width:40px;height:40px;border:1px solid var(--etx-ui-cyan-line,#537e83);border-radius:12px;background:var(--a-selected);color:var(--a-text);}
+#modalAdminGuard #adminGuardAccion {font-size:20px!important;font-weight:700!important;letter-spacing:-.4px;line-height:1.4;color:var(--a-text)!important;overflow-wrap:anywhere;}
+#modalAdminGuard > div > div:nth-child(2) > div:first-child {color:var(--a-muted)!important;font-size:11px!important;letter-spacing:1px!important;margin-bottom:10px!important;}
+#modalAdminGuard #adminGuardInput {height:48px!important;border:1px solid var(--a-line)!important;background:var(--a-input)!important;color:var(--a-text)!important;border-radius:10px!important;font-family:inherit;font-size:14px!important;}
+#modalAdminGuard #adminGuardInput:focus {border-color:var(--a-cyan)!important;box-shadow:0 0 0 2px var(--a-selected);}
+#modalAdminGuard #adminGuardEye {width:46px!important;height:48px!important;color:var(--a-muted)!important;}
+#modalAdminGuard #adminGuardEye:hover {color:var(--a-cyan)!important;}
+#modalAdminGuard #adminGuardError {color:var(--red,#e05a3a)!important;line-height:1.5;}
+#modalAdminGuard > div > div:last-child {gap:10px!important;flex-wrap:wrap;padding-top:18px!important;padding-bottom:18px!important;}
+#modalAdminGuard > div > div:last-child button {display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:11px 18px!important;border-radius:9px!important;font:600 13px/1.3 'DM Sans',system-ui,sans-serif!important;border:1px solid var(--a-line)!important;background:transparent!important;color:var(--a-text)!important;}
+#modalAdminGuard #adminGuardBtn {background:var(--a-terra)!important;color:var(--a-ink)!important;border-color:transparent!important;}
+#modalAdminGuard #adminGuardBtn .etx-ic {--green:currentColor;}
+#modalAdminGuard #adminGuardBtn.a-danger {background:var(--red,#e05a3a)!important;color:#fff!important;}
+#modalAdminGuard #adminGuardBtn:disabled {opacity:.6;cursor:wait!important;}
+#modalAdminGuard > div > div:last-child button:not(:disabled):hover {filter:brightness(1.1);}
+#modalAdminGuard button:focus-visible,.a-authorized button:focus-visible {outline:2px solid var(--a-cyan);outline-offset:3px;}
+.a-authorized .etaax-ui-card {background:var(--a-panel);border-color:var(--a-line);border-radius:18px;padding:24px;}
+.a-authorized .etaax-ui-card > .a-ui-icon {width:42px;height:42px;border-radius:12px;border:1px solid var(--green,#3dbe7a);color:var(--green,#3dbe7a);margin-bottom:14px;}
+.a-authorized .etaax-ui-card > .a-ui-icon .etx-ic {--green:currentColor;}
+.a-authorized .etaax-ui-msg {color:var(--a-text);font-size:14px;line-height:1.6;}
+.a-authorized .etaax-ui-btn {min-height:44px;padding:11px 18px;}
+.a-authorized .etaax-ui-btn.primary {background:var(--green,#3dbe7a);color:#0b1b11;}
+@media(max-width:480px) {#modalAdminGuard > div > div {padding:18px!important;}#modalAdminGuard #adminGuardAccion {font-size:19px!important;}}
+@media(prefers-reduced-motion:reduce) {.a-authorized,.a-authorized .etaax-ui-card {animation:none!important;}}

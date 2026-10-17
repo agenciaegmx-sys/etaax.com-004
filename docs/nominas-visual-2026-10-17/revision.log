@@ -1,0 +1,6 @@
+PASA 1440px: listado, contraseña válida/incorrecta, ojo, selector por sucursal, sueldo, prima, bono, descuento, dock, continuidad del pago y acción destructiva.
+PASA 768px: listado, contraseña válida/incorrecta, ojo, selector por sucursal, sueldo, prima, bono, descuento, dock, continuidad del pago y acción destructiva.
+PASA 390px: listado, contraseña válida/incorrecta, ojo, selector por sucursal, sueldo, prima, bono, descuento, dock, continuidad del pago y acción destructiva.
+PASA 320px: listado, contraseña válida/incorrecta, ojo, selector por sucursal, sueldo, prima, bono, descuento, dock, continuidad del pago y acción destructiva.
+Capturas /private/tmp/etaax-nominas-ui
+NOMINAS UI: 4 casos, 0 fallas. Supabase simulado; sin llamadas de producción.
