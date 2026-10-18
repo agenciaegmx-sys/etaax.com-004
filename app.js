@@ -1379,8 +1379,9 @@ function _unoPorProducto(cat, preferirMaestro) {
 /* Sub-unidades de un insumo (tercer nivel del empaque), o null si no las declara.
    Devuelve el nombre con el que el negocio las llamó ("Tostadas") y cuánto pesa una,
    que es lo que el escandallo necesita para ofrecerlas como unidad de medida.
-   `contSub` es el dato bueno; en registros viejos solo existía `contNeto` (el total
-   de la pieza) y se deriva dividiendo, igual que hace el propio catálogo. */
+   En Abarrotes se divide el contenido útil (drenado o neto) por la cantidad.
+   En otros tipos `contSub` es el dato capturado; si no existe, se deriva del
+   contenido total de la pieza, igual que hace el catálogo. */
 function getSubUnidadInsumo(insumoId) {
     if (!insumoId) return null;
     var ins = (typeof window._insumoResolver === 'function')
@@ -1389,15 +1390,16 @@ function getSubUnidadInsumo(insumoId) {
     var p = ins && (ins.presentaciones || [])[0];
     if (!p) return null;
     var n = parseFloat(p.unidadesPorPieza) || 0;
-    if (!(n > 1)) return null;
+    if (!(n > (ins.tipoInsumo === 'abarrote' ? 0 : 1))) return null;
     var costo = parseFloat(p.costoSubUnidad) || 0;
     if (!(costo > 0)) return null;
-    var cada = (p.contSub !== undefined && p.contSub !== '')
+    var util = ins.tipoInsumo === 'abarrote' ? EtaaxCore.costosAbarrote(p) : null;
+    var cada = util ? util.contenidoSubUnidad : (p.contSub !== undefined && p.contSub !== '')
         ? parseFloat(p.contSub) || 0
         : (parseFloat(p.contNeto) || 0) / n;
     var nombre = (p.nombreSubUnidad || '').trim() || 'Sub-unidad';
     return { nombre: nombre, singular: nombre.replace(/s$/i, ''), porPieza: n,
-             costo: costo, cada: cada, um: (p.umContenido || 'G').toUpperCase() };
+             costo: costo, cada: cada, um: util ? util.umBase : (p.umContenido || 'G').toUpperCase() };
 }
 // Peso bruto (ml/g) que aporta UNA sub-unidad.
 function _contSubBrutoML(insumoId) {
@@ -1420,6 +1422,10 @@ function getContenidoPorPieza(insumoId) {
     // Buscar presentación con contenido medible (ML/G/LT/KG/OZ)
     for (var k = 0; k < pres.length; k++) {
         var p = pres[k];
+        if (ins.tipoInsumo === 'abarrote') {
+            var util = EtaaxCore.costosAbarrote(p);
+            if (util.contenidoBase > 0) return util.contenidoBase;
+        }
         var cont = parseFloat(p.contNeto) || 0;
         var um   = (p.umContenido || 'ML').toUpperCase();
         var f    = factorToML[um];

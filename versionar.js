@@ -30,7 +30,7 @@ const RAIZ = __dirname;
 /* La capa compartida: lo que cargan varias páginas y cambia con el producto.
    No entra `app-movil/` (tiene su propio service worker) ni lo de un solo uso. */
 const COMPARTIDOS = [
-    'etaax-core.js', 'etaax-db.js', 'etaax-store.js', 'etaax-iconos.js', 'etaax-header.js',
+    'etaax-core.js', 'app.js', 'etaax-db.js', 'etaax-store.js', 'etaax-iconos.js', 'etaax-header.js',
     'etaax-sidebar.js', 'etaax-sidebar.css', 'etaax-modulos-ui.js', 'etaax-modulos-ui.css',
     'hub-modulos.js', 'hub-modulos.css', 'hub-paleta.css', 'hub-globales.css', 'hub-interacciones.js',
     'novedades.js', 'theme.js', 'ctx-bar.js', 'global-nav.js', 'financiero/nav.js',
@@ -92,6 +92,14 @@ paginas('').concat(fs.existsSync(path.join(RAIZ, SW)) ? [SW] : []).forEach(rel =
                atributo. Así quedó un `?v=f7366b4c14248>` que nadie entiende. */
             : new RegExp('((?:src|href)="(?:\\.\\.\\/|\\.\\/|\\/)?' + esc + ')(\\?[^"]*)?(")', 'g');
         txt = txt.replace(re, (m, inicio, q, comilla) => {
+            // app-movil/app.js es otro archivo: resolver la ruta de la página
+            // evita estamparle la huella de /app.js solo por compartir nombre.
+            if (rel !== SW) {
+                const ruta = inicio.slice(inicio.indexOf('"') + 1);
+                const destino = ruta.startsWith('/') ? ruta.slice(1)
+                    : path.posix.normalize(path.posix.join(path.posix.dirname(rel), ruta));
+                if (destino !== f) return m;
+            }
             if (q === '?v=' + esperado[f]) return m;
             desfasadas.push(rel + ' → ' + f);
             return inicio + '?v=' + esperado[f] + (comilla || '"');

@@ -672,6 +672,10 @@ function _normIngrediente(ing) {
     var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing.insumoId) : null;
     var p   = ins && (ins.presentaciones || [])[0];
     if (!p) return { cant: cant, unidad: 'G' };
+    if (ins.tipoInsumo === 'abarrote') {
+        var util = EtaaxCore.costosAbarrote(p);
+        if (util.contenidoSubUnidad > 0) return { cant: cant * util.contenidoSubUnidad, unidad: util.umBase };
+    }
     var n    = parseFloat(p.unidadesPorPieza) || 0;
     // `contSub` es el contenido de UNA sub-unidad; en registros viejos solo había
     // `contNeto` (el total de la pieza) y se deriva dividiendo, igual que el catálogo.
@@ -974,10 +978,23 @@ function ingredienteBase(cantidad, unidad) {
 // Unidad base de un insumo de alimentos según su presentación.
 function unidadBaseInsumo(ins) {
     const p = ((ins && ins.presentaciones) || [])[0] || {};
+    if (ins && ins.tipoInsumo === 'abarrote') {
+        var util = EtaaxCore.costosAbarrote(p);
+        if (util.contenidoBase > 0) return util.umBase;
+    }
     const u = (p.umContenido || '').toUpperCase();
     if (u === 'KG' || u === 'G') return 'G';
     if (u === 'LT' || u === 'ML') return 'ML';
     return 'PZA';
+}
+function _contenidoBasePresentacion(ins, p) {
+    if (ins.tipoInsumo === 'abarrote') {
+        var util = EtaaxCore.costosAbarrote(p);
+        if (util.contenidoBase > 0) return util.contenidoBase;
+    }
+    var um = (p.umContenido || 'ML').toUpperCase();
+    var cn = parseFloat(p.contNeto) || 0;
+    return (um === 'LT' || um === 'KG') ? cn * 1000 : cn;
 }
 /* Consumo teórico de un insumo por las recetas vendidas, en UNIDAD BASE (ml/g/pza),
    venga de donde venga: bebidas o alimentos. Los dos montones son disjuntos (una
@@ -2701,9 +2718,7 @@ function _filaLive(fila, sucursal) {
     var p = (ins.presentaciones && ins.presentaciones[0]) || {};
     var esFood = (ins.familia || '').toLowerCase().indexOf('aliment') >= 0;
     var esPza  = _esRefrescoCerveza(ins);
-    var umP = (p.umContenido || 'ML').toUpperCase();
-    var cn = parseFloat(p.contNeto) || 0;
-    var contBase = (umP === 'LT' || umP === 'KG') ? cn * 1000 : cn;
+    var contBase = _contenidoBasePresentacion(ins, p);
     var m = Object.assign({}, fila); // conserva cerradas*, pesos, existenciaPeso, entradas, etc.
     m.nombre = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
     m.categoria = ins.categoria || m.categoria || '';
@@ -5098,10 +5113,9 @@ function cargarProductosCaptura() {
             // lo ya contado (pesos capturados, cerradas, entradas, mermas…).
             {
                 const pEx  = (ins.presentaciones || [])[0] || {};
-                const umEx = (pEx.umContenido || 'ML').toUpperCase();
-                const cnEx = parseFloat(pEx.contNeto) || 0;
-                const contBaseEx = (umEx === 'LT' || umEx === 'KG') ? cnEx * 1000 : cnEx;
+                const contBaseEx = _contenidoBasePresentacion(ins, pEx);
                 if (contBaseEx > 0) existe.contNeto = contBaseEx;
+                if (ins.tipoInsumo === 'abarrote') existe.baseUnit = unidadBaseInsumo(ins);
                 const pcEx = parseFloat(pEx.pesoCristal);
                 if (!isNaN(pcEx)) existe.pesoCristal = pcEx; // puede bajar a 0 a propósito
                 existe.rendimientoBatch = parseFloat(pEx.rendimiento) || 0; // sub-recetas: ml/g por batch
@@ -5131,12 +5145,8 @@ function cargarProductosCaptura() {
         const copaML = _copaMLInsumo(ins);
 
         const pesoCristal = parseFloat(p?.pesoCristal) || 0;
-        const _umP = (p?.umContenido || 'ML').toUpperCase();
-        // Contenido neto en unidad base: licor en ML; alimentos en g/ml/pza (KG/LT → ×1000).
-        const contBase = (() => {
-            const cn = parseFloat(p?.contNeto) || 0;
-            return (_umP === 'LT' || _umP === 'KG') ? cn * 1000 : cn;
-        })();
+        // Abarrotes: contenido utilizable (drenado si existe), en g/ml.
+        const contBase = _contenidoBasePresentacion(ins, p || {});
 
         return {
             insumoId: _cid, // id canónico (maestro), aunque `ins` sea copia por sucursal

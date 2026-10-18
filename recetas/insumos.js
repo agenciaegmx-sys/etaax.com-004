@@ -1544,7 +1544,9 @@
        if (!p) return '—';
        var cont = [p.contNeto, (p.umContenido || '')].filter(Boolean).join(' ');
        var n    = parseFloat(p.unidadesPorPieza) || 0;
-       var sub  = (n > 1) ? (' (' + n + ' × ' + _contSubDe(p) + ' ' + (p.umContenido || '') + ')') : '';
+       var sub  = (n > 1) ? (ins.tipoInsumo === 'abarrote'
+           ? ' (' + n + ' ' + _subUnidadNombre(p) + ')'
+           : ' (' + n + ' × ' + _contSubDe(p) + ' ' + (p.umContenido || '') + ')') : '';
        return ([p.presentacionCompra || '', ins.empaque || '', cont].filter(Boolean).join(' · ') || '—') + sub;
    }
 
@@ -3472,11 +3474,7 @@
    // ── Helpers de presentaciones ────────────────────────────────
    /** Factor de precio según selección de impuesto y checkboxes manuales */
    function calcImpFactor(p) {
-       if (p.incluyeImpuesto !== '0') return 1; // precio ya incluye impuesto
-       let f = 1;
-       if (p.ivaCheck  === '1') f *= 1.16;
-       if (p.iepsCheck === '1') f *= (1 + parseFloat(p.iepsTasa || '26.5') / 100);
-       return f;
+       return EtaaxCore.factorImpuestoPresentacion(p);
    }
 
    // ── Presentaciones ────────────────────────────────────────────
@@ -4196,15 +4194,27 @@
        return n || 'unidad';
    }
    function _subUnidadCardHTML(p, i) {
-       var hay = parseFloat(p.unidadesPorPieza) > 1;
+       var hay = parseFloat(p.unidadesPorPieza) > (tipoInsumoActual === 'abarrote' ? 0 : 1);
        var v = parseFloat(p.costoSubUnidad) || 0;
        return '<div class="meta-item" id="box-subun-'+i+'"'+(hay?'':' style="display:none"')+'>'
            + '<label id="lbl-subun-'+i+'">Costo por '+etx(_subUnidadNombre(p))+' '+_MXN+'</label>'
            + '<div id="ref-subun-'+i+'" style="background:var(--surface);border:1px solid var(--blue);border-radius:6px;'
-           + 'padding:8px 12px;font-size:14px;color:var(--blue);font-weight:700">'+fmtMXN(v, 3)+'</div></div>';
+           + 'padding:8px 12px;font-size:14px;color:var(--blue);font-weight:700">'+fmtMXN(v, 3)+'</div>'
+           + '<div id="peso-subun-'+i+'" style="font-size:11px;color:var(--text-dim);margin-top:6px">'
+           + _pesoSubUnidadTexto(p) + '</div></div>';
    }
 
-   /* CONTENIDO: se captura el de UNA sub-unidad (una tostada, una vara, una lata),
+   function _pesoSubUnidadTexto(p) {
+       if (tipoInsumoActual !== 'abarrote') return '';
+       var c = EtaaxCore.costosAbarrote(p);
+       return c.contenidoSubUnidad > 0 ? 'Contenido por unidad: '
+           + Number(c.contenidoSubUnidad.toFixed(4)) + ' ' + c.umBase
+           + (c.drenada ? ' · masa drenada' : ' · contenido neto') : '';
+   }
+
+   /* En otros tipos se captura el contenido de UNA sub-unidad; Abarrotes
+      captura directamente contNeto (el empaque), sin pasar por estos helpers.
+      CONTENIDO: se captura el de UNA sub-unidad (una tostada, una vara, una lata),
       que es lo que la gente tiene a la mano. El sistema multiplica por cuántas trae
       la pieza y guarda el TOTAL en contNeto — la llave que leen inventarios y
       recetas, que no cambia de significado. Antes se pedía el peso del paquete
@@ -4235,6 +4245,15 @@
    }
    function _hintSubUnidadTexto(p) {
        var n = parseFloat(p.unidadesPorPieza) || 0;
+       if (tipoInsumoActual === 'abarrote') {
+           var c = EtaaxCore.costosAbarrote(p);
+           if (!(n > 0) || !(c.contenidoBase > 0)) return '';
+           return etx(n) + ' ' + etx(_subUnidadNombre(p)) + ' en '
+               + Number(c.contenidoBase.toFixed(4)) + ' ' + c.umBase
+               + (c.drenada ? ' de masa drenada' : ' de contenido neto')
+               + '. Cada unidad: <b>' + Number(c.contenidoSubUnidad.toFixed(4)) + ' ' + c.umBase
+               + '</b>. La cantidad de piezas no modifica el contenido capturado.';
+       }
        var cada = parseFloat(_contSubDe(p)) || 0;
        if (!(n > 1) || cada <= 0) return '';
        var um = (p.umContenido || 'G').toUpperCase();
@@ -4261,46 +4280,15 @@
    function _presEsGranel(nom) {
        return _PRES_A_GRANEL.indexOf(String(nom || '').toLowerCase().trim()) >= 0;
    }
-   function _calcCostosAbarrote(p, precioEfectivo, contML) {
-       const cantPres = parseFloat(p.cantPresCompra) || 1;
-       const presCompra = p.presentacionCompra || 'Pieza';
-
-       // Antes solo dividían Caja, Paquete y Costal. Una BOLSA de 16 piezas, una
-       // rejilla, un tarro — o cualquier concepto que el negocio agregue con
-       // "＋ Agregar concepto" — se quedaban sin dividir y el costo por pieza
-       // salía igual al precio de TODA la caja. Lo que manda es la cantidad, no
-       // cómo se llame el empaque; se excluye solo lo que se compra a granel.
-       const piezasEnPack = (cantPres > 1 && !_presEsGranel(presCompra)) ? cantPres : 1;
-       const costoPieza = precioEfectivo / piezasEnPack;
-       p.costoPieza = costoPieza.toFixed(2);
-       _calcCostoSubUnidad(p, costoPieza);
-
-       // Si hay masa drenada usar ese contenido para el costo, si no el contenido del producto
-       const masaDrena  = parseFloat(p.masaDrenada) || 0;
-       const umEfectivo = masaDrena > 0
-           ? (p.umMasaDrenada || 'G').toUpperCase()
-           : (p.umContenido   || 'G').toUpperCase();
-       const contEfML   = masaDrena > 0 ? toML(masaDrena, umEfectivo) : contML;
-
-       if (umEfectivo === 'ML') {
-           p.costoUnitario = contEfML > 0 ? (costoPieza / contEfML).toFixed(4) : '0';
-           p.umCosto = 'ML';
-       } else if (umEfectivo === 'LT') {
-           p.costoUnitario = contEfML > 0 ? (costoPieza / (contEfML / 1000)).toFixed(2) : '0';
-           p.umCosto = 'LT';
-       } else if (umEfectivo === 'G') {
-           p.costoUnitario = contEfML > 0 ? (costoPieza / contEfML).toFixed(4) : '0';
-           p.umCosto = 'G';
-       } else if (umEfectivo === 'KG') {
-           p.costoUnitario = contEfML > 0 ? (costoPieza / (contEfML / 1000)).toFixed(2) : '0';
-           p.umCosto = 'KG';
-       } else if (['PZA','CARGA','PORCION'].includes(umEfectivo)) {
-           p.costoUnitario = costoPieza.toFixed(2);
-           p.umCosto = 'PZA';
-       } else {
-           p.costoUnitario = contEfML > 0 ? (costoPieza / (contEfML / 1000)).toFixed(2) : '0';
-           p.umCosto = 'KG';
-       }
+   function _calcCostosAbarrote(p, precioEfectivo) {
+       const costos = EtaaxCore.costosAbarrote(p, precioEfectivo);
+       p.costoPieza = costos.costoPieza.toFixed(8);
+       p.costoUnitario = costos.costoUnitario.toFixed(8);
+       p.umCosto = costos.umCosto;
+       p.costoSubUnidad = parseFloat(p.unidadesPorPieza) > 0 ? costos.costoSubUnidad.toFixed(8) : '';
+       // Ya no se captura peso por cereza: se obtiene del contenido útil / cantidad.
+       // Quitar el valor derivado viejo evita que un consumidor use gramos obsoletos.
+       delete p.contSub;
    }
 
    function _calcCostosBarril(p, precioEfectivo, contML) {
@@ -4409,11 +4397,11 @@
    function updPres(i, campo, val) {
        presentacionesTemp[i][campo] = val;
        const p = presentacionesTemp[i];
-       // El contenido se teclea POR SUB-UNIDAD; contNeto guarda el total de la pieza.
+       // Otros tipos capturan contenido por sub-unidad; Abarrotes captura el total.
        if (campo === 'contSub') _setContSub(p, val);
        // Cambiar cuántas sub-unidades trae la pieza recalcula el total con el mismo
        // contenido unitario (14 varas → 20 varas, sin volver a teclear los gramos).
-       if (campo === 'unidadesPorPieza') _setContSub(p, _contSubDe(p));
+       if (campo === 'unidadesPorPieza' && tipoInsumoActual !== 'abarrote') _setContSub(p, _contSubDe(p));
    
        // ── 1. Auto-calcular costoUnitario desde precio + contenido ──
        // Solo si el usuario no lo ha llenado manualmente o si cambia precio/contenido
@@ -4422,7 +4410,7 @@
        const contML         = toML(p.contNeto, p.umContenido || 'ML');
    
        const _triggerCosto = ['precio','contNeto','contSub','umContenido','cantPresCompra','presentacionCompra','umPresCompra','factorPieza','tamanoCopa','ivaCheck','iepsCheck','iepsTasa','incluyeImpuesto','masaDrenada','umMasaDrenada','unidadesPorPieza','nombreSubUnidad'];
-       if (_triggerCosto.includes(campo) && precioEfectivo > 0) {
+       if (_triggerCosto.includes(campo) && (precioEfectivo > 0 || tipoInsumoActual === 'abarrote')) {
            if (tipoInsumoActual === 'cerveza_barril') {
                _calcCostosBarril(p, precioEfectivo, contML);
            } else if (['refresco','cerveza'].includes(tipoInsumoActual)) {
@@ -4430,7 +4418,7 @@
            } else if (tipoInsumoActual === 'carne' || tipoInsumoActual === 'fruta') {
                _calcCostosProteina(p, precioEfectivo);
            } else if (tipoInsumoActual === 'abarrote') {
-               _calcCostosAbarrote(p, precioEfectivo, contML);
+               _calcCostosAbarrote(p, precioEfectivo);
            } else if (contML > 0) {
                p.costoUnitario = (precioEfectivo / (contML / 1000)).toFixed(2);
                p.umCosto = 'LT';
@@ -4474,10 +4462,32 @@
                const _elUW = document.getElementById('box-subun-'+i);
                const _elU  = document.getElementById('ref-subun-'+i);
                const _elUL = document.getElementById('lbl-subun-'+i);
-               const _hay  = parseFloat(p.unidadesPorPieza) > 1;
+               const _hay  = parseFloat(p.unidadesPorPieza) > (tipoInsumoActual === 'abarrote' ? 0 : 1);
                if (_elUW) _elUW.style.display = _hay ? '' : 'none';
                if (_elU)  _elU.textContent  = fmtMXN(parseFloat(p.costoSubUnidad)||0, 3);
                if (_elUL) _elUL.textContent = 'Costo por '+_subUnidadNombre(p)+' MXN';
+               const _elPeso = document.getElementById('peso-subun-'+i);
+               if (_elPeso) _elPeso.textContent = _pesoSubUnidadTexto(p);
+               if (tipoInsumoActual === 'abarrote') {
+                   const _medible = ['KG','LT'].includes(_um2);
+                   const _lblPieza = document.getElementById('lbl-pieza-'+i);
+                   const _compraMedida = ['G','KG','ML','LT','OZ'].includes((p.umPresCompra||'').toUpperCase());
+                   if (_lblPieza) _lblPieza.textContent = (_compraMedida ? 'Costo por referencia ' : 'Costo por empaque ')+'MXN';
+                   const _lbl = document.getElementById('lbl-costobase-'+i);
+                   const _lblSmall = document.getElementById('lbl-costosmall-'+i);
+                   if (_lbl) _lbl.textContent = 'Costo por '+(_medible ? _um2 : 'KG/LT')+' MXN';
+                   if (_lblSmall) _lblSmall.textContent = 'Costo por '+(_um2 === 'KG' ? 'G' : 'ML')+' MXN';
+                   if (_elC) _elC.textContent = _medible ? fmtMXN(_cuBig2) : '—';
+                   if (_elS) _elS.textContent = _medible ? fmtMXN(_cuSmall2, 3) : '—';
+                   // La leyenda también debe reaccionar: quitar masa drenada no
+                   // puede dejar «900 G» visibles junto a costos ya recalculados.
+                   const _drenada = parseFloat(p.masaDrenada) > 0;
+                   const _impuestos = p.incluyeImpuesto === '0' && (p.ivaCheck === '1' || p.iepsCheck === '1');
+                   const _bloque = document.getElementById('precio-final-block-'+i);
+                   const _masa = document.getElementById('precio-final-masa-'+i);
+                   if (_bloque) _bloque.style.display = _drenada || _impuestos ? '' : 'none';
+                   if (_masa) _masa.textContent = _drenada ? 'Masa drenada: '+p.masaDrenada+' '+(p.umMasaDrenada||'G') : '';
+               }
                _pintarHintSubUnidad(p, i);
            }
        }
@@ -4681,7 +4691,7 @@
        const _hasMasaDrenada = esAbarrote && parseFloat(p.masaDrenada) > 0;
        const _hasImpuesto    = !dis && (p.ivaCheck==='1' || p.iepsCheck==='1');
        let precioFinalHtml = '';
-       if (_hasMasaDrenada || _hasImpuesto) {
+       if (esAbarrote || _hasMasaDrenada || _hasImpuesto) {
            const base   = parseFloat(p.precio)||0;
            let factor   = 1;
            let tags     = '';
@@ -4690,11 +4700,9 @@
                if (p.iepsCheck==='1') factor *= (1 + parseFloat(p.iepsTasa||'26.5')/100);
                tags = [p.ivaCheck==='1'?'+ IVA 16%':'', p.iepsCheck==='1'?'+ IEPS '+(p.iepsTasa||'26.5')+'%':''].filter(Boolean).join(' · ');
            }
-           const masaLabel = _hasMasaDrenada
-               ? `<div style="font-size:9px;color:var(--text-dim);margin-top:2px">Masa drenada: ${p.masaDrenada} ${p.umMasaDrenada||'G'}</div>`
-               : '';
-           precioFinalHtml = `<div class="meta-item" style="margin-top:10px" id="precio-final-block-${i}">
-               <label>${_hasImpuesto ? 'Precio final (c/impuestos)' : 'Precio base (masa drenada)'} ${_MXN}</label>
+           const masaLabel = `<div id="precio-final-masa-${i}" style="font-size:9px;color:var(--text-dim);margin-top:2px">${_hasMasaDrenada ? 'Masa drenada: '+p.masaDrenada+' '+(p.umMasaDrenada||'G') : ''}</div>`;
+           precioFinalHtml = `<div class="meta-item" style="margin-top:10px;${_hasMasaDrenada || _hasImpuesto ? '' : 'display:none'}" id="precio-final-block-${i}">
+               <label>${_hasImpuesto ? 'Precio final (c/impuestos)' : 'Precio de compra'} ${_MXN}</label>
                <div style="background:var(--surface);border:1px solid var(--green-dim);border-radius:6px;padding:8px 12px">
                    <div id="precio-final-val-${i}" style="font-size:15px;font-weight:700;color:var(--green)">${fmtMXN(base * factor)}</div>
                    ${tags ? `<div style="font-size:9px;color:var(--text-dim);margin-top:2px">${tags}</div>` : ''}
@@ -4765,14 +4773,15 @@
            const _cuBig   = ['ML','G'].includes(_um) ? _cu * 1000 : _cu;
            const _cuSmall = ['LT','KG'].includes(_um) ? _cu / 1000 : _cu;
 
-           innerHtml = (!_esPieza
-               ? '<div class="meta-item"><label>Costo por pieza '+_MXN+'</label>'
+           const _compraMedida = ['G','KG','ML','LT','OZ'].includes((p.umPresCompra||'').toUpperCase());
+           innerHtml = ((!_esPieza || esAbarrote)
+               ? '<div class="meta-item"><label id="lbl-pieza-'+i+'">'+(esAbarrote ? (_compraMedida ? 'Costo por referencia ' : 'Costo por empaque ') : 'Costo por pieza ')+_MXN+'</label>'
                  + '<div id="ref-pieza-'+i+'" style="background:var(--surface);border:1px solid var(--green-dim);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--green);font-weight:600">'+fmtMXN(_cp)+'</div></div>'
                : '')
-               + (!_esPieza ? '<div class="meta-item"><label>Costo por KG/LT '+_MXN+'</label>'
-               + '<div id="ref-costoum-'+i+'" style="background:var(--surface);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:700">'+fmtMXN(_cuBig)+'</div></div>' : '')
-               + (!_esPieza ? '<div class="meta-item"><label>Costo por ML/GR '+_MXN+'</label>'
-               + '<div id="ref-costomlgr-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--text-dim);font-weight:600">'+fmtMXN(_cuSmall, 3)+'</div></div>' : '')
+               + ((!_esPieza || esAbarrote) ? '<div class="meta-item"><label id="lbl-costobase-'+i+'">Costo por '+(esAbarrote && ['KG','LT'].includes(_um) ? _um : 'KG/LT')+' '+_MXN+'</label>'
+               + '<div id="ref-costoum-'+i+'" style="background:var(--surface);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:700">'+(esAbarrote && _um === 'PZA' ? '—' : fmtMXN(_cuBig))+'</div></div>' : '')
+               + ((!_esPieza || esAbarrote) ? '<div class="meta-item"><label id="lbl-costosmall-'+i+'">Costo por '+(esAbarrote ? (_um === 'KG' ? 'G' : 'ML') : 'ML/GR')+' '+_MXN+'</label>'
+               + '<div id="ref-costomlgr-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--text-dim);font-weight:600">'+(esAbarrote && _um === 'PZA' ? '—' : fmtMXN(_cuSmall, 3))+'</div></div>' : '')
                + _subUnidadCardHTML(p, i);
        } else {
            innerHtml = `<div class="meta-item">
@@ -5086,6 +5095,7 @@
        if (_btnC) _btnC.style.display = tieneCopa ? '' : 'none';
        document.getElementById('listaPresentaciones').innerHTML =
            presentacionesTemp.map((pRaw, i) => {
+               if (esAbarrote && parseFloat(pRaw.precio) > 0) _calcCostosAbarrote(pRaw, parseFloat(pRaw.precio) * calcImpFactor(pRaw));
                const p = _escCampos(pRaw);
                const contNeto   = parseFloat(p.contNeto)   || 0;
                const pesoUnidad = parseFloat(p.pesoUnidad) || 0;
@@ -5165,7 +5175,7 @@
                         contenido — dos niveles, que "Cantidad" ya cubre. -->
                    <div class="mg-2" style="margin-top:2px">
                        <div class="meta-item">
-                           <label>Cada pieza trae (opcional)</label>
+                           <label>${esAbarrote ? 'Piezas por empaque (opcional)' : 'Cada pieza trae (opcional)'}</label>
                            <input type="number" value="${p.unidadesPorPieza||''}" placeholder="Ej. 40" min="0" step="1"
                                oninput="updPres(${i},'unidadesPorPieza',this.value)">
                        </div>
@@ -5176,8 +5186,8 @@
                        </div>
                    </div>
                    <div style="font-size:10.5px;color:var(--text-dim);margin:-4px 0 4px;line-height:1.5">
-                       Para empaques de tres niveles: una caja de 16 bolsas y cada bolsa con 40 tostadas
-                       → te da el costo de la bolsa <b>y</b> el de cada tostada.
+                       ${esAbarrote ? 'Ej. 150 cerezas en un bote o 16 huevos en 1 KG. El contenido de abajo corresponde al empaque completo o a esa unidad de referencia, no a cada cereza o huevo.'
+                           : 'Para empaques de tres niveles: una caja de 16 bolsas y cada bolsa con 40 tostadas → te da el costo de la bolsa <b>y</b> el de cada tostada.'}
                    </div>`}` : ''}
 
                    <!-- Proveedor/Zona (todos los tipos) -->
@@ -5206,11 +5216,12 @@
                    <div class="mg-2">
                        <div class="meta-item">
                            <label>${esBarril ? 'Contenido por vaso/jarra'
+                               : esAbarrote ? 'Contenido por pieza / empaque (neto)'
                                : (parseFloat(p.unidadesPorPieza) > 1
                                    ? 'Contenido de cada <span style="text-transform:none;letter-spacing:0;color:var(--blue)">'+etx(_subUnidadNombre(p).replace(/s$/,''))+'</span>'
                                    : 'Contenido por pieza')}</label>
-                           <input type="number" value="${_contSubDe(p)}" placeholder="${esCarne?'1000':esAbarrote?'500':'700'}"
-                               oninput="updPres(${i},'contSub',this.value)">
+                           <input type="number" value="${esAbarrote ? (p.contNeto||'') : _contSubDe(p)}" placeholder="${esCarne?'1000':esAbarrote?'500':'700'}" min="0" step="any"
+                               oninput="updPres(${i},'${esAbarrote ? 'contNeto' : 'contSub'}',this.value)">
                        </div>
                        <div class="meta-item">
                            <label>Unidad</label>
@@ -5226,8 +5237,8 @@
                    <!-- Masa drenada (solo abarrotes) -->
                    ${esAbarrote ? `<div class="mg-2">
                        <div class="meta-item">
-                           <label>Masa drenada</label>
-                           <input type="number" value="${p.masaDrenada||''}" placeholder="0"
+                           <label>Masa drenada por empaque (opcional)</label>
+                           <input type="number" value="${p.masaDrenada||''}" placeholder="0" min="0" step="any"
                                oninput="updPres(${i},'masaDrenada',this.value)">
                        </div>
                        <div class="meta-item">

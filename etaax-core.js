@@ -1753,7 +1753,66 @@
         return n(salarioDiarioDefault) > 0;
     }
 
+    /* Abarrotes: contNeto siempre es el contenido de UNA pieza/empaque de
+       referencia. Contar cerezas/huevos nunca multiplica ese contenido.
+       La masa drenada, cuando existe, es el contenido que se puede utilizar. */
+    function contenidoUtilPresentacion(p) {
+        p = p || {};
+        var drenada = n(p.masaDrenada) > 0;
+        var cantidad = Math.max(0, n(drenada ? p.masaDrenada : p.contNeto));
+        var um = String((drenada ? p.umMasaDrenada : p.umContenido) || 'G').toUpperCase();
+        var factores = { G:1, KG:1000, ML:1, LT:1000, OZ:29.5735 };
+        return { cantidad: cantidad, um: um, base: cantidad * (factores[um] || 0),
+                 umBase: ['G','KG'].indexOf(um) >= 0 ? 'G' : 'ML', drenada: drenada };
+    }
+    function factorImpuestoPresentacion(p) {
+        if (p.incluyeImpuesto !== '0') return 1;
+        return (p.ivaCheck === '1' ? 1.16 : 1) *
+            (p.iepsCheck === '1' ? 1 + n(p.iepsTasa || '26.5') / 100 : 1);
+    }
+    function costosAbarrote(p, precioEfectivo) {
+        p = p || {};
+        var precio = Math.max(0, precioEfectivo === undefined
+            ? n(p.precio) * factorImpuestoPresentacion(p) : n(precioEfectivo));
+        var cantidad = n(p.cantPresCompra) > 0 ? n(p.cantPresCompra) : 1;
+        var umCompra = String(p.umPresCompra || '').toUpperCase();
+        // La unidad manda, incluso si la presentación se llama Bolsa o Costal.
+        // Las fichas antiguas sin unidad conservan su referencia Kilo/Litro.
+        if (!umCompra) {
+            var nombre = String(p.presentacionCompra || '').toLowerCase().trim();
+            if (/^(kilo|kilos|granel|a granel|a granel — kg)$/.test(nombre)) umCompra = 'KG';
+            else if (/^(litro|litros)$/.test(nombre)) umCompra = 'LT';
+            else if (/^(gramo|gramos)$/.test(nombre)) umCompra = 'G';
+        }
+        var factores = { G:1, KG:1000, ML:1, LT:1000, OZ:29.5735 };
+        var compraBase = cantidad * (factores[umCompra] || 0);
+        var neto = Math.max(0, n(p.contNeto)) * (factores[String(p.umContenido || 'G').toUpperCase()] || 0);
+        var util = contenidoUtilPresentacion(p);
+        var piezas = cantidad;
+        if (compraBase > 0) {
+            var pesoCompra = ['G','KG'].indexOf(umCompra) >= 0;
+            var pesoNeto = ['G','KG'].indexOf(String(p.umContenido || 'G').toUpperCase()) >= 0;
+            // Una compra de 5 KG puede describir una referencia de 1 KG con
+            // 16 huevos. Su costo de referencia es 1/5 del importe comprado.
+            var referencia = neto > 0 && pesoCompra === pesoNeto ? neto : factores[umCompra];
+            piezas = compraBase / referencia;
+            if (!(util.base > 0)) util = { base: referencia, umBase: pesoCompra ? 'G' : 'ML', drenada:false };
+        }
+        var costoPieza = precio / piezas;
+        var porPieza = Math.max(0, n(p.unidadesPorPieza));
+        var medible = util.base > 0;
+        return { costoCompra: precio, costoPieza: costoPieza,
+            costoUnitario: medible ? costoPieza * 1000 / util.base : costoPieza,
+            umCosto: medible ? (util.umBase === 'G' ? 'KG' : 'LT') : 'PZA',
+            costoSubUnidad: porPieza > 0 ? costoPieza / porPieza : 0,
+            contenidoSubUnidad: porPieza > 0 ? util.base / porPieza : 0,
+            contenidoBase: util.base, umBase: util.umBase, drenada: util.drenada };
+    }
+
     window.EtaaxCore = {
+        contenidoUtilPresentacion: contenidoUtilPresentacion,
+        factorImpuestoPresentacion: factorImpuestoPresentacion,
+        costosAbarrote: costosAbarrote,
         sueldoDiarioEfectivo: sueldoDiarioEfectivo,
         baseMensualStaff: baseMensualStaff,
         sueldoEsDelMinimo: sueldoEsDelMinimo,

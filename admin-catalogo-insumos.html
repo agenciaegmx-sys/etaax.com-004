@@ -3,6 +3,8 @@
 <head>
 <script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
     <meta charset="UTF-8">
+    <script src="/etaax-core.js?v=36ef24d3"></script>
+    <link id="adminInsumosScript" rel="preload" as="script" href="/recetas/insumos.js?v=c716419c">
     <script src="/theme.js?v=e6b90817"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -627,7 +629,7 @@ function _loadInsumosJS(callback) {
     l.src = 'insumo-label.js';
     l.onload = l.onerror = function () {
         var s = document.createElement('script');
-        s.src = 'recetas/insumos.js';
+        s.src = document.getElementById('adminInsumosScript').href;
         s.onload = callback;
         document.body.appendChild(s);
     };

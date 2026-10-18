@@ -27693,7 +27693,13 @@ console.log('\n══ BE18 · La caché no se mezcla ══');
             paginas.forEach(rel => {
                 const txt = fs.readFileSync(path.join(RAIZ, rel), 'utf8');
                 let m;
-                while ((m = re.exec(txt))) if (m[2] !== esperado) desfasados.add(f);
+                while ((m = re.exec(txt))) {
+                    // El navegador resuelve desde la página: app-movil/app.js
+                    // no es /app.js. Comparar solo nombres exigía la huella ajena.
+                    const ruta = m[0].match(/="([^"?]*)/)[1];
+                    const real = new URL(ruta, 'https://fixture.invalid/' + rel).pathname.slice(1);
+                    if (real === f && m[2] !== esperado) desfasados.add(f);
+                }
             });
         });
         /* Y que la huella esté BIEN ESCRITA. Al extender el versionado a la app
@@ -27720,6 +27726,24 @@ console.log('\n══ BE18 · La caché no se mezcla ══');
             eq(desfasados.size, 0,
                'el navegador seguiría sirviendo la copia vieja de: ' + [...desfasados].join(', ') +
                ' — corre `node versionar.js`'));
+        test('versionar conserva app-movil/app.js y actualiza el app.js del escandallo', () => {
+            const { execFileSync } = require('child_process');
+            const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(),'etaax-versionar-rutas-'));
+            try {
+                fs.copyFileSync(path.join(RAIZ,'versionar.js'),path.join(tmp,'versionar.js'));
+                fs.mkdirSync(path.join(tmp,'recetas'));fs.mkdirSync(path.join(tmp,'app-movil'));
+                fs.writeFileSync(path.join(tmp,'app.js'),'/* escandallo */');
+                fs.writeFileSync(path.join(tmp,'app-movil/app.js'),'/* móvil, archivo distinto */');
+                fs.writeFileSync(path.join(tmp,'recetas/index.html'),'<script src="../app.js?v=anterior"></script>');
+                const movil='<script src="app.js?v=movil-7"></script>';
+                fs.writeFileSync(path.join(tmp,'app-movil/index.html'),movil);
+                execFileSync(process.execPath,[path.join(tmp,'versionar.js')],{cwd:tmp});
+                const hash=crypto.createHash('sha256').update('/* escandallo */').digest('hex').slice(0,8);
+                eq(fs.readFileSync(path.join(tmp,'recetas/index.html'),'utf8'),'<script src="../app.js?v='+hash+'"></script>');
+                eq(fs.readFileSync(path.join(tmp,'app-movil/index.html'),'utf8'),movil);
+                execFileSync(process.execPath,[path.join(tmp,'versionar.js'),'--revisar'],{cwd:tmp});
+            } finally { fs.rmSync(tmp,{recursive:true,force:true}); }
+        });
     }
 
     /* Un archivo compartido = una sola versión en todo el sitio. Si una página
@@ -28588,6 +28612,127 @@ console.log('\n══ BE21 · Insumos: cada sucursal, su ficha ══');
         eq(/_importarMaestroASuc/.test(cg), true, 'cgAgregar dejó de usar la puerta única');
         eq(/\.sucursales\s*=/.test(ign), false, 'ignAgregar volvió a escribir membresía a mano');
         return eq(/(_ex|maestro)\.sucursales\s*=\s*s\b/.test(cg), false, 'cgAgregar volvió a compartir el registro');
+    });
+}
+
+/* Abarrotes: empaque, peso útil y piezas interiores son referencias distintas.
+   Se ejecutan las fórmulas del núcleo y los controladores reales del editor,
+   escandallo e inventario, con precios de prueba (nunca datos de producción). */
+console.log('\n══ Abarrotes · costo por empaque, kilo/litro y pieza interior ══');
+{
+    const ctx = cargarJS(crearContexto(), 'etaax-core.js');
+    const core = ctx.EtaaxCore;
+    const cerezas = { precio:'30', incluyeImpuesto:'1', presentacionCompra:'Pieza',
+        cantPresCompra:'1', umPresCompra:'PZA', contNeto:'2.1', umContenido:'KG',
+        masaDrenada:'900', umMasaDrenada:'G', unidadesPorPieza:'150', nombreSubUnidad:'Cerezas' };
+    const cerca = (real, esperado) => {
+        if (!Number.isFinite(real) || Math.abs(real-esperado)>1e-7)
+            throw new Error('esperado='+esperado+' real='+real);
+    };
+    [
+        ['bote con 150 cerezas y 900 G drenados', {}, [30, 100/3, .2, 6, 'KG']],
+        ['masa drenada expresada en KG', {masaDrenada:'.9',umMasaDrenada:'KG'}, [30,100/3,.2,6,'KG']],
+        ['sin masa drenada usa 2.1 KG netos', {masaDrenada:''}, [30,100/7,.2,14,'KG']],
+        ['contenido neto en G y drenado en KG', {contNeto:'2100',umContenido:'G',masaDrenada:'.9',umMasaDrenada:'KG'}, [30,100/3,.2,6,'KG']],
+        ['caja de tres botes', {precio:'90',cantPresCompra:'3',presentacionCompra:'Caja'}, [30,100/3,.2,6,'KG']],
+        ['un kilo de 16 huevos', {contNeto:'1',masaDrenada:'',unidadesPorPieza:'16',umPresCompra:'KG',presentacionCompra:'Granel'}, [30,30,1.875,62.5,'KG']],
+        ['dos kilos con referencia de 16 huevos por kilo', {precio:'60',contNeto:'1',masaDrenada:'',unidadesPorPieza:'16',umPresCompra:'KG',cantPresCompra:'2',presentacionCompra:'Granel'}, [30,30,1.875,62.5,'KG']],
+        ['bolsa de 500 G con referencia de un kilo', {precio:'15',contNeto:'1',masaDrenada:'',unidadesPorPieza:'16',umPresCompra:'G',cantPresCompra:'500',presentacionCompra:'Bolsa'}, [30,30,1.875,62.5,'KG']],
+        ['dos litros con 20 unidades por litro', {precio:'80',contNeto:'1',umContenido:'LT',masaDrenada:'',unidadesPorPieza:'20',umPresCompra:'LT',cantPresCompra:'2'}, [40,40,2,50,'LT']],
+        ['volumen drenado en ML', {umContenido:'LT',masaDrenada:'900',umMasaDrenada:'ML'}, [30,100/3,.2,6,'LT']],
+        ['una sola pieza interior', {unidadesPorPieza:'1'}, [30,100/3,30,900,'KG']],
+        ['sin precio limpia costos anteriores', {precio:''}, [0,0,0,6,'KG']],
+        ['IVA adicional se aplica a las tres referencias', {incluyeImpuesto:'0',ivaCheck:'1'}, [34.8,116/3,.232,6,'KG']],
+        ['IVA e IEPS adicionales', {incluyeImpuesto:'0',ivaCheck:'1',iepsCheck:'1',iepsTasa:'26.5'}, [44.022,48.913333333333,.29348,6,'KG']],
+        ['empaque legado de 11 bolsas con 40 tostadas', {precio:'539',presentacionCompra:'Caja',cantPresCompra:'11',contNeto:'1000',contSub:'25',umContenido:'G',masaDrenada:'',unidadesPorPieza:'40'}, [49,49,1.225,25,'KG']],
+    ].forEach(([nombre, cambios, esperado]) => test(nombre, () => {
+        const p = {...cerezas,...cambios}, antes=JSON.stringify(p), c=core.costosAbarrote(p);
+        [c.costoPieza,c.costoUnitario,c.costoSubUnidad,c.contenidoSubUnidad].forEach((v,i)=>cerca(v,esperado[i]));
+        eq(c.umCosto,esperado[4]);eq(JSON.stringify(p),antes,'fórmula sin mutaciones');
+        // Costear por peso o por pieza debe dar el MISMO importe del empaque.
+        cerca(c.costoSubUnidad * Number(p.unidadesPorPieza),c.costoPieza);
+        cerca(c.costoUnitario * c.contenidoBase / 1000,c.costoPieza);
+    }));
+    test('sin peso medible no inventa un costo por kilo', () => {
+        const c=core.costosAbarrote({...cerezas,masaDrenada:'',contNeto:'1',umContenido:'PZA'});
+        eq(c.umCosto,'PZA');cerca(c.contenidoSubUnidad,0);
+    });
+    test('comprar KG sin contenido capturado conserva el costo por kilo', () => {
+        const c=core.costosAbarrote({...cerezas,masaDrenada:'',contNeto:'',umPresCompra:'KG',cantPresCompra:'2',precio:'60'});
+        cerca(c.costoUnitario,30);eq(c.umCosto,'KG');
+    });
+    // Extraer declaraciones completas: no se reescribe la lógica bajo prueba.
+    const cargarFunciones = (archivo, nombres) => {
+        const src=fs.readFileSync(path.join(RAIZ,archivo),'utf8');
+        nombres.forEach(nombre=>{
+            const start=src.indexOf('function '+nombre+'(');
+            if(start<0)throw new Error('Falta '+nombre);
+            let depth=0;
+            for(let i=src.indexOf('{',start);i<src.length;i++){
+                if(src[i]==='{')depth++;
+                else if(src[i]==='}'&&--depth===0){vm.runInContext(src.slice(start,i+1),ctx,{filename:archivo+':'+nombre});return;}
+            }
+            throw new Error('Sin cierre '+nombre);
+        });
+    };
+    vm.runInContext("var presentacionesTemp=[],tipoInsumoActual='abarrote',OZ_ML=29.5735,COPA_ML=44.36;function _actualizarUtilidad(){} function actualizarCopaCosto(){} function calcCostoPorUm(){return null;}",ctx);
+    cargarFunciones('recetas/insumos.js',['calcImpFactor','toML','fmtMXN','fmtPrecio','_subUnidadNombre',
+        '_pesoSubUnidadTexto','_hintSubUnidadTexto','_pintarHintSubUnidad','_calcCostosAbarrote','updPres']);
+    test('teclear 1 → 15 → 150 cerezas no multiplica el contenido neto',()=>{
+        ctx.presentacionesTemp=[{...cerezas,contSub:'14'}];
+        ['1','15','150'].forEach(v=>ctx.updPres(0,'unidadesPorPieza',v));
+        const p=ctx.presentacionesTemp[0];eq(p.contNeto,'2.1');eq(p.contSub,undefined);
+        cerca(Number(p.costoUnitario),33.33333333);cerca(Number(p.costoSubUnidad),.2);
+        eq(ctx.document.getElementById('peso-subun-0').textContent.includes('6 G'),true);
+    });
+    test('quitar masa drenada actualiza costo/kg y peso individual en vivo',()=>{
+        ctx.updPres(0,'masaDrenada','');const p=ctx.presentacionesTemp[0];
+        cerca(Number(p.costoUnitario),14.28571429);cerca(Number(p.costoSubUnidad),.2);eq(p.contNeto,'2.1');
+        eq(ctx.document.getElementById('peso-subun-0').textContent.includes('14 G'),true);
+        eq(ctx.document.getElementById('precio-final-masa-0').textContent,'');
+        eq(ctx.document.getElementById('precio-final-block-0').style.display,'none');
+    });
+    test('cambiar el contenido neto y poner masa drenada recalcula las piezas',()=>{
+        ctx.updPres(0,'contNeto','3');ctx.updPres(0,'masaDrenada','900');
+        cerca(Number(ctx.presentacionesTemp[0].costoUnitario),33.33333333);eq(ctx.presentacionesTemp[0].contNeto,'3');
+    });
+    test('borrar el precio no deja costos fantasma',()=>{
+        ctx.updPres(0,'precio','');
+        ['costoPieza','costoUnitario','costoSubUnidad'].forEach(k=>cerca(Number(ctx.presentacionesTemp[0][k]),0));
+    });
+    const ins={id:'cereza',tipoInsumo:'abarrote',familia:'Alimentos',presentaciones:[{...cerezas,costoPieza:'30',costoUnitario:'33.33333333',umCosto:'KG',costoSubUnidad:'.2',contSub:'14'}]};
+    ctx._insumoResolver=()=>ins;ctx.getCatalogoInsumos=()=>[ins];
+    cargarFunciones('app.js',['getSubUnidadInsumo','_contSubBrutoML','getContenidoPorPieza','getCostoParaUnidad','getPesoBrutoPorUnidad']);
+    test('el escandallo toma 6 G drenados por cereza, aunque exista contSub antiguo',()=>{
+        const s=ctx.getSubUnidadInsumo('cereza');cerca(s.cada,6);eq(s.um,'G');
+        cerca(ctx.getPesoBrutoPorUnidad({insumoId:'cereza',unidad:'SUBUNIDAD'}),6);
+        cerca(ctx.getCostoParaUnidad(ins,'SUBUNIDAD'),.2);
+        cerca(ctx.getCostoParaUnidad(ins,'KG'),33.33333333);
+        cerca(ctx.getContenidoPorPieza('cereza'),900);
+    });
+    cargarFunciones('recetas/inventarios.js',['_normIngrediente','unidadBaseInsumo','_contenidoBasePresentacion']);
+    test('inventario descuenta 12 G por dos cerezas y un bote rinde 900 G útiles',()=>{
+        const normal=ctx._normIngrediente({insumoId:'cereza',unidad:'SUBUNIDAD',cantidad:2});
+        cerca(normal.cant,12);eq(normal.unidad,'G');
+        cerca(ctx._contenidoBasePresentacion(ins,ins.presentaciones[0]),900);eq(ctx.unidadBaseInsumo(ins),'G');
+    });
+    test('el inventario conserva la referencia PZA cuando no hay peso capturado',()=>{
+        const sinPeso={...cerezas,masaDrenada:'',contNeto:'1',umContenido:'PZA'};
+        cerca(ctx._contenidoBasePresentacion(ins,sinPeso),1);
+    });
+    cargarFunciones('recetas/inventarios.js',['_esRefrescoCerveza','_filaLive','costoCopa']);
+    ctx._copaMLInsumo=()=>0;
+    test('la valuación de un bote equivale a 150 cerezas y conserva lo contado',()=>{
+        const original={insumoId:'cereza',tipo:'peso',existenciaPeso:450,entradas:['2'],contNeto:2100};
+        const fila=ctx._filaLive(original);
+        cerca(fila.contNeto,900);cerca(fila.existenciaPeso,450);eq(fila.entradas,original.entradas);
+        cerca(ctx.costoCopa(fila)*fila.contNeto,30);cerca(150*ctx.getCostoParaUnidad(ins,'SUBUNIDAD'),30);
+        eq(original.contNeto,2100,'la consulta no altera el registro histórico');
+    });
+    test('el registro anterior de tostadas conserva costo y peso al reabrir',()=>{
+        const p={...cerezas,precio:'539',cantPresCompra:'11',contNeto:'1000',umContenido:'G',masaDrenada:'',unidadesPorPieza:'40',contSub:'25'};
+        ctx._calcCostosAbarrote(p,539);cerca(Number(p.costoPieza),49);cerca(Number(p.costoSubUnidad),1.225);
+        eq(p.contNeto,'1000');eq(p.contSub,undefined);
     });
 }
 
