@@ -42,6 +42,7 @@ const COMPARTIDOS = [
     'administrativo/cortes-ui.css', 'administrativo/cortes-ui.js',
     'administrativo/nominas-ui.css', 'administrativo/nominas-ui.js',
     'administrativo/staff-ui.css', 'administrativo/staff-ui.js',
+    'recetas/recetas-ui.css', 'recetas/recetas-ui.js',
     'administrativo/fijos-ui.css', 'administrativo/fijos-ui.js',
     'administrativo/movimientos-ui.css', 'administrativo/movimientos-ui.js',
     'administrativo/operaciones-ui.css', 'administrativo/operaciones-ui.js',
