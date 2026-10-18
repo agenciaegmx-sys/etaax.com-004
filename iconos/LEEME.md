@@ -120,3 +120,16 @@ Fuentes publicadas en `agenciaegmx-sys/iconos-etaax`, commit
 
 Las acciones comunes reutilizan los trazos del resto de Administrativo.
 `administrativo/operaciones-ui.*` integra su presentación en la aplicación.
+
+## Staff operativo
+
+`staff-operativo/oscuro/` incorpora 58 iconos, prefijo `sto-`, publicados en
+`agenciaegmx-sys/iconos-etaax`, commit
+`5ca46a7d436d617061bdf30759f68451afd1588b`.
+Las variantes claras y la galería con búsqueda y descargas están en
+`etaax-staff-operativo-iconos.html` de ese repositorio.
+
+Cubren horarios y asistencia, checklists, organigrama, perfiles de puesto,
+evaluaciones y resultados. El sprite adapta los trazos al tema y mantiene
+los colores de los estados. `administrativo/staff-operativo-ui.*` decora los
+controles existentes sin cambiar registros, reglas operativas ni permisos.
