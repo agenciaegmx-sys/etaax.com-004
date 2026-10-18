@@ -26,7 +26,7 @@
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=dc47c144">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/recetas/recetas-ui.css?v=3d7210ce">
+<link rel="stylesheet" href="/recetas/recetas-ui.css?v=5cb3b6da">
 </head>
 <body>
 <header class="top-bar">
@@ -125,13 +125,18 @@
             <div class="card">
                 <div class="card-header"><h2>Ingredientes</h2></div>
                 <div class="card-body">
-                    <div class="tabla-wrap">
+                    <div class="tabla-wrap ing-table-wrap">
                         <table id="tablaIngredientes">
+                            <colgroup>
+                                <col class="ing-col-order"><col class="ing-col-name"><col class="ing-col-description">
+                                <col class="ing-col-quantity"><col class="ing-col-unit"><col class="ing-col-price">
+                                <col class="ing-col-total"><col class="ing-col-actions">
+                            </colgroup>
                             <thead>
                                 <tr>
                                     <th>#</th><th>Ingrediente</th><th>Descripción</th>
-                                    <th>Cant.</th><th>Unidad</th><th>Costo / kg - lt - pz ($)</th>
-                                    <th>Costo U.</th><th></th>
+                                    <th>Cantidad</th><th>Unidad</th><th>Costo de referencia<span class="ing-header-detail">MXN / kg, lt o pieza</span></th>
+                                    <th>Importe<span class="ing-header-detail">MXN</span></th><th><span class="ing-sr-only">Acciones</span></th>
                                 </tr>
                             </thead>
                             <tbody id="tbodyIngredientes"></tbody>
@@ -973,7 +978,7 @@
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js?v=599f78b4"></script>
 <script src="/etaax-store.js?v=51ca2ddd"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
-<script src="/etaax-core.js?v=36ef24d3"></script><!-- fórmulas de dinero: antes de app.js -->
+<script src="/etaax-core.js?v=cb60ed96"></script><!-- fórmulas de dinero: antes de app.js -->
 <script src="/insumo-label.js?v=789551ec"></script>
 <script src="/multi-select.js"></script><!-- filtros de grupo/categoría con palomitas -->
 <script src="/reordenar.js"></script><!-- orden manual del catálogo (arrastrar filas) -->
@@ -981,7 +986,7 @@
 <script src="/etaax-nav.js"></script>
 <script src="/qr-pairing.js"></script>
 <script src="../security.js?v=c188734e"></script>
-<script src="../app.js?v=c394a861"></script>
+<script src="../app.js?v=9a1a38e8"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');

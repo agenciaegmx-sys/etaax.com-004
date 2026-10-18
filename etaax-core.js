@@ -1753,7 +1753,7 @@
         return n(salarioDiarioDefault) > 0;
     }
 
-    /* Abarrotes: contNeto siempre es el contenido de UNA pieza/empaque de
+    /* Compra por contenido: contNeto es el contenido de UNA pieza/empaque de
        referencia. Contar cerezas/huevos nunca multiplica ese contenido.
        La masa drenada, cuando existe, es el contenido que se puede utilizar. */
     function contenidoUtilPresentacion(p) {
@@ -1770,12 +1770,41 @@
         return (p.ivaCheck === '1' ? 1.16 : 1) *
             (p.iepsCheck === '1' ? 1 + n(p.iepsTasa || '26.5') / 100 : 1);
     }
-    function costosAbarrote(p, precioEfectivo) {
+    // En frutas/proteínas a granel el editor anterior podía guardar 1 KG
+    // como peso de CADA fruto y multiplicarlo por 160. Reconocer únicamente
+    // esa referencia exacta (la compra o una unidad de compra), sin reinterpretar
+    // paquetes cuyo contenido individual sí estaba bien capturado.
+    function contenidoCompraPresentacion(p, tipoInsumo) {
         p = p || {};
+        var contenido = p.contNeto || '';
+        if (['fruta','carne'].indexOf(tipoInsumo) < 0) return contenido;
+        var factores = { G:1, KG:1000, ML:1, LT:1000 };
+        var umCompra = String(p.umPresCompra || 'KG').toUpperCase();
+        var umCont = String(p.umContenido || 'G').toUpperCase();
+        var mismaDimension = (['KG','G'].indexOf(umCompra) >= 0) === (['KG','G'].indexOf(umCont) >= 0);
+        var total = n(contenido) * (factores[umCont] || 0);
+        var sub = n(p.contSub) * (factores[umCont] || 0);
+        var compra = n(p.cantPresCompra) * (factores[umCompra] || 0);
+        var piezas = n(p.unidadesPorPieza);
+        var coincide = function(a,b){ return Math.abs(a-b) < 0.000001; };
+        if (mismaDimension && piezas > 1 && compra > 0 && sub > 0 && total > compra &&
+            coincide(total, sub * piezas) && (coincide(sub, compra) || coincide(sub, factores[umCompra] || 0))) {
+            return p.contSub;
+        }
+        return contenido;
+    }
+    function costosAbarrote(p, precioEfectivo, tipoInsumo) {
+        p = p || {};
+        var contenidoCompra = contenidoCompraPresentacion(p, tipoInsumo);
+        if (contenidoCompra !== p.contNeto) p = Object.assign({}, p, { contNeto:contenidoCompra });
+        // Masa drenada es una captura de Abarrotes; conservar el criterio de
+        // frutas/proteínas aunque la ficha provenga de una conversión de tipo.
+        if (['fruta','carne'].indexOf(tipoInsumo) >= 0 && n(p.masaDrenada) > 0)
+            p = Object.assign({}, p, { masaDrenada:'' });
         var precio = Math.max(0, precioEfectivo === undefined
             ? n(p.precio) * factorImpuestoPresentacion(p) : n(precioEfectivo));
         var cantidad = n(p.cantPresCompra) > 0 ? n(p.cantPresCompra) : 1;
-        var umCompra = String(p.umPresCompra || '').toUpperCase();
+        var umCompra = String(p.umPresCompra || (['fruta','carne'].indexOf(tipoInsumo) >= 0 ? 'KG' : '')).toUpperCase();
         // La unidad manda, incluso si la presentación se llama Bolsa o Costal.
         // Las fichas antiguas sin unidad conservan su referencia Kilo/Litro.
         if (!umCompra) {
@@ -1813,6 +1842,8 @@
         contenidoUtilPresentacion: contenidoUtilPresentacion,
         factorImpuestoPresentacion: factorImpuestoPresentacion,
         costosAbarrote: costosAbarrote,
+        costosPresentacion: costosAbarrote,
+        contenidoCompraPresentacion: contenidoCompraPresentacion,
         sueldoDiarioEfectivo: sueldoDiarioEfectivo,
         baseMensualStaff: baseMensualStaff,
         sueldoEsDelMinimo: sueldoEsDelMinimo,

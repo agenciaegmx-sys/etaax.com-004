@@ -672,8 +672,8 @@ function _normIngrediente(ing) {
     var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing.insumoId) : null;
     var p   = ins && (ins.presentaciones || [])[0];
     if (!p) return { cant: cant, unidad: 'G' };
-    if (ins.tipoInsumo === 'abarrote') {
-        var util = EtaaxCore.costosAbarrote(p);
+    if (['abarrote','fruta','carne'].indexOf(ins.tipoInsumo) >= 0) {
+        var util = EtaaxCore.costosPresentacion(p, undefined, ins.tipoInsumo);
         if (util.contenidoSubUnidad > 0) return { cant: cant * util.contenidoSubUnidad, unidad: util.umBase };
     }
     var n    = parseFloat(p.unidadesPorPieza) || 0;
@@ -978,8 +978,8 @@ function ingredienteBase(cantidad, unidad) {
 // Unidad base de un insumo de alimentos según su presentación.
 function unidadBaseInsumo(ins) {
     const p = ((ins && ins.presentaciones) || [])[0] || {};
-    if (ins && ins.tipoInsumo === 'abarrote') {
-        var util = EtaaxCore.costosAbarrote(p);
+    if (ins && ['abarrote','fruta','carne'].indexOf(ins.tipoInsumo) >= 0) {
+        var util = EtaaxCore.costosPresentacion(p, undefined, ins.tipoInsumo);
         if (util.contenidoBase > 0) return util.umBase;
     }
     const u = (p.umContenido || '').toUpperCase();
@@ -988,8 +988,8 @@ function unidadBaseInsumo(ins) {
     return 'PZA';
 }
 function _contenidoBasePresentacion(ins, p) {
-    if (ins.tipoInsumo === 'abarrote') {
-        var util = EtaaxCore.costosAbarrote(p);
+    if (['abarrote','fruta','carne'].indexOf(ins.tipoInsumo) >= 0) {
+        var util = EtaaxCore.costosPresentacion(p, undefined, ins.tipoInsumo);
         if (util.contenidoBase > 0) return util.contenidoBase;
     }
     var um = (p.umContenido || 'ML').toUpperCase();
@@ -5115,7 +5115,7 @@ function cargarProductosCaptura() {
                 const pEx  = (ins.presentaciones || [])[0] || {};
                 const contBaseEx = _contenidoBasePresentacion(ins, pEx);
                 if (contBaseEx > 0) existe.contNeto = contBaseEx;
-                if (ins.tipoInsumo === 'abarrote') existe.baseUnit = unidadBaseInsumo(ins);
+                if (['abarrote','fruta','carne'].indexOf(ins.tipoInsumo) >= 0) existe.baseUnit = unidadBaseInsumo(ins);
                 const pcEx = parseFloat(pEx.pesoCristal);
                 if (!isNaN(pcEx)) existe.pesoCristal = pcEx; // puede bajar a 0 a propósito
                 existe.rendimientoBatch = parseFloat(pEx.rendimiento) || 0; // sub-recetas: ml/g por batch

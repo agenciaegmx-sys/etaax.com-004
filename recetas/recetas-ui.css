@@ -86,11 +86,67 @@ body.etx-recetas-page {
 [data-theme="light"] .etx-recetas-page :is(input,select) {color-scheme:light;}
 .etx-recetas-page :is(input,textarea)::placeholder {color:var(--r-muted);opacity:.8;}
 .etx-recetas-page #editorWrap .tabla-wrap {max-width:100%;overflow-x:auto;}
-.etx-recetas-page #tablaIngredientes {min-width:850px;}
-.etx-recetas-page #tablaIngredientes th {padding:13px 10px;background:var(--r-input);font-size:9px;letter-spacing:1px;color:var(--r-muted);border-color:var(--r-line);}
-.etx-recetas-page #tablaIngredientes td {padding:10px 8px;border-color:var(--r-line);}
-.etx-recetas-page #tablaIngredientes [data-ing="nombre"] {min-width:180px;}
-.etx-recetas-page #tablaIngredientes button {min-width:32px;min-height:34px;}
+.etx-recetas-page .ing-table-wrap {container:ingredients / inline-size;margin-bottom:18px;}
+.etx-recetas-page #tablaIngredientes {width:100%;min-width:940px;table-layout:fixed;font-size:13px;}
+.etx-recetas-page #tablaIngredientes .ing-col-order {width:44px;}
+.etx-recetas-page #tablaIngredientes .ing-col-description {width:172px;}
+.etx-recetas-page #tablaIngredientes .ing-col-quantity {width:80px;}
+.etx-recetas-page #tablaIngredientes .ing-col-unit {width:148px;}
+.etx-recetas-page #tablaIngredientes .ing-col-price {width:124px;}
+.etx-recetas-page #tablaIngredientes .ing-col-total {width:94px;}
+.etx-recetas-page #tablaIngredientes .ing-col-actions {width:76px;}
+.etx-recetas-page #tablaIngredientes th {padding:13px 8px;background:var(--r-input);font:600 11px/1.4 'DM Sans',sans-serif;letter-spacing:0;text-transform:none;color:var(--r-muted);border-color:var(--r-line);vertical-align:middle;}
+.etx-recetas-page #tablaIngredientes th:nth-child(7) {text-align:right;}
+.etx-recetas-page .ing-header-detail {display:block;font-size:10px;font-weight:400;margin-top:3px;color:var(--r-muted);}
+.etx-recetas-page #tablaIngredientes td {padding:12px 8px;border-color:var(--r-line);vertical-align:middle;}
+.etx-recetas-page #tablaIngredientes :is(input,select) {width:100%;height:44px;padding:10px 11px!important;font-size:13px!important;line-height:1.4;letter-spacing:0;font-weight:400;}
+.etx-recetas-page #tablaIngredientes select {appearance:none;padding-right:28px!important;cursor:pointer;text-overflow:ellipsis;}
+.etx-recetas-page .ing-unit-control {position:relative;min-width:0;}
+.etx-recetas-page .ing-unit-control::after {content:'';position:absolute;right:13px;top:50%;width:6px;height:6px;border-right:1.5px solid var(--r-muted);border-bottom:1.5px solid var(--r-muted);transform:translateY(-75%) rotate(45deg);pointer-events:none;}
+.etx-recetas-page #tablaIngredientes input[type="number"] {text-align:right;font-variant-numeric:tabular-nums;appearance:textfield;-moz-appearance:textfield;}
+.etx-recetas-page #tablaIngredientes input[type="number"]::-webkit-inner-spin-button,
+.etx-recetas-page #tablaIngredientes input[type="number"]::-webkit-outer-spin-button {appearance:none;margin:0;}
+.etx-recetas-page #tablaIngredientes [data-ing="nombre"] {min-width:0;font-weight:500;text-overflow:ellipsis;}
+.etx-recetas-page .ing-name-control {position:relative;min-width:0;}
+.etx-recetas-page #tablaIngredientes .is-linked [data-ing="nombre"] {padding-left:25px!important;}
+.etx-recetas-page .ing-link-dot {position:absolute;left:11px;top:50%;transform:translateY(-50%);width:5px;height:5px;border-radius:50%;background:var(--green);pointer-events:none;}
+.etx-recetas-page #tablaIngredientes .ing-description input {color:var(--r-muted);}
+.etx-recetas-page #tablaIngredientes .ing-order {padding:12px 3px;white-space:nowrap;color:var(--r-muted);font-size:11px;font-variant-numeric:tabular-nums;}
+.etx-recetas-page .ing-order .ord-grip {margin-right:4px;}
+.etx-recetas-page .ing-cost-control {position:relative;min-width:0;}
+.etx-recetas-page .ing-cost-control > span {position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--r-muted);font-size:12px;pointer-events:none;}
+.etx-recetas-page #tablaIngredientes .ing-cost-control input {padding-left:23px!important;font-variant-numeric:tabular-nums;}
+.etx-recetas-page #tablaIngredientes .ing-total {white-space:nowrap;text-align:right;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;}
+.etx-recetas-page #tablaIngredientes .ing-row-actions {padding:12px 4px;}
+.etx-recetas-page .ing-actions {display:flex;align-items:center;justify-content:flex-end;gap:4px;}
+.etx-recetas-page #tablaIngredientes .ing-actions button {display:inline-flex;align-items:center;justify-content:center;width:32px;min-width:32px;height:36px;padding:5px;background:transparent;border:1px solid var(--r-line);border-radius:8px;color:var(--r-muted);cursor:pointer;}
+.etx-recetas-page #tablaIngredientes .ing-actions .ing-ficha {color:var(--r-cyan);}
+.etx-recetas-page #tablaIngredientes .ing-actions .ing-ficha:hover {background:var(--r-selected);border-color:var(--r-cyan);}
+.etx-recetas-page #tablaIngredientes .ing-actions .ing-eliminar:hover {color:var(--red);border-color:var(--red);}
+.etx-recetas-page #tablaIngredientes .ing-actions .etx-ic {width:17px;height:17px;--green:currentColor;}
+.ing-sr-only {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+/* En ventanas estrechas cada ingrediente conserva sus campos en una tarjeta;
+   no hay que deslizar la tabla para encontrar la unidad o el botón de borrar. */
+@container ingredients (max-width:880px) {
+  .etx-recetas-page #tablaIngredientes {display:block;min-width:0;}
+  .etx-recetas-page #tablaIngredientes colgroup {display:none;}
+  .etx-recetas-page #tablaIngredientes thead {position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  .etx-recetas-page #tbodyIngredientes {display:grid;gap:14px;}
+  .etx-recetas-page #tbodyIngredientes tr {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:'order actions' 'name name' 'description description' 'quantity unit' 'price total';gap:14px 12px;padding:16px;background:var(--r-input);border:1px solid var(--r-line);border-radius:12px;}
+  .etx-recetas-page #tablaIngredientes td {display:block;min-width:0;padding:0;border:0;}
+  .etx-recetas-page #tablaIngredientes td[data-label]::before {content:attr(data-label);display:block;margin-bottom:6px;font:500 11px/1.4 'DM Sans',sans-serif;color:var(--r-muted);text-align:left;}
+  .etx-recetas-page #tablaIngredientes .ing-order {grid-area:order;align-self:center;}
+  .etx-recetas-page #tablaIngredientes .ing-order::before {content:'Ingrediente ';font-size:12px;}
+  .etx-recetas-page #tablaIngredientes .ing-name {grid-area:name;}
+  .etx-recetas-page #tablaIngredientes .ing-description {grid-area:description;}
+  .etx-recetas-page #tablaIngredientes .ing-quantity {grid-area:quantity;}
+  .etx-recetas-page #tablaIngredientes .ing-unit {grid-area:unit;}
+  .etx-recetas-page #tablaIngredientes .ing-price {grid-area:price;}
+  .etx-recetas-page #tablaIngredientes .ing-total {grid-area:total;align-self:end;height:66px;box-sizing:border-box;padding:0 0 12px;}
+  .etx-recetas-page #tablaIngredientes .ing-total::before {margin-bottom:16px;}
+  .etx-recetas-page #tablaIngredientes .ing-row-actions {grid-area:actions;padding:0;}
+  .etx-recetas-page #tablaIngredientes .ing-actions button {width:36px;height:36px;}
+}
 .etx-recetas-page #editorWrap :is(.costo-total-bar,#barraRendBruto) {border-radius:11px!important;background:var(--r-input)!important;border:1px solid var(--r-line)!important;padding:16px!important;gap:12px;flex-wrap:wrap;min-width:0;}
 .etx-recetas-page #editorWrap .costo-total-val {font:700 28px/1.3 'DM Sans',sans-serif;letter-spacing:-.5px;}
 .etx-recetas-page #editorWrap .proc-media-grid {grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;}

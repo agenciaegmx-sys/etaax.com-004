@@ -1379,7 +1379,7 @@ function _unoPorProducto(cat, preferirMaestro) {
 /* Sub-unidades de un insumo (tercer nivel del empaque), o null si no las declara.
    Devuelve el nombre con el que el negocio las llamó ("Tostadas") y cuánto pesa una,
    que es lo que el escandallo necesita para ofrecerlas como unidad de medida.
-   En Abarrotes se divide el contenido útil (drenado o neto) por la cantidad.
+   En abarrotes, frutas y proteínas se divide el contenido útil por la cantidad.
    En otros tipos `contSub` es el dato capturado; si no existe, se deriva del
    contenido total de la pieza, igual que hace el catálogo. */
 function getSubUnidadInsumo(insumoId) {
@@ -1390,10 +1390,10 @@ function getSubUnidadInsumo(insumoId) {
     var p = ins && (ins.presentaciones || [])[0];
     if (!p) return null;
     var n = parseFloat(p.unidadesPorPieza) || 0;
-    if (!(n > (ins.tipoInsumo === 'abarrote' ? 0 : 1))) return null;
+    if (!(n > (['abarrote','fruta','carne'].indexOf(ins.tipoInsumo) >= 0 ? 0 : 1))) return null;
     var costo = parseFloat(p.costoSubUnidad) || 0;
     if (!(costo > 0)) return null;
-    var util = ins.tipoInsumo === 'abarrote' ? EtaaxCore.costosAbarrote(p) : null;
+    var util = ['abarrote','fruta','carne'].indexOf(ins.tipoInsumo) >= 0 ? EtaaxCore.costosPresentacion(p, undefined, ins.tipoInsumo) : null;
     var cada = util ? util.contenidoSubUnidad : (p.contSub !== undefined && p.contSub !== '')
         ? parseFloat(p.contSub) || 0
         : (parseFloat(p.contNeto) || 0) / n;
@@ -1422,8 +1422,8 @@ function getContenidoPorPieza(insumoId) {
     // Buscar presentación con contenido medible (ML/G/LT/KG/OZ)
     for (var k = 0; k < pres.length; k++) {
         var p = pres[k];
-        if (ins.tipoInsumo === 'abarrote') {
-            var util = EtaaxCore.costosAbarrote(p);
+        if (['abarrote','fruta','carne'].indexOf(ins.tipoInsumo) >= 0) {
+            var util = EtaaxCore.costosPresentacion(p, undefined, ins.tipoInsumo);
             if (util.contenidoBase > 0) return util.contenidoBase;
         }
         var cont = parseFloat(p.contNeto) || 0;
@@ -1816,21 +1816,21 @@ function renderTabla() {
                aparte le robaría ancho a la tabla, que ya va apretada con ocho.
                Y es el único punto por donde se arrastra — el resto del renglón
                son campos que hay que poder tocar para escribir. */
-            '<td style="color:var(--text-dim);width:44px;white-space:nowrap">' +
+            '<td class="ing-order">' +
                 '<span class="ord-grip" title="Arrastra para cambiar el orden">⠿</span>' +
-                (i+1) + '</td>' +
-            '<td style="position:relative">' +
-                '<div style="display:flex;align-items:center;gap:5px">' +
-                (vinculado ? '<span style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0" title="Vinculado al catálogo"></span>' : '') +
-                '<input type="text" data-ing="nombre" value="'+ing.nombre+'" placeholder="Ingrediente" autocomplete="off"' +
+                '<span class="ing-row-number">'+(i+1) + '</span></td>' +
+            '<td class="ing-name" data-label="Ingrediente" style="position:relative">' +
+                '<div class="ing-name-control'+(vinculado ? ' is-linked' : '')+'">' +
+                (vinculado ? '<span class="ing-link-dot" title="Vinculado al catálogo"></span>' : '') +
+                '<input type="text" data-ing="nombre" value="'+etx(ing.nombre)+'" title="'+etx(ing.nombre)+'" aria-label="Ingrediente '+(i+1)+'" placeholder="Nombre del ingrediente" autocomplete="off"' +
                 ' oninput="updateIng('+i+',\'nombre\',this.value);mostrarDropdown('+i+',this.value)"' +
                 ' onblur="setTimeout(cerrarTodosDropdowns,200)"' +
                 ' onkeydown="if(_ddTecla(event,'+i+'))event.preventDefault()"' +
                 ' style="width:100%">' +
                 '</div></td>' +
-            '<td><input type="text" value="'+ing.desc+'" placeholder="Detalle" oninput="updateIng('+i+',\'desc\',this.value)"></td>' +
-            '<td><input type="number" value="'+ing.cantidad+'" min="0" step="1" oninput="updateIng('+i+',\'cantidad\',parseFloat(this.value)||0)"></td>' +
-            '<td><select onchange="updateUnidad('+i+',this.value)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;">' +
+            '<td class="ing-description" data-label="Descripción"><input type="text" value="'+etx(ing.desc)+'" aria-label="Descripción del ingrediente '+(i+1)+'" placeholder="Detalle opcional" oninput="updateIng('+i+',\'desc\',this.value)"></td>' +
+            '<td class="ing-quantity" data-label="Cantidad"><input type="number" value="'+ing.cantidad+'" aria-label="Cantidad del ingrediente '+(i+1)+'" min="0" step="1" oninput="updateIng('+i+',\'cantidad\',parseFloat(this.value)||0)"></td>' +
+            '<td class="ing-unit" data-label="Unidad"><div class="ing-unit-control"><select aria-label="Unidad del ingrediente '+(i+1)+'" onchange="updateUnidad('+i+',this.value)">' +
                 /* La sub-unidad aparece SOLO si el insumo vinculado la declara, y se
                    muestra con el nombre que le puso el negocio ("TOSTADA"), no con una
                    etiqueta genérica: es la unidad con la que se cocina. Sin ella, para
@@ -1845,16 +1845,16 @@ function renderTabla() {
                     var et = s ? s.singular.toUpperCase() : 'SUB-UNIDAD';
                     return '<option value="SUBUNIDAD"'+(ing.unidad==='SUBUNIDAD'?' selected':'')+'>'+etx(et)+'</option>';
                 })() +
-            '</select></td>' +
-            '<td><div style="display:flex;align-items:center;gap:4px">' +
-                '<span style="color:var(--amber);font-size:14px">$</span>' +
-                '<input type="number" value="'+(ing.costoPorKgLt||'')+'" min="0" step="0.01" placeholder="0.00"' +
+            '</select></div></td>' +
+            '<td class="ing-price" data-label="Costo de referencia"><div class="ing-cost-control">' +
+                '<span aria-hidden="true">$</span>' +
+                '<input type="number" value="'+(ing.costoPorKgLt||'')+'" aria-label="Costo de referencia del ingrediente '+(i+1)+'" min="0" step="0.01" placeholder="0.00"' +
                 ' oninput="updateIng('+i+',\'costoPorKgLt\',parseFloat(this.value)||0)"></div></td>' +
-            '<td class="costo-u">$'+costoU.toFixed(2)+'</td>' +
-            '<td style="white-space:nowrap">' +
-                (vinculado ? '<button onclick="verFichaInsumo(\''+ing.insumoId+'\')" style="background:transparent;border:none;color:var(--green);cursor:pointer;font-size:13px;padding:2px 5px;opacity:0.85" title="Ver ficha técnica">◉</button>' : '') +
-                '<button onclick="eliminarIng('+i+')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;padding:2px 6px;" title="Eliminar">✕</button>' +
-            '</td>';
+            '<td class="costo-u ing-total" data-label="Importe">$'+costoU.toFixed(2)+'</td>' +
+            '<td class="ing-row-actions"><div class="ing-actions">' +
+                (vinculado ? '<button class="ing-ficha" onclick="verFichaInsumo(\''+ing.insumoId+'\')" title="Ver ficha técnica" aria-label="Ver ficha del ingrediente '+(i+1)+'">◉</button>' : '') +
+                '<button class="ing-eliminar" onclick="eliminarIng('+i+')" title="Eliminar" aria-label="Eliminar ingrediente '+(i+1)+'">✕</button>' +
+            '</div></td>';
         tbody.appendChild(tr);
     });
 

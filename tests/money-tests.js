@@ -6738,6 +6738,8 @@ console.log('\n══ BB4 · El buscador de ingredientes (app.js) ══');
            truena y el test no llegaría a comprobar lo que le importa. */
         vm.runInContext(fs.readFileSync(path.join(RAIZ,'etaax-core.js'),'utf8'), ctx, { filename:'etaax-core.js' });
         vm.runInContext(fs.readFileSync(path.join(RAIZ,'insumo-label.js'),'utf8'), ctx, { filename:'insumo-label.js' });
+        const escapeHTML = fs.readFileSync(path.join(RAIZ,'security.js'),'utf8').match(/window\.etx = function \(s\) \{[\s\S]*?\n\};/)[0];
+        vm.runInContext(escapeHTML, ctx, { filename:'security.js:etx' });
         try { vm.runInContext(fs.readFileSync(path.join(RAIZ,'app.js'),'utf8'), ctx, { filename:'app.js' }); }
         catch(e) { /* el arranque toca el DOM real; las funciones quedan igual (hoisting) */ }
         return { ctx, store, cat, cuerpo, medir(){ return { lecturas, bytes }; },
@@ -28676,7 +28678,7 @@ console.log('\n══ Abarrotes · costo por empaque, kilo/litro y pieza interio
         });
     };
     vm.runInContext("var presentacionesTemp=[],tipoInsumoActual='abarrote',OZ_ML=29.5735,COPA_ML=44.36;function _actualizarUtilidad(){} function actualizarCopaCosto(){} function calcCostoPorUm(){return null;}",ctx);
-    cargarFunciones('recetas/insumos.js',['calcImpFactor','toML','fmtMXN','fmtPrecio','_subUnidadNombre',
+    cargarFunciones('recetas/insumos.js',['calcImpFactor','toML','fmtMXN','fmtPrecio','_subUnidadNombre','_usaContenidoCompra',
         '_pesoSubUnidadTexto','_hintSubUnidadTexto','_pintarHintSubUnidad','_calcCostosAbarrote','updPres']);
     test('teclear 1 → 15 → 150 cerezas no multiplica el contenido neto',()=>{
         ctx.presentacionesTemp=[{...cerezas,contSub:'14'}];
@@ -28733,6 +28735,39 @@ console.log('\n══ Abarrotes · costo por empaque, kilo/litro y pieza interio
         const p={...cerezas,precio:'539',cantPresCompra:'11',contNeto:'1000',umContenido:'G',masaDrenada:'',unidadesPorPieza:'40',contSub:'25'};
         ctx._calcCostosAbarrote(p,539);cerca(Number(p.costoPieza),49);cerca(Number(p.costoSubUnidad),1.225);
         eq(p.contNeto,'1000');eq(p.contSub,undefined);
+    });
+    test('frutas: 1 KG dividido entre 166 piezas conserva el kilo y deriva peso y costo',()=>{
+        const p={precio:'165',incluyeImpuesto:'1',cantPresCompra:'1',umPresCompra:'KG',contNeto:'1',umContenido:'KG',unidadesPorPieza:'166'};
+        const c=core.costosPresentacion(p,undefined,'fruta');
+        cerca(c.costoUnitario,165);cerca(c.contenidoSubUnidad,1000/166);cerca(c.costoSubUnidad,165/166);
+        eq(p.contNeto,'1');
+    });
+    test('la referencia de 1 KG capturada antes por fruto se recupera sin multiplicarla',()=>{
+        const p={precio:'165',incluyeImpuesto:'1',cantPresCompra:'1',umPresCompra:'KG',contNeto:'160',contSub:'1',umContenido:'KG',unidadesPorPieza:'160'};
+        const antes=JSON.stringify(p),c=core.costosPresentacion(p,undefined,'fruta');
+        eq(core.contenidoCompraPresentacion(p,'fruta'),'1');cerca(c.costoPieza,165);cerca(c.costoSubUnidad,1.03125);cerca(c.contenidoSubUnidad,6.25);
+        eq(JSON.stringify(p),antes,'la lectura no cambia la ficha almacenada');
+    });
+    test('no reinterpreta piezas cuyo peso individual anterior sí era válido',()=>{
+        const p={precio:'720',cantPresCompra:'24',umPresCompra:'KG',contNeto:'24',contSub:'2',umContenido:'KG',unidadesPorPieza:'12'};
+        eq(core.contenidoCompraPresentacion(p,'carne'),'24');
+        const c=core.costosPresentacion(p,undefined,'carne');cerca(c.costoPieza,720);cerca(c.costoUnitario,30);cerca(c.costoSubUnidad,60);cerca(c.contenidoSubUnidad,2000);
+    });
+    test('dos kilos de frutas con referencia de un kilo conservan el costo individual',()=>{
+        const c=core.costosPresentacion({precio:'330',cantPresCompra:'2',umPresCompra:'KG',contNeto:'1',umContenido:'KG',unidadesPorPieza:'166'},undefined,'fruta');
+        cerca(c.costoPieza,165);cerca(c.costoSubUnidad,165/166);cerca(c.contenidoSubUnidad,1000/166);
+    });
+    test('proteínas compradas por piezas mantienen el costo por pieza y kilo',()=>{
+        const c=core.costosPresentacion({precio:'300',cantPresCompra:'10',umPresCompra:'PZA',contNeto:'200',umContenido:'G',unidadesPorPieza:'1',masaDrenada:'900',umMasaDrenada:'G'},undefined,'carne');
+        cerca(c.costoPieza,30);cerca(c.costoUnitario,150);cerca(c.costoSubUnidad,30);cerca(c.contenidoSubUnidad,200);
+    });
+    cargarFunciones('recetas/insumos.js',['_calcCostosProteina']);
+    test('el editor de frutas no multiplica el contenido al capturar 166 piezas',()=>{
+        ctx.tipoInsumoActual='fruta';ctx.presentacionesTemp=[{precio:'165',incluyeImpuesto:'1',cantPresCompra:'1',umPresCompra:'KG',contNeto:'1',umContenido:'KG',nombreSubUnidad:'Zarzamoras'}];
+        ['1','16','166'].forEach(v=>ctx.updPres(0,'unidadesPorPieza',v));
+        eq(ctx.presentacionesTemp[0].contNeto,'1');cerca(Number(ctx.presentacionesTemp[0].costoSubUnidad),165/166);
+        const hint=ctx._hintSubUnidadTexto(ctx.presentacionesTemp[0]);
+        eq(hint.includes('1 KG ÷ 166 piezas'),true);eq(hint.includes('6.0241 G por pieza'),true);eq(hint.includes('Costo por pieza'),true);
     });
 }
 
