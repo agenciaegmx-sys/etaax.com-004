@@ -200,7 +200,7 @@ async function run(base){
   await check('Nombre vivo, minimizar, guardar importe y conservar credenciales · '+width,async()=>{
    await fx(p,"openModal('col1')");await fu(p,"document.querySelector('#modalStaff .s-title-copy')");
    await fx(p,"fNombre.value='Ana González actualizada';fNombre.dispatchEvent(new Event('input',{bubbles:true}));fMultaRetardo.value=25");
-   assert.equal(await fx(p,"modalTitle.textContent.includes('Ana González actualizada')"),true);
+   assert.equal(await fx(p,"modalStaffNombre.textContent.includes('Ana González actualizada')"),true);
    await fu(p,"document.querySelector('#modalStaff .etx-min-btn')");await fx(p,"document.querySelector('#modalStaff .etx-min-btn').click()");
    assert.equal(await fx(p,"document.querySelector('#etx-dock .etx-chip').textContent.includes('Ana González')"),true);
    await fx(p,"document.querySelector('#etx-dock .etx-chip').click();fMultaRetardo.scrollIntoView({block:'center'})");await shot(p,'perfil-'+width);
@@ -220,7 +220,7 @@ async function run(base){
    await fx(p,"new Promise((ok,fail)=>{const s=document.createElement('script');s.src='/staff-modal.js';s.onload=ok;s.onerror=fail;document.body.appendChild(s)})");
    await fx(p,"StaffModal.open({negId:'n1',staffId:'col1',skipGate:true})");await fu(p,"document.querySelector('#sm_overlay')?.classList.contains('open')");
    assert.equal(await fx(p,"sm_multaRetardo.value"),'25');await fx(p,"sm_nombre.value='Ana editada';sm_nombre.dispatchEvent(new Event('input'));sm_multaRetardo.value=30");
-   assert.equal(await fx(p,"sm_title.textContent.includes('Ana editada')"),true);await fx(p,"StaffModal._save()");await fu(p,"!sm_overlay.classList.contains('open')");
+   assert.equal(await fx(p,"sm_titleName.textContent.includes('Ana editada')"),true);await fx(p,"StaffModal._save()");await fu(p,"!sm_overlay.classList.contains('open')");
    assert.equal(await fx(p,"JSON.parse(localStorage.getItem('etaax_n1_staff')).find(s=>s.id==='col1').multaRetardo"),30);
   });
   await check('Encabezado opaco permanece fijo al desplazar catálogo · '+width,async()=>{

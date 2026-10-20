@@ -30,6 +30,12 @@ body:is(.etx-staff-page,.etx-permisos-page) #mainContent .brand-title {font:700 
 :is(.etx-staff-page,.etx-permisos-page) :is(.btn-primary,.np-btn-primary,.btn-save,.rm-btn.ok) .etx-ic {--green:var(--s-ink);}
 :is(.etx-staff-page,.etx-permisos-page) :is(.btn-primary,.np-btn-primary,.btn-save,.rm-btn.ok):not(:disabled):hover {filter:brightness(1.07);opacity:1;}
 /* Catálogo y filtros */
+.etx-staff-page #mainContent > .s-catalog-header {flex-direction:column;align-items:stretch;gap:0;margin-bottom:0;padding:16px 24px 0;}
+.etx-staff-page .s-catalog-header > .brand {flex-direction:row;align-items:baseline;align-self:flex-start;gap:8px;}
+body.etx-staff-page #mainContent .s-catalog-header .brand-title {font-size:23px;}
+.etx-staff-page .s-catalog-header > .s-catalog-controls {padding:14px 0;border:0;}
+.etx-staff-page .s-catalog-header > :is(.s-catalog-controls,.puesto-chips),.etx-staff-page .s-catalog-header .controls-bar {width:100%;min-width:0;}
+.etx-staff-page .s-catalog-header > .puesto-chips {padding:12px 0;border-top:1px solid var(--s-line);border-bottom:0;max-height:104px;overflow:auto;box-sizing:border-box;scrollbar-width:thin;scrollbar-color:var(--s-line) transparent;}
 .etx-staff-page #mainContent .card {background:var(--s-panel);border:1px solid var(--s-line);border-radius:14px;overflow:hidden;}
 .etx-staff-page .card-header {padding:20px;border-color:var(--s-line);}
 .etx-staff-page .controls-bar {gap:10px;align-items:center;}
@@ -70,6 +76,8 @@ body:is(.etx-staff-page,.etx-permisos-page) #mainContent .brand-title {font:700 
 .etx-staff-page .modal-header h2 {display:flex;align-items:center;gap:12px;flex:1;min-width:0;font:700 23px/1.25 'DM Sans',sans-serif;letter-spacing:-.5px;text-transform:none;}
 .s-title-plate {width:44px;height:44px;border:1px solid var(--etx-ui-cyan-line,#537e83);background:var(--s-selected);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
 .s-title-copy {overflow-wrap:anywhere;}
+.etx-staff-page .s-person-heading {flex:1;min-width:0;}
+.etx-staff-page .s-person-name {font:600 13px/1.5 'DM Sans',sans-serif;color:var(--s-terra);margin-top:4px;overflow-wrap:anywhere;}
 .etx-staff-page :is(.modal-close,.etx-min-btn),.s-staff-tool :is(.tm-x,.tm-back,.etx-min-btn) {min-height:40px;background:transparent!important;border:1px solid var(--s-line)!important;border-radius:9px!important;color:var(--text)!important;font:12px 'DM Sans',sans-serif!important;padding:9px 12px!important;align-items:center;justify-content:center;gap:6px;}
 .etx-staff-page :is(.modal-close,.etx-min-btn) {display:inline-flex;}
 .etx-staff-page .modal-close {width:auto!important;min-width:40px;flex-shrink:0;}
@@ -209,10 +217,21 @@ body:is(.etx-staff-page,.etx-permisos-page) #mainContent .brand-title {font:700 
   .etx-staff-page .puesto-chips {padding:12px 14px;}
   .etx-staff-page .filtros-bar select {flex:1 1 130px;min-width:0;}
   .etx-staff-page .search-wrap {flex-basis:100%;}
+  .etx-staff-page #mainContent > .s-catalog-header {padding:12px 14px 0;}
+  .etx-staff-page .s-catalog-header > .s-catalog-controls {padding:12px 0;}
+  .etx-staff-page .s-catalog-header .controls-bar {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+  .etx-staff-page .s-catalog-header .filtros-bar {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-column:1/-1;gap:8px;}
+  .etx-staff-page .s-catalog-header .search-wrap,.etx-staff-page .s-catalog-header #filterSucursal {grid-column:1/-1;}
+  .etx-staff-page .s-catalog-header .filtros-bar select {width:100%;padding:10px 22px 10px 10px;font-size:12px;}
+  .etx-staff-page .s-catalog-header .controls-bar > button {min-width:0;padding:8px!important;font-size:11px;white-space:normal!important;}
+  .etx-staff-page .s-catalog-header #btnAgregarColaborador {grid-column:1/-1;width:100%;}
+  .etx-staff-page .s-catalog-header > .puesto-chips {flex-wrap:nowrap;padding:10px 0;max-height:none;overflow-x:auto;}
+  .etx-staff-page .s-catalog-header .puesto-chip {flex-shrink:0;white-space:nowrap;}
   .etx-staff-page :is(#modalStaff,#modalBajas,#np_overlay),.etx-permisos-page .rm-bg,.s-staff-tool {padding:8px;}
   .etx-staff-page :is(#modalStaff,#modalBajas,#np_overlay) .modal,.etx-permisos-page .rm-card,.s-staff-tool .tool-modal {max-height:calc(100dvh - 16px);border-radius:14px;}
   .etx-staff-page :is(.modal-header,.modal-body,.modal-footer),.etx-permisos-page :is(.rm-hd,.rm-body,.rm-ft) {padding:16px;}
   .etx-staff-page .modal-header h2 {font-size:20px;flex-basis:100%;}
+  .etx-staff-page .modal-header > .s-person-heading {flex-basis:100%;}
   .etx-staff-page .modal-header .etx-min-btn {margin-left:auto;}
   .etx-staff-page .form-grid {grid-template-columns:minmax(0,1fr);}
   .etx-staff-page #bonosLista > div:has(button) {display:grid!important;grid-template-columns:minmax(0,1fr) 40px;gap:8px;}

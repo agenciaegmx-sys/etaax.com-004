@@ -27,6 +27,8 @@
         st.id = 'smStyles';
         st.textContent =
             '#sm_overlay .modal{max-width:700px}' +
+            '#sm_overlay .sm-person-heading{flex:1;min-width:0}' +
+            '#sm_overlay .sm-person-name{font:600 13px/1.5 "DM Sans",sans-serif;color:var(--etx-ui-terra,#fb9b6f);margin-top:4px;overflow-wrap:anywhere}' +
             '.sm-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}' +
             '.sm-grp{display:flex;flex-direction:column;gap:5px}' +
             '.sm-grp.full{grid-column:1/-1}' +
@@ -67,7 +69,7 @@
         el.innerHTML =
           '<div class="modal">' +
             '<div class="modal-header">' +
-              '<h2 id="sm_title">Agregar colaborador</h2>' +
+              '<div class="sm-person-heading"><h2 id="sm_title">Agregar colaborador</h2><div id="sm_titleName" class="sm-person-name" hidden></div></div>' +
               '<button class="modal-close" onclick="StaffModal._close()">✕</button>' +
             '</div>' +
             '<div class="modal-body">' +
@@ -334,8 +336,13 @@
     function _titulo(){
         var nombre = (document.getElementById('sm_nombre').value || '').trim();
         var el = document.getElementById('sm_title');
-        var t = (document.getElementById('sm_id').value ? 'Editar colaborador' : 'Agregar colaborador') + (nombre ? ' · ' + nombre : '');
+        var t = document.getElementById('sm_id').value ? 'Editar colaborador' : 'Agregar colaborador';
         if (el.textContent !== t) el.textContent = t;
+        var sub = document.getElementById('sm_titleName');
+        if (sub.textContent !== nombre) sub.textContent = nombre;
+        sub.hidden = !nombre;
+        var head = el.closest('.modal-header');
+        if (head) head.dataset.dockTitle = t + (nombre ? ' · ' + nombre : '');
     }
     function _renderChips() {
         var list = document.getElementById('sm_chips');

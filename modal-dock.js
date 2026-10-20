@@ -74,7 +74,7 @@
     }
     function titleOf(header) {
         var t = header.querySelector('.dx-win-title,.tm-tt,#iframeInsumoLabel,h2,h3');
-        var txt = (t ? t.textContent : header.textContent) || 'Ventana';
+        var txt = header.getAttribute('data-dock-title') || (t ? t.textContent : header.textContent) || 'Ventana';
         return (txt.replace(/[✕✖🗕—]/g, '').trim().slice(0, 42)) || 'Ventana';
     }
 
