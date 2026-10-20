@@ -37,7 +37,7 @@ const COMPARTIDOS = [
     'security.js', 'page-guard.js', 'negocio-tab.js', 'embed.js', 'presencia.js', 'modal-drag.js',
     'modal-dock.js', 'precios.js', 'datos-pago.js', 'negocio-tipos.js', 'insumo-label.js',
     'reporte-marca.js', 'carta-tema.js', 'nav-pref.js', 'styles.css',
-    'portal-operativo.css', 'portal-operativo.js', 'staff-area.js', 'recetas/inventarios.js', 'recetas/insumos.js',
+    'portal-operativo.css', 'portal-operativo.js', 'staff-area.js', 'nomina-params.js', 'staff-modal.js', 'recetas/inventarios.js', 'recetas/insumos.js',
     'administrativo/gastos-ui.css', 'administrativo/gastos-ui.js',
     'administrativo/cortes-ui.css', 'administrativo/cortes-ui.js',
     'administrativo/nominas-ui.css', 'administrativo/nominas-ui.js',

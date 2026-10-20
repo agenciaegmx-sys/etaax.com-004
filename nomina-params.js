@@ -1,7 +1,7 @@
 /* ============================================================
    ETAAX — Parámetros globales de nómina por negocio
    Un solo registro por negocio (tabla gf_nomina_params):
-     { primaVacacionalPct, jornadaHoras, salarioDiarioDefault }
+     { primaVacacionalPct, jornadaHoras, salarioDiarioDefault, referenciasSueldo }
    Se definen una vez y aplican a todos los colaboradores.
 
    Requiere: supabase-config.js (_supabase). Opcional: etaax-db.js.
@@ -26,7 +26,8 @@
         return {
             primaVacacionalPct:  _num(p.primaVacacionalPct,  DEFAULTS.primaVacacionalPct),
             jornadaHoras:        _num(p.jornadaHoras,         DEFAULTS.jornadaHoras),
-            salarioDiarioDefault:_num(p.salarioDiarioDefault, DEFAULTS.salarioDiarioDefault)
+            salarioDiarioDefault:_num(p.salarioDiarioDefault, DEFAULTS.salarioDiarioDefault),
+            referenciasSueldo: p.referenciasSueldo || {}
         };
     }
 
@@ -39,14 +40,45 @@
     }
 
     async function _save(negId, params) {
-        localStorage.setItem(_key(negId), JSON.stringify(params));
-        if (!negId || !window._supabase) return;
-        try {
-            await _supabase.from('gf_nomina_params').upsert(
-                { negocio_id: negId, datos: params, updated_at: new Date().toISOString() },
+        if (!negId) throw new Error('No hay negocio activo.');
+        var previo = _get(negId), remoto = !!window._supabase;
+        if (remoto) {
+            var actual = await _supabase.from('gf_nomina_params').select('datos').eq('negocio_id', negId).maybeSingle();
+            if (actual.error) throw new Error(actual.error.message);
+            if (actual.data && actual.data.datos) previo = actual.data.datos;
+        }
+        var refs = Object.assign(Object.create(null), previo.referenciasSueldo || {});
+        if (_num(params.salarioDiarioDefault, _num(previo.salarioDiarioDefault, 0)) !== _num(previo.salarioDiarioDefault, 0)) {
+            var staff;
+            if (remoto) {
+                var r = await _supabase.from('staff').select('datos').eq('negocio_id', negId);
+                if (r.error || !Array.isArray(r.data)) throw new Error(r.error ? r.error.message : 'No se pudo revisar el personal.');
+                staff = r.data.map(function(row){ return row.datos; });
+            } else {
+                staff = JSON.parse(localStorage.getItem('etaax_' + negId + '_staff') || '[]');
+            }
+            if (!window.EtaaxCore) throw new Error('No se pudo cargar el cálculo de nómina.');
+            /* Clasificar una sola vez, usando el mínimo ANTERIOR. Guardamos la
+               referencia en el MISMO documento del parámetro, sin reescribir
+               fichas, credenciales ni expedientes de otras sucursales. */
+            (staff || []).forEach(function(s){
+                if (!s || !s.id || s.esquemaSueldo !== 'diario' || s.origenSueldo ||
+                    Object.prototype.hasOwnProperty.call(refs, s.id)) return;
+                refs[s.id] = { origen: EtaaxCore.sueldoUsaMinimo(s, previo) ? 'minimo' : 'personalizado',
+                    sueldoDiario: _num(s.sueldoDiario, 0) };
+            });
+        }
+        var siguiente = Object.assign({}, previo, params, { referenciasSueldo: refs });
+        if (remoto) {
+            var guardado = await _supabase.from('gf_nomina_params').upsert(
+                { negocio_id: negId, datos: siguiente, updated_at: new Date().toISOString() },
                 { onConflict: 'negocio_id' }
             );
-        } catch (e) { if (window._sbToastError) _sbToastError('nómina params: ' + e.message); }
+            if (guardado.error) throw new Error(guardado.error.message);
+        }
+        localStorage.setItem(_key(negId), JSON.stringify(siguiente));
+        if (typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent('etaax:nomina-params', { detail: { negocioId: negId } }));
+        return siguiente;
     }
 
     function _ensureStyles() {
@@ -85,10 +117,11 @@
               '<p style="font-size:12px;color:var(--text-dim);margin:0 0 16px;line-height:1.6">Se definen una vez y aplican a todos los colaboradores del negocio. Cada quien puede ajustar su sueldo en su propio expediente.</p>' +
               '<div class="np-grp"><label>Prima dominical</label><div class="np-inw suf"><input type="number" id="np_prima" min="0" step="1" placeholder="25"><span class="np-suf">%</span></div><span class="np-hint">Por ley es 25% sobre el sueldo de los domingos trabajados.</span></div>' +
               '<div class="np-grp"><label>Jornada (horas por día)</label><div class="np-inw suf"><input type="number" id="np_jornada" min="1" max="24" step="0.5" placeholder="8"><span class="np-suf">hrs</span></div><span class="np-hint">Base para el pago por hora de las horas extra (sueldo diario ÷ jornada).</span></div>' +
-              '<div class="np-grp"><label>Salario mínimo diario (default)</label><div class="np-inw pre"><span class="np-pre">$</span><input type="number" id="np_diario" min="0" step="0.01" placeholder="0.00"></div><span class="np-hint">Se precarga a cada colaborador nuevo con esquema "por día". Cada quien puede cambiarlo.</span></div>' +
+              '<div class="np-grp"><label>Salario mínimo diario (default)</label><div class="np-inw pre"><span class="np-pre">$</span><input type="number" id="np_diario" min="0" step="0.01" placeholder="0.00"></div><span class="np-hint">Actualiza a los colaboradores vinculados al mínimo, incluidos los registros anteriores. Los sueldos personalizados se conservan.</span></div>' +
+              '<p id="np_error" role="alert" style="display:none;color:var(--red);font-size:12px"></p>' +
             '</div>' +
             '<div class="modal-footer"><button class="np-btn np-btn-ghost" onclick="NominaParams._close()">Cancelar</button>' +
-              '<button class="np-btn np-btn-primary" onclick="NominaParams._save()">Guardar parámetros</button></div>' +
+              '<button id="np_guardar" class="np-btn np-btn-primary" onclick="NominaParams._save()">Guardar parámetros</button></div>' +
           '</div>';
         document.body.appendChild(el);
     }
@@ -111,6 +144,7 @@
             _negId = negId || localStorage.getItem('etaax_negocio_activo') || '';
             _onSaved = onSaved || null;
             _ensureModal();
+            document.getElementById('np_error').style.display = 'none';
             var p = _get(_negId);
             document.getElementById('np_prima').value   = p.primaVacacionalPct;
             document.getElementById('np_jornada').value = p.jornadaHoras;
@@ -119,14 +153,23 @@
         },
         _close: _close,
         _save: async function () {
+            var btn = document.getElementById('np_guardar');
+            if (btn.disabled) return;
+            btn.disabled = true;
             var params = {
                 primaVacacionalPct:  _num(document.getElementById('np_prima').value, DEFAULTS.primaVacacionalPct),
                 jornadaHoras:        _num(document.getElementById('np_jornada').value, DEFAULTS.jornadaHoras) || 8,
                 salarioDiarioDefault:_num(document.getElementById('np_diario').value, 0)
             };
-            await _save(_negId, params);
-            _close();
-            if (typeof _onSaved === 'function') _onSaved(params);
+            try {
+                var guardado = await _save(_negId, params);
+                _close();
+                if (typeof _onSaved === 'function') _onSaved(guardado);
+            } catch (e) {
+                var err = document.getElementById('np_error');
+                err.textContent = 'No se guardaron los parámetros: ' + e.message;
+                err.style.display = '';
+            } finally { btn.disabled = false; }
         }
     };
 })();

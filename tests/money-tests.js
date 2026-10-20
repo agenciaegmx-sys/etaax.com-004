@@ -2113,6 +2113,7 @@ console.log('\n══ SUITE L · Bloque bancario del editor de staff (administra
     const L = crearContexto();
     cargarJS(L, 'bancos-mx.js');
     cargarJS(L, 'staff-area.js');   // la página la exige: sin ella su script no arranca
+    cargarJS(L, 'etaax-core.js');
     cargarInline(L, 'administrativo/staff.html');
     const $ = id => L.document.getElementById(id);
 
@@ -2196,6 +2197,7 @@ console.log('\n══ SUITE M · Expediente del colaborador (administrativo/staf
     const M = crearContexto();
     cargarJS(M, 'bancos-mx.js');
     cargarJS(M, 'staff-area.js');   // la página la exige: sin ella su script no arranca
+    cargarJS(M, 'etaax-core.js');
     cargarInline(M, 'administrativo/staff.html');
 
     /* Fecha de referencia FIJA. Antes se calculaba desde "hoy" y el candado
@@ -2630,6 +2632,7 @@ console.log('\n══ SUITE R · Bajas y candado del catálogo (administrativo/s
     const R = crearContexto();
     cargarJS(R, 'bancos-mx.js');
     cargarJS(R, 'staff-area.js');
+    cargarJS(R, 'etaax-core.js');
     cargarInline(R, 'administrativo/staff.html');
     R._storage['etaax_negocio_activo'] = 'n1';
 
@@ -4996,6 +4999,7 @@ console.log('\n══ SUITE AL · Catálogo de staff por sucursal (administrativ
     const S = crearContexto();
     cargarJS(S, 'etaax-core.js');
     cargarJS(S, 'insumo-label.js');
+    cargarJS(S, 'etaax-core.js');
     cargarInline(S, 'administrativo/staff.html');
     S._storage['etaax_negocio_activo'] = 'negT';
 
@@ -12725,7 +12729,7 @@ console.log('\n══ BG2 · Las vistas globales, completas ══');
             "var _DATA=" + JSON.stringify(opts.data || []) + ";" +
             "function load(){return _DATA;}", ctx);
         ['_getSucs','_getSucActiva','_catGlobalOn','_effSuc','_vistaGlobalStaff',
-         '_pobFiltroSucursal','_staffEnVista'].forEach(f => vm.runInContext(dS(f), ctx, { filename:'staff.html' }));
+         '_pobFiltroSucursal','_vistaGlobalStaff','_staffEnAlcance','_staffEnVista'].forEach(f => vm.runInContext(dS(f), ctx, { filename:'staff.html' }));
         ctx.__filtro = filtro;
         return ctx;
     }
@@ -28769,6 +28773,89 @@ console.log('\n══ Abarrotes · costo por empaque, kilo/litro y pieza interio
         const hint=ctx._hintSubUnidadTexto(ctx.presentacionesTemp[0]);
         eq(hint.includes('1 KG ÷ 166 piezas'),true);eq(hint.includes('6.0241 G por pieza'),true);eq(hint.includes('Costo por pieza'),true);
     });
+}
+
+/* ══ Staff · referencias de sueldo y bajas por sucursal (20-oct-2026) ══ */
+console.log('\n══ Staff · mínimo vinculado, domingo y archivo por sucursal ══');
+{
+    const ctx = cargarJS(crearContexto(), 'etaax-core.js'), C = ctx.EtaaxCore;
+    const params = {salarioDiarioDefault:400,referenciasSueldo:{viejo:{origen:'minimo',sueldoDiario:315.04},propio:{origen:'personalizado',sueldoDiario:400}}};
+    const viejo = {id:'viejo',esquemaSueldo:'diario',sueldoDiario:315.04,sueldoCapturado:true};
+    test('un sueldo mínimo viejo sigue la referencia aunque antes se marcara capturado',()=>eq(C.sueldoDiarioEfectivo(viejo,params),400));
+    test('la proyección mensual usa la misma referencia',()=>eq(C.baseMensualStaff(viejo,31,params),12400));
+    test('y el catálogo identifica su origen',()=>eq(C.sueldoEsDelMinimo(viejo,params),true));
+    test('un sueldo personalizado no se vincula cuando el mínimo alcanza su importe',()=>eq(C.sueldoUsaMinimo({id:'propio',esquemaSueldo:'diario',sueldoDiario:400},params),false));
+    test('un sueldo personalizado igual al mínimo también se conserva',()=>eq(C.sueldoDiarioEfectivo({...viejo,origenSueldo:'personalizado'},params),315.04));
+    test('cero personalizado sigue siendo cero',()=>eq(C.sueldoDiarioEfectivo({...viejo,origenSueldo:'personalizado',sueldoDiario:0},params),0));
+    test('sin costo sigue ganando a la referencia',()=>eq(C.baseMensualStaff({...viejo,sinCostoNegocio:true},31,params),0));
+    test('el sueldo fijo por periodo se conserva',()=>eq(C.baseMensualStaff({esquemaSueldo:'periodo',salarioBase:2800,periodicidad:'semanal'},31,params),2800*52/12));
+    test('una modificación desde un editor anterior rompe la referencia del importe',()=>eq(C.sueldoDiarioEfectivo({...viejo,sueldoDiario:450},params),450));
+    test('el mínimo puede bajar: la referencia no queda congelada en el máximo',()=>eq(C.sueldoDiarioEfectivo(viejo,{...params,salarioDiarioDefault:300}),300));
+    test('una referencia explícita también respeta un mínimo de cero',()=>eq(C.sueldoDiarioEfectivo({...viejo,origenSueldo:'minimo'},{salarioDiarioDefault:0}),0));
+    test('nuevo mínimo y referencia sobreviven JSON sin cambiar el cálculo',()=>eq(C.sueldoDiarioEfectivo(JSON.parse(JSON.stringify(viejo)),JSON.parse(JSON.stringify(params))),400));
+
+    for(const [archivo,fn,esperado] of [
+        ['administrativo/diario.html','_sueldoDiarioEfectivo',400],
+        ['financiero/gastos-globales.html','_baseMensualStaff',12400],
+        ['consultoria/simulador-kpis.html','_mensualizar',12400]
+    ])test('el consumidor '+archivo+' conserva la referencia del registro antiguo',()=>{
+        const X=crearContexto();cargarJS(X,'etaax-core.js');cargarInline(X,archivo);
+        X.NominaParams={get(){return params;}};X.getNegocioActivo=()=> 'n1';
+        eq(X[fn](viejo,'2026-10'),esperado);
+    });
+
+    const S=crearContexto(); cargarJS(S,'etaax-core.js');cargarJS(S,'staff-area.js');cargarJS(S,'bancos-mx.js');cargarInline(S,'administrativo/staff.html');
+    S._storage.etaax_negocio_activo='n1';S._storage.etaax_sucursal_activa='suc_principal';
+    S._storage.etaax_n1_staff=JSON.stringify([
+        {id:'m',nombre:'Matriz',estado:'Baja definitiva',fechaBaja:'2026-10-18'},
+        {id:'n',nombre:'Norte',sucursalId:'norte',estado:'Baja definitiva',fechaBaja:'2026-10-19'},
+        {id:'t',nombre:'Temporal',sucursalId:'norte',estado:'Baja temporal'},
+        {id:'a',nombre:'Activo',estado:'Activo'}]);
+    test('bajas de Matriz incluyen solo su histórico, incluidos registros sin sucursal',()=>eq(S._bajas().map(s=>s.id).join(','),'m'));
+    test('el contador de bajas coincide con esa sucursal',()=>{S._pintarBotonBajas();eq(S.document.getElementById('btnBajas').innerHTML.includes('>1</span>'),true);});
+    S._storage.etaax_sucursal_activa='norte';
+    test('bajas de Norte no mezclan Matriz ni bajas temporales',()=>eq(S._bajas().map(s=>s.id).join(','),'n'));
+    S.sessionStorage.setItem('etaax_cat_global','1');
+    test('el archivo global conserva todas las sucursales y el orden de baja',()=>eq(S._bajas().map(s=>s.id).join(','),'n,m'));
+    S.document.getElementById('filterSucursal').value='norte';
+    test('el filtro global también acota las bajas',()=>eq(S._bajas().map(s=>s.id).join(','),'n'));
+    S.document.getElementById('filterSucursal').value='suc_principal';
+    test('y resuelve Matriz para una baja antigua sin sucursal',()=>eq(S._bajas().map(s=>s.id).join(','),'m'));
+    S.sessionStorage.removeItem('etaax_cat_global');
+    test('un filtro residual de otra vista no recorta ni mezcla una sucursal activa',()=>eq(S._bajas().map(s=>s.id).join(','),'n'));
+    ['administrativo/staff.html','staff-modal.js'].forEach(file=>test('domingo está disponible en '+file,()=>eq(fs.readFileSync(path.join(RAIZ,file),'utf8').includes('<option value="domingo">Domingo</option>'),true)));
+
+    function entorno(){
+        const X=crearContexto();cargarJS(X,'etaax-core.js');cargarJS(X,'nomina-params.js');
+        let actual={salarioDiarioDefault:315.04,primaVacacionalPct:25,jornadaHoras:8,extra:'conservar'};
+        X._storage.etaax_n1_nomina_params=JSON.stringify(actual);
+        const staff=[viejo,{id:'propio',esquemaSueldo:'diario',sueldoDiario:450,sucursalId:'norte'},
+            {id:'igual',esquemaSueldo:'diario',sueldoDiario:315.04,origenSueldo:'personalizado'},
+            {id:'cero',esquemaSueldo:'diario',sueldoDiario:0,sueldoCapturado:true}];
+        const estado={escrituras:[],fallar:''};
+        X._supabase={from(tabla){const q={select(){return q;},eq(){return q;},maybeSingle(){q.uno=true;return q;},upsert(v){q.valor=v;return q;},then(resolve,reject){
+            const error=estado.fallar===(q.valor?'guardar':tabla)?{message:'Fallo controlado'}:null;
+            if(q.valor&&!error){estado.escrituras.push({tabla,valor:q.valor});actual=JSON.parse(JSON.stringify(q.valor.datos));}
+            return Promise.resolve({data:tabla==='staff'?staff.map(datos=>({datos})):actual?{datos:actual}:null,error}).then(resolve,reject);
+        }};return q;}};
+        return {X,estado,staff};
+    }
+    testAsyncCola.push(['cambiar el mínimo conserva referencias antiguas sin reescribir expedientes',async()=>{
+        const {X,estado}=entorno();await X.NominaParams.save('n1',{salarioDiarioDefault:450});
+        const p=X.NominaParams.get('n1');eq(X.EtaaxCore.sueldoDiarioEfectivo(viejo,p),450);
+        eq(p.referenciasSueldo.propio.origen,'personalizado');eq(p.referenciasSueldo.cero.origen,'personalizado');
+        eq(estado.escrituras.length,1);eq(estado.escrituras[0].tabla,'gf_nomina_params');eq(estado.escrituras[0].valor.datos.extra,'conservar');
+        await X.NominaParams.save('n1',{salarioDiarioDefault:500});
+        const nuevo=X.NominaParams.get('n1');eq(X.EtaaxCore.sueldoDiarioEfectivo(viejo,nuevo),500);
+        eq(X.EtaaxCore.sueldoDiarioEfectivo({id:'propio',esquemaSueldo:'diario',sueldoDiario:450},nuevo),450);
+        eq(X.EtaaxCore.sueldoDiarioEfectivo({id:'igual',esquemaSueldo:'diario',sueldoDiario:315.04,origenSueldo:'personalizado'},nuevo),315.04);
+        eq(X.NominaParams.get('n2').salarioDiarioDefault,0);
+    }]);
+    for(const falla of ['staff','guardar','gf_nomina_params'])testAsyncCola.push(['si falla '+falla+', el mínimo local no se adelanta ni se confirma un guardado',async()=>{
+        const {X,estado}=entorno();estado.fallar=falla;let fallo=false;
+        try{await X.NominaParams.save('n1',{salarioDiarioDefault:500});}catch(e){fallo=true;}
+        eq(fallo,true);eq(X.NominaParams.get('n1').salarioDiarioDefault,315.04);eq(estado.escrituras.length,0);
+    }]);
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

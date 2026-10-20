@@ -18,6 +18,7 @@
     var _tmpDocs = [];
     var _onSaved = null;
     var _negId   = '';
+    var _sueldoMinimo = true, _minimoMostrado = '';
 
     /* ── Estilos propios del modal (los base .modal* viven en styles.css) ── */
     function _ensureStyles() {
@@ -125,11 +126,11 @@
                   '<option value="socios">🤝 Socios Operativos</option></select>' +
                   '<span class="sm-hint">Solo para nómina (aparte del acceso al sistema). Opera el negocio, incluida gerencia → Operativa. No opera (contador, redes) → Administrativa.</span></div>' +
                 '<div class="sm-grp"><label>Esquema de pago</label><select id="sm_esquemaSueldo" onchange="StaffModal._togEsq()"><option value="periodo">Sueldo fijo por periodo</option><option value="diario">Sueldo por día (× días trabajados)</option></select></div>' +
-                '<div class="sm-grp" id="grpSmDiario" style="display:none"><label>Sueldo diario</label><input type="number" id="sm_sueldoDiario" min="0" step="0.01" placeholder="0.00" oninput="StaffModal._updPrev();StaffModal._calcPrima()"><span class="sm-hint">Al pagar: sueldo diario × días trabajados.</span></div>' +
+                '<div class="sm-grp" id="grpSmDiario" style="display:none"><label>Sueldo diario</label><input type="number" id="sm_sueldoDiario" min="0" step="0.01" placeholder="0.00" oninput="StaffModal._sueldoPropio();StaffModal._updPrev();StaffModal._calcPrima()"><span class="sm-hint">Al pagar: sueldo diario × días trabajados.</span><button type="button" class="sm-btn sm-btn-ghost" onclick="StaffModal._usarMinimo()">Usar mínimo del negocio</button></div>' +
                 '<div class="sm-grp" id="grpSmBase"><label>Salario base (por periodo)</label><input type="number" id="sm_salarioBase" min="0" step="0.01" placeholder="0.00" oninput="StaffModal._calcPrima()"></div>' +
                 '<div class="sm-grp full" id="grpSmPreview" style="display:none"><div id="sm_sueldoPreview" style="background:var(--surface2);border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-muted)"></div></div>' +
                 '<div class="sm-grp"><label>Periodicidad de pago</label><select id="sm_periodicidad" onchange="StaffModal._calcPrima()"><option value="">— Seleccionar —</option><option value="semanal">Semanal</option><option value="quincenal">Quincenal</option><option value="mensual">Mensual</option></select></div>' +
-                '<div class="sm-grp"><label>Día de pago</label><select id="sm_diaPago"><option value="">— Seleccionar —</option><option value="lunes">Lunes</option><option value="martes">Martes</option><option value="miercoles">Miércoles</option><option value="jueves">Jueves</option><option value="viernes">Viernes</option><option value="sabado">Sábado</option><option value="dia1_15">Días 1 y 15</option><option value="dia15_ultimo">Días 15 y último</option><option value="dia1">Día 1 del mes</option><option value="dia15">Día 15 del mes</option><option value="ultimo">Último día del mes</option></select></div>' +
+                '<div class="sm-grp"><label>Día de pago</label><select id="sm_diaPago"><option value="">— Seleccionar —</option><option value="lunes">Lunes</option><option value="martes">Martes</option><option value="miercoles">Miércoles</option><option value="jueves">Jueves</option><option value="viernes">Viernes</option><option value="sabado">Sábado</option><option value="domingo">Domingo</option><option value="dia1_15">Días 1 y 15</option><option value="dia15_ultimo">Días 15 y último</option><option value="dia1">Día 1 del mes</option><option value="dia15">Día 15 del mes</option><option value="ultimo">Último día del mes</option></select></div>' +
                 '<div class="sm-grp"><label>Forma de pago de nómina</label><select id="sm_formaPago" onchange="StaffModal._togBanc()"><option value="">— Seleccionar —</option><option>Transferencia Bancaria</option><option>Efectivo</option><option>Cheque</option></select></div>' +
               '</div>' +
               /* Banco y CLABE solo con transferencia; con efectivo o cheque estorban.
@@ -196,17 +197,15 @@
         else { sel.value = _BANCO_OTRO; otro.value = nombre; otro.style.display = ''; }
     }
 
-    /* ── Persistencia (idéntico patrón a staff.html: reemplaza la tabla) ── */
+    /* Actualizar fichas sin vaciar el catálogo ni el archivo de bajas. */
     function _load(negId) {
         try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_staff')) || []; } catch (e) { return []; }
     }
     async function _save(negId, d) {
         localStorage.setItem('etaax_' + negId + '_staff', JSON.stringify(d));
         if (!negId || !window._supabase) return;
-        var rDel = await _supabase.from('staff').delete().eq('negocio_id', negId);
-        if (rDel.error) { if (window._sbToastError) _sbToastError('staff delete: ' + rDel.error.message); return; }
         if (d.length) {
-            var rIns = await _supabase.from('staff').insert(d.map(function(m){ return { id: m.id, negocio_id: negId, datos: m }; }));
+            var rIns = await _supabase.from('staff').upsert(d.map(function(m){ return { id: m.id, negocio_id: negId, datos: m }; }), {onConflict:'id'});
             if (rIns.error && window._sbToastError) _sbToastError('staff insert: ' + rIns.error.message);
         }
     }
@@ -247,6 +246,7 @@
     }
 
     function _fill(staffId) {
+        _sueldoMinimo = true; _minimoMostrado = '';
         _tmpDocs = [];
         ['sm_nombre','sm_puesto','sm_area','sm_fechaIngreso','sm_fechaNacimiento','sm_curp','sm_nss','sm_celular','sm_correo','sm_direccion','sm_usuario','sm_pwd','sm_nip','sm_salarioBase','sm_diaPago','sm_formaPago','sm_datosBancarios','sm_primaVacacional','sm_bonoIncentivo','sm_referencias','sm_notas'].forEach(function(id){ document.getElementById(id).value=''; });
         document.getElementById('sm_estado').value = 'Activo';
@@ -290,9 +290,12 @@
                 document.getElementById('sm_usuario').value = s.usuario || '';
                 document.getElementById('sm_pwd').placeholder = s.passwordHash ? '•••••••• guardada — vacía para conservarla' : 'Mínimo 6 caracteres';
                 document.getElementById('sm_nip').placeholder = s.nipHash ? '••••• guardado — vacío para conservarlo' : '5 dígitos';
-                document.getElementById('sm_salarioBase').value = s.salarioBase || '';
+                document.getElementById('sm_salarioBase').value = s.salarioBase || (s.esquemaSueldo !== 'diario' && s.sueldoCapturado ? 0 : '');
                 document.getElementById('sm_esquemaSueldo').value = s.esquemaSueldo || 'periodo';
-                document.getElementById('sm_sueldoDiario').value = s.sueldoDiario || '';
+                var parSueldo = window.NominaParams ? NominaParams.get(_negId) : {};
+                _sueldoMinimo = EtaaxCore.sueldoUsaMinimo(s, parSueldo);
+                document.getElementById('sm_sueldoDiario').value = _sueldoMinimo ? (parSueldo.salarioDiarioDefault || 0) : (s.esquemaSueldo !== 'diario' && !(s.sueldoDiario > 0) ? '' : (s.sueldoDiario != null ? s.sueldoDiario : ''));
+                _minimoMostrado = document.getElementById('sm_sueldoDiario').value;
                 window.StaffModal._togEsq();
                 document.getElementById('sm_categoriaNomina').value = s.categoriaNomina || _categoriaPorRol(s.rol);
                 document.getElementById('sm_periodicidad').value = s.periodicidad || '';
@@ -361,7 +364,7 @@
         var existing = editId ? (data.find(function(s){ return s.id === editId; }) || {}) : {};
         // Credenciales según el tipo de rol
         var passwordHash = esAdmin ? (pwd ? await window._hashPwdStaff(pwd) : (existing.passwordHash || '')) : '';
-        var nipHash      = (!esAdmin && rol) ? (nipRaw ? await window._hashPwdStaff('nip|' + nipRaw) : (existing.nipHash || '')) : '';
+        var nipHash      = rol ? (nipRaw ? await window._hashPwdStaff('nip|' + nipRaw) : (existing.nipHash || '')) : '';
         var obj = {
             id: editId || _genId(),
             nombre: nombre,
@@ -380,6 +383,9 @@
             correo: document.getElementById('sm_correo').value.trim(),
             direccion: document.getElementById('sm_direccion').value.trim(),
             estado: document.getElementById('sm_estado').value || 'Activo',
+            origenSueldo: document.getElementById('sm_esquemaSueldo').value === 'diario' && _sueldoMinimo && document.getElementById('sm_sueldoDiario').value === _minimoMostrado ? 'minimo' :
+                (document.getElementById(document.getElementById('sm_esquemaSueldo').value === 'diario' ? 'sm_sueldoDiario' : 'sm_salarioBase').value.trim() !== '' ? 'personalizado' : ''),
+            sueldoCapturado: document.getElementById(document.getElementById('sm_esquemaSueldo').value === 'diario' ? 'sm_sueldoDiario' : 'sm_salarioBase').value.trim() !== '',
             salarioBase: parseFloat(document.getElementById('sm_salarioBase').value) || 0,
             esquemaSueldo: document.getElementById('sm_esquemaSueldo').value || 'periodo',
             sueldoDiario: parseFloat(document.getElementById('sm_sueldoDiario').value) || 0,
@@ -468,13 +474,17 @@
             document.getElementById('sm_accesoNip').style.display   = (conRol && !admin) ? '' : 'none';
             document.getElementById('sm_accesoNone').style.display  = conRol ? 'none' : '';
         },
+        _sueldoPropio: function () { _sueldoMinimo = false; },
+        _usarMinimo: function () { _sueldoMinimo = true; window.StaffModal._togEsq(); },
         _togEsq: function () {
             var diario = document.getElementById('sm_esquemaSueldo').value === 'diario';
             document.getElementById('grpSmDiario').style.display = diario ? '' : 'none';
             document.getElementById('grpSmBase').style.display  = diario ? 'none' : '';
-            if (diario && !document.getElementById('sm_sueldoDiario').value && window.NominaParams) {
+            if (diario && document.getElementById('sm_sueldoDiario').value === '') _sueldoMinimo = true;
+            if (diario && _sueldoMinimo && window.NominaParams) {
                 var def = NominaParams.get(_negId || localStorage.getItem('etaax_negocio_activo') || '').salarioDiarioDefault;
-                if (def > 0) document.getElementById('sm_sueldoDiario').value = def;
+                document.getElementById('sm_sueldoDiario').value = def || 0;
+                _minimoMostrado = document.getElementById('sm_sueldoDiario').value;
             }
             window.StaffModal._updPrev();
             window.StaffModal._calcPrima();

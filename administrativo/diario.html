@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="../styles.css?v=d87bdb06">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="../supabase-config.js"></script>
-<script src="/etaax-core.js?v=cb60ed96"></script>
+<script src="/etaax-core.js?v=073b1628"></script>
 <script src="/etaax-store.js?v=51ca2ddd"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js?v=599f78b4"></script>
 <script src="/qr-pairing.js"></script>
@@ -6937,10 +6937,10 @@ var _PN_METODOS = {
    veces —aquí, en gastos-globales y en el simulador— y las tres no coincidían.
    Ver el bloque "EL SUELDO DE UN COLABORADOR" en /etaax-core.js. */
 function _sueldoDiarioEfectivo(s){
-    return EtaaxCore.sueldoDiarioEfectivo(s, _nomParams().salarioDiarioDefault);
+    return EtaaxCore.sueldoDiarioEfectivo(s, _nomParams());
 }
 function _sueldoEsDelMinimo(s){
-    return EtaaxCore.sueldoEsDelMinimo(s, _nomParams().salarioDiarioDefault);
+    return EtaaxCore.sueldoEsDelMinimo(s, _nomParams());
 }
 function _diasDelMesActual(){ var d=new Date(); return new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); }
 function _diasDefaultPeriodo(tipo){ return tipo==='semana'?7:tipo==='quincena'?15:tipo==='mes'?_diasDelMesActual():7; }
@@ -8031,11 +8031,11 @@ function renderFijosPanel(){
 <script src="/ctx-bar.js?v=29d2de56"></script>
 <script src="/presencia.js?v=431b2b80"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="../admin-guard.js"></script>
-<script src="/nomina-params.js"></script>
+<script src="/nomina-params.js?v=ab88bf74"></script>
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=1f8501c0"></script>
-<script src="/novedades.js?v=57830c20"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=47f6016b"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=37e92d68"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>

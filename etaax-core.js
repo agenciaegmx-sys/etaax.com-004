@@ -1696,19 +1696,44 @@
           (les paga el gobierno), practicantes, familiares. Va PRIMERO, incluso
           antes de un sueldo viejo que hubiera quedado capturado: si no, se le
           pagaría de la caja a quien no hay que pagarle.
-       2) el sueldo de su ficha, incluido un CERO capturado a propósito.
-       3) el mínimo del negocio, solo si nunca se le capturó nada. Devolver cero
+       2) el mínimo vigente si su sueldo está vinculado a ese parámetro.
+       3) el sueldo personalizado, incluido un CERO capturado a propósito.
+       4) el mínimo del negocio, si nunca se le capturó nada. Devolver cero
           ahí haría que la proyección saliera más baja que la realidad, y un
           renglón en cero nadie lo revisa: parece que ese colaborador no cuesta.
 
        `sueldoCapturado` es lo que separa "puse cero" de "nunca lo llené":
        parseFloat('') || 0 los vuelve idénticos, y sin esa marca un cero escrito
        a mano se ignoraba y se sustituía por el mínimo. Los registros viejos no
-       la traen, así que se siguen comportando igual que siempre. */
+       la traen. `origenSueldo` y la foto de referencias en los parámetros
+       separan el mínimo precargado del sueldo personalizado de esos registros. */
+    function minimoDiarioNomina(params) {
+        return n(params && typeof params === 'object' ? params.salarioDiarioDefault : params);
+    }
+
+    /* Los registros nuevos dicen su origen. Para los anteriores, el parámetro
+       conserva una foto de su referencia ANTES de cambiar el mínimo: así un
+       sueldo personalizado no se vincula si el mínimo alcanza después su monto.
+       La firma del importe también protege cambios desde un editor antiguo. */
+    function sueldoUsaMinimo(s, params) {
+        if (!s || s.esquemaSueldo !== 'diario') return false;
+        if (s.origenSueldo === 'personalizado') return false;
+        if (s.origenSueldo === 'minimo') return true;
+        var refs = params && typeof params === 'object' && params.referenciasSueldo;
+        var ref = refs && Object.prototype.hasOwnProperty.call(refs, s.id) ? refs[s.id] : null;
+        if (ref) return ref.origen === 'minimo' &&
+            Math.round(n(ref.sueldoDiario) * 100) === Math.round(n(s.sueldoDiario) * 100);
+        var diario = n(s.sueldoDiario), minimo = minimoDiarioNomina(params);
+        if (!diario) return !s.sueldoCapturado;
+        return !!(params && typeof params === 'object' && minimo > 0 &&
+            Math.round(diario * 100) === Math.round(minimo * 100));
+    }
+
     function sueldoDiarioEfectivo(s, salarioDiarioDefault) {
         if (!s) return 0;
         if (s.sinCostoNegocio) return 0;
-        var cap = !!s.sueldoCapturado;
+        if (sueldoUsaMinimo(s, salarioDiarioDefault)) return minimoDiarioNomina(salarioDiarioDefault);
+        var cap = !!s.sueldoCapturado || s.origenSueldo === 'personalizado';
         if (s.esquemaSueldo === 'diario') {
             var d = n(s.sueldoDiario);
             if (d > 0 || cap) return d;
@@ -1720,7 +1745,7 @@
                 return b / 30;                      // mensual o sin especificar
             }
         }
-        return n(salarioDiarioDefault);
+        return minimoDiarioNomina(salarioDiarioDefault);
     }
 
     /* Lo que cuesta ese colaborador en un mes. No es sueldoDiarioEfectivo × días:
@@ -1729,7 +1754,8 @@
     function baseMensualStaff(s, diasDelMes, salarioDiarioDefault) {
         if (!s) return 0;
         if (s.sinCostoNegocio) return 0;
-        var cap = !!s.sueldoCapturado, dias = n(diasDelMes) || 30;
+        var cap = !!s.sueldoCapturado || s.origenSueldo === 'personalizado', dias = n(diasDelMes) || 30;
+        if (sueldoUsaMinimo(s, salarioDiarioDefault)) return minimoDiarioNomina(salarioDiarioDefault) * dias;
         if (s.esquemaSueldo === 'diario') {
             var d = n(s.sueldoDiario);
             if (d > 0 || cap) return d * dias;
@@ -1741,16 +1767,18 @@
                 return b;
             }
         }
-        return n(salarioDiarioDefault) * dias;
+        return minimoDiarioNomina(salarioDiarioDefault) * dias;
     }
 
     /* ¿El sueldo sale del mínimo del negocio y no de su ficha? Para decirlo en
        pantalla: pagar el mínimo por descuido y pagarlo a propósito se ven igual. */
     function sueldoEsDelMinimo(s, salarioDiarioDefault) {
-        if (!s || s.sinCostoNegocio || s.sueldoCapturado) return false;
+        if (s && !s.sinCostoNegocio && sueldoUsaMinimo(s, salarioDiarioDefault))
+            return minimoDiarioNomina(salarioDiarioDefault) > 0;
+        if (!s || s.sinCostoNegocio || s.sueldoCapturado || s.origenSueldo === 'personalizado') return false;
         if (s.esquemaSueldo === 'diario' && n(s.sueldoDiario) > 0) return false;
         if (s.esquemaSueldo !== 'diario' && n(s.salarioBase) > 0) return false;
-        return n(salarioDiarioDefault) > 0;
+        return minimoDiarioNomina(salarioDiarioDefault) > 0;
     }
 
     /* Compra por contenido: contNeto es el contenido de UNA pieza/empaque de
@@ -1845,6 +1873,7 @@
         costosPresentacion: costosAbarrote,
         contenidoCompraPresentacion: contenidoCompraPresentacion,
         sueldoDiarioEfectivo: sueldoDiarioEfectivo,
+        sueldoUsaMinimo: sueldoUsaMinimo,
         baseMensualStaff: baseMensualStaff,
         sueldoEsDelMinimo: sueldoEsDelMinimo,
         n: n, fmtM: fmtM, fmtN: fmtN, genId: genId, todayStr: todayStr,
