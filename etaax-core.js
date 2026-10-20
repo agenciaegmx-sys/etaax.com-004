@@ -1729,6 +1729,15 @@
             Math.round(diario * 100) === Math.round(minimo * 100));
     }
 
+    /* Descuento por ocurrencia: cantidad entera, tarifa editable y centavos al
+       final. Comparte la regla el perfil y el editor de pago de nómina. */
+    function descuentoRetardos(cantidad, tarifa) {
+        var cant = Number(cantidad), importe = Number(tarifa);
+        cant = Number.isFinite(cant) ? Math.max(0, Math.floor(cant)) : 0;
+        importe = Number.isFinite(importe) ? Math.max(0, Math.round(importe * 100) / 100) : 0;
+        return {cantidad:cant, tarifa:importe, monto:Math.round(cant * importe * 100) / 100};
+    }
+
     function sueldoDiarioEfectivo(s, salarioDiarioDefault) {
         if (!s) return 0;
         if (s.sinCostoNegocio) return 0;
@@ -1873,6 +1882,7 @@
         costosPresentacion: costosAbarrote,
         contenidoCompraPresentacion: contenidoCompraPresentacion,
         sueldoDiarioEfectivo: sueldoDiarioEfectivo,
+        descuentoRetardos: descuentoRetardos,
         sueldoUsaMinimo: sueldoUsaMinimo,
         baseMensualStaff: baseMensualStaff,
         sueldoEsDelMinimo: sueldoEsDelMinimo,

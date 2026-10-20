@@ -2,7 +2,8 @@
    valores de opciones, permisos, almacenamiento ni reglas operativas. */
 (function () {
  'use strict';
- var pagina=location.pathname.split('/').pop();
+ var pagina=location.pathname.split('/').filter(Boolean).pop()||'';
+ if(pagina.indexOf('.')<0)pagina+='.html';
  var paginas={'horarios.html':'horarios','checklists.html':'checklists','organigrama.html':'organigrama','perfiles-puesto.html':'perfiles','evaluaciones.html':'evaluaciones'};
  var tipo=paginas[pagina], pendiente=false;
  if(!tipo&&pagina!=='staff-hub.html')return;

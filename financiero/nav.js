@@ -53,7 +53,7 @@
 
     function archivoActual() {
         var p = (location.pathname || '').split('/').pop();
-        return p || 'index.html';
+        return p ? (p.indexOf('.') < 0 ? p + '.html' : p) : 'index.html';
     }
 
     function pintar() {

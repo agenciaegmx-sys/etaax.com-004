@@ -268,9 +268,10 @@
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=dc47c144">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/administrativo/staff-ui.css?v=6a4582c6">
+<link rel="stylesheet" href="/administrativo/staff-ui.css?v=71f0fc2c">
 </head>
 <body>
+<script src="/etaax-ui-inicio.js?v=199a743f"></script>
 <header class="top-bar">
     <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
@@ -428,7 +429,7 @@
                 </div>
                 <div class="form-group full">
                     <label>Nombre completo *</label>
-                    <input type="text" id="fNombre" placeholder="Ej. María Guadalupe Torres">
+                    <input type="text" id="fNombre" oninput="_tituloColaborador()" placeholder="Ej. María Guadalupe Torres">
                 </div>
                 <div class="form-group">
                     <label>Puesto desempeñado *</label>
@@ -473,7 +474,7 @@
                 </div>
                 <div class="form-group">
                     <label>Sucursal asignada</label>
-                    <select id="fSucursal">
+                    <select id="fSucursal" onchange="_refrescarMinimoSucursal()">
                         <option value="">— Sin sucursal asignada —</option>
                     </select>
                 </div>
@@ -577,7 +578,7 @@
                     </label>
                     <input type="number" id="fSueldoDiario" min="0" step="0.01" placeholder="0.00" readonly oninput="_sueldoPersonalizadoStaff();_updateSueldoPreview();_calcPrimaVacacional()">
                     <span class="form-hint" id="hintSueldoDiario">Estándar = salario mínimo. Modificar requiere clave.</span>
-                    <button type="button" class="btn-row" onclick="_usarMinimoSueldo()">Usar mínimo del negocio</button>
+                    <button type="button" class="btn-row" onclick="_usarMinimoSueldo()">Usar mínimo de la sucursal</button>
                 </div>
                 <div class="form-group" id="grpSalarioBase">
                     <label style="display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -631,6 +632,11 @@
                     </select>
                 </div>
             </div>
+            <div class="form-grid" style="margin:18px 0"><div class="form-group full">
+                <label>Descuento por retardo ($)</label>
+                <input type="number" id="fMultaRetardo" min="0" step="0.01" placeholder="0.00">
+                <span class="form-hint">Importe por cada retardo. Nómina cuenta los marcados en Horarios y permite ajustar la cantidad y el importe antes de pagar. Cero desactiva el descuento.</span>
+            </div></div>
             <!-- Banco y CLABE solo tienen sentido si se paga por transferencia; con
                  efectivo o cheque estorban. Pero el bloque TAMBIÉN se muestra si ya
                  hay datos guardados, para que un cambio de forma de pago nunca deje
@@ -735,7 +741,7 @@
 <script src="../supabase-config.js"></script>
 <script src="/etaax-store.js?v=51ca2ddd"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js?v=599f78b4"></script>
-<script src="/etaax-core.js?v=073b1628"></script><!-- la regla del sueldo: una sola verdad -->
+<script src="/etaax-core.js?v=25f064ae"></script><!-- la regla del sueldo: una sola verdad -->
 <script src="/bancos-mx.js"></script><!-- bancos de México + CLABE: fuente única, no copiar -->
 <script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única -->
 <script src="/etaax-iconos.js?v=37e92d68"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
@@ -1011,20 +1017,20 @@ function _celdaPagoNomina(s) {
     if (s.sinCostoNegocio)
         return '<span style="color:var(--text-dim);font-size:11.5px">sin costo</span>';
 
-    var par = (window.NominaParams ? NominaParams.get(getNegocioActivo()) : {}) || {};
+    var par = (window.NominaParams ? NominaParams.get(getNegocioActivo(), s.sucursalId || MATRIZ_ID) : {}) || {};
     var diario = window.EtaaxCore
         ? EtaaxCore.sueldoDiarioEfectivo(s, par)
         : (parseFloat(s.sueldoDiario) || 0);
     if (!(diario > 0)) return '<span style="color:var(--text-dim)">—</span> ' + lbl;
 
     var total = diario * (_PER_DIAS[per] || 7);
-    /* Se avisa cuando el monto sale del mínimo del negocio y no de su ficha: un
+    /* Se avisa cuando el monto sale del mínimo de la sucursal y no de su ficha: un
        número que nadie capturó no debe verse igual que uno capturado. */
     var delMin = window.EtaaxCore && EtaaxCore.sueldoEsDelMinimo
         ? EtaaxCore.sueldoEsDelMinimo(s, par) : false;
     return '<strong style="font-variant-numeric:tabular-nums;color:' + (delMin?'var(--text-muted)':'var(--text)') + '">$' +
         total.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}) + '</strong> ' + lbl +
-        (delMin ? '<div style="font-size:9.5px;color:var(--text-dim)">mínimo del negocio</div>' : '');
+        (delMin ? '<div style="font-size:9.5px;color:var(--text-dim)">mínimo de la sucursal</div>' : '');
 }
 
 function renderPuestoChips() {
@@ -1181,8 +1187,8 @@ function openModal(id) {
 var _sueldoMinimoEditor = false, _sueldoMinimoMostrado = '';
 function _openModalReal(id) {
     tmpDocs = [];
-    clearForm();
     _poblarSucursalModal();
+    clearForm();
     document.getElementById('modalTitle').textContent = id ? 'Editar colaborador' : 'Agregar colaborador';
     document.getElementById('fId').value = '';
 
@@ -1227,7 +1233,7 @@ function _openModalReal(id) {
             document.getElementById('fSinCosto').checked  = !!s.sinCostoNegocio;
             document.getElementById('fSalarioBase').value  = s.salarioBase || (s.esquemaSueldo !== 'diario' && s.sueldoCapturado ? 0 : '');
             document.getElementById('fEsquemaSueldo').value = s.esquemaSueldo || 'periodo';
-            var parSueldo = window.NominaParams ? NominaParams.get(getNegocioActivo()) : {};
+            var parSueldo = window.NominaParams ? NominaParams.get(getNegocioActivo(), s.sucursalId || MATRIZ_ID) : {};
             _sueldoMinimoEditor = EtaaxCore.sueldoUsaMinimo(s, parSueldo);
             document.getElementById('fSueldoDiario').value = _sueldoMinimoEditor
                 ? EtaaxCore.sueldoDiarioEfectivo(s.sinCostoNegocio ? Object.assign({}, s, {sinCostoNegocio:false}) : s, parSueldo)
@@ -1238,6 +1244,7 @@ function _openModalReal(id) {
             document.getElementById('fCategoriaNomina').value = s.categoriaNomina || _categoriaPorRol(s.rol);
             document.getElementById('fPeriodicidad').value = s.periodicidad || '';
             document.getElementById('fDiaPago').value      = s.diaPago || '';
+            document.getElementById('fMultaRetardo').value = s.multaRetardo || 0;
             document.getElementById('fFormaPago').value    = s.formaPagoNomina || '';
             document.getElementById('fDatosBancarios').value = s.datosBancarios || '';
             _ponerBanco(s.bancoNomina || '');
@@ -1261,19 +1268,35 @@ function _openModalReal(id) {
             tmpDocs = (s.documentos || []).slice();
         }
     }
+    _toggleEsquemaSueldo();
     _togAccesoStaff(); // mostrar credenciales o NIP según el rol
     _calcPrimaVacacional(); // recalcular con todos los datos ya cargados
     renderChips();
     _lockSueldos(); // salario = regla estándar (mínimo); modificar pide clave
     _lockAcceso(!!id); // credenciales bloqueadas al editar; libres al dar de alta
+    _tituloColaborador();
     document.getElementById('modalStaff').classList.add('open');
+}
+
+function _tituloColaborador(){
+    var nombre = (document.getElementById('fNombre').value || '').trim();
+    var titulo = (document.getElementById('fId').value ? 'Editar colaborador' : 'Agregar colaborador') + (nombre ? ' · ' + nombre : '');
+    var el = document.querySelector('#modalTitle .s-title-copy') || document.getElementById('modalTitle');
+    if (el.textContent !== titulo) el.textContent = titulo;
 }
 
 /* ── Salario como REGLA ESTÁNDAR: el campo arranca bloqueado (referencia =
    salario mínimo). Modificarlo requiere clave de administrador. Si el valor
    guardado quedó por DEBAJO del mínimo, se avisa en el hint. ── */
+function _parametrosSueldoEditor(){
+    return window.NominaParams ? NominaParams.get(getNegocioActivo(), document.getElementById('fSucursal').value || MATRIZ_ID) : {};
+}
+function _refrescarMinimoSucursal(){
+    if (_sueldoMinimoEditor) { _toggleEsquemaSueldo(); _lockSueldos(); }
+    _calcPrimaVacacional();
+}
 function _lockSueldos(){
-    var def=(window.NominaParams?(NominaParams.get(getNegocioActivo()).salarioDiarioDefault||0):0);
+    var def=(window.NominaParams?(_parametrosSueldoEditor().salarioDiarioDefault||0):0);
     [['fSueldoDiario','btnModSueldoDiario'],['fSalarioBase','btnModSalarioBase']].forEach(function(par){
         var el=document.getElementById(par[0]), b=document.getElementById(par[1]);
         if(el){ el.readOnly=true; el.style.opacity='.7'; el.style.cursor='not-allowed'; }
@@ -1282,9 +1305,9 @@ function _lockSueldos(){
     var h=document.getElementById('hintSueldoDiario');
     if(h){
         var v=parseFloat(document.getElementById('fSueldoDiario').value)||0;
-        if(_sueldoMinimoEditor){ h.textContent='Vinculado al mínimo del negocio: $'+def+'. Se actualiza al cambiar el parámetro.'; h.style.color=''; }
+        if(_sueldoMinimoEditor){ h.textContent='Vinculado al mínimo de la sucursal: $'+def+'. Se actualiza al cambiar el parámetro.'; h.style.color=''; }
         else if(def>0 && v>0 && v<def){ h.textContent='Sueldo personalizado por debajo del mínimo ($'+def+'). Se conserva sin ajustes automáticos.'; h.style.color='var(--red)'; }
-        else if(def>0){ h.textContent='Sueldo personalizado. No cambia con el mínimo del negocio.'; h.style.color=''; }
+        else if(def>0){ h.textContent='Sueldo personalizado. No cambia con el mínimo de la sucursal.'; h.style.color=''; }
         else { h.textContent='Modificar requiere clave.'; h.style.color=''; }
     }
 }
@@ -1301,11 +1324,11 @@ function _desbloquearSueldo(inputId, btnId){ _desbloquearCampo(inputId, btnId, '
 function _sueldoPersonalizadoStaff(){
     _sueldoMinimoEditor = false;
     var h = document.getElementById('hintSueldoDiario');
-    h.textContent = 'Sueldo personalizado. No cambia con el mínimo del negocio.'; h.style.color = '';
+    h.textContent = 'Sueldo personalizado. No cambia con el mínimo de la sucursal.'; h.style.color = '';
 }
 function _usarMinimoSueldo(){
-    _gateStaff('Usar salario mínimo del negocio', function(){
-        var par = window.NominaParams ? NominaParams.get(getNegocioActivo()) : {};
+    _gateStaff('Usar salario mínimo de la sucursal', function(){
+        var par = _parametrosSueldoEditor();
         _sueldoMinimoEditor = true;
         document.getElementById('fSueldoDiario').value = par.salarioDiarioDefault || 0;
         _sueldoMinimoMostrado = document.getElementById('fSueldoDiario').value;
@@ -1323,11 +1346,13 @@ function _lockAcceso(isEdit){
 }
 
 function clearForm() {
+    document.getElementById('fSucursal').value = _getSucActiva() || MATRIZ_ID;
     ['fNombre','fPuesto','fFechaIngreso','fFechaNacimiento','fCurp','fNss','fCelular','fCorreo','fDireccion','fDatosBancarios','fPrimaVacacional','fReferencias','fNotas','fUsuario','fPwd','fNip','fSalarioBase'].forEach(function(id){
         document.getElementById(id).value = '';
     });
     document.getElementById('fPeriodicidad').value = '';
     document.getElementById('fDiaPago').value = '';
+    document.getElementById('fMultaRetardo').value = 0;
     document.getElementById('fFormaPago').value = '';
     document.getElementById('fFoto').value = '';
     document.getElementById('fotoHint').textContent = 'Se reduce y se guarda en la nube. JPG o PNG.';
@@ -1344,7 +1369,7 @@ function clearForm() {
     document.getElementById('fCategoriaNomina').value = 'operativa';
     // Estandarizar el staff NUEVO al salario mínimo diario definido (si hay):
     // arranca con esquema "por día" y el sueldo precargado al mínimo.
-    var _defMin = (window.NominaParams ? (NominaParams.get(getNegocioActivo()).salarioDiarioDefault || 0) : 0);
+    var _defMin = (window.NominaParams ? (_parametrosSueldoEditor().salarioDiarioDefault || 0) : 0);
     _sueldoMinimoEditor = true;
     document.getElementById('fEsquemaSueldo').value = _defMin > 0 ? 'diario' : 'periodo';
     document.getElementById('fSueldoDiario').value = _defMin > 0 ? _defMin : '';
@@ -1511,7 +1536,7 @@ function _toggleEsquemaSueldo() {
     // Al elegir pago por día, un campo vacío toma la referencia; un cero propio se conserva.
     if (diario && document.getElementById('fSueldoDiario').value === '') _sueldoMinimoEditor = true;
     if (diario && _sueldoMinimoEditor && window.NominaParams) {
-        var def = NominaParams.get(getNegocioActivo()).salarioDiarioDefault;
+        var def = _parametrosSueldoEditor().salarioDiarioDefault;
         document.getElementById('fSueldoDiario').value = def || 0;
         _sueldoMinimoMostrado = document.getElementById('fSueldoDiario').value;
     }
@@ -1549,7 +1574,7 @@ function _domingosDelMes() {
 /* Prima DOMINICAL = domingos del mes × sueldo diario × % (si trabaja domingos).
    (la función conserva el nombre _calcPrimaVacacional por compatibilidad interna) */
 function _calcPrimaVacacional() {
-    var pct = (window.NominaParams ? NominaParams.get(getNegocioActivo()).primaVacacionalPct : 25) || 25;
+    var pct = (window.NominaParams ? _parametrosSueldoEditor().primaVacacionalPct : 25) || 25;
     var diario = _sueldoDiarioEditor();
     var domingos = _domingosDelMes();
     var prima = domingos * diario * (pct / 100);
@@ -1693,6 +1718,7 @@ async function _saveStaffReal() {
         categoriaNomina: document.getElementById('fCategoriaNomina').value || 'operativa',
         periodicidad:    document.getElementById('fPeriodicidad').value,
         diaPago:         document.getElementById('fDiaPago').value,
+        multaRetardo:    EtaaxCore.descuentoRetardos(1, document.getElementById('fMultaRetardo').value).tarifa,
         foto:            document.getElementById('fFoto').value,
         sinCostoNegocio: document.getElementById('fSinCosto').checked,
         formaPagoNomina: document.getElementById('fFormaPago').value,
@@ -2271,7 +2297,7 @@ function _expNominaCuerpo(s, revelado) {
     var oculto = '••••••';
     var esquema = s.esquemaSueldo === 'diario' ? 'Por día trabajado' : 'Fijo por periodo';
     var sueldo = s.esquemaSueldo === 'diario'
-        ? EtaaxCore.sueldoDiarioEfectivo(Object.assign({}, s, {sinCostoNegocio:false}), window.NominaParams ? NominaParams.get(getNegocioActivo()) : 0) : s.salarioBase;
+        ? EtaaxCore.sueldoDiarioEfectivo(Object.assign({}, s, {sinCostoNegocio:false}), window.NominaParams ? NominaParams.get(getNegocioActivo(), s.sucursalId || MATRIZ_ID) : 0) : s.salarioBase;
     var etiquetaSueldo = s.esquemaSueldo === 'diario' ? 'Sueldo diario' : 'Salario base (por periodo)';
     var clabe = s.clabeNomina || '';
     var clabeTxt = clabe
@@ -2284,6 +2310,7 @@ function _expNominaCuerpo(s, revelado) {
         _expF(etiquetaSueldo, sueldo ? (revelado ? _dinero(sueldo) : oculto) : '') +
         _expF('Periodicidad', s.periodicidad ? s.periodicidad.charAt(0).toUpperCase() + s.periodicidad.slice(1) : '') +
         _expF('Día de pago', s.diaPago) +
+        _expF('Descuento por retardo', s.multaRetardo > 0 ? (revelado ? _dinero(s.multaRetardo) + ' por retardo' : oculto) : 'Sin descuento') +
         (function(){
             var bs = _bonosDeStaff(s);
             if (!bs.length) return _expF('Bonos e incentivos', '');
@@ -2568,7 +2595,7 @@ document.addEventListener('keydown', function(e){ if (e.key === 'Escape') cerrar
 <script src="/ctx-bar.js?v=29d2de56"></script>
 <script src="/presencia.js?v=431b2b80"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="../admin-guard.js"></script>
-<script src="/nomina-params.js?v=ab88bf74"></script>
+<script src="/nomina-params.js?v=0464451a"></script>
 <script src="/global-nav.js?v=d6ed658c"></script>
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
@@ -2579,6 +2606,6 @@ document.addEventListener('keydown', function(e){ if (e.key === 'Escape') cerrar
 <script src="/etaax-header.js?v=15a5a6ef"></script>
 <script src="/etaax-modulos-ui.js?v=34de802f"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
-<script src="/administrativo/staff-ui.js?v=afd56024"></script>
+<script src="/administrativo/staff-ui.js?v=8409e757"></script>
 </body>
 </html>

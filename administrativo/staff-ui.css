@@ -9,7 +9,7 @@
 [data-theme="light"] :is(.etx-staff-page,.etx-permisos-page,.s-staff-tool),
 :is(.etx-staff-page,.etx-permisos-page)[data-theme="light"] {--s-input:#f7f5f0;--s-selected:#e8f3f4;--s-ink:#fff;}
 :is(.etx-staff-page,.etx-permisos-page) .main-content {min-width:0;}
-:is(.etx-staff-page,.etx-permisos-page) #mainContent > .header {padding:26px 24px;border-color:var(--s-line);background:transparent;}
+:is(.etx-staff-page,.etx-permisos-page) #mainContent > .header {padding:26px 24px;border-color:var(--s-line);background:var(--s-panel);isolation:isolate;}
 :is(.etx-staff-page,.etx-permisos-page) .brand {gap:6px;}
 :is(.etx-staff-page,.etx-permisos-page) .brand-label {color:var(--s-muted);font-size:9px;letter-spacing:2.5px;}
 body:is(.etx-staff-page,.etx-permisos-page) #mainContent .brand-title {font:700 30px/1.2 'DM Sans',sans-serif;letter-spacing:-.7px;color:var(--s-terra);text-transform:none;}

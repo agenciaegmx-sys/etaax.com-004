@@ -73,7 +73,7 @@
             '<div class="modal-body">' +
               '<div class="sm-sec">Datos personales</div>' +
               '<div class="sm-grid">' +
-                '<div class="sm-grp full"><label>Nombre completo *</label><input type="text" id="sm_nombre" placeholder="Ej. María Guadalupe Torres"></div>' +
+                '<div class="sm-grp full"><label>Nombre completo *</label><input type="text" id="sm_nombre" oninput="StaffModal._titulo()" placeholder="Ej. María Guadalupe Torres"></div>' +
                 '<div class="sm-grp"><label>Puesto desempeñado</label><input type="text" id="sm_puesto" placeholder="Mesero, Cocinero, Cajero…"></div>' +
                 /* ÁREA con opciones fijas, no texto libre. El portal del colaborador
                    (QR + NIP) decide con esto qué checklists y qué recetario le
@@ -96,7 +96,7 @@
                 '<div class="sm-grp"><label>N° Seguro Social (NSS)</label><input type="text" id="sm_nss" maxlength="11" placeholder="11 dígitos" inputmode="numeric"></div>' +
                 '<div class="sm-grp full"><label>Dirección actual</label><input type="text" id="sm_direccion" placeholder="Calle, colonia, municipio, CP"></div>' +
                 '<div class="sm-grp"><label>Estado</label><select id="sm_estado"><option>Activo</option><option>Baja temporal</option><option>Baja definitiva</option></select></div>' +
-                '<div class="sm-grp"><label>Sucursal asignada</label><select id="sm_sucursal"><option value="">— Sin sucursal —</option></select></div>' +
+                '<div class="sm-grp"><label>Sucursal asignada</label><select id="sm_sucursal" onchange="StaffModal._togEsq()"><option value="">— Sin sucursal —</option></select></div>' +
                 /* Los roles salen del CATÁLOGO del negocio (page-guard.js), el mismo
                    que administra Permisos y Roles: si un negocio creó "Hostess" o
                    renombró "Mesero" a "Cajera", aquí aparece igual. Escrita a mano,
@@ -126,13 +126,14 @@
                   '<option value="socios">🤝 Socios Operativos</option></select>' +
                   '<span class="sm-hint">Solo para nómina (aparte del acceso al sistema). Opera el negocio, incluida gerencia → Operativa. No opera (contador, redes) → Administrativa.</span></div>' +
                 '<div class="sm-grp"><label>Esquema de pago</label><select id="sm_esquemaSueldo" onchange="StaffModal._togEsq()"><option value="periodo">Sueldo fijo por periodo</option><option value="diario">Sueldo por día (× días trabajados)</option></select></div>' +
-                '<div class="sm-grp" id="grpSmDiario" style="display:none"><label>Sueldo diario</label><input type="number" id="sm_sueldoDiario" min="0" step="0.01" placeholder="0.00" oninput="StaffModal._sueldoPropio();StaffModal._updPrev();StaffModal._calcPrima()"><span class="sm-hint">Al pagar: sueldo diario × días trabajados.</span><button type="button" class="sm-btn sm-btn-ghost" onclick="StaffModal._usarMinimo()">Usar mínimo del negocio</button></div>' +
+                '<div class="sm-grp" id="grpSmDiario" style="display:none"><label>Sueldo diario</label><input type="number" id="sm_sueldoDiario" min="0" step="0.01" placeholder="0.00" oninput="StaffModal._sueldoPropio();StaffModal._updPrev();StaffModal._calcPrima()"><span class="sm-hint">Al pagar: sueldo diario × días trabajados.</span><button type="button" class="sm-btn sm-btn-ghost" onclick="StaffModal._usarMinimo()">Usar mínimo de la sucursal</button></div>' +
                 '<div class="sm-grp" id="grpSmBase"><label>Salario base (por periodo)</label><input type="number" id="sm_salarioBase" min="0" step="0.01" placeholder="0.00" oninput="StaffModal._calcPrima()"></div>' +
                 '<div class="sm-grp full" id="grpSmPreview" style="display:none"><div id="sm_sueldoPreview" style="background:var(--surface2);border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-muted)"></div></div>' +
                 '<div class="sm-grp"><label>Periodicidad de pago</label><select id="sm_periodicidad" onchange="StaffModal._calcPrima()"><option value="">— Seleccionar —</option><option value="semanal">Semanal</option><option value="quincenal">Quincenal</option><option value="mensual">Mensual</option></select></div>' +
                 '<div class="sm-grp"><label>Día de pago</label><select id="sm_diaPago"><option value="">— Seleccionar —</option><option value="lunes">Lunes</option><option value="martes">Martes</option><option value="miercoles">Miércoles</option><option value="jueves">Jueves</option><option value="viernes">Viernes</option><option value="sabado">Sábado</option><option value="domingo">Domingo</option><option value="dia1_15">Días 1 y 15</option><option value="dia15_ultimo">Días 15 y último</option><option value="dia1">Día 1 del mes</option><option value="dia15">Día 15 del mes</option><option value="ultimo">Último día del mes</option></select></div>' +
                 '<div class="sm-grp"><label>Forma de pago de nómina</label><select id="sm_formaPago" onchange="StaffModal._togBanc()"><option value="">— Seleccionar —</option><option>Transferencia Bancaria</option><option>Efectivo</option><option>Cheque</option></select></div>' +
               '</div>' +
+              '<div class="sm-grp" style="margin:18px 0"><label>Descuento por retardo ($)</label><input type="number" id="sm_multaRetardo" min="0" step="0.01" placeholder="0.00"><span class="sm-hint">Importe por retardo marcado en Horarios. Cantidad e importe editables al pagar nómina. Cero desactiva el descuento.</span></div>' +
               /* Banco y CLABE solo con transferencia; con efectivo o cheque estorban.
                  Se muestran igual si YA hay datos guardados: cambiar la forma de pago
                  no debe esconder lo que alguien capturó. */
@@ -253,6 +254,7 @@
         document.getElementById('sm_rol').value = '';
         _poblarSucModal(staffId ? '' : (localStorage.getItem('etaax_sucursal_activa') || ''));
         document.getElementById('sm_periodicidad').value = '';
+        document.getElementById('sm_multaRetardo').value = 0;
         document.getElementById('sm_categoriaNomina').value = 'operativa';
         document.getElementById('sm_esquemaSueldo').value = 'periodo';
         document.getElementById('sm_sueldoDiario').value = '';
@@ -292,7 +294,7 @@
                 document.getElementById('sm_nip').placeholder = s.nipHash ? '••••• guardado — vacío para conservarlo' : '5 dígitos';
                 document.getElementById('sm_salarioBase').value = s.salarioBase || (s.esquemaSueldo !== 'diario' && s.sueldoCapturado ? 0 : '');
                 document.getElementById('sm_esquemaSueldo').value = s.esquemaSueldo || 'periodo';
-                var parSueldo = window.NominaParams ? NominaParams.get(_negId) : {};
+                var parSueldo = window.NominaParams ? NominaParams.get(_negId, s.sucursalId || 'suc_principal') : {};
                 _sueldoMinimo = EtaaxCore.sueldoUsaMinimo(s, parSueldo);
                 document.getElementById('sm_sueldoDiario').value = _sueldoMinimo ? (parSueldo.salarioDiarioDefault || 0) : (s.esquemaSueldo !== 'diario' && !(s.sueldoDiario > 0) ? '' : (s.sueldoDiario != null ? s.sueldoDiario : ''));
                 _minimoMostrado = document.getElementById('sm_sueldoDiario').value;
@@ -300,6 +302,7 @@
                 document.getElementById('sm_categoriaNomina').value = s.categoriaNomina || _categoriaPorRol(s.rol);
                 document.getElementById('sm_periodicidad').value = s.periodicidad || '';
                 document.getElementById('sm_diaPago').value = s.diaPago || '';
+                document.getElementById('sm_multaRetardo').value = s.multaRetardo || 0;
                 document.getElementById('sm_formaPago').value = s.formaPagoNomina || '';
                 document.getElementById('sm_datosBancarios').value = s.datosBancarios || '';
                 _ponerBanco(s.bancoNomina || '');
@@ -325,9 +328,15 @@
         }
         window.StaffModal._togAcceso(); // mostrar credenciales o NIP según el rol
         window.StaffModal._calcPrima(); // recalcular con todos los datos cargados
-        _renderChips();
+        _renderChips(); _titulo();
     }
 
+    function _titulo(){
+        var nombre = (document.getElementById('sm_nombre').value || '').trim();
+        var el = document.getElementById('sm_title');
+        var t = (document.getElementById('sm_id').value ? 'Editar colaborador' : 'Agregar colaborador') + (nombre ? ' · ' + nombre : '');
+        if (el.textContent !== t) el.textContent = t;
+    }
     function _renderChips() {
         var list = document.getElementById('sm_chips');
         if (!list) return;
@@ -392,6 +401,7 @@
             categoriaNomina: document.getElementById('sm_categoriaNomina').value || 'operativa',
             periodicidad: document.getElementById('sm_periodicidad').value,
             diaPago: document.getElementById('sm_diaPago').value,
+            multaRetardo: EtaaxCore.descuentoRetardos(1, document.getElementById('sm_multaRetardo').value).tarifa,
             formaPagoNomina: document.getElementById('sm_formaPago').value,
             bancoNomina: _bancoValor(),
             clabeNomina: document.getElementById('sm_clabe').value.replace(/[^0-9]/g, ''),
@@ -429,6 +439,7 @@
         save: _save,
         categoriaPorRol: _categoriaPorRol,
         _close: _close,
+        _titulo: _titulo,
         _save: _saveColaborador,
         _sugCat: function () { document.getElementById('sm_categoriaNomina').value = _categoriaPorRol(document.getElementById('sm_rol').value); },
         _rolChange: function () { window.StaffModal._sugCat(); window.StaffModal._togAcceso(); },
@@ -482,7 +493,7 @@
             document.getElementById('grpSmBase').style.display  = diario ? 'none' : '';
             if (diario && document.getElementById('sm_sueldoDiario').value === '') _sueldoMinimo = true;
             if (diario && _sueldoMinimo && window.NominaParams) {
-                var def = NominaParams.get(_negId || localStorage.getItem('etaax_negocio_activo') || '').salarioDiarioDefault;
+                var def = NominaParams.get(_negId || localStorage.getItem('etaax_negocio_activo') || '', document.getElementById('sm_sucursal').value || 'suc_principal').salarioDiarioDefault;
                 document.getElementById('sm_sueldoDiario').value = def || 0;
                 _minimoMostrado = document.getElementById('sm_sueldoDiario').value;
             }
@@ -492,7 +503,7 @@
         _calcPrima: function () {
             // Prima DOMINICAL = domingos del mes × sueldo diario × %
             var negId = _negId || localStorage.getItem('etaax_negocio_activo') || '';
-            var pct = (window.NominaParams ? NominaParams.get(negId).primaVacacionalPct : 25) || 25;
+            var pct = (window.NominaParams ? NominaParams.get(negId, document.getElementById('sm_sucursal').value || 'suc_principal').primaVacacionalPct : 25) || 25;
             var diario;
             if (document.getElementById('sm_esquemaSueldo').value === 'diario') diario = parseFloat(document.getElementById('sm_sueldoDiario').value) || 0;
             else { var b = parseFloat(document.getElementById('sm_salarioBase').value) || 0, per = document.getElementById('sm_periodicidad').value; diario = per === 'semanal' ? b / 7 : per === 'quincenal' ? b / 15 : b / 30; }

@@ -136,6 +136,7 @@
 <link rel="stylesheet" href="/administrativo/staff-operativo-ui.css?v=742f8727">
 </head>
 <body>
+<script src="/etaax-ui-inicio.js?v=199a743f"></script>
 <div class="mod-grid-bg"></div>
 <div class="mod-glow"></div>
 
@@ -288,7 +289,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
-<script src="/etaax-core.js?v=073b1628"></script>
+<script src="/etaax-core.js?v=25f064ae"></script>
 <script src="/etaax-store.js?v=51ca2ddd"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js?v=599f78b4"></script>
 <script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única -->
@@ -708,7 +709,8 @@ function _renderGrid(scope){
            + '</span><span class="pp">'+esc(s.puesto||'')+'</span>'
            + '<span class="ph">'+_fmtH(_horasStaff(s.id))+' / sem</span>'
            + (_ar.turnos ? '<span class="hr-asis-res">✓ '+_ar.si+'  ✕ '+_ar.no+(_retardosSemana(s.id)?'  ⏱ '+_retardosSemana(s.id):'')+(_ar.sinMarcar?'  · '+_ar.sinMarcar+' sin marcar':'')
-                          + (_ar.si?'<br><b>'+_fmtH(_horasAsistidas(s.id))+'</b> asistidas':'') + '</span>' : '')
+                          + (_ar.si?'<br><b>'+_fmtH(_horasAsistidas(s.id))+'</b> asistidas':'')
+                          + _descuentoRetardosSemana(s) + '</span>' : '')
            + '</div></td>';
         for (var i=0;i<7;i++){ h += '<td class="hr-cell '+(i===hoy?'hoy':'')+'">'+_turnoCellHTML(s.id,i)+'</td>'; }
         h += '</tr>';
@@ -779,7 +781,7 @@ function marcarRetardo(sid, dayIdx, ev){
     persist(rec);
     render();
 }
-// Retardos de la semana (para el resumen y, más adelante, para la nómina).
+// Retardos de la semana: el pago de nómina los cuenta por su propio periodo.
 function _retardosSemana(sid){
     var n = 0;
     for (var i=0;i<7;i++){
@@ -787,6 +789,12 @@ function _retardosSemana(sid){
         if (t && !t.desc && t.in && t.ret) n++;
     }
     return n;
+}
+function _descuentoRetardosSemana(s){
+    var r=EtaaxCore.descuentoRetardos(_retardosSemana(s.id), s.multaRetardo);
+    if(!r.monto) return '';
+    var dinero=function(v){return v.toLocaleString('es-MX',{style:'currency',currency:'MXN'});};
+    return '<br><span title="Ajustable al pagar nómina">'+r.cantidad+' × '+dinero(r.tarifa)+' = −'+dinero(r.monto)+'</span>';
 }
 function _usuarioActualHor(){
     try { var c = JSON.parse(localStorage.getItem('etaax_ctx')||'{}'); return c.userName || c.negNombre || ''; }
@@ -1182,6 +1190,6 @@ document.addEventListener('keydown', function(e){
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=15a5a6ef"></script>
 <script src="/etaax-modulos-ui.js?v=34de802f"></script>
-<script src="/administrativo/staff-operativo-ui.js?v=e08b0432"></script>
+<script src="/administrativo/staff-operativo-ui.js?v=49b7d26d"></script>
 </body>
 </html>

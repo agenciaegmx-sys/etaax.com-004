@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="../styles.css?v=d87bdb06">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="../supabase-config.js"></script>
-<script src="/etaax-core.js?v=073b1628"></script>
+<script src="/etaax-core.js?v=25f064ae"></script>
 <script src="/etaax-store.js?v=51ca2ddd"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js?v=599f78b4"></script>
 <script src="/qr-pairing.js"></script>
@@ -519,6 +519,7 @@
 <link rel="stylesheet" href="/administrativo/operaciones-ui.css?v=de67a3b6">
 </head>
 <body>
+<script src="/etaax-ui-inicio.js?v=199a743f"></script>
 
 <header class="top-bar">
     <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
@@ -6877,11 +6878,11 @@ function _abrirSelectorPagoReal(tipo){
             body.innerHTML=staff.map(function(s){
                 var sub=(s.puesto?_esc(s.puesto)+' · ':'')+(catLbl[_ggStaffCat(s)]||'');
                 if(!_sucAct) sub+=' · <span style="color:#7ab8f5">'+_esc(_sucNombreDx(s.sucursalId))+'</span>';
-                /* Se dice cuándo el sueldo sale del mínimo del negocio y no de su
+                /* Se dice cuándo el sueldo sale del mínimo de la sucursal y no de su
                    ficha: pagarle el mínimo a propósito y pagárselo porque nadie le
                    configuró el sueldo se ven idénticos en la lista, y el segundo es
                    un error que conviene notar ANTES de pagar. */
-                var _lbl = _sueldoEsDelMinimo(s) ? '≈ mínimo del negocio' : '≈ sueldo diario';
+                var _lbl = _sueldoEsDelMinimo(s) ? '≈ mínimo de la sucursal' : '≈ sueldo diario';
                 return _selRow('abrirPagoNomina(\''+s.id+'\')', _esc(s.nombre), sub, fmtM(_sueldoDiarioEfectivo(s)), _lbl);
             }).join('');
         }
@@ -6937,10 +6938,10 @@ var _PN_METODOS = {
    veces —aquí, en gastos-globales y en el simulador— y las tres no coincidían.
    Ver el bloque "EL SUELDO DE UN COLABORADOR" en /etaax-core.js. */
 function _sueldoDiarioEfectivo(s){
-    return EtaaxCore.sueldoDiarioEfectivo(s, _nomParams());
+    return EtaaxCore.sueldoDiarioEfectivo(s, _nomParams(s.sucursalId || 'suc_principal'));
 }
 function _sueldoEsDelMinimo(s){
-    return EtaaxCore.sueldoEsDelMinimo(s, _nomParams());
+    return EtaaxCore.sueldoEsDelMinimo(s, _nomParams(s.sucursalId || 'suc_principal'));
 }
 function _diasDelMesActual(){ var d=new Date(); return new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); }
 function _diasDefaultPeriodo(tipo){ return tipo==='semana'?7:tipo==='quincena'?15:tipo==='mes'?_diasDelMesActual():7; }
@@ -7059,6 +7060,14 @@ function _ensurePagoNomModal(){
           +'<div id="pnPrimaDom" style="display:none;margin-top:8px;font-size:12px;color:var(--accent);background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.25);border-radius:6px;padding:8px 12px"></div>'
           +'<div id="pnAsisBox" style="margin-top:8px;font-size:12px;color:var(--text-muted);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;line-height:1.5"></div>'
         +'</div>'
+        +'<div class="gs-sec"><div class="gs-sec-title">Descuento por retardos</div>'
+          +'<div class="fg-row-3">'
+            +'<div class="fg"><label>Retardos del periodo</label><input type="number" id="pnRetardos" min="0" step="1" oninput="_pnActualizarRetardos()"></div>'
+            +'<div class="fg"><label>Importe por retardo ($)</label><input type="number" id="pnMultaRetardo" min="0" step="0.01" oninput="_pnActualizarRetardos()"></div>'
+            +'<div class="fg"><label>Total a descontar</label><input type="text" id="pnRetardosTotal" readonly></div>'
+          +'</div>'
+          +'<div class="form-hint">Cantidad desde Horarios e importe desde el perfil. Puedes ajustar ambos para este pago. Cero elimina el descuento.</div>'
+        +'</div>'
         +'<div class="gs-sec"><div class="gs-sec-title">Conceptos adicionales</div>'
           +'<div class="fg-row-3" style="align-items:end">'
             +'<div class="fg"><label>Tipo</label><select id="pnCptTipo" onchange="_pnCptTipoChange()"><option value="bono">🎁 Bono</option><option value="sancion">⛔ Sanción / descuento</option><option value="horas">⏱️ Horas extras</option><option value="festivo">🎉 Día festivo</option><option value="doble">2️⃣ Día doble</option><option value="prima">☀️ Prima dominical</option><option value="otro">📋 Otro</option></select></div>'
@@ -7107,6 +7116,8 @@ function abrirPagoNomina(staffId){
     _cerrarSelPago();
     _ensurePagoNomModal();
     _pagoNomStaff=s; _pagoNomConceptos=[]; _pnTotalManual=null; _pnBonosQuitados=[];
+    document.getElementById('pnMultaRetardo').value=EtaaxCore.descuentoRetardos(1,s.multaRetardo).tarifa;
+    document.getElementById('pnRetardos').value=0;
     // La prima dominical se calcula sola por los domingos del periodo (ver _pnPrimaDom).
     // Se pre-marca si el colaborador trabaja domingos, pero siempre es visible/ajustable.
     _pnPrimaInclude=!!s.primaVacacionalEnPago;
@@ -7216,8 +7227,22 @@ function _pnRangoChange(){
             (a && (a.conRol || a.descansos)) ? (a.asistidos + a.descansos) : _diffDias(d,h);
         _pnPintarAsistencia(a);
     }
+    document.getElementById('pnRetardos').value = a ? a.retardos : 0;
+    _pnActualizarRetardos();
     _pnReponerBonos();   // el bono "por día" depende de los días del periodo
     _pnCalc();
+}
+/* Un único concepto negativo reutiliza el desglose, recibo y registro de gasto.
+   Los bonos no lo regeneran; cambiar el periodo vuelve a contar Horarios. */
+function _pnActualizarRetardos(){
+    var r=EtaaxCore.descuentoRetardos(document.getElementById('pnRetardos').value,
+        document.getElementById('pnMultaRetardo').value);
+    document.getElementById('pnRetardosTotal').value=fmtM(r.monto);
+    _pagoNomConceptos=_pagoNomConceptos.filter(function(c){return !c._retardos;});
+    if(r.monto>0) _pagoNomConceptos.push({concepto:'Descuento por retardos',
+        detalle:r.cantidad+' retardo'+(r.cantidad!==1?'s':'')+' × '+fmtM(r.tarifa),
+        monto:-r.monto, pago:'mismo', fecha:'', _retardos:true, cantidad:r.cantidad, tarifa:r.tarifa});
+    _pnTotalManual=null; _pnRenderCptList(); _pnCalc();
 }
 /* Panel de asistencia: de dónde salió el número. Sin esto el usuario ve un dato que
    no puso y no sabe si confiar en él. */
@@ -7293,7 +7318,7 @@ function _pnTotalEdit(){
     var hint=document.getElementById('pnTotalHint'); if(hint) hint.style.display='';
 }
 function _pnTotalAuto(){ _pnTotalManual=null; _pnCalc(); }
-function _nomParams(){ return (window.NominaParams ? NominaParams.get(getNegocioActivo()) : {jornadaHoras:8,primaVacacionalPct:25,salarioDiarioDefault:0}); }
+function _nomParams(sucId){ return (window.NominaParams ? NominaParams.get(getNegocioActivo(), sucId === undefined ? (_pagoNomStaff ? (_pagoNomStaff.sucursalId || 'suc_principal') : (localStorage.getItem('etaax_sucursal_activa') || 'suc_principal')) : sucId) : {jornadaHoras:8,primaVacacionalPct:25,salarioDiarioDefault:0}); }
 function _pnCptTipoChange(){
     var tipo=document.getElementById('pnCptTipo').value;
     var necesitaCant = (tipo==='horas'||tipo==='festivo'||tipo==='doble'||tipo==='prima');
@@ -7399,6 +7424,9 @@ function _pnCptEliminar(i){
     /* Si quitan un bono automático, se recuerda: si reviviera al mover una fecha
        el usuario pensaría que el sistema le lleva la contraria. */
     var c=_pagoNomConceptos[i];
+    if(c && c._retardos){
+        document.getElementById('pnRetardos').value=0; _pnActualizarRetardos(); return;
+    }
     if(c && c._auto && c._bonoKey) _pnBonosQuitados.push(c._bonoKey);
     _pagoNomConceptos.splice(i,1); _pnTotalManual=null; _pnRenderCptList(); _pnCalc();
 }
@@ -7589,7 +7617,10 @@ function _confirmarPagoNom(){
         +_fmtHNom(_asis.horas)+' efectivas)';
     var prima=_pnPrimaDom();
     if(_pnPrimaInclude && prima.monto>0) desg+='\n+ Prima dominical ('+prima.domingos+' domingo'+(prima.domingos!==1?'s':'')+'): '+fmtM(prima.monto);
-    mismos.forEach(function(c){ desg+='\n+ '+c.concepto+': '+fmtM(c.monto); });
+    mismos.forEach(function(c){
+        desg+=c._retardos ? '\n− '+c.concepto+' ('+c.detalle+'): '+fmtM(Math.abs(c.monto))
+            : '\n+ '+c.concepto+': '+fmtM(c.monto);
+    });
     if(_pnTotalManual!==null) desg+='\n(Total ajustado manualmente)';
     if(aparte.length) desg+='\nPagado aparte: '+aparte.map(function(c){ return c.concepto+' '+fmtM(c.monto)+' ('+(_PN_METODOS[c.pago]||{}).lbl+')'; }).join(', ');
 
@@ -8031,7 +8062,7 @@ function renderFijosPanel(){
 <script src="/ctx-bar.js?v=29d2de56"></script>
 <script src="/presencia.js?v=431b2b80"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="../admin-guard.js"></script>
-<script src="/nomina-params.js?v=ab88bf74"></script>
+<script src="/nomina-params.js?v=0464451a"></script>
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=1f8501c0"></script>
@@ -8044,7 +8075,7 @@ function renderFijosPanel(){
 <script src="/administrativo/gastos-ui.js?v=93b54efc"></script>
 <script src="/administrativo/cortes-ui.js?v=585bb93b"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
-<script src="/administrativo/nominas-ui.js?v=7e9e8753"></script>
+<script src="/administrativo/nominas-ui.js?v=3daa71f6"></script>
 <script src="/administrativo/fijos-ui.js?v=043e00fe"></script>
 <script src="/administrativo/movimientos-ui.js?v=466c7833"></script>
 <script src="/administrativo/operaciones-ui.js?v=ec105b87"></script>

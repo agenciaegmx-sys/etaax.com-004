@@ -218,9 +218,10 @@
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=dc47c144">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/administrativo/staff-ui.css?v=6a4582c6">
+<link rel="stylesheet" href="/administrativo/staff-ui.css?v=71f0fc2c">
 </head>
 <body>
+<script src="/etaax-ui-inicio.js?v=199a743f"></script>
 <!-- Candado: cubre la página hasta autorizar con contraseña de
      dueño/admin; cancelar el modal no da acceso al contenido -->
 <div id="permLockOverlay" style="position:fixed;inset:0;z-index:8500;background:rgba(10,9,8,.93);
@@ -234,8 +235,8 @@
     <div style="display:flex;gap:10px">
         <button onclick="_gatePermisos()" style="background:#f5c842;color:#0a0908;border:none;border-radius:8px;
             padding:9px 20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">🔓 Desbloquear</button>
-        <a href="staff.html" style="display:inline-block;background:transparent;border:1px solid #2a2825;color:#7a7570;
-            border-radius:8px;padding:9px 20px;font-family:'DM Sans',sans-serif;font-size:13px;text-decoration:none">← Volver</a>
+        <button onclick="_volverCatalogoPermisos()" style="display:inline-block;background:transparent;border:1px solid #2a2825;color:#7a7570;
+            border-radius:8px;padding:9px 20px;font-family:'DM Sans',sans-serif;font-size:13px">← Volver</button>
     </div>
 </div>
 <header class="top-bar">
@@ -1189,12 +1190,18 @@ function _mostrarNavBar() {
     document.body.classList.add('has-ctx');
 }
 
+function _volverCatalogoPermisos(){
+    if (window.parent !== window && typeof window.parent.volverTool === 'function') {
+        window.parent.volverTool(); return;
+    }
+    window.location.replace('staff.html' + window.location.search);
+}
 function _gatePermisos() {
     _pedirClaveAdmin('Permisos y roles — Acceso restringido', function(){
         var ov = document.getElementById('permLockOverlay');
         if (ov) ov.remove();
         _mostrarNavBar();
-    }, '🔓 Desbloquear', { soloAdmin: true });
+    }, '🔓 Desbloquear', { soloAdmin: true, onCancel: _volverCatalogoPermisos });
 }
 
 /* Escape cierra la ventanita: si un modal no se cierra con Escape, se siente
@@ -1286,6 +1293,6 @@ function ctxSalir() {
 <script src="/etaax-header.js?v=15a5a6ef"></script>
 <script src="/etaax-modulos-ui.js?v=34de802f"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
-<script src="/administrativo/staff-ui.js?v=afd56024"></script>
+<script src="/administrativo/staff-ui.js?v=8409e757"></script>
 </body>
 </html>

@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css?v=d87bdb06">
-<script src="/etaax-core.js?v=073b1628"></script>
+<script src="/etaax-core.js?v=25f064ae"></script>
 <script src="/reporte-marca.js?v=eb1fc301"></script>
     <style>
         /* ── Tabs principales ── */
@@ -136,6 +136,7 @@
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 </head>
 <body>
+<script src="/etaax-ui-inicio.js?v=199a743f"></script>
 
 <header class="top-bar">
     <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
@@ -1327,8 +1328,8 @@ function _diasDelMes(mes){
 function _minDiarioGG(){
     return (window.NominaParams ? n(NominaParams.get(getNegocioActivo()).salarioDiarioDefault) : 0);
 }
-function _sueldoEsDelMinimoGG(s){ return EtaaxCore.sueldoEsDelMinimo(s, window.NominaParams ? NominaParams.get(getNegocioActivo()) : _minDiarioGG()); }
-function _baseMensualStaff(s,mes){ return EtaaxCore.baseMensualStaff(s, _diasDelMes(mes), window.NominaParams ? NominaParams.get(getNegocioActivo()) : _minDiarioGG()); }
+function _sueldoEsDelMinimoGG(s){ return EtaaxCore.sueldoEsDelMinimo(s, window.NominaParams ? NominaParams.get(getNegocioActivo(), s.sucursalId || 'suc_principal') : _minDiarioGG()); }
+function _baseMensualStaff(s,mes){ return EtaaxCore.baseMensualStaff(s, _diasDelMes(mes), window.NominaParams ? NominaParams.get(getNegocioActivo(), s.sucursalId || 'suc_principal') : _minDiarioGG()); }
 /* Categoría de nómina de un colaborador de staff (con fallback por rol) */
 function _staffCategoria(s){
     if(s.categoriaNomina) return s.categoriaNomina;
@@ -1460,7 +1461,7 @@ function renderNominas(){
         var minBadge = (_sMin && _sMin.sinCostoNegocio)
             ? ' <span title="Trabaja en el negocio pero su pago no sale de la caja (beca, practicante, familiar)" style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--blue);background:rgba(122,184,245,.12);border:1px solid rgba(122,184,245,.35);border-radius:4px;padding:1px 5px">sin costo</span>'
             : (_sMin && _sueldoEsDelMinimoGG(_sMin))
-            ? ' <span title="No tiene sueldo en su ficha: se está usando el mínimo del negocio" style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.35);border-radius:4px;padding:1px 5px">mínimo</span>'
+            ? ' <span title="No tiene sueldo en su ficha: se está usando el mínimo de la sucursal" style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.35);border-radius:4px;padding:1px 5px">mínimo</span>'
             : '';
         var acc=p._auto
             ? '<button class="btn-row" data-edit-staff="'+_esc(p.staffId)+'" title="Capturar bonos / IMSS / prima del mes">✏️</button>'
@@ -1974,8 +1975,8 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="/presencia.js?v=431b2b80"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="../admin-guard.js"></script>
 <script src="/bancos-mx.js"></script><!-- bancos de México + CLABE (lo usa staff-modal) -->
-<script src="/staff-modal.js?v=9d3130c4"></script>
-<script src="/nomina-params.js?v=ab88bf74"></script>
+<script src="/staff-modal.js?v=d85f7927"></script>
+<script src="/nomina-params.js?v=0464451a"></script>
 <script src="nav.js?v=resumen-2"></script><!-- la barra lateral, una sola para todo el módulo -->
 <script src="/nav-pref.js?v=b697c829"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
 <script src="/modal-drag.js?v=4f2eff35"></script>

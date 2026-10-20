@@ -31,7 +31,7 @@ const RAIZ = __dirname;
    No entra `app-movil/` (tiene su propio service worker) ni lo de un solo uso. */
 const COMPARTIDOS = [
     'etaax-core.js', 'app.js', 'etaax-db.js', 'etaax-store.js', 'etaax-iconos.js', 'etaax-header.js',
-    'etaax-sidebar.js', 'etaax-sidebar.css', 'etaax-modulos-ui.js', 'etaax-modulos-ui.css',
+    'etaax-ui-inicio.js', 'etaax-sidebar.js', 'etaax-sidebar.css', 'etaax-modulos-ui.js', 'etaax-modulos-ui.css',
     'hub-modulos.js', 'hub-modulos.css', 'hub-paleta.css', 'hub-globales.css', 'hub-interacciones.js',
     'novedades.js', 'theme.js', 'ctx-bar.js', 'global-nav.js', 'financiero/nav.js',
     'security.js', 'page-guard.js', 'negocio-tab.js', 'embed.js', 'presencia.js', 'modal-drag.js',

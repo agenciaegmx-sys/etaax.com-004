@@ -2,7 +2,8 @@
    los nodos y handlers originales, incluso los valores emoji de los roles. */
 (function () {
     'use strict';
-    var pagina = location.pathname.split('/').pop();
+    var pagina = location.pathname.split('/').filter(Boolean).pop() || '';
+    if (pagina.indexOf('.') < 0) pagina += '.html';
     if (pagina === 'staff.html') document.body.classList.add('etx-staff-page');
     if (pagina === 'permisos.html') document.body.classList.add('etx-permisos-page');
     var pendiente = false;

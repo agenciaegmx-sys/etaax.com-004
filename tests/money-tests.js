@@ -7157,10 +7157,10 @@ console.log('\n══ BB8 · Que navegar no cueste de más ══');
         const j = nt.indexOf('[[headers]]', i);
         return nt.slice(i, j < 0 ? nt.length : j);
     })();
-    test('los .js se sirven con stale-while-revalidate', () =>
-        eq(bloqueJs.indexOf('stale-while-revalidate') > -1, true, bloqueJs.trim().slice(0, 80)));
-    test('…y ya no con must-revalidate, que obliga a preguntar por cada archivo', () =>
-        eq(bloqueJs.indexOf('must-revalidate') === -1, true, 'sin must-revalidate'));
+    test('los .js no sirven una versión vieja mientras actualizan la caché', () =>
+        eq(bloqueJs.includes('stale-while-revalidate'), false));
+    test('los .js revalidan antes de usarse para mantener el diseño vigente', () =>
+        eq(bloqueJs.includes('no-cache, must-revalidate'), true));
     /* El HTML NO: si también se guardara, un despliegue no se vería hasta la
        segunda visita y habría que pedirle a la gente que recargue. */
     test('el HTML se sigue revalidando siempre', () =>
@@ -28832,18 +28832,21 @@ console.log('\n══ Staff · mínimo vinculado, domingo y archivo por sucursal
         const staff=[viejo,{id:'propio',esquemaSueldo:'diario',sueldoDiario:450,sucursalId:'norte'},
             {id:'igual',esquemaSueldo:'diario',sueldoDiario:315.04,origenSueldo:'personalizado'},
             {id:'cero',esquemaSueldo:'diario',sueldoDiario:0,sueldoCapturado:true}];
+        let revision='2026-10-20T00:00:00.000Z';
         const estado={escrituras:[],fallar:''};
-        X._supabase={from(tabla){const q={select(){return q;},eq(){return q;},maybeSingle(){q.uno=true;return q;},upsert(v){q.valor=v;return q;},then(resolve,reject){
+        X._supabase={from(tabla){const filtros={};const q={select(){return q;},eq(k,v){filtros[k]=v;return q;},is(k,v){filtros[k]=v;return q;},maybeSingle(){q.uno=true;return q;},update(v){q.valor=v;return q;},insert(v){q.valor=v;return q;},then(resolve,reject){
             const error=estado.fallar===(q.valor?'guardar':tabla)?{message:'Fallo controlado'}:null;
-            if(q.valor&&!error){estado.escrituras.push({tabla,valor:q.valor});actual=JSON.parse(JSON.stringify(q.valor.datos));}
-            return Promise.resolve({data:tabla==='staff'?staff.map(datos=>({datos})):actual?{datos:actual}:null,error}).then(resolve,reject);
+            const coincide=!('updated_at' in filtros)||filtros.updated_at===revision;
+            if(q.valor&&!error&&coincide){estado.escrituras.push({tabla,valor:q.valor});actual=JSON.parse(JSON.stringify(q.valor.datos));revision=q.valor.updated_at;}
+            return Promise.resolve({data:tabla==='staff'?staff.map(datos=>({datos})):q.valor?(coincide?[{negocio_id:'n1'}]:[]):actual?{datos:actual,updated_at:revision}:null,error}).then(resolve,reject);
         }};return q;}};
         return {X,estado,staff};
     }
     testAsyncCola.push(['cambiar el mínimo conserva referencias antiguas sin reescribir expedientes',async()=>{
         const {X,estado}=entorno();await X.NominaParams.save('n1',{salarioDiarioDefault:450});
         const p=X.NominaParams.get('n1');eq(X.EtaaxCore.sueldoDiarioEfectivo(viejo,p),450);
-        eq(p.referenciasSueldo.propio.origen,'personalizado');eq(p.referenciasSueldo.cero.origen,'personalizado');
+        eq(p.referenciasSueldo.propio,undefined);eq(p.referenciasSueldo.cero.origen,'personalizado');
+        eq(X.NominaParams.get('n1','norte').salarioDiarioDefault,315.04);
         eq(estado.escrituras.length,1);eq(estado.escrituras[0].tabla,'gf_nomina_params');eq(estado.escrituras[0].valor.datos.extra,'conservar');
         await X.NominaParams.save('n1',{salarioDiarioDefault:500});
         const nuevo=X.NominaParams.get('n1');eq(X.EtaaxCore.sueldoDiarioEfectivo(viejo,nuevo),500);
@@ -28856,6 +28859,72 @@ console.log('\n══ Staff · mínimo vinculado, domingo y archivo por sucursal
         try{await X.NominaParams.save('n1',{salarioDiarioDefault:500});}catch(e){fallo=true;}
         eq(fallo,true);eq(X.NominaParams.get('n1').salarioDiarioDefault,315.04);eq(estado.escrituras.length,0);
     }]);
+}
+
+/* Seis correcciones de Staff: aislamiento concurrente y descuentos por retardo. */
+{
+    console.log('\nStaff · parámetros por sucursal y retardos');
+    const C=crearContexto();cargarJS(C,'etaax-core.js');
+    for(const [cant,tarifa,monto] of [[3,25,75],[2,12.35,24.7],[1,0,0],[0,50,0],[-2,50,0],[3,-1,0],[2.9,10,20],[Infinity,10,0],[2,Infinity,0]])
+        test('retardos '+cant+' × '+tarifa+' = '+monto,()=>eq(C.EtaaxCore.descuentoRetardos(cant,tarifa).monto,monto));
+
+    function backend(inicial){
+        let fila=inicial?{datos:JSON.parse(JSON.stringify(inicial)),updated_at:'2026-10-20T00:00:00.000Z'}:null;
+        const estado={choques:0,escrituras:0};
+        const staff=[{id:'m',esquemaSueldo:'diario',sueldoDiario:315.04},
+            {id:'n',sucursalId:'norte',esquemaSueldo:'diario',sueldoDiario:315.04},
+            {id:'custom',sucursalId:'norte',esquemaSueldo:'diario',sueldoDiario:450},
+            {id:'explicit',sucursalId:'norte',esquemaSueldo:'diario',sueldoDiario:315.04,origenSueldo:'personalizado'}];
+        return {estado,cliente:{from(tabla){const filtros={};let valor,insertar=false;const q={
+            select(){return q;},eq(k,v){filtros[k]=v;return q;},is(k,v){filtros[k]=v;return q;},maybeSingle(){return q;},
+            update(v){valor=v;return q;},insert(v){valor=v;insertar=true;return q;},
+            then(ok,fail){
+                let data=null,error=null;
+                if(tabla==='staff')data=staff.map(datos=>({datos}));
+                else if(!valor)data=fila?JSON.parse(JSON.stringify(fila)):null;
+                else if(insertar&&fila){estado.choques++;error={code:'23505',message:'Otra sucursal creó el registro'};}
+                else if(!insertar&&(!fila||fila.updated_at!==filtros.updated_at)){estado.choques++;data=[];}
+                else{fila=JSON.parse(JSON.stringify(valor));estado.escrituras++;data=[{negocio_id:'n1'}];}
+                return Promise.resolve({data,error}).then(ok,fail);
+            }};return q;}}};
+    }
+    function dispositivo(b){const X=crearContexto();cargarJS(X,'etaax-core.js');cargarJS(X,'nomina-params.js');X._supabase=b.cliente;return X;}
+    for(const vacio of [false,true])testAsyncCola.push(['dos sucursales guardan simultáneamente '+(vacio?'sin registro previo':'con configuración antigua'),async()=>{
+        const b=backend(vacio?null:{salarioDiarioDefault:315.04,primaVacacionalPct:25,jornadaHoras:8,extra:'conservar'});
+        const a=dispositivo(b),n=dispositivo(b);
+        await Promise.all([a.NominaParams.save('n1',{salarioDiarioDefault:400,jornadaHoras:7},'suc_principal'),n.NominaParams.save('n1',{salarioDiarioDefault:450,jornadaHoras:6},'norte')]);
+        await a.NominaParams.sync('n1');await n.NominaParams.sync('n1');
+        for(const x of [a,n]){eq(x.NominaParams.get('n1','suc_principal').salarioDiarioDefault,400);eq(x.NominaParams.get('n1','norte').salarioDiarioDefault,450);eq(x.NominaParams.get('n1','norte').jornadaHoras,6);}
+        eq(b.estado.escrituras,2);eq(b.estado.choques>=1,true);
+        if(!vacio){
+            const mat=a.NominaParams.get('n1','suc_principal'),norte=a.NominaParams.get('n1','norte');
+            eq(mat.referenciasSueldo.n,undefined);eq(norte.referenciasSueldo.m,undefined);
+            eq(norte.referenciasSueldo.n.origen,'minimo');eq(norte.referenciasSueldo.custom.origen,'personalizado');
+            eq(a.NominaParams.get('n1','otra').salarioDiarioDefault,315.04);
+            eq(JSON.parse(a._storage.etaax_n1_nomina_params).extra,'conservar');
+            await a.NominaParams.save('n1',{salarioDiarioDefault:500},'norte');
+            const p=a.NominaParams.get('n1','norte');
+            eq(a.EtaaxCore.sueldoDiarioEfectivo({id:'n',esquemaSueldo:'diario',sueldoDiario:315.04},p),500);
+            eq(a.EtaaxCore.sueldoDiarioEfectivo({id:'custom',esquemaSueldo:'diario',sueldoDiario:450},p),450);
+            eq(a.EtaaxCore.sueldoDiarioEfectivo({id:'explicit',esquemaSueldo:'diario',sueldoDiario:315.04,origenSueldo:'personalizado'},p),315.04);
+            eq(a.NominaParams.get('n1','suc_principal').salarioDiarioDefault,400);
+        }
+    }]);
+    const P=crearContexto();cargarJS(P,'etaax-core.js');cargarInline(P,'administrativo/diario.html');
+    P._storage.etaax_negocio_activo='n1';P._storage.etaax_sucursal_activa='suc_principal';P.NominaParams={get(){return {jornadaHoras:8,primaVacacionalPct:25,salarioDiarioDefault:300};}};
+    const empleado={id:'m',nombre:'Colaborador de prueba',sucursalId:'suc_principal',multaRetardo:25,bonos:[],esquemaSueldo:'diario',sueldoDiario:300};
+    P._cacheStaff=[empleado];P._pagoNomStaff=empleado;P._pagoNomConceptos=[];P._pnTotalManual=null;
+    const el=id=>P.document.getElementById(id);
+    el('pnDesde').value='2026-10-12';el('pnHasta').value='2026-10-18';el('pnTipo').value='semana';el('pnDiario').value=300;el('pnMultaRetardo').value=25;
+    const wk=P.getWeekStr(new Date('2026-10-12T12:00:00'));
+    P._cacheHorarios={['hor_suc_principal_'+wk]:{turnos:{m:{d0:{in:'09:00',out:'17:00',asis:'si',ret:true},d1:{in:'09:00',out:'17:00',asis:'si',ret:true},d2:{desc:true}},otro:{d3:{in:'09:00',ret:true}}}}};
+    test('Horarios precarga solo retardos del colaborador y periodo, descontando del neto',()=>{P._pnRangoChange();eq(el('pnRetardos').value,'2');eq(P._pagoNomConceptos.filter(c=>c._retardos).length,1);eq(P._pnCalc(),850);});
+    test('la tarifa y cantidad son editables sin duplicar el descuento',()=>{el('pnRetardos').value=3;el('pnMultaRetardo').value=12.35;P._pnActualizarRetardos();P._pnActualizarRetardos();eq(P._pagoNomConceptos.filter(c=>c._retardos).length,1);eq(P._pnCalc(),862.95);});
+    test('el recibo separa el descuento y conserva la multiplicación',()=>{const d=P._reciboNominaDatos();eq(d.totalDed,37.05);eq(d.deducciones.length,1);eq(d.deducciones[0].detalle.includes('3 retardos'),true);eq(d.total,862.95);});
+    test('reponer bonos no elimina ni repite retardos',()=>{empleado.bonos=[{concepto:'Bono',monto:100,periodicidad:'semanal'}];P._pnReponerBonos();P._pnReponerBonos();eq(P._pagoNomConceptos.filter(c=>c._retardos).length,1);eq(P._pnCalc(),962.95);});
+    test('eliminar el descuento lo deja en cero aunque se recalculen bonos',()=>{P._pnCptEliminar(P._pagoNomConceptos.findIndex(c=>c._retardos));P._pnReponerBonos();eq(P._pagoNomConceptos.some(c=>c._retardos),false);eq(el('pnRetardos').value,'0');});
+    test('cambiar el periodo vuelve a contar y conserva la tarifa editada',()=>{el('pnHasta').value='2026-10-12';P._pnRangoChange();eq(el('pnRetardos').value,'1');eq(P._pagoNomConceptos.find(c=>c._retardos).monto,-12.35);});
+    test('tarifa cero elimina el descuento sin borrar los retardos de Horarios',()=>{el('pnMultaRetardo').value=0;P._pnActualizarRetardos();eq(P._pagoNomConceptos.some(c=>c._retardos),false);eq(P._asistenciaRango('m','2026-10-12','2026-10-18').retardos,2);});
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

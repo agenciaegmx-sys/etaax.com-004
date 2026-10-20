@@ -71,7 +71,7 @@
         var boton = document.getElementById('btnPagarNomina');
         if (boton) boton.parentElement.classList.add('n-toolbar');
         cada('#modalPagoNom .gs-sec-title', function (el, i) {
-            icono(el, ['periodo','sueldo','conceptos'][i]); el.dataset.paso = ('0' + (i + 1)).slice(-2);
+            icono(el, ['periodo','sueldo','descuento','conceptos'][i]); el.dataset.paso = ('0' + (i + 1)).slice(-2);
         });
         var total = document.getElementById('pnTotal');
         if (total) total.parentElement.parentElement.classList.add('n-total');

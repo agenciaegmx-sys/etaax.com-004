@@ -9,6 +9,7 @@
 [[headers]]
   for = "/*"
   [headers.values]
+    Cache-Control = "public, no-cache, must-revalidate"
     # Clickjacking: solo el propio sitio puede enmarcarse (lo usa el editor de
     # insumo/escandallo en un iframe). Sigue bloqueando enmarcado de terceros.
     X-Frame-Options = "SAMEORIGIN"
@@ -52,43 +53,22 @@
       form-action 'self';
     """
 
-# ── Caché: que navegar no cueste un viaje al servidor por archivo ──────────
-# MEDIDO (15-sep-2026, producción): abrir un módulo pide 19 scripts. Con la
-# cabecera por defecto de Netlify —max-age=0, must-revalidate— el navegador tiene
-# que PREGUNTARLE AL SERVIDOR por cada uno antes de usarlo, aunque los tenga
-# guardados y nada haya cambiado. Medido en serie: ~4.4 s de pura revalidación
-# con la caché llena. En una tablet con datos móviles eso se siente en CADA
-# navegación, y es tiempo que no compra nada.
-#
-# `stale-while-revalidate` cambia el trato: el navegador USA lo que tiene, de
-# inmediato, y revalida por detrás. La navegación deja de esperar.
-#
-# EL RIESGO, dicho claro: justo después de un despliegue, una carga puede juntar
-# el HTML nuevo (que sí se revalida siempre) con un .js de la visita anterior. Es
-# UNA carga: esa misma visita dispara la revalidación y la siguiente ya viene
-# pareja. Para que ni esa se sienta, /negocio-tab.js —el primer script de toda
-# página— detecta el síntoma de esa mezcla (una función que "no existe") y
-# recarga una sola vez.
-#
-# El HTML NO se toca: sigue revalidándose siempre, para que un despliegue se vea
-# sin pedirle a nadie que recargue.
+# HTML, JS y CSS se revalidan antes de usarse. Una navegación no debe mezclar
+# una página nueva con scripts o estilos anteriores. versionar.js cambia además
+# sus URLs cuando cambia el contenido, incluida la entrada visual temprana.
 [[headers]]
   for = "/*.js"
   [headers.values]
-    Cache-Control = "public, max-age=0, stale-while-revalidate=604800"
+    Cache-Control = "public, no-cache, must-revalidate"
 
 [[headers]]
   for = "/*.css"
   [headers.values]
-    Cache-Control = "public, max-age=0, stale-while-revalidate=604800"
+    Cache-Control = "public, no-cache, must-revalidate"
 
 # ── EL SERVICE WORKER DE LA APP MÓVIL, SIN CACHÉ ──────────────
-# La regla de arriba sirve TODOS los .js con stale-while-revalidate de una
-# semana. Para un service worker eso es una trampa: el navegador lo compara byte
-# a byte para decidir si instala una versión nueva, y si se lo sirven viejo
-# durante siete días, la app instalada se queda congelada en la cáscara anterior
-# hasta que a alguien se le ocurra borrar los datos del sitio. Nadie relaciona
-# nunca ese síntoma con esta línea, así que va explicada.
+# El service worker conserva su política explícita para que se comprueben
+# las actualizaciones de la app móvil antes de reutilizarlo.
 #
 # OJO CON EL ORDEN: Netlify aplica TODAS las reglas que casan y gana la ÚLTIMA.
 # Este bloque tiene que ir DESPUÉS del de /*.js o no sirve de nada.

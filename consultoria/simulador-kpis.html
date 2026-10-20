@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css?v=d87bdb06">
-<script src="/etaax-core.js?v=073b1628"></script>
-<script src="/nomina-params.js?v=ab88bf74"></script><!-- salario mínimo del negocio: lo usa la regla de sueldo -->
+<script src="/etaax-core.js?v=25f064ae"></script>
+<script src="/nomina-params.js?v=0464451a"></script><!-- salario mínimo de la sucursal: lo usa la regla de sueldo -->
 <style>
 .sim-wrap{max-width:1180px;margin:0 auto;padding:24px 22px 90px}
 .sim-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:20px}
@@ -67,6 +67,7 @@
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=dc47c144">
 </head>
 <body>
+<script src="/etaax-ui-inicio.js?v=199a743f"></script>
 <header class="top-bar">
     <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
@@ -265,7 +266,7 @@ async function _sbInit(){
    negocio ni conocía a los colaboradores sin costo, así que el simulador
    proyectaba una nómina distinta de la que se pagaba de verdad. */
 function _mensualizar(s,mes){
-    var params = window.NominaParams ? NominaParams.get(getNegocioActivo()) : 0;
+    var params = window.NominaParams ? NominaParams.get(getNegocioActivo(), s.sucursalId || 'suc_principal') : 0;
     return EtaaxCore.baseMensualStaff(s, diasMes(mes), params);
 }
 function _nominaMes(mes){
