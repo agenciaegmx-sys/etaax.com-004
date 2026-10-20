@@ -63,9 +63,10 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=dc47c144">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
+<link rel="stylesheet" href="/recetas/insumos-ui.css?v=cffd7481">
 </head>
 <body>
-<script src="/etaax-ui-inicio.js?v=199a743f"></script>
+<script src="/etaax-ui-inicio.js?v=7da80c8b"></script>
 <header class="top-bar">
     <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
@@ -158,10 +159,10 @@ document.addEventListener('DOMContentLoaded', function(){
 
         <!-- TABLA — ancho completo sin max-width -->
         <div style="padding:0 0 32px">
-            <div class="card" style="max-width:none;margin:0 16px">
+            <div class="card" id="insumosCatalogCard" style="max-width:none;margin:0 16px">
                 <div class="card-header">
                     <h2>Catálogo</h2>
-                    <div style="display:flex;align-items:center;gap:8px">
+                    <div class="i-catalog-tools" style="display:flex;align-items:center;gap:8px">
                         <span class="pill pill-amber" id="countLabel">0 insumos</span>
                         <button id="btnVistaGrid" onclick="setVistaInsumos('grid')"
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
@@ -286,7 +287,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <div class="modal-overlay" id="modalOverlay">
     <div class="modal">
         <div class="modal-header">
-            <div style="min-width:0">
+            <div class="i-editor-heading" style="min-width:0">
                 <h2 id="modalTitulo">Nuevo insumo</h2>
                 <!-- Nombre del insumo en el header FIJO: al bajar por presentaciones,
                      costos y stock, "Editar insumo" solo no dice cuál se está editando.
@@ -296,7 +297,7 @@ document.addEventListener('DOMContentLoaded', function(){
                 <!-- Sello de auditoría: cuándo se tocó por última vez y quién -->
                 <div id="insSello" style="margin-top:2px"></div>
             </div>
-            <div style="display:flex;align-items:center;gap:10px">
+            <div class="i-editor-actions" style="display:flex;align-items:center;gap:10px">
                 <!-- BOTÓN, no <span>. Además de ser lo correcto (se enfoca con
                      el tabulador y responde al Enter), modal-drag.js deja en paz
                      a los <button> del encabezado: con un <span> el arrastre
@@ -326,9 +327,9 @@ document.addEventListener('DOMContentLoaded', function(){
         <div class="modal-body">
 
             <!-- FILA 1: Foto + campos principales -->
-            <div style="display:flex;gap:16px;align-items:stretch;margin-bottom:12px">
+            <div class="i-editor-identidad" style="display:flex;gap:16px;align-items:stretch;margin-bottom:12px">
                 <!-- Foto -->
-                <div style="display:flex;flex-direction:column;gap:8px;width:200px;flex-shrink:0">
+                <div class="i-editor-foto" style="display:flex;flex-direction:column;gap:8px;width:200px;flex-shrink:0">
                     <label class="proc-label">Foto del producto</label>
                     <div class="foto-wrap" id="insFotoWrap" style="width:200px;flex:1;min-height:150px" onclick="document.getElementById('insFotoInput').click()">
                         <div class="foto-placeholder" id="insFotoPlaceholder">
@@ -346,7 +347,7 @@ document.addEventListener('DOMContentLoaded', function(){
                     <div id="qrInsumoBox" style="display:none;text-align:center"></div>
                 </div>
                 <!-- Campos principales -->
-                <div style="flex:1">
+                <div class="i-editor-datos" style="flex:1">
                     <div class="meta-grid" style="grid-template-columns:1fr 1fr">
                         <div class="meta-item" id="row-nombre" style="grid-column:span 2">
                             <label>Nombre base *</label>
@@ -431,7 +432,7 @@ document.addEventListener('DOMContentLoaded', function(){
             </div>
 
             <!-- PRESENTACIONES -->
-            <div style="margin-top:18px">
+            <div class="i-editor-presentaciones" style="margin-top:18px">
                 <div style="margin-bottom:10px">
                     <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">Presentaciones y costos</span>
                 </div>
@@ -522,7 +523,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=25f064ae"></script>
-<script src="/recetas/insumos.js?v=254fd7a7"></script>
+<script src="/recetas/insumos.js?v=07e33c62"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -833,7 +834,7 @@ body.ins-sin-costos .ins-col-prov { display: none; }
         <!-- Header -->
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
             <div>
-                <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:var(--text)">Catálogo Global <span style="color:var(--green)">ETAAX</span></div>
+                <div id="cgTitulo" style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:var(--text)">Catálogo Global <span style="color:var(--green)">ETAAX</span></div>
                 <div id="cgTotal" style="font-size:11px;color:var(--text-muted);letter-spacing:.5px">Cargando…</div>
             </div>
             <button onclick="cerrarCatalogoGlobal()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:6px 14px;cursor:pointer;font-family:inherit;font-size:12px">✕ Cerrar</button>
@@ -1417,11 +1418,12 @@ async function cgAgregar(id) {
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
 <script src="/novedades.js?v=47f6016b"></script><!-- aviso de actualizaciones del sistema -->
-<script src="/etaax-iconos.js?v=37e92d68"></script>
+<script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=15a5a6ef"></script>
 <script src="/etaax-modulos-ui.js?v=34de802f"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
+<script src="/recetas/insumos-ui.js?v=ba6cd0e3"></script>
 </body>
 </html>

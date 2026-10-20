@@ -12,6 +12,7 @@
         body.classList.add('etx-modulos-ui');
         document.documentElement.classList.add('etx-tema-en-header');
     }
+    if (p === 'insumos.html') body.classList.add('etx-insumos-page');
     if (p === 'staff.html') body.classList.add('etx-staff-page');
     if (p === 'permisos.html') body.classList.add('etx-permisos-page');
     var op = {'horarios.html':'horarios','checklists.html':'checklists','organigrama.html':'organigrama','perfiles-puesto.html':'perfiles','evaluaciones.html':'evaluaciones'};

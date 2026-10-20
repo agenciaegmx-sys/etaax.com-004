@@ -1,0 +1,163 @@
+/* Catálogo, ficha y editor de insumos: presentación sobre los controles existentes. */
+body.etx-insumos-page {
+  --i-panel:var(--etx-ui-panel,#171611);--i-line:var(--etx-ui-line,#3a3830);
+  --i-muted:var(--etx-ui-muted,#b5afa3);--i-cyan:var(--etx-ui-cyan,#8ce4ee);
+  --i-terra:var(--etx-ui-terra,#fb9b6f);--i-input:#211f19;--i-selected:#1d3236;--i-ink:#13110e;
+  font-family:'DM Sans',sans-serif;
+}
+[data-theme="light"] body.etx-insumos-page {--i-input:#f7f5f0;--i-selected:#e8f3f4;--i-ink:#fff;}
+.i-ui-icon {display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;vertical-align:middle;}
+.etx-insumos-page .i-ui-icon .etx-ic {width:20px;height:20px;--green:var(--i-cyan);--etx-color:currentColor;}
+.i-title-plate {width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--etx-ui-cyan-line,#537e83);border-radius:12px;background:var(--i-selected);}
+.i-title-copy {min-width:0;overflow-wrap:anywhere;}
+.etx-insumos-page :is(button,input,select,textarea,a,[tabindex]):focus-visible {outline:2px solid var(--i-cyan)!important;outline-offset:3px;}
+.etx-insumos-page button {font-family:inherit;transition:background .16s,border-color .16s,color .16s;}
+.etx-insumos-page button:disabled {opacity:.5;cursor:not-allowed;}
+/* Cabecera y catálogo */
+.etx-insumos-page .main-content {min-width:0;}
+.etx-insumos-page #mainContent > .header {background:var(--i-panel);border-color:var(--i-line);padding:24px;gap:18px;margin-bottom:0;}
+.etx-insumos-page .brand {gap:6px;}
+body.etx-insumos-page #mainContent .brand-title {font:700 30px/1.2 'DM Sans',sans-serif;letter-spacing:-.7px;color:var(--i-terra);text-transform:none;}
+.etx-insumos-page .brand-label {font-size:9px;letter-spacing:2.5px;color:var(--i-muted);}
+.etx-insumos-page .hdr-acts {gap:8px;flex-wrap:wrap;min-width:0;}
+.etx-insumos-page .wrap {width:100%;max-width:1480px;box-sizing:border-box;padding:24px;margin:0 auto;}
+.etx-insumos-page .card {background:var(--i-panel);border-color:var(--i-line);border-radius:14px;min-width:0;overflow:hidden;}
+.etx-insumos-page .filtros-grid {gap:10px;}
+.etx-insumos-page .search-wrap {min-width:0;}
+.etx-insumos-page .search-icon {display:flex;left:12px;color:var(--i-muted);pointer-events:none;}
+.etx-insumos-page .search-wrap input {padding:11px 40px;}
+.etx-insumos-page :is(.filtro-select,.search-wrap input,#ordenModoIns) {background:var(--i-input);color:var(--text);border:1px solid var(--i-line);border-radius:9px;min-height:44px;max-width:100%;min-width:0;box-sizing:border-box;font:13px/1.5 'DM Sans',sans-serif;}
+.etx-insumos-page #insumosCatalogCard {margin:0 24px!important;}
+.etx-insumos-page #insumosCatalogCard > .card-header {padding:18px 20px;gap:12px;flex-wrap:wrap;border-color:var(--i-line);}
+.etx-insumos-page .card-header h2 {display:flex;align-items:center;gap:8px;font:600 15px/1.5 'DM Sans',sans-serif;letter-spacing:0;text-transform:none;color:var(--text);}
+.etx-insumos-page .i-catalog-tools {flex-wrap:wrap;min-width:0;}
+.etx-insumos-page :is(.btn-primary,.btn-vista,.btn-add,#insumosCatalogCard .card-header button) {display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:9px;min-height:42px;padding:10px 14px;font:13px/1.4 'DM Sans',sans-serif;letter-spacing:0;text-transform:none;}
+.etx-insumos-page :is(.btn-vista,.btn-add) {background:transparent;border:1px solid var(--i-line);color:var(--text);}
+.etx-insumos-page .i-catalog-tools button {min-height:38px!important;padding:8px 11px!important;font:12px/1.4 'DM Sans',sans-serif!important;border-radius:8px!important;}
+.etx-insumos-page .i-catalog-tools button.i-selected {background:var(--i-selected)!important;color:var(--i-cyan)!important;border-color:var(--i-cyan)!important;}
+.etx-insumos-page .i-catalog-tools button:not(.i-selected) {background:transparent!important;color:var(--i-muted)!important;border-color:var(--i-line)!important;}
+.etx-insumos-page :is(.btn-primary,#modalOverlay [onclick="guardarInsumo()"],#btnAgregarCosteo) {background:var(--i-terra)!important;color:var(--i-ink)!important;border:1px solid transparent!important;font-weight:600;}
+.etx-insumos-page :is(.btn-primary,#modalOverlay [onclick="guardarInsumo()"],#btnAgregarCosteo) .etx-ic {--green:var(--i-ink);}
+.etx-insumos-page :is(.btn-primary,.btn-vista,.btn-add):not(:disabled):hover {filter:brightness(1.07);border-color:var(--i-cyan);}
+.etx-insumos-page .tabla-wrap {overflow-x:auto;}
+.etx-insumos-page #contenedorLista table {width:100%;font-size:13px;}
+.etx-insumos-page #contenedorLista th {background:var(--i-input);color:var(--i-muted);font-size:9px;letter-spacing:1.3px;padding:14px 12px;white-space:nowrap;border-color:var(--i-line);}
+.etx-insumos-page #contenedorLista td {padding:14px 12px;border-color:var(--i-line);font:13px/1.5 'DM Sans',sans-serif;}
+.etx-insumos-page #contenedorLista td:first-of-type > div > div:last-child {min-width:0;}
+.etx-insumos-page #contenedorLista tr:hover td {background:var(--i-input);}
+.etx-insumos-page #contenedorLista button {min-height:36px;padding:7px 10px!important;}
+.etx-insumos-page .pill {border-radius:7px;font-size:10px;letter-spacing:.4px;}
+.etx-insumos-page #gridInsumos {grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr))!important;gap:16px!important;}
+.etx-insumos-page .insumo-card {background:var(--i-panel);border-color:var(--i-line);border-radius:14px;overflow:hidden;}
+.etx-insumos-page .insumo-card .i-ui-icon .etx-ic {width:40px;height:40px;}
+.etx-insumos-page .insumo-card .ins-mas-btn .etx-ic {width:18px;height:18px;}
+.etx-insumos-page #contenedorCosteo :is(th,td) {border-color:var(--i-line);font-family:inherit;}
+/* Ventanas: el display sigue bajo control de sus funciones originales. */
+.etx-insumos-page :is(#modalOverlay,#modalFicha,#modalCategoria,#modalImportar) {padding:16px;box-sizing:border-box;}
+.etx-insumos-page :is(#modalOverlay,#modalFicha,#modalCategoria,#modalImportar) > .modal {background:var(--i-panel);border:1px solid var(--i-line);border-radius:18px;display:flex;flex-direction:column;min-width:0;overflow:hidden;max-height:calc(100dvh - 32px)!important;}
+.etx-insumos-page #modalOverlay > .modal {max-width:1000px;}
+.etx-insumos-page #modalFicha > .modal {max-width:700px!important;}
+.etx-insumos-page #modalCategoria > .modal {max-width:900px!important;}
+.etx-insumos-page :is(.modal-header,.modal-footer) {background:var(--i-panel);border-color:var(--i-line);padding:20px 24px;gap:12px;flex-shrink:0;flex-wrap:wrap;}
+.etx-insumos-page .modal-header {position:relative;z-index:2;}
+.etx-insumos-page .modal-header h2 {display:flex;align-items:center;gap:12px;font:700 23px/1.3 'DM Sans',sans-serif;letter-spacing:-.5px;text-transform:none;min-width:0;}
+.etx-insumos-page .i-editor-heading {flex:1;min-width:0;}
+.etx-insumos-page #insNombreHd {color:var(--i-terra)!important;max-width:none!important;white-space:normal!important;overflow-wrap:anywhere;font:600 13px/1.5 'DM Sans',sans-serif!important;margin-top:4px!important;}
+.etx-insumos-page #insSello {color:var(--i-muted);font-size:10px;line-height:1.5;}
+.etx-insumos-page .i-editor-actions {flex-wrap:wrap;gap:8px!important;}
+.etx-insumos-page :is(.modal-close,.etx-min-btn,#btnConvertirTipo) {display:inline-flex!important;align-items:center;justify-content:center;gap:7px;background:transparent!important;border:1px solid var(--i-line)!important;border-radius:9px!important;min-height:40px;width:auto!important;min-width:40px;padding:9px 12px!important;color:var(--text)!important;font:12px 'DM Sans',sans-serif!important;}
+.etx-insumos-page #btnConvertirTipo span {color:inherit!important;}
+.etx-insumos-page .modal-body {padding:24px;overflow-y:auto;min-height:0;max-height:none;scrollbar-width:thin;scrollbar-color:var(--i-line) transparent;isolation:isolate;position:relative;z-index:0;}
+.etx-insumos-page .modal-footer {flex-wrap:wrap;}
+.etx-insumos-page .i-editor-identidad {gap:20px!important;margin-bottom:22px!important;}
+.etx-insumos-page .i-editor-foto {width:180px!important;min-width:0;}
+.etx-insumos-page #insFotoWrap {width:100%!important;border:1px solid var(--i-line);border-radius:12px;min-height:200px!important;overflow:hidden;background:var(--i-input);}
+.etx-insumos-page #insFotoWrap img {object-fit:contain!important;}
+.etx-insumos-page #insFotoPlaceholder .etx-ic {width:34px;height:34px;}
+.etx-insumos-page .i-editor-datos {min-width:0;}
+.etx-insumos-page :is(.meta-grid,.mg-1,.mg-2,.mg-3) {gap:16px;align-items:end;}
+.etx-insumos-page .meta-grid {grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+.etx-insumos-page .mg-3 {grid-template-columns:repeat(3,minmax(0,1fr));}
+.etx-insumos-page .mg-2 {grid-template-columns:repeat(2,minmax(0,1fr));}
+.etx-insumos-page .meta-item {min-width:0;gap:7px;}
+.etx-insumos-page :is(.meta-item label,.proc-label) {font-size:12px!important;letter-spacing:0!important;text-transform:none!important;color:var(--text);line-height:1.5;}
+.etx-insumos-page :is(.meta-item label,.proc-label):has(.i-ui-icon) {display:flex;align-items:center;gap:7px;}
+.etx-insumos-page :is(.meta-item,.modal-body) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),select,textarea) {max-width:100%;min-width:0;width:100%;box-sizing:border-box;min-height:44px;background:var(--i-input);border:1px solid var(--i-line);border-radius:9px;padding:11px 12px;font:13px/1.5 'DM Sans',sans-serif;color:var(--text);color-scheme:dark;}
+[data-theme="light"] .etx-insumos-page :is(input,select,textarea) {color-scheme:light!important;}
+.etx-insumos-page input::placeholder,.etx-insumos-page textarea::placeholder {color:var(--i-muted);opacity:.85;}
+.etx-insumos-page input[type="checkbox"] {accent-color:var(--i-cyan);}
+.etx-insumos-page input[readonly] {opacity:.85;}
+.etx-insumos-page #ins-notas {min-height:120px!important;resize:vertical;line-height:1.7!important;}
+.etx-insumos-page .i-presentacion {background:var(--i-input)!important;border:1px solid var(--i-line)!important;border-radius:12px!important;padding:20px!important;margin-bottom:18px!important;}
+.etx-insumos-page .i-presentacion > div:first-child {gap:12px;margin-bottom:18px!important;}
+.etx-insumos-page .i-presentacion > div:first-child > span {display:flex;align-items:center;gap:8px;font:600 14px/1.5 'DM Sans',sans-serif!important;letter-spacing:0!important;text-transform:none!important;color:var(--text)!important;}
+.etx-insumos-page .i-presentacion .meta-item > div[id] {border-radius:9px!important;min-height:44px;box-sizing:border-box;font-variant-numeric:tabular-nums;line-height:1.5;}
+.etx-insumos-page #btnAgregarCosteo {width:auto!important;}
+.etx-insumos-page #convertirTipoPop {background:var(--i-panel)!important;border-color:var(--i-line)!important;max-width:calc(100vw - 48px);}
+.etx-insumos-page #convertirTipoGrid button {display:flex;align-items:center;gap:7px;min-height:42px;border-radius:8px;}
+.etx-insumos-page #modalCategoria .modal-body > div {grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:12px!important;}
+.etx-insumos-page .cat-btn {background:var(--i-input);border-color:var(--i-line);border-radius:12px;padding:18px 12px;min-width:0;}
+.etx-insumos-page .cat-btn .etx-ic {width:30px;height:30px;}
+.etx-insumos-page .cat-btn-title {font:600 13px/1.5 'DM Sans',sans-serif;color:var(--text);}
+.etx-insumos-page .cat-btn-desc {font:11px/1.6 'DM Sans',sans-serif;color:var(--i-muted);}
+/* Ficha técnica */
+.etx-insumos-page #fichaContenido {line-height:1.7;}
+.etx-insumos-page .i-ficha-identidad {gap:18px!important;flex-wrap:wrap;border-color:var(--i-line)!important;}
+.etx-insumos-page .i-ficha-identidad > div:nth-child(2) {min-width:150px;}
+.etx-insumos-page .i-ficha-identidad > div:first-child {width:132px!important;height:132px!important;border-radius:12px!important;overflow:hidden;}
+.etx-insumos-page .i-ficha-identidad img {object-fit:contain!important;}
+.etx-insumos-page .i-ficha-identidad .pill {margin-left:auto;}
+.etx-insumos-page .i-ficha-presentacion {background:var(--i-input)!important;border-color:var(--i-line)!important;border-radius:12px!important;padding:18px!important;margin-bottom:12px!important;}
+.etx-insumos-page #fichaContenido p {font-size:13px!important;line-height:1.8!important;color:var(--i-muted)!important;}
+@media(max-width:850px) {
+  .etx-insumos-page #mainContent > .header {align-items:flex-start;}
+  .etx-insumos-page .hdr-acts {width:100%;}
+  .etx-insumos-page .i-editor-foto {width:150px!important;}
+  .etx-insumos-page .i-catalog-tools {flex-basis:100%;}
+  .etx-insumos-page #modalCategoria .modal-body > div {grid-template-columns:repeat(3,minmax(0,1fr))!important;}
+}
+@media(max-width:600px) {
+  .etx-insumos-page #mainContent > .header {padding:16px;}
+  .etx-insumos-page .wrap {padding:16px 12px;}
+  .etx-insumos-page #insumosCatalogCard {margin:0 12px!important;}
+  .etx-insumos-page #insumosCatalogCard > .card-header {padding:16px;}
+  .etx-insumos-page .filtros-grid {grid-template-columns:minmax(0,1fr);}
+  .etx-insumos-page .hdr-acts > button {flex:1 1 140px;}
+  .etx-insumos-page #btnAgregarInsumo {flex-basis:100%;}
+  .etx-insumos-page :is(#modalOverlay,#modalFicha,#modalCategoria,#modalImportar) {padding:8px;}
+  .etx-insumos-page :is(#modalOverlay,#modalFicha,#modalCategoria,#modalImportar) > .modal {max-height:calc(100dvh - 16px)!important;border-radius:14px;}
+  .etx-insumos-page :is(.modal-header,.modal-body,.modal-footer) {padding:16px;}
+  .etx-insumos-page .modal-header h2 {font-size:20px;}
+  .etx-insumos-page .i-editor-heading {flex-basis:100%;}
+  .etx-insumos-page .i-editor-actions {width:100%;justify-content:flex-end;}
+  .etx-insumos-page .i-editor-identidad {flex-direction:column!important;}
+  .etx-insumos-page .i-editor-foto {width:100%!important;max-width:180px;align-self:center;}
+  .etx-insumos-page #insFotoWrap {min-height:160px!important;height:180px;flex:none!important;}
+  .etx-insumos-page :is(.meta-grid,.mg-2,.mg-3) {grid-template-columns:minmax(0,1fr)!important;}
+  .etx-insumos-page .meta-item[style*="grid-column"] {grid-column:1/-1!important;}
+  .etx-insumos-page .i-presentacion {padding:16px!important;}
+  .etx-insumos-page .modal-footer > [onclick="guardarInsumo()"] {flex:1;}
+  .etx-insumos-page #modalCategoria .modal-body > div {grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  .etx-insumos-page .i-ficha-identidad > div:first-child {width:100px!important;height:100px!important;}
+}
+
+.etx-insumos-page .i-editor-presentaciones {margin-top:24px!important;border-top:1px solid var(--i-line);padding-top:22px;}
+.etx-insumos-page :is(.i-tax-panel,.i-stock-panel,.i-costeo-panel) > div:first-child,.etx-insumos-page .i-editor-presentaciones > div:first-child > span {display:flex;align-items:center;gap:8px;font:600 14px/1.5 'DM Sans',sans-serif!important;letter-spacing:0!important;text-transform:none!important;color:var(--text)!important;opacity:1!important;}
+.etx-insumos-page .i-tax-panel {background:var(--i-panel)!important;border-color:var(--i-line)!important;border-radius:10px!important;padding:16px!important;margin:18px 0!important;}
+.etx-insumos-page .i-tax-panel > .meta-grid {align-items:stretch;}
+.etx-insumos-page .i-tax-panel > .meta-grid > div {min-width:0;border-color:var(--i-line)!important;border-radius:8px!important;}
+.etx-insumos-page .i-tax-panel select {min-height:34px!important;padding:6px 8px!important;}
+
+/* Catálogos de origen, también cuando se abren dentro del escandallo. */
+.etx-insumos-page :is(#modalCatalogoGlobal,#modalInsumosNeg) > div {background:var(--i-panel)!important;border-color:var(--i-line)!important;min-width:0!important;box-sizing:border-box;}
+.etx-insumos-page :is(#cgTitulo,#ignTitulo) {display:flex;align-items:center;gap:10px;font:700 21px/1.3 'DM Sans',sans-serif!important;letter-spacing:-.4px!important;min-width:0;overflow-wrap:anywhere;}
+.etx-insumos-page :is(#modalCatalogoGlobal,#modalInsumosNeg) > div > div:first-child {gap:12px;border-color:var(--i-line)!important;min-width:0;}
+.etx-insumos-page :is(#modalCatalogoGlobal,#modalInsumosNeg) > div > div:first-child > div {min-width:0;}
+.etx-insumos-page :is(#modalCatalogoGlobal,#modalInsumosNeg) button {display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:9px!important;min-height:40px;padding:9px 12px!important;font:12px 'DM Sans',sans-serif!important;flex-shrink:0;}
+.etx-insumos-page :is(#cgSearch,#cgFamilia,#ignSearch) {background:var(--i-input)!important;border-color:var(--i-line)!important;border-radius:9px!important;min-width:0;min-height:44px;font:13px 'DM Sans',sans-serif!important;}
+@media(max-width:600px) {
+ .etx-insumos-page :is(#cgTitulo,#ignTitulo) {font-size:18px!important;}
+ .etx-insumos-page :is(#cgTitulo,#ignTitulo) .i-title-plate {width:34px;height:34px;border-radius:9px;}
+}
+
+.etx-insumos-page .i-ficha-section {display:flex;align-items:center;gap:8px;font:600 14px/1.5 'DM Sans',sans-serif!important;letter-spacing:0!important;text-transform:none!important;color:var(--text)!important;}

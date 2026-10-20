@@ -1783,7 +1783,7 @@
                        ${_modoOrden ? '<span class="ord-grip" title="Arrastra para cambiar el orden">⠿</span>' : ''}
                        ${ins.foto
                            ? `<img ${_fotoInsAttr(ins.foto)} loading="lazy" decoding="async" style="width:36px;height:36px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">`
-                           : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">${ins.esSubReceta ? '🍳' : '📦'}</div>`
+                           : `<div class="i-insumo-placeholder" style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">${ins.esSubReceta ? '🍳' : '📦'}</div>`
                        }
                        <div>
                            <div style="font-weight:500">${etx(insumoTitulo(ins))}${ins.esSubReceta ? ' <span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.3);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">🍳 Sub-receta</span>' : ''}${novBadgeHTML(ins)}</div>
@@ -3651,7 +3651,7 @@
        var sello = _selloActualizacion(ins);
        if (!hist.length) {
            return '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">'
-               + '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">Historial de cambios</div>'
+               + '<div class="i-ficha-section" data-i-icon="historial" style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">Historial de cambios</div>'
                + '<div style="font-size:12px;color:var(--text-dim)">'
                + (sello ? 'Última actualización ' + etx(sello.rel) + (sello.quien ? ' · ' + etx(sello.quien) : '') + '. Sin cambios registrados en los últimos 90 días.'
                         : 'Todavía no hay cambios registrados. Se van guardando cada vez que se edita el insumo.')
@@ -3674,7 +3674,7 @@
        }).join('');
        return '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">'
            + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px">'
-               + '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">📜 Historial de cambios</div>'
+               + '<div class="i-ficha-section" data-i-icon="historial" style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">📜 Historial de cambios</div>'
                + '<div style="font-size:10.5px;color:var(--text-dim)">últimos 90 días · ' + hist.length + ' movimiento' + (hist.length !== 1 ? 's' : '') + '</div>'
            + '</div>' + filas + '</div>';
    }
@@ -4684,7 +4684,7 @@
            </div>`;
        }
 
-       return `<div style="background:rgba(245,200,66,.04);border:1px solid rgba(245,200,66,.15);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+       return `<div class="i-tax-panel" style="background:rgba(245,200,66,.04);border:1px solid rgba(245,200,66,.15);border-radius:8px;padding:12px 14px;margin-bottom:10px">
            <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);opacity:.7;margin-bottom:10px">Impuestos</div>
            <div class="meta-grid" style="grid-template-columns:1fr 1fr;gap:8px">
                <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px">
@@ -4859,7 +4859,7 @@
 
        const cardsHtml = _costeoCardsHTML(p);
 
-       return `<div style="padding-top:12px;border-top:1px solid var(--border)">
+       return `<div class="i-costeo-panel" style="padding-top:12px;border-top:1px solid var(--border)">
            <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">Costeo automático</div>
            ${copaInputs}
            <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;padding:5px 10px;background:rgba(255,255,255,0.03);border-radius:6px">
@@ -4892,7 +4892,7 @@
       compra, no precio de venta — por eso va en su propio bloque. */
    function _renderStockBlock(p, i, tieneCopa) {
        var unidad = tieneCopa ? 'botellas' : 'unidades de compra';
-       return `<div style="padding-top:12px;border-top:1px solid var(--border)">
+       return `<div class="i-stock-panel" style="padding-top:12px;border-top:1px solid var(--border)">
            <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--blue);margin-bottom:8px">Stock · para requisiciones y alertas</div>
            <div class="meta-grid" style="grid-template-columns:1fr 1fr;gap:8px">
                <div class="meta-item">
@@ -5083,7 +5083,7 @@
                    : '—';
    
                return `
-               <div style="background:var(--surface2);border:1px solid var(--border);
+               <div class="i-presentacion" style="background:var(--surface2);border:1px solid var(--border);
                    border-radius:8px;padding:12px;margin-bottom:10px">
                    <div style="display:flex;justify-content:space-between;
                        align-items:center;margin-bottom:10px">
@@ -5812,7 +5812,7 @@
                </span>
            </div>
    
-           <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;
+           <div class="i-ficha-section" data-i-icon="unidad" style="font-size:10px;letter-spacing:2px;text-transform:uppercase;
                color:var(--text-dim);margin-bottom:10px">Presentaciones</div>
    
            ${pres.length ? pres.map(p => `
@@ -5879,7 +5879,7 @@
 
            ${ins.notas ? `
                <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-                   <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;
+                   <div class="i-ficha-section" data-i-icon="descripcion" style="font-size:10px;letter-spacing:2px;text-transform:uppercase;
                        color:var(--text-dim);margin-bottom:6px">Notas</div>
                    <p style="font-size:13px;color:var(--text-muted);line-height:1.7">${ins.notas}</p>
                </div>` : ''}

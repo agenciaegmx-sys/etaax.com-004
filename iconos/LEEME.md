@@ -133,3 +133,13 @@ Cubren horarios y asistencia, checklists, organigrama, perfiles de puesto,
 evaluaciones y resultados. El sprite adapta los trazos al tema y mantiene
 los colores de los estados. `administrativo/staff-operativo-ui.*` decora los
 controles existentes sin cambiar registros, reglas operativas ni permisos.
+
+## Insumos
+
+`insumos/oscuro/` incorpora 50 SVG, prefijo `ins-`: catálogo, ficha, editor,
+acciones, impuestos, stock y diez tipos de producto. Se publicaron las variantes
+claras y oscuras en `agenciaegmx-sys/iconos-etaax`, commit `0a97a13`, con la
+[galería, búsqueda y descargas](https://github.com/agenciaegmx-sys/iconos-etaax/blob/main/etaax-insumos-iconos.html).
+Las acciones comunes mantienen la geometría de Recetas y Administrativo.
+`recetas/insumos-ui.*` integra su presentación y conserva los valores de los
+controles, las fórmulas y los permisos del catálogo.

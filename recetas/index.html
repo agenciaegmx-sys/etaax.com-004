@@ -26,10 +26,10 @@
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=dc47c144">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/recetas/recetas-ui.css?v=5cb3b6da">
+<link rel="stylesheet" href="/recetas/recetas-ui.css?v=b728d1d1">
 </head>
 <body>
-<script src="/etaax-ui-inicio.js?v=199a743f"></script>
+<script src="/etaax-ui-inicio.js?v=7da80c8b"></script>
 <header class="top-bar">
     <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
@@ -2961,19 +2961,34 @@ function _toggleInsumoMenu(e) {
     var btn = e && e.currentTarget && e.currentTarget.tagName === 'BUTTON'
         ? e.currentTarget
         : document.querySelector('[onclick*="_toggleInsumoMenu"]');
-    m.style.display = 'block';
     if (!btn) return;
-    if (m.parentNode !== document.body) document.body.appendChild(m);
     var r = btn.getBoundingClientRect();
+    var zona = btn.closest('.modal-body');
+    var cabecera = document.getElementById('recetaEditorHeader');
+    var techo = zona ? Math.max(8, zona.getBoundingClientRect().top + 8)
+        : cabecera && cabecera.getClientRects().length ? Math.max(8, cabecera.getBoundingClientRect().bottom + 8) : 8;
+    // La lista se abre dentro del espacio de contenido, debajo de la cabecera.
+    if (r.bottom <= techo || r.top >= window.innerHeight || techo >= window.innerHeight - 48) return;
+    m.style.maxHeight = Math.max(40, window.innerHeight - techo - 8) + 'px';
+    m.style.overflowY = 'auto';
+    m.style.display = 'block';
+    if (m.parentNode !== document.body) document.body.appendChild(m);
     var alto = m.offsetHeight || 150;
-    var arriba = r.top > alto + 14;                       // ¿cabe encima del botón?
+    var arriba = r.top - alto - 6 >= techo;
+    var top = arriba ? r.top - alto - 6 : r.bottom + 6;
+    top = Math.max(techo, Math.min(top, window.innerHeight - alto - 8));
     m.style.position = 'fixed';
     m.style.zIndex   = '9999';
     m.style.left     = Math.max(8, Math.min(r.left, window.innerWidth - m.offsetWidth - 8)) + 'px';
-    m.style.top      = (arriba ? r.top - alto - 6 : r.bottom + 6) + 'px';
+    m.style.top      = top + 'px';
     m.style.bottom   = 'auto';
 }
 document.addEventListener('click', function () { var m = document.getElementById('insumoMenu'); if (m) m.style.display = 'none'; });
+window.addEventListener('scroll', function (e) {
+    var m = document.getElementById('insumoMenu');
+    if (m && (!e.target || !e.target.nodeType || !m.contains(e.target))) m.style.display = 'none';
+}, true);
+window.addEventListener('resize', function () { var m = document.getElementById('insumoMenu'); if (m) m.style.display = 'none'; });
 function abrirInsumoDesde(modo) {
     var m = document.getElementById('insumoMenu'); if (m) m.style.display = 'none';
     var url = { globalneg:'insumos.html?solo=1&globalneg=1', etaax:'insumos.html?solo=1&etaax=1', nuevo:'insumos.html?solo=1&nuevo=1' }[modo];
@@ -5009,7 +5024,7 @@ window.addEventListener('load', function() {
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
 <script src="/novedades.js?v=47f6016b"></script><!-- aviso de actualizaciones del sistema -->
-<script src="/etaax-iconos.js?v=37e92d68"></script>
+<script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=15a5a6ef"></script>

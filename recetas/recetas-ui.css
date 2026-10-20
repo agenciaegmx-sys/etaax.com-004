@@ -11,6 +11,9 @@ body.etx-recetas-page {
 .etx-recetas-page .r-ui-icon .etx-ic {width:20px;height:20px;--green:var(--r-cyan);--etx-color:currentColor;}
 .r-title-plate {display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:1px solid var(--etx-ui-cyan-line,#537e83);border-radius:12px;background:var(--r-selected);flex-shrink:0;}
 .r-title-copy {min-width:0;overflow-wrap:anywhere;}
+/* Los menús de ingredientes se elevan sobre sus tarjetas, dentro del contenido.
+   Su z-index no debe competir con el encabezado sticky del editor. */
+.etx-recetas-page #editorWrap {position:relative;isolation:isolate;z-index:0;}
 .etx-recetas-page :is(button,input,select,textarea,a,[tabindex]):focus-visible {outline:2px solid var(--r-cyan)!important;outline-offset:3px;}
 .etx-recetas-page button {font-family:inherit;transition:background .16s,border-color .16s,color .16s;}
 .etx-recetas-page button:disabled {opacity:.5;cursor:not-allowed;}
