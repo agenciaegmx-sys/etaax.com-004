@@ -1563,7 +1563,8 @@
        // Más renglones por hoja: un catálogo de 500 insumos con celdas de reporte
        // financiero se va a 30 páginas. Aquí se viene a cotejar, no a leer.
        'table.rt tbody td{padding:4px 8px;font-size:10.5px}' +
-       'table.rt thead th{padding:6px 8px}</style>';
+       // Texto negro sobre gris claro, tanto en la vista previa como en papel.
+       'table.rt thead th{padding:6px 8px;background:#eee;color:#000;font-weight:800;border-bottom-color:#b5b5b5}</style>';
    // Renglón de título de grupo, a lo ancho de la tabla.
    function _filaGrupoPDF(nombre, n, extra, cols){
        return '<tr class="grp-h"><td colspan="' + cols + '">' + etx(nombre) +
