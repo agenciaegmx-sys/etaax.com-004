@@ -1191,7 +1191,7 @@ function _rendBatch(fila) {
 function _recetaDePrebatch(fila) {
     if (!fila) return null;
     var cid = _canonInsumoId(fila.insumoId) || fila.insumoId;
-    var ins = (getInsumos() || []).find(function (x) {
+    var ins = (typeof window._insumoResolver === 'function' && window._insumoResolver(fila.insumoId)) || (getInsumos() || []).find(function (x) {
         return x && (_canonInsumoId(x.id) || x.id) === cid;
     });
     if (!ins || !ins.esSubReceta || !ins.recetaId) return null;
@@ -1334,19 +1334,25 @@ function _repartoPrebatch() {
     });
     _ordenPrebatches(_elegibles).forEach(function (_e) {
         var pf = _e.pf, ins = _e.ins, sr = _e.sr;
-        // TOTAL = suma de TODOS los ingredientes de la sub-receta (rendimiento base),
-        // no solo los ligados a un insumo. Así cada insumo recibe su proporción real
-        // dentro del batch completo (ej. Aperol 60 de 1180 ml), no dentro del subconjunto
-        // de alcoholes (bug: repartía 2500 entre 120 → 1250 c/u en vez de ~127 c/u).
+        // Conservar TODOS los ingredientes, incluso los no ligados a un insumo:
+        // si falta el rendimiento, su suma es el último recurso para el reparto.
         var partes = [], total = 0;
         (sr.ingredientes || []).forEach(function(ing){
             var _z3 = _normIngrediente(ing);                       // sub-unidad → unidad base
             var b = ingredienteBase(_z3.cant, _z3.unidad); // → ml/g base
             if (b <= 0) return;
-            total += b;                                        // todos cuentan para el rendimiento
+            total += b;
             if (ing.insumoId) partes.push({ id: ing.insumoId, b: b }); // solo los ligados se reparten
         });
         if (!total) return;
+        /* La producción añade _rendBatch(pf) por batch. El reparto debe dividir
+           entre ESE MISMO rendimiento, no entre la suma de ingredientes:
+           350 + 350 con rendimiento 750 repartía 375 de cada uno por batch,
+           aunque producirlo solo descontara 350. Cada batch inventaba 25 ml
+           por insumo (0.4167 copas de 60 ml). También afecta a reducciones.
+           Son equivalentes de materia prima por cantidad de producto terminado;
+           el contenido/capacidad de su envase no cambia la fórmula de la receta. */
+        var rend = _rendBatch(pf) || total;
         // Magnitudes del prebatch en unidad BASE (ml/g)
         var toB = pf.tipo === 'copa' ? (parseFloat(pf.copaML) || 0) : 1;
         if (pf.tipo === 'copa' && !toB) return;
@@ -1384,7 +1390,7 @@ function _repartoPrebatch() {
         out.esPB[pf.insumoId] = 1;
         var desg = [];
         partes.forEach(function(p){
-            var sh = p.b / total;
+            var sh = p.b / rend;
             // Por id canónico: si el ingrediente de la sub-receta apunta a la COPIA
             // por sucursal y la fila del inventario usa el MAESTRO, el .find crudo
             // no encontraba nada y ese insumo se quedaba SIN su parte del batch
@@ -1395,7 +1401,7 @@ function _repartoPrebatch() {
                sabe su nombre aunque no se esté contando aquí. */
             var _insP = (typeof window._insumoResolver === 'function') ? window._insumoResolver(p.id) : null;
             var _nomP = (fi && fi.nombre) || (_insP && _insP.nombre) || '(sin renglón)';
-            desg.push({ insumoId: (fi && fi.insumoId) || p.id, nombre: _nomP, ml: fisB * sh });
+            desg.push({ insumoId: (fi && fi.insumoId) || p.id, nombre: _nomP, ml: fisB * sh, porBatch: p.b });
             if (!fi) return; // ingrediente sin fila en este inventario → solo informativo
             var u = fi.tipo === 'copa' ? (parseFloat(fi.copaML) || 0) : (fi.tipo === 'pza' ? (parseFloat(fi.contNeto) || 0) : 1);
             if (fi.tipo !== 'peso' && !(u > 0)) return;
@@ -1414,7 +1420,7 @@ function _repartoPrebatch() {
            propio renglón, el mismo producto contaría dos veces —una dentro del
            batch de arriba y otra en los insumos de este—. Se vacía. */
         if (_rec) { ['ea','ent','vco','cm','can','teo','fis','dif','venta'].forEach(function (c) { _rec[c] = 0; }); }
-        out.lista.push({ insumoId: pf.insumoId, nombre: pf.nombre, fisML: fisB, teoML: teoB, desglose: desg });
+        out.lista.push({ insumoId: pf.insumoId, nombre: pf.nombre, fisML: fisB, teoML: teoB, rendimientoBase: rend, desglose: desg });
     });
     return out;
 }
@@ -9347,7 +9353,7 @@ function _step5TablasHTML() {
             return '<div style="font-size:9px;opacity:.7;white-space:nowrap" title="Este producto' +
                 ' está dentro de un batch (una sub-receta de producción propia). Su parte se le' +
                 ' devuelve aquí para que la diferencia mire TODO el producto, no solo el' +
-                ' embotellado.">↳ ' + _nb(copas / copasBot) + ' bot' + _lt + ' en batches</div>';
+                ' embotellado.">↳ ' + _nb(copas / copasBot) + ' bot' + _lt + ' del insumo en batches</div>';
         };
         const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
         const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
@@ -9709,8 +9715,8 @@ function _step5TablasHTML() {
             var difML = r.fisML - r.teoML;
             var difTag = Math.abs(difML) < 1 ? '' : ` · dif ${difML>=0?'+':''}${Math.round(difML)} ml repartida`;
             return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
-                <b>${etx(r.nombre)}</b> — ${Math.round(r.fisML)} ml pesados${difTag}
-                <div style="color:var(--text-dim);margin-top:2px">Contiene: ${r.desglose.map(function(d){ return etx(d.nombre) + ' ' + Math.round(d.ml) + ' ml'; }).join(' · ')}</div>
+                <b>${etx(r.nombre)}</b> — ${Math.round(r.fisML * 100) / 100} ml de mix contados${difTag}
+                <div style="color:var(--text-dim);margin-top:2px">Equivalentes por insumo: ${r.desglose.map(function(d){ return etx(d.nombre) + ' ' + Math.round(d.ml * 100) / 100 + ' ml (' + _nc(d.porBatch) + ' por cada ' + _nc(r.rendimientoBase) + ' ml de receta)'; }).join(' · ')}</div>
             </div>`;
         }).join('');
         prodCard = `<div class="card" style="max-width:none;margin:0 16px 12px">
@@ -10192,7 +10198,7 @@ function verReporteDirectivo(gerencial, modo) {
                                             : v * (parseFloat(a.f.copaML) || 0);
                 if (!ml) return '';
                 return '  ·  ' + (Math.abs(ml) >= 1000 ? (Math.round(ml / 100) / 10) + ' L'
-                                                       : Math.round(ml) + ' ml');
+                                                       : (Math.round(ml * 100) / 100) + ' ml');
             };
             return `<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:10px">
               <div class="rd-sec" style="margin-top:14px">${etx(grp)}</div>
@@ -10210,9 +10216,9 @@ function verReporteDirectivo(gerencial, modo) {
                       Batches hechos en el periodo: <b>${hechos % 1 ? hechos.toFixed(1) : hechos}</b>
                       &nbsp;·&nbsp; Existencia actual: <b>${_u(a, a.fisico)}${_ml(a, a.fisico)}</b></div>
                     ${partes.length ? `<div style="font-size:9.5px;color:#56514a;margin-top:3px;line-height:1.6">
-                      Se reparte a: ${partes.map(p => etx(p.nombre) + ' ' +
+                      Equivalentes por insumo: ${partes.map(p => etx(p.nombre) + ' ' +
                           (Math.abs(p.ml) >= 1000 ? (Math.round(p.ml / 100) / 10) + ' L'
-                                                  : Math.round(p.ml) + ' ml')).join('  ·  ')}</div>` : ''}
+                                                  : (Math.round(p.ml * 100) / 100) + ' ml')).join('  ·  ')}</div>` : ''}
                   </div>`;
               }).join('')}
             </div>`;

@@ -22099,8 +22099,9 @@ console.log('\n══ BH39 · Un batch hecho de otro batch ══');
     vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){}', K);
 
     /* El batch: 200 G limón + 320 G azúcar + 500 ML agua + 1750 ML vodka.
-       Total 2770 → el vodka es el 63.18 % de lo que hay en cualquier
-       Limoncello, esté en la garrafa o embotellado. */
+       Rinde 2600 ML terminados: cada 2600 ML representan 1750 ML de vodka.
+       Sumar gramos y mililitros como si fueran el rendimiento (2770) falseaba
+       los equivalentes de materia prima y no cancelaba la producción. */
     const RECS = [
         { id:'srLim1', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
           camposExtra:{ rendimientoFinal:'2600', unidadRendimientoFinal:'ML' },
@@ -22143,27 +22144,26 @@ console.log('\n══ BH39 · Un batch hecho de otro batch ══');
 
     /* ── EL CASO, CON SUS CIFRAS ── */
     test('EL CASO · el vodka de las botellas también llega', () =>
-        eq(vodkaDe(montar(1952, 1094)), n2((1952 + 1094) * 1750 / 2770), '1924 ml'));
-    /* La prueba de que ANTES faltaba: solo con la garrafa daba 1233 ml. */
+        eq(vodkaDe(montar(1952, 1094)), n2((1952 + 1094) * 1750 / 2600), '2050.2 ml equivalentes'));
+    /* La prueba de que sin el segundo nivel faltaba el vodka de las botellas. */
     test('…y es más que lo que había antes, que era solo la garrafa', () =>
-        eq(vodkaDe(montar(1952, 1094)) > n2(1952 * 1750 / 2770), true,
-           'faltaban 691 ml, los de las botellas'));
+        eq(vodkaDe(montar(1952, 1094)) > n2(1952 * 1750 / 2600), true,
+           'incluye el vodka de las botellas'));
     test('…sin botellas, sigue dando lo de la garrafa y ya', () =>
-        eq(vodkaDe(montar(1952, 0, false)), n2(1952 * 1750 / 2770), 'sin inventar nada'));
+        eq(vodkaDe(montar(1952, 0, false)), n2(1952 * 1750 / 2600), 'sin inventar nada'));
     /* Cada insumo su proporción, no solo el que más pesa. */
     test('…y el azúcar recibe la suya, de los dos niveles', () => {
         const rep = montar(1952, 1094);
         return eq(n2((rep.porInsumo['azucar'] || {}).fis || 0),
-                  n2((1952 + 1094) * 320 / 2770), 'proporcional');
+                  n2((1952 + 1094) * 320 / 2600), 'gramos equivalentes');
     });
-    /* NADA SE CUENTA DOS VECES: la suma de lo repartido a los insumos tiene
-       que ser exactamente lo que había en los dos batches juntos. Es el
-       candado que impide que una cascada infle el inventario. */
-    test('la suma repartida == lo que hay en los dos batches, ni un ml más', () => {
+    /* NADA SE CUENTA DOS VECES: los equivalentes de CADA ingrediente deben
+       representar los mismos batches terminados. Gramos de materia prima +
+       mililitros de materia prima no se suman como ml de producto terminado. */
+    test('cada ingrediente representa exactamente los dos batches contados, sin duplicarlos', () => {
         const rep = montar(1952, 1094);
-        const suma = ['vodka','limon','azucar','agua']
-            .reduce((s, k) => s + ((rep.porInsumo[k] || {}).fis || 0), 0);
-        return eq(n2(suma), 3046, 'sin inflar');
+        for (const [id, cantidad] of [['vodka',1750],['limon',200],['azucar',320],['agua',500]])
+            eq(n2(rep.porInsumo[id].fis / cantidad * 2600), 3046, 'sin inflar ' + id);
     });
     /* Y el batch de en medio NO se queda además con lo que recibió: ya lo
        repartió hacia abajo. Si se lo quedara, el mismo Limoncello contaría
@@ -22542,7 +22542,7 @@ console.log('\n══ BH42 · La producción propia en el impreso ══');
         eq(bloque.indexOf('Existencia actual') > -1 && bloque.indexOf("' L'") > -1,
            true, 'lo que hay'));
     test('…y en qué se reparte', () =>
-        eq(bloque.indexOf('Se reparte a:') > -1, true, 'la distribución'));
+        eq(bloque.indexOf('Equivalentes por insumo:') > -1, true, 'la distribución'));
     /* Lo que NO debe llevar: las columnas que salían en cero. */
     ['Varianza', 'Dif. $', 'Vta. copa', 'Entradas'].forEach(col =>
         test('…y NO lleva la columna «' + col + '», que salía en cero', () =>
@@ -28935,6 +28935,108 @@ function resumen() {
         : '🚨 ' + FALLA + ' FÓRMULA(S) ROTA(S) de ' + (PASA + FALLA) + ' — NO pushear hasta entender por qué');
     process.exit(FALLA === 0 ? 0 : 1);
 }
+
+/* Regresión 2026-10-23: producción y reparto deben usar el MISMO rendimiento.
+   350 ml + 350 ml, rendimiento declarado 750 ml. Copas de 60 ml y ginebra
+   directa en el cóctel: el mix no debe volver a descontar esa ginebra. */
+function suitePrebatchRendimiento20261023() {
+    console.log('\n══ Inventarios · rendimiento y equivalentes del Mix Negroni ══');
+    const P = crearContexto();
+    cargarJS(P, 'etaax-core.js'); cargarJS(P, 'insumo-label.js'); cargarJS(P, 'recetas/inventarios.js');
+    P._storage.etaax_negocio_activo = 'negT';
+    const n6 = v => Math.round(v * 1e6) / 1e6;
+    function montar(opts = {}) {
+        const rendimiento = opts.rendimiento || 750;
+        setVar(P, '_cacheRecetasInv', [
+            { id:'srMix', nombre:'Mix Negroni PR', tipo:'sub-bebidas', camposExtra:{ rendimientoFinal:rendimiento, unidadRendimientoFinal:'ML' },
+              ingredientes:[{ insumoId:'vermouth', cantidad:350, unidad:'ML' },{ insumoId:'campari', cantidad:350, unidad:'ML' }] },
+            { id:'negroni', nombre:'Negroni Clásico', tipo:'bebidas', ingredientes:[
+                { insumoId:'mix', cantidad:60, unidad:'ML' },{ insumoId:'gin', cantidad:30, unidad:'ML' }] }
+        ]);
+        setVar(P, '_cacheInsumosInv', [
+            { id:'mix', nombre:'Mix Negroni PR', esSubReceta:true, recetaId:'srMix', activo:'1' },
+            ...['vermouth','campari','gin'].map(id=>({id,nombre:id,activo:'1'}))
+        ]);
+        setVar(P, 'invActual', { id:'invNegroni', area:'barra', entradasLog:[], cancelaciones:[], descuentos:[], ventasCompuesto:{},
+            prebatchProducidos:{mix:opts.batches === undefined ? 4 : opts.batches}, cocktailsVendidos:{negroni:20}, filas:[] });
+        const fila = (id, ml, ea) => ({insumoId:id,nombre:id,tipo:'copa',copaML:60,contNeto:750,existenciaAnterior:ea/60,
+            cerradasBodega:0,cerradasBarra:0,pesoCristal:0,pesos:[String(ml/1000)],entradas:[],ventasCopasDirectas:0,ventasBotella:0,cortesiaCopas:0,mermaCopas:0});
+        setVar(P, 'filasCaptura', [fila('mix',opts.mix === undefined ? 1800 : opts.mix,0),
+            fila('vermouth',opts.vermouth === undefined ? 1600 : opts.vermouth,3000),fila('campari',1600,3000),fila('gin',2400,3000)]);
+        vm.runInContext('_consumoDirty=true;_cancelDirty=true;_repCache=_repartoPrebatch();',P);
+    }
+    function valores() {
+        return vm.runInContext(`(()=>{const f=filasCaptura[1],a=_repartoDe('vermouth');return {
+            fis:a.fis*60,venta:a.venta*60,teo:calcExistenciaTeorica(f)*60,
+            totalTeo:(calcExistenciaTeorica(f)+a.teo)*60,
+            dif:calcDiferencia(f)+a.dif,desg:_repCache.lista[0].desglose[0].ml}})()`,P);
+    }
+    test('4 batches descuentan 1,400 ml de CADA insumo y no consumen ginebra',()=>{
+        montar();eq(P.consumoBasesPorProduccion('vermouth'),1400);eq(P.consumoBasesPorProduccion('campari'),1400);eq(P.consumoBasesPorProduccion('gin'),0);
+    });
+    test('el cóctel descuenta la ginebra directa una sola vez',()=>{
+        montar();eq(P.calcVentasCopasRecetas('gin',60),10);eq(P.calcVentasCopasRecetas('vermouth',60),0);
+    });
+    test('750 ml de mix representan 350 ml de vermouth, no 375 ni 750',()=>{
+        montar({mix:750});eq(n6(valores().fis),350);eq(n6(valores().desg),350);
+    });
+    test('586.5 ml de MIX representan 273.7 ml de cada ingrediente con rendimiento 750',()=>{
+        montar({mix:586.5});eq(n6(valores().fis),273.7);
+    });
+    test('20 cócteles consumen 560 ml de vermouth en el mix (1200 × 350/750)',()=>{
+        montar();eq(n6(valores().venta),560);eq(n6(valores().totalTeo),2440);
+    });
+    test('el consumo de un batch adicional equivale a 5.833333 copas de 60 ml',()=>{
+        montar({batches:4});const antes=valores().teo;montar({batches:5});eq(n6(antes-valores().teo),350);eq(n6((antes-valores().teo)/60),5.833333);
+    });
+    test('corregir la producción no inventa diferencia si el producto sigue contado en el mix',()=>{
+        for(const batches of [0,0.5,3,4,5,12]) {montar({batches});eq(n6(valores().dif),0);eq(n6(valores().totalTeo),2440);}
+    });
+    test('un faltante de 19 copas sigue en -19 al cambiar solo los batches registrados',()=>{
+        for(const batches of [3,4,5]) {montar({batches,vermouth:460});eq(n6(valores().dif),-19);}
+    });
+    test('si faltan OTROS 350 ml sin aparecer en el mix pasa de -19 a -24.833333 copas',()=>{
+        montar({vermouth:110});eq(n6(valores().dif),-24.833333);
+    });
+    test('un traslado real de 350 ml a otro batch no es faltante: permanece -19',()=>{
+        montar({batches:5,vermouth:110,mix:2550});eq(n6(valores().dif),-19);
+    });
+    test('también respeta un rendimiento menor por reducción y uno mayor por dilución',()=>{
+        for(const rendimiento of [500,700,750,1000]) {
+            montar({rendimiento,mix:rendimiento*4-1200});eq(n6(valores().dif),0);
+            eq(n6(valores().venta),n6(1200*350/rendimiento));
+        }
+    });
+    test('rendimiento real 700 en envase 750: de 586.5 ml quedan 293.25 ml de cada insumo',()=>{
+        montar({rendimiento:700,mix:586.5});eq(n6(valores().fis),293.25);
+        eq(vm.runInContext('_repCache.lista[0].rendimientoBase',P),700);
+        eq(vm.runInContext('_prodPrebatchUnidades(filasCaptura[0])*60',P),2800);
+    });
+    test('los ml del ingrediente no cambian si su copa es de 45 ml en vez de 60',()=>{
+        montar({rendimiento:700,mix:586.5});
+        vm.runInContext('filasCaptura[1].copaML=45;_repCache=_repartoPrebatch();',P);
+        eq(n6(P._repartoDe('vermouth').fis*45),293.25);
+    });
+    test('el desglose del resultado distingue el total de mix de los ml de cada insumo',()=>{
+        montar({rendimiento:700,mix:586.5});
+        const html=P._step5TablasHTML();
+        eq(html.includes('586.5 ml de mix contados'),true);
+        eq(html.includes('293.25 ml (350 por cada 700 ml de receta)'),true);
+        eq(html.includes('del insumo en batches'),true);
+    });
+    test('el rendimiento y el reparto usan la misma ficha local, aunque la fila guarde el ID maestro',()=>{
+        montar({rendimiento:700,mix:700});
+        vm.runInContext(`
+            invActual.sucursalId='suc_principal';localStorage.setItem('etaax_sucursal_activa','suc_principal');
+            _cacheRecetasInv=_cacheRecetasInv.concat([{id:'srVieja',tipo:'sub-bebidas',camposExtra:{rendimientoFinal:1000,unidadRendimientoFinal:'ML'},ingredientes:[{insumoId:'vermouth',cantidad:1000,unidad:'ML'}]}]);
+            _cacheInsumosInv=_cacheInsumosInv.map(x=>x.id==='mix'?Object.assign({},x,{recetaId:'srVieja'}):x).concat([{id:'mixLocal',origenId:'mix',sucursalId:'suc_principal',esSubReceta:true,recetaId:'srMix',activo:'1'}]);
+            _consumoDirty=true;_repCache=_repartoPrebatch();
+        `,P);
+        eq(vm.runInContext('_rendBatch(filasCaptura[0])',P),700);
+        eq(P.consumoBasesPorProduccion('vermouth'),1400);eq(n6(valores().fis),350);
+    });
+}
+suitePrebatchRendimiento20261023();
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
