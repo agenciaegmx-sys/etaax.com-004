@@ -8,6 +8,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX – Salud Financiera · Ventas Totales</title>
+    <!-- Presentación inicial: descargar antes de llegar a los scripts del final. -->
+    <link rel="preload" as="script" href="/etaax-iconos.js?v=e6d5073b">
+    <link rel="preload" as="script" href="/etaax-sidebar.js?v=fd2dac1b">
+    <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=34de802f">
+    <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
+
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
          (DNS + TLS) en medio, con el texto esperando. -->
@@ -157,12 +164,12 @@
         .suc-sep{height:1px;background:var(--border);margin:4px 0;}
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=dc47c144">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=45aa97a3">
 <script src="/financiero/periodo-enlace.js?v=1"></script>
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 </head>
 <body>
-<script src="/etaax-ui-inicio.js?v=7da80c8b"></script>
+<script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
 
 <header class="top-bar">
     <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">

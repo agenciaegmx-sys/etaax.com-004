@@ -1,4 +1,19 @@
 /* Espacio de trabajo compartido. Las tablas y los formularios conservan su UI. */
+/* La presentación anterior no llega a pintarse mientras se aplican los SVG y
+   el header nuevo. La opacidad conserva medidas y no altera capturas ni forms. */
+html.etx-ui-pendiente body {opacity:0!important;pointer-events:none!important;}
+html.etx-ui-pendiente::before {
+  content:"";position:fixed;inset:0;background:var(--bg,#0f0e0a);z-index:2147483646;
+}
+html.etx-ui-pendiente::after {
+  content:"";position:fixed;left:calc(50% - 16px);top:calc(50% - 16px);
+  width:28px;height:28px;border:2px solid var(--border,#3a3830);
+  border-top-color:var(--cyan,#8ce4ee);border-radius:50%;z-index:2147483647;
+  animation:etx-ui-carga .7s linear infinite;
+}
+#etxUiCarga {position:fixed;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+@keyframes etx-ui-carga {to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce) {html.etx-ui-pendiente::after{animation:none;}}
 body.etx-module-cards {
   --etx-ui-cyan:#8ce4ee;--etx-ui-terra:#fb9b6f;--etx-ui-panel:#171611;
   --etx-ui-line:#3a3830;--etx-ui-muted:#b5afa3;--etx-ui-tint:rgba(251,155,111,.09);
