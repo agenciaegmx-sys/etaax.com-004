@@ -652,10 +652,7 @@ function _grupoCategoria(f) {
 
 // ── Helpers matemáticos ───────────────────────────────────────
 function ingredienteML(cantidad, unidad) {
-    const u = (unidad || 'ML').toUpperCase();
-    if (u === 'OZ') return cantidad * OZ_ML;
-    if (u === 'LT') return cantidad * 1000;
-    return cantidad;
+    return EtaaxCore.cantidadBaseInventario(cantidad, unidad);
 }
 
 /* SUB-UNIDADES DEL EMPAQUE (tercer nivel) ────────────────────────────────
@@ -885,6 +882,11 @@ function _construirIdx(esCancel) {
             var _nz = _normIngrediente(ing);
             var cant = _nz.cant, u = (_nz.unidad || '').toUpperCase();
             ing = { insumoId: ing.insumoId, cantidad: cant, unidad: _nz.unidad };
+            var base = ingredienteBase(cant, u);
+            var fi = _filaDeMiembro(id);
+            if (fi && (u === 'PZA' || u === 'PZ' || u === '')) {
+                base = EtaaxCore.cantidadFilaInventario(cant, u, fi) * _basePorUnidadFila(fi);
+            }
             /* Un PREBATCH se acumula ADEMÁS bajo su sub-receta. El id del insumo no
                sirve de identidad: al convertir una sub-receta a insumo el registro
                no lleva origenId, así que dos conversiones (una por sucursal, o una
@@ -899,12 +901,12 @@ function _construirIdx(esCancel) {
             if (_rid) _ids.push('sr:' + _rid);
             _ids.forEach(function (k) {
                 var s = slot(k);
-                if (esBeb)            s.mlBeb   += ingredienteML(cant, ing.unidad) * uds;      // copas (bebidas, cualquier estatus)
-                if (esBeb)            s.baseBeb += ingredienteBase(cant, ing.unidad) * uds;   // lo mismo en unidad base (KG/LT sí convierten)
-                if (esAli && activa)  s.baseAli += ingredienteBase(cant, ing.unidad) * uds;    // alimentos activos (unidad base)
+                if (esBeb)            s.mlBeb   += base * uds;      // copas (bebidas, cualquier estatus)
+                if (esBeb)            s.baseBeb += base * uds;
+                if (esAli && activa)  s.baseAli += base * uds;
                 if (activa) {                                                                   // pza (bebidas+alimentos activos)
                     if (u === 'PZA' || u === 'PZ' || u === '') s.pzaDir += cant * uds;
-                    else                                       s.mlPza  += ingredienteML(cant, ing.unidad) * uds;
+                    else                                       s.mlPza  += base * uds;
                 }
             });
         });
@@ -970,10 +972,7 @@ function calcVentasCopasRecetas(insumoId, copaML, idx) {
 // ── INVENTARIO DE ALIMENTOS: consumo teórico en unidad base (g/ml/pza) ──
 // Convierte la cantidad de un ingrediente de receta a la unidad base chica.
 function ingredienteBase(cantidad, unidad) {
-    const u = (unidad || '').toUpperCase();
-    if (u === 'KG' || u === 'LT') return cantidad * 1000; // a g / ml
-    if (u === 'OZ') return cantidad * OZ_ML;              // a ml
-    return cantidad;                                       // G, ML, PZA, PORCION… tal cual
+    return EtaaxCore.cantidadBaseInventario(cantidad, unidad);
 }
 // Unidad base de un insumo de alimentos según su presentación.
 function unidadBaseInsumo(ins) {
@@ -984,7 +983,7 @@ function unidadBaseInsumo(ins) {
     }
     const u = (p.umContenido || '').toUpperCase();
     if (u === 'KG' || u === 'G') return 'G';
-    if (u === 'LT' || u === 'ML') return 'ML';
+    if (u === 'LT' || u === 'L' || u === 'ML' || u === 'OZ') return 'ML';
     return 'PZA';
 }
 function _contenidoBasePresentacion(ins, p) {
@@ -994,7 +993,7 @@ function _contenidoBasePresentacion(ins, p) {
     }
     var um = (p.umContenido || 'ML').toUpperCase();
     var cn = parseFloat(p.contNeto) || 0;
-    return (um === 'LT' || um === 'KG') ? cn * 1000 : cn;
+    return EtaaxCore.cantidadBaseInventario(cn, um);
 }
 /* Consumo teórico de un insumo por las recetas vendidas, en UNIDAD BASE (ml/g/pza),
    venga de donde venga: bebidas o alimentos. Los dos montones son disjuntos (una
@@ -1148,9 +1147,30 @@ function _prodPrebatchUnidades(fila) {
     var n = _batchesProducidos(fila.insumoId);
     if (!n) return 0;
     var rB = _rendBatch(fila);
-    if (fila.tipo === 'copa') return n * (rB > 0 && fila.copaML > 0 ? rB / fila.copaML : 0); // batches→copas
-    if (fila.tipo === 'peso') return n * rB; // batches→unidad base
-    return n; // pza: 1 batch = 1 pza
+    return EtaaxCore.cantidadFilaInventario(n * rB, _unidadBaseBatch(fila), fila);
+}
+function _unidadBaseBatch(fila) {
+    var sr = _recetaDePrebatch(fila);
+    var u = String((sr && sr.camposExtra && sr.camposExtra.unidadRendimientoFinal) ||
+        (fila.tipo === 'peso' ? fila.baseUnit || 'G' : 'ML')).toUpperCase();
+    return u === 'KG' ? 'G' : (u === 'LT' || u === 'L' || u === 'OZ') ? 'ML' : u === 'PZ' ? 'PZA' : u;
+}
+function _basePorUnidadFila(fila) {
+    if (fila.tipo === 'copa') return parseFloat(fila.copaML) || 0;
+    if (fila.tipo === 'pza') {
+        if (_recetaIdDePrebatch(fila.insumoId) && _unidadBaseBatch(fila) === 'PZA') return 1;
+        return (parseFloat(fila.contNeto) || 0) || (_recetaIdDePrebatch(fila.insumoId) ? 0 : 1);
+    }
+    return 1;
+}
+function _unidadBaseDeFila(fila) {
+    if (_recetaIdDePrebatch(fila.insumoId)) return _unidadBaseBatch(fila);
+    if (fila.tipo === 'pza' && !(parseFloat(fila.contNeto) > 0)) return 'PZA';
+    return String(fila.baseUnit || (fila.tipo === 'peso' ? 'G' : 'ML')).toUpperCase();
+}
+function _fmtEquivalenteBatch(cantidad, unidad) {
+    var escala = String(unidad || '').toUpperCase() === 'PZA' ? 10000 : 100;
+    return (Math.round((parseFloat(cantidad) || 0) * escala) / escala) + ' ' + String(unidad || 'ML').toLowerCase();
 }
 /* CUÁNTO RINDE UN BATCH. Es distinto de la CAPACIDAD DEL ENVASE donde se guarda:
    "Tinto de Verano" rinde 900 ml y se almacena en garrafas de 4 L. Confundirlos es
@@ -1174,7 +1194,7 @@ function _rendBatch(fila) {
         var rf = parseFloat(cx.rendimientoFinal) || 0;
         if (rf > 0) {
             var u = (cx.unidadRendimientoFinal || '').toString().toUpperCase();
-            return (u === 'KG' || u === 'LT' || u === 'L') ? rf * 1000 : rf;   // a g/ml
+            return ingredienteBase(rf, u);   // a g/ml/pza
         }
     }
     var rp = parseFloat(fila.rendimientoBatch) || 0;
@@ -1255,15 +1275,9 @@ function _consumoBaseProd(fila) {
        usado a 300 ml por batch × 24 batches son 7200 ml = 2.4 piezas, no 7200.
        Se restaban 7200 PIEZAS del teórico y el insumo se iba a −7,189. Se convierte
        igual que el consumo por recetas: piezas directas + (ml ÷ contenido de la pieza). */
-    if (fila.tipo === 'pza') {
-        var d = consumoBasesPorProduccionDetalle(fila.insumoId);
-        var cn = parseFloat(fila.contNeto) || 0;             // ml/g que trae una pieza
-        return d.pza + (cn > 0 ? d.ml / cn : 0);
-    }
-    var u = consumoBasesPorProduccion(fila.insumoId); // ml / g / pza base
-    if (!u) return 0;
-    if (fila.tipo === 'copa') return fila.copaML > 0 ? u / fila.copaML : 0; // base ml → copas
-    return u; // peso: la unidad base ES g/ml, va directo
+    var d = consumoBasesPorProduccionDetalle(fila.insumoId);
+    return EtaaxCore.cantidadFilaInventario(d.pza, 'PZA', fila) +
+           EtaaxCore.cantidadFilaInventario(d.ml, 'ML', fila); // ml/g ya normalizados
 }
 
 // ══ REPARTO DEL PREBATCH A SUS INSUMOS (Resultado — modelo de Edwin) ══════════
@@ -1322,7 +1336,7 @@ function _repartoPrebatch() {
     var out = { porInsumo: {}, esPB: {}, lista: [] };
     var _elegibles = [];
     (filasCaptura || []).forEach(function(pf){
-        if (!pf || pf.tipo === 'pza' || pf.esCompuesto) return;
+        if (!pf || pf.esCompuesto) return;
         var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(pf.insumoId) : null;
         if (!ins || !ins.esSubReceta || !ins.recetaId) return;
         // Dos renglones de la misma sub-receta: solo el primero la representa, o cada
@@ -1342,7 +1356,7 @@ function _repartoPrebatch() {
             var b = ingredienteBase(_z3.cant, _z3.unidad); // → ml/g base
             if (b <= 0) return;
             total += b;
-            if (ing.insumoId) partes.push({ id: ing.insumoId, b: b }); // solo los ligados se reparten
+            if (ing.insumoId) partes.push({ id: ing.insumoId, b: b, cantidad: _z3.cant, unidad: _z3.unidad });
         });
         if (!total) return;
         /* La producción añade _rendBatch(pf) por batch. El reparto debe dividir
@@ -1354,8 +1368,8 @@ function _repartoPrebatch() {
            el contenido/capacidad de su envase no cambia la fórmula de la receta. */
         var rend = _rendBatch(pf) || total;
         // Magnitudes del prebatch en unidad BASE (ml/g)
-        var toB = pf.tipo === 'copa' ? (parseFloat(pf.copaML) || 0) : 1;
-        if (pf.tipo === 'copa' && !toB) return;
+        var toB = _basePorUnidadFila(pf);
+        if (!toB) return;
         /* ══ LO QUE ESTE BATCH YA RECIBIÓ DE OTRO ════════════════════════
            Si llegó aquí después de un batch que lo lleva como ingrediente, su
            parte ya está en out.porInsumo —en las unidades de SU fila— y hay
@@ -1365,7 +1379,7 @@ function _repartoPrebatch() {
         var _rec = out.porInsumo[pf.insumoId];
         var _her = function (campo) { return _rec ? (parseFloat(_rec[campo]) || 0) * toB : 0; };
         var eaB    = (parseFloat(pf.existenciaAnterior) || 0) * toB + _her('ea');
-        var entB   = getEntradasCopas(pf) * toB + _her('ent');
+        var entB   = (pf.tipo === 'peso' ? getEntradasBottles(pf.insumoId) : getEntradasCopas(pf)) * toB + _her('ent');
         /* Lo VENDIDO del batch, en unidad base, buscado POR SU SUB-RECETA. Dos
            razones para no usar el id del insumo ni calcVentasCopasRecetas:
              · calcVentasCopasRecetas devuelve 0 sin copaML (un prebatch de cocina se
@@ -1390,7 +1404,6 @@ function _repartoPrebatch() {
         out.esPB[pf.insumoId] = 1;
         var desg = [];
         partes.forEach(function(p){
-            var sh = p.b / rend;
             // Por id canónico: si el ingrediente de la sub-receta apunta a la COPIA
             // por sucursal y la fila del inventario usa el MAESTRO, el .find crudo
             // no encontraba nada y ese insumo se quedaba SIN su parte del batch
@@ -1401,11 +1414,15 @@ function _repartoPrebatch() {
                sabe su nombre aunque no se esté contando aquí. */
             var _insP = (typeof window._insumoResolver === 'function') ? window._insumoResolver(p.id) : null;
             var _nomP = (fi && fi.nombre) || (_insP && _insP.nombre) || '(sin renglón)';
-            desg.push({ insumoId: (fi && fi.insumoId) || p.id, nombre: _nomP, ml: fisB * sh, porBatch: p.b });
+            var porBatch = fi ? EtaaxCore.cantidadFilaInventario(p.cantidad, p.unidad, fi) : p.b;
+            var baseBatch = fi ? porBatch * _basePorUnidadFila(fi) : p.b;
+            var unidad = fi ? _unidadBaseDeFila(fi) : String(p.unidad || 'PZA').toUpperCase();
+            if (unidad === 'KG') unidad = 'G';
+            if (unidad === 'LT' || unidad === 'L' || unidad === 'OZ') unidad = 'ML';
+            desg.push({ insumoId: (fi && fi.insumoId) || p.id, nombre: _nomP, ml: fisB / rend * baseBatch,
+                porBatch: baseBatch, unidadBase: unidad });
             if (!fi) return; // ingrediente sin fila en este inventario → solo informativo
-            var u = fi.tipo === 'copa' ? (parseFloat(fi.copaML) || 0) : (fi.tipo === 'pza' ? (parseFloat(fi.contNeto) || 0) : 1);
-            if (fi.tipo !== 'peso' && !(u > 0)) return;
-            var conv = function(v){ return (v * sh) / (fi.tipo === 'peso' ? 1 : u); }; // base → unidad de la fila
+            var conv = function(v){ return v / rend * porBatch; }; // producto terminado → unidad de la fila
             // Se guarda bajo el id de la FILA (canónico): _repartoDe() se consulta
             // con ese id, y guardarlo bajo el de la copia lo dejaba inalcanzable.
             var _k = fi.insumoId;
@@ -1420,7 +1437,8 @@ function _repartoPrebatch() {
            propio renglón, el mismo producto contaría dos veces —una dentro del
            batch de arriba y otra en los insumos de este—. Se vacía. */
         if (_rec) { ['ea','ent','vco','cm','can','teo','fis','dif','venta'].forEach(function (c) { _rec[c] = 0; }); }
-        out.lista.push({ insumoId: pf.insumoId, nombre: pf.nombre, fisML: fisB, teoML: teoB, rendimientoBase: rend, desglose: desg });
+        out.lista.push({ insumoId: pf.insumoId, nombre: pf.nombre, fisML: fisB, teoML: teoB,
+            rendimientoBase: rend, unidadBase: _unidadBaseBatch(pf), desglose: desg });
     });
     return out;
 }
@@ -6812,7 +6830,8 @@ function _revisarPrebatch(pre) {
     if (!fila) {
         probs.push('no tiene renglón en este inventario, así que su sobrante no se reparte a sus insumos');
     } else {
-        if (fila.tipo === 'pza') probs.push('está capturado por PIEZA: el reparto del sobrante solo funciona por copa o por peso');
+        if (fila.tipo === 'pza' && !_basePorUnidadFila(fila))
+            probs.push('está capturado por PIEZA pero falta el contenido por pieza para repartir su sobrante');
         var cx = (sr && sr.camposExtra) || {};
         var rendSR = parseFloat(cx.rendimientoFinal) || 0;
         var rendPr = parseFloat(fila.rendimientoBatch) || 0;
@@ -9107,6 +9126,7 @@ function _medidaInsumo(fila) {
 // Formatea una cantidad en COPAS usando la medida declarada del insumo.
 function _fmtCop(copas, fila) {
     var v = parseFloat(copas) || 0;
+    if (fila && fila.tipo !== 'copa') return _fmtEquivalenteBatch(v, fila.tipo === 'pza' ? 'PZA' : fila.baseUnit || 'G');
     var m = _medidaInsumo(fila);
     var n1 = function (x) { var r = Math.round(x * 10) / 10; return r % 1 ? r.toFixed(1) : String(r); };
     if (!m) return n1(v) + ' cop';
@@ -9246,7 +9266,7 @@ function _step5TablasHTML() {
         if (q && !(f.nombre||'').toLowerCase().includes(q)) return;
         if (_subcatStep5 && (f.subcategoria||f.categoria) !== _subcatStep5) return;
         const b = _ens(_grupoCategoria(f));
-        (f.tipo === 'pza' ? b.pza : b.copa).push(f);
+        (f.tipo === 'copa' ? b.copa : b.pza).push(f);
     });
     vcomps.forEach(vf => {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
@@ -9276,7 +9296,10 @@ function _step5TablasHTML() {
         var cn  = parseFloat(fila.contNeto) || 0;
         var ml  = prodVer * cop;
         var leg = txt;
-        if (cop > 0 && ml > 0) {
+        if (fila.tipo === 'pza' || fila.tipo === 'peso') {
+            leg = _fmtEquivalenteBatch(prodVer * _basePorUnidadFila(fila), _unidadBaseDeFila(fila));
+            if (fila.tipo === 'pza') leg += ' · ' + _nc(prodVer) + ' pza';
+        } else if (cop > 0 && ml > 0) {
             var n1 = function (x) { var r = Math.round(x * 10) / 10; return r % 1 ? r.toFixed(1) : String(r); };
             leg = (ml >= 1000 ? n1(ml / 1000) + ' L' : n1(ml) + ' ml');
             if (cn > 0) leg += ' · ' + n1(ml / cn) + ' bot';
@@ -9287,7 +9310,9 @@ function _step5TablasHTML() {
     }
     function _tituloCoct(fila, prodVer, prodMat) {
         if (!(prodVer > 0)) return _origenConsumo(fila);
-        var t = _fmtCop(prodVer, fila) + ' se fueron en producir batches de sub-receta.';
+        var t = (fila.tipo === 'copa' ? _fmtCop(prodVer, fila) :
+            _fmtEquivalenteBatch(prodVer, fila.tipo === 'pza' ? 'PZA' : fila.baseUnit || 'G')) +
+            ' se fueron en producir batches de sub-receta.';
         if (prodMat > 0) return t + ' Van sumadas aquí: este batch no se está repartiendo.';
         return t + ' NO se suman a la cifra de arriba porque ese producto sigue contado ' +
                'dentro del batch — su parte ya viene en el teórico y en el físico de este renglón.';
@@ -9405,19 +9430,23 @@ function _step5TablasHTML() {
     // ── Constructor de fila PZA (secos: refrescos en lata, cervezas, etc.) ──
     function _rowPza(fila) {
         const adjP      = _repartoDe(fila.insumoId);
+        const peso      = fila.tipo === 'peso';
+        const unidad    = peso ? fila.baseUnit || 'G' : 'PZA';
+        const cant      = v => _fmtEquivalenteBatch(v, unidad);
         /* EA y entradas con su parte del batch, igual que el teórico y el físico de
            abajo. Sin sumarlas, un refresco que además vive dentro de una sub-receta
            enseñaba una existencia anterior más chica que la que su propio teórico
            daba por buena — el renglón de pieza era el único que no cuadraba. */
         const ea        = (parseFloat(fila.existenciaAnterior) || 0) + adjP.ea;
-        const entTotal  = getEntradasCopas(fila) + adjP.ent;
+        const entTotal  = (peso ? getEntradasBottles(fila.insumoId) : getEntradasCopas(fila)) + adjP.ent;
         const prodPBpMat = _prodPBVisible(fila, adjP);
         const prodPBpVer = (function () { try { return _consumoBaseProd(fila) || 0; } catch (e) { return 0; } })();
-        const ventaCoct = calcVentasPzaRecetas(fila.insumoId) + adjP.vco + prodPBpMat;
-        const ventasDir = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
+        const ventaCoct = consumoRecetasFila(fila) + adjP.vco + prodPBpMat;
+        const ventasDir = peso ? 0 : (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
         const ventas    = ventasDir + ventaCoct;
-        const cancelPza = getCancelacionesCopas(fila.insumoId) + adjP.can;
-        const cortMerma = (parseFloat(fila.cortesiaCopas) || 0) + (parseFloat(fila.mermaCopas) || 0) + adjP.cm;
+        const cancelPza = getCancelacionesCopas(fila.insumoId) + cancelRecetasFila(fila) + adjP.can;
+        const cortMerma = (peso ? (parseFloat(fila.mermaBase) || 0) :
+            (parseFloat(fila.cortesiaCopas) || 0) + (parseFloat(fila.mermaCopas) || 0)) + adjP.cm;
         const teorico   = calcExistenciaTeorica(fila) + adjP.teo;
         const fisico    = calcExistencia(fila) + adjP.fis;
         const dif       = fisico - teorico;
@@ -9433,15 +9462,15 @@ function _step5TablasHTML() {
                     ${_contP?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contP}</div>`:''}
                     <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}${_btnOcultoImpreso(fila.insumoId)}
                 </td>
-                <td style="text-align:center">${ea.toFixed(0)} pza</td>
-                <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza':'—'}${_lineaProd(fila, prodPBpVer, prodPBpMat, _n1(prodPBpVer) + ' pza')}</td>
-                <td style="text-align:center;color:var(--accent)">${ventasDir>0?(ventasDir%1?ventasDir.toFixed(1):ventasDir)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--accent)">${cortMerma>0?(cortMerma%1?cortMerma.toFixed(1):cortMerma)+' pza':'—'}</td>
-                <td style="text-align:center">${teorico.toFixed(0)} pza</td>
-                <td style="text-align:center;font-weight:600">${fisico.toFixed(0)} pza</td>
-                <td style="text-align:center;font-weight:700;color:${color}">${dif>=0?'+':''}${dif.toFixed(0)} pza</td>
+                <td style="text-align:center">${cant(ea)}</td>
+                <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+cant(entTotal):'—'}</td>
+                <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${ventaCoct>0?cant(ventaCoct):'—'}${_lineaProd(fila, prodPBpVer, prodPBpMat, cant(prodPBpVer))}</td>
+                <td style="text-align:center;color:var(--accent)">${ventasDir>0?cant(ventasDir):'—'}</td>
+                <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cant(cancelPza):'—'}</td>
+                <td style="text-align:center;color:var(--accent)">${cortMerma>0?cant(cortMerma):'—'}</td>
+                <td style="text-align:center">${cant(teorico)}</td>
+                <td style="text-align:center;font-weight:600">${cant(fisico)}</td>
+                <td style="text-align:center;font-weight:700;color:${color}">${dif>=0?'+':''}${cant(dif)}</td>
                 <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
             </tr>`;
@@ -9684,17 +9713,20 @@ function _step5TablasHTML() {
             dif+=r.dif; difCosto+=r.difCosto; vend+=r.vend;
         });
         b.pza.forEach(f   => { const r=_rowPza(f);   pzaBody+=r.html; dif+=r.dif; difCosto+=r.difCosto; vend+=r.vend; });
-        const unidad    = (!copaBody && pzaBody) ? 'pza' : 'cop';
+        const unidades = [...new Set(b.copa.concat(b.pza).map(f => _uDe(f).mov.toLowerCase())
+            .concat(b.comp.map(f => _uDe(f).mov.toLowerCase())))];
+        const mixtas = unidades.length > 1;
+        const unidad = unidades[0] || 'u';
         const copaTable = copaBody ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px;font-size:13.5px">${COPA_THEAD}<tbody>${copaBody}</tbody></table></div>` : '';
         const pzaTable  = pzaBody  ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="font-size:13.5px">${PZA_THEAD}<tbody>${pzaBody}</tbody></table></div>` : '';
         const abierto   = !!_s5Abiertos[grp];
-        const faltTxt   = dif < -0.05 ? `faltan ${_nc(Math.abs(dif))} ${unidad}` : (dif > 0.05 ? `sobran ${_nc(dif)} ${unidad}` : 'cuadra');
+        const faltTxt   = mixtas ? 'Diferencias por insumo' : dif < -0.05 ? `faltan ${_nc(Math.abs(dif))} ${unidad}` : (dif > 0.05 ? `sobran ${_nc(dif)} ${unidad}` : 'cuadra');
         const faltCol   = dif < -0.05 ? 'var(--red)' : (dif > 0.05 ? 'var(--green)' : 'var(--text-dim)');
         return `<div class="card" style="max-width:none;margin:0 16px 12px">
             <div class="card-header" data-grp="${etx(grp)}" style="cursor:pointer;user-select:none" onclick="_s5Toggle('${gid}', this)">
                 <h2 style="display:flex;align-items:center;gap:8px"><span id="s5car-${gid}" style="font-size:12px;color:var(--text-muted)">${abierto?'▾':'▸'}</span> ${grp}</h2>
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--text-dim)">
-                    <span>🥃 <b style="color:var(--text)">${_nc(vend)}</b> ${unidad} vendidas</span>
+                    <span>${mixtas ? 'Movimientos por insumo' : '<b style="color:var(--text)">' + _nc(vend) + '</b> ' + unidad + ' vendidas'}</span>
                     <span style="color:${faltCol}">${faltTxt}</span>
                     <span class="pill ${difCosto>=0?'pill-green':'pill-red'}" style="font-size:11px">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</span>
                 </div>
@@ -9713,10 +9745,10 @@ function _step5TablasHTML() {
         const abierto = !!_s5Abiertos[GPROD];
         const body = _repL.map(function(r){
             var difML = r.fisML - r.teoML;
-            var difTag = Math.abs(difML) < 1 ? '' : ` · dif ${difML>=0?'+':''}${Math.round(difML)} ml repartida`;
+            var difTag = Math.abs(difML) < 1 ? '' : ` · dif ${difML>=0?'+':''}${_fmtEquivalenteBatch(difML, r.unidadBase)} repartida`;
             return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
-                <b>${etx(r.nombre)}</b> — ${Math.round(r.fisML * 100) / 100} ml de mix contados${difTag}
-                <div style="color:var(--text-dim);margin-top:2px">Equivalentes por insumo: ${r.desglose.map(function(d){ return etx(d.nombre) + ' ' + Math.round(d.ml * 100) / 100 + ' ml (' + _nc(d.porBatch) + ' por cada ' + _nc(r.rendimientoBase) + ' ml de receta)'; }).join(' · ')}</div>
+                <b>${etx(r.nombre)}</b> — ${_fmtEquivalenteBatch(r.fisML, r.unidadBase)} de ${r.unidadBase === 'ML' ? 'mix' : 'preparación'} contados${difTag}
+                <div style="color:var(--text-dim);margin-top:2px">Equivalentes por insumo: ${r.desglose.map(function(d){ return etx(d.nombre) + ' ' + _fmtEquivalenteBatch(d.ml, d.unidadBase) + ' (' + _nc(d.porBatch) + ' por cada ' + _fmtEquivalenteBatch(r.rendimientoBase, r.unidadBase) + ' de receta)'; }).join(' · ')}</div>
             </div>`;
         }).join('');
         prodCard = `<div class="card" style="max-width:none;margin:0 16px 12px">
@@ -9762,7 +9794,7 @@ function _step5DesgloseCard(fila, refMap) {
     var esComp   = !!fila.esCompuesto;
     var esPB     = !esComp && _esPrebatchRepartido(fila.insumoId);
     var adjG     = (esComp || esPB) ? _repZero : _repartoDe(fila.insumoId);
-    var copasBot = (fila.contNeto>0 && fila.copaML>0) ? fila.contNeto/fila.copaML : 0;
+    var copasBot = _copasBotDe(fila);
     var ea       = (parseFloat(fila.existenciaAnterior)||0) + adjG.ea; // copas
     var fisico   = calcExistencia(fila) + adjG.fis;                    // copas
     var teorico  = calcExistenciaTeorica(fila) + adjG.teo;
@@ -9772,12 +9804,13 @@ function _step5DesgloseCard(fila, refMap) {
     var pctVal   = esPB ? null : _pctVarianza(dif, _consumoPeriodo(fila) + adjG.venta); // dif vs venta neta
     var pct      = pctVal !== null ? ((pctVal>=0?'+':'')+pctVal.toFixed(1)+'%') : '—';
     var ventaCoct = esComp ? (fila._ventaCoct||0)
-        : consumoRecetasFila(fila) + (function(){ try { return _consumoBaseProd(fila) || 0; } catch(e) { return 0; } })();
+        : consumoRecetasFila(fila) + adjG.vco + _prodPBVisible(fila, adjG);
     var ventaDir  = parseFloat(fila.ventasCopasDirectas)||0;
     var ventaBot  = parseFloat(fila.ventasBotella)||0;
-    var cort = parseFloat(fila.cortesiaCopas)||0, merma = parseFloat(fila.mermaCopas)||0;
-    var cancel = esComp ? (fila._cancel||0) : getCancelacionesCopas(fila.insumoId);
-    var _n1 = function(v){ return v%1 ? (Math.round(v*10)/10).toFixed(1) : v; };
+    var cort = fila.tipo === 'peso' ? 0 : parseFloat(fila.cortesiaCopas)||0;
+    var merma = (parseFloat(fila.tipo === 'peso' ? fila.mermaBase : fila.mermaCopas)||0) + adjG.cm;
+    var cancel = esComp ? (fila._cancel||0) : getCancelacionesCopas(fila.insumoId) + cancelRecetasFila(fila) + adjG.can;
+    var _n1 = function(v){ return fila.tipo === 'pza' ? Math.round(v*10000)/10000 : v%1 ? (Math.round(v*10)/10).toFixed(1) : v; };
     var eaDisp, fiDisp, uEx;
     if (esComp) {
         // El compuesto se lee en la unidad de sus miembros: botellas si se sirven
@@ -9800,8 +9833,8 @@ function _step5DesgloseCard(fila, refMap) {
     var uEnt = esComp ? 'bot' : _unidadCompra(fila);
     var fila2 = function(lbl, val, col){ return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px"><span style="color:var(--text-dim)">'+lbl+'</span><span style="color:'+(col||'var(--text)')+';font-weight:600;text-align:right">'+val+'</span></div>'; };
     var ventasParts = [];
-    if (ventaDir>0)  ventasParts.push(_n1(ventaDir)+' copa');
-    if (ventaCoct>0) ventasParts.push('<span style="color:var(--viol)">'+_n1(ventaCoct)+' coct</span>');
+    if (ventaDir>0)  ventasParts.push(_fmtCop(ventaDir, fila));
+    if (ventaCoct>0) ventasParts.push('<span style="color:var(--viol)">'+_fmtCop(ventaCoct, fila)+' en recetas</span>');
     if (ventaBot>0)  ventasParts.push(_n1(ventaBot)+' bot');
     return '<div class="inv-item-card" style="padding:14px">'+
         '<div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:2px">'+(esComp?'🧩 ':'')+etx(esComp?fila.nombre:insumoTitulo(fila))+'</div>'+
@@ -9810,11 +9843,11 @@ function _step5DesgloseCard(fila, refMap) {
         fila2('Entradas', entTotal>0?'+'+_n1(entTotal)+' '+uEnt:'—', entTotal>0?'var(--green)':'var(--text-dim)')+
         (entradas.length?'<div style="font-size:10px;color:var(--text-dim);padding:1px 0 4px 10px;line-height:1.6">'+entradas.map(function(e){return '• '+_n1(e.cantidad)+' '+uEnt+(e._de?' · '+etx(e._de):'')+(e.fecha?' · '+e.fecha:'')+(e.tipo?' ('+tipoEntradaLabel(e.tipo)+')':'');}).join('<br>')+'</div>':'')+
         fila2('Ventas', ventasParts.length?ventasParts.join(' · '):'—', 'var(--accent)')+
-        fila2('Cortesía / Merma', (cort+merma)>0?_n1(cort+merma)+' cop':'—', (cort+merma)>0?'var(--red)':'var(--text-dim)')+
-        fila2('Cancelaciones', cancel>0?_n1(cancel)+' cop':'—', 'var(--text-muted)')+
+        fila2('Cortesía / Merma', (cort+merma)>0?_fmtCop(cort+merma, fila):'—', (cort+merma)>0?'var(--red)':'var(--text-dim)')+
+        fila2('Cancelaciones', cancel>0?_fmtCop(cancel, fila):'—', 'var(--text-muted)')+
         fila2('Exist. actual', fiDisp+' '+uEx+(pesosAct.length?' <span style="font-size:10px;color:var(--text-dim)">('+pesosAct.join(', ')+')</span>':''))+
         '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">'+
-            fila2('Diferencia', (dif>=0?'+':'')+_n1(dif)+' cop · '+pct, color)+
+            fila2('Diferencia', _fmtCopSgn(dif, fila)+' · '+pct, color)+
             fila2('Dif. $ (carta)', (difCarta>=0?'+':'')+'$'+difCarta.toFixed(2), color)+
         '</div>'+
     '</div>';
@@ -9948,10 +9981,10 @@ function verReporteDirectivo(gerencial, modo) {
         const cc        = costoCopa(f);
         const difCosto  = esPBo ? 0 : dif * (f.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
         const ea        = (parseFloat(f.existenciaAnterior) || 0) + adjO.ea;
-        const entBot    = getEntradasBottles(f.insumoId);
         const copasBot  = _copasBotDe(f, 1);   // 1 = sin contenido, la botella cuenta como una
+        const entBot    = getEntradasBottles(f.insumoId) + (f.tipo === 'copa' ? (copasBot > 0 ? adjO.ent / copasBot : 0) : adjO.ent);
         // Coctelería = consumo por recetas del menú; copa → en copas, pza → en piezas.
-        const ventaCoct    = (f.tipo === 'pza' ? calcVentasPzaRecetas(f.insumoId) : calcVentasCopasRecetas(f.insumoId, f.copaML)) + adjO.vco;
+        const ventaCoct    = consumoRecetasFila(f) + adjO.vco;
         /* Lo que se fue en PRODUCIR batches. El teórico ya lo restaba, pero no se
            enseñaba en ninguna columna: el renglón no cuadraba a la vista y parecía
            que al insumo le faltaba producto sin razón. Va aparte de ventaCoct para
@@ -9964,11 +9997,11 @@ function verReporteDirectivo(gerencial, modo) {
         const ventaCopaDir = parseFloat(f.ventasCopasDirectas) || 0; // venta directa por copa/pza
         const ventaCopa = ventaCoct + ventaCopaDir;
         const ventaBot  = parseFloat(f.ventasBotella) || 0;
-        const cortesia  = parseFloat(f.cortesiaCopas)  || 0;
-        const merma     = parseFloat(f.mermaCopas)     || 0;
-        const cancel    = getCancelacionesCopas(f.insumoId);
+        const cortesia  = f.tipo === 'peso' ? 0 : parseFloat(f.cortesiaCopas) || 0;
+        const merma     = (parseFloat(f.tipo === 'peso' ? f.mermaBase : f.mermaCopas) || 0) + adjO.cm;
+        const cancel    = getCancelacionesCopas(f.insumoId) + cancelRecetasFila(f) + adjO.can;
         // pza: venta total en piezas = botella + directa + por menú/recetas (igual que el Resultado).
-        const ventaPzaTot = f.tipo === 'pza' ? (ventaBot + (parseFloat(f.ventasCopasDirectas)||0) + calcVentasPzaRecetas(f.insumoId)) : 0;
+        const ventaPzaTot = f.tipo === 'pza' ? ventaBot + ventaCopa : 0;
         /* prodPB entra al CONSUMO: producir un batch gasta el insumo tal cual, así
            que cuenta como uso a precio proveedor igual que una venta. Lo que NO es
            es una venta —no se le cobró a nadie—, por eso vive fuera de ventaNeta y
@@ -9976,7 +10009,7 @@ function verReporteDirectivo(gerencial, modo) {
         const consumo   = (f.tipo === 'pza'
             ? ventaPzaTot + cortesia + merma + cancel
             : ventaCopa + ventaBot * copasBot + cortesia + merma + cancel) + prodPB;
-        const disponible = ea + (f.tipo === 'pza' ? entBot : entBot * copasBot);
+        const disponible = ea + (f.tipo === 'copa' ? entBot * copasBot : entBot);
         const pctConsumo = disponible > 0 ? (consumo / disponible) * 100 : 0;
         /* % de varianza contra TODO el uso del insumo (misma definición que la columna
            % del Resultado, ver _usoTotal): botella, copa, pieza, coctelería Y producción
@@ -10125,7 +10158,8 @@ function verReporteDirectivo(gerencial, modo) {
     // En modo gerencial se ocultan los importes: muestra el % si existe, o '•••'. En directivo, el monto real.
     const $g = (montoHTML, pct) => ger ? (pct!=null ? pct+'%' : '<span style="color:#bbb">•••</span>') : montoHTML;
     // Existencia en BOTELLAS (licor/vino) o PIEZAS (refresco/cerveza) — no en copas (más legible, igual que el resultado).
-    const _exFmt = (a, copas) => { const v = a.f.tipo==='pza' ? copas : (a.copasBot>0 ? copas/a.copasBot : copas); return (a.f.tipo==='pza' ? v.toFixed(0)+' pza' : v.toFixed(2)+' bot'); };
+    const _exFmt = (a, copas) => a.f.tipo !== 'copa' ? _fmtEquivalenteBatch(copas, a.f.tipo === 'pza' ? 'PZA' : a.f.baseUnit || 'G') :
+        (a.copasBot > 0 ? copas / a.copasBot : copas).toFixed(2) + ' bot';
     // Tabla de varianza reutilizable (críticos / riesgo) con su grupo y motivo (físico vs teórico).
     function _rdTablaVar(items){
         if(!items.length) return '<div style="font-size:10px;color:#aaa;padding:4px 0 10px">Ninguno en este estado. ✅</div>';
@@ -10191,14 +10225,14 @@ function verReporteDirectivo(gerencial, modo) {
            Un batch, en el reporte, contesta dos preguntas: cuántos se hicieron
            y cuánto quedó. Lo demás ya está contado en sus insumos. */
         if (grp === GPROD_RD) {
-            const _u = (a, v) => a.f.tipo === 'pza' ? v.toFixed(0) + ' pza'
+            const _u = (a, v) => a.f.tipo === 'peso' ? _fmtEquivalenteBatch(v, a.f.baseUnit || 'G') : a.f.tipo === 'pza' ? _fmtEquivalenteBatch(v, 'PZA')
                                : (a.copasBot > 0 ? (v / a.copasBot).toFixed(2) : v.toFixed(1)) + ' bot';
             const _ml = (a, v) => {
-                var ml = a.f.tipo === 'pza' ? v * (parseFloat(a.f.contNeto) || 0)
-                                            : v * (parseFloat(a.f.copaML) || 0);
+                var ml = v * _basePorUnidadFila(a.f);
                 if (!ml) return '';
-                return '  ·  ' + (Math.abs(ml) >= 1000 ? (Math.round(ml / 100) / 10) + ' L'
-                                                       : (Math.round(ml * 100) / 100) + ' ml');
+                if (a.f.tipo === 'peso' || _unidadBaseBatch(a.f) === 'PZA') return '';
+                if (_unidadBaseBatch(a.f) === 'ML' && Math.abs(ml) >= 1000) return '  ·  ' + (Math.round(ml) / 1000) + ' L';
+                return '  ·  ' + _fmtEquivalenteBatch(ml, _unidadBaseBatch(a.f));
             };
             return `<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:10px">
               <div class="rd-sec" style="margin-top:14px">${etx(grp)}</div>
@@ -10217,8 +10251,7 @@ function verReporteDirectivo(gerencial, modo) {
                       &nbsp;·&nbsp; Existencia actual: <b>${_u(a, a.fisico)}${_ml(a, a.fisico)}</b></div>
                     ${partes.length ? `<div style="font-size:9.5px;color:#56514a;margin-top:3px;line-height:1.6">
                       Equivalentes por insumo: ${partes.map(p => etx(p.nombre) + ' ' +
-                          (Math.abs(p.ml) >= 1000 ? (Math.round(p.ml / 100) / 10) + ' L'
-                                                  : (Math.round(p.ml * 100) / 100) + ' ml')).join('  ·  ')}</div>` : ''}
+                          _fmtEquivalenteBatch(p.ml, p.unidadBase)).join('  ·  ')}</div>` : ''}
                   </div>`;
               }).join('')}
             </div>`;
@@ -10278,14 +10311,15 @@ function verReporteDirectivo(gerencial, modo) {
             gDif += a.difCosto;
             gNet += a.dif;
             gVend += a.f.tipo === 'pza' ? (a.ventaPzaTot || 0) : ((a.ventaCopa || 0) + (a.ventaBot || 0) * (a.copasBot || 0));
-            const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
-            const entStr = a.f.tipo === 'pza' ? (a.entBot>0?'+'+a.entBot+' p':'—') : (a.entBot>0?'+'+a.entBot.toFixed(1)+' b':'—');
-            const vtaCopaStr = a.f.tipo === 'pza' ? '—' : (a.ventaCopaDir>0?a.ventaCopaDir.toFixed(1)+' c':'—');
-            const vtaBotStr  = a.f.tipo === 'pza' ? ((a.ventaBot+a.ventaCopaDir)>0?(a.ventaBot+a.ventaCopaDir).toFixed(0)+' p':'—') : (a.ventaBot>0?a.ventaBot+' b':'—');
+            const u = a.f.tipo === 'peso' ? String(a.f.baseUnit || 'G').toLowerCase() : a.f.tipo === 'pza' ? 'pza' : 'cop';
+            const entStr = a.entBot > 0 ? '+' + _fmtEquivalenteBatch(a.entBot, a.f.tipo === 'copa' ? 'b' : u) : '—';
+            const vtaCopaStr = a.f.tipo !== 'copa' ? '—' : (a.ventaCopaDir>0?a.ventaCopaDir.toFixed(1)+' c':'—');
+            const vtaBotStr = a.f.tipo === 'peso' ? '—' : a.f.tipo === 'pza' ?
+                ((a.ventaBot+a.ventaCopaDir)>0?_fmtEquivalenteBatch(a.ventaBot+a.ventaCopaDir, 'PZA'):'—') : (a.ventaBot>0?a.ventaBot+' b':'—');
             // Coctelería + lo consumido al producir batches: así el renglón cuadra
             // con el teórico, que ya restaba la producción.
             const coctTot    = a.ventaCoct + (a.prodPB || 0);
-            const coctStr    = coctTot>0 ? (a.f.tipo==='pza'?coctTot.toFixed(0)+' p':coctTot.toFixed(1)+' c') + (a.prodPB>0?' *':'') : '—';
+            const coctStr = coctTot > 0 ? _fmtEquivalenteBatch(coctTot, u) + (a.prodPB>0?' *':'') : '—';
             const cDif  = scol(a.dif), cCost = scol(a.difCosto);
             return `<tr>
               <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}${_fmtContenido(a.f)?`<div style="font-size:8.5px;color:#2471a3;margin-top:1px">📦 ${_fmtContenido(a.f)}</div>`:''}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
@@ -10295,20 +10329,21 @@ function verReporteDirectivo(gerencial, modo) {
               <td class="tc">${vtaBotStr}</td>
               <td class="tc" style="color:#9b8de8">${coctStr}</td>
               <td class="tc" style="font-weight:600">${_exFmt(a, a.fisico)}</td>
-              <td class="tc" style="color:${cDif};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}</td>
+              <td class="tc" style="color:${cDif};font-weight:700">${a.dif>=0?'+':''}${_fmtEquivalenteBatch(a.dif, u)}</td>
               <td class="tc" style="color:${cDif}">${a.varPct.toFixed(0)}%</td>
               <td class="tr" style="color:${cCost};font-weight:700">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td>
             </tr>`;
         }).join('');
         const gc = gDif >= 0 ? cOk : cCrit;
-        const _gU = _pzaGrupo ? 'pza' : 'cop';
+        const _us = [...new Set(items.map(a => a.f.tipo === 'peso' ? String(a.f.baseUnit || 'G').toLowerCase() : a.f.tipo === 'pza' ? 'pza' : 'cop'))];
+        const _gU = _us[0] || 'u', _mixtas = _us.length > 1;
         const _netCol = gNet < -0.05 ? cCrit : (gNet > 0.05 ? cOk : '#999');
-        const _faltTxt = gNet < -0.05 ? `faltan ${_ncRd(Math.abs(gNet))} ${_gU}` : (gNet > 0.05 ? `sobran ${_ncRd(gNet)} ${_gU}` : 'cuadra');
+        const _faltTxt = _mixtas ? 'Diferencias por insumo' : gNet < -0.05 ? `faltan ${_ncRd(Math.abs(gNet))} ${_gU}` : (gNet > 0.05 ? `sobran ${_ncRd(gNet)} ${_gU}` : 'cuadra');
         return `<div class="rd-grp">
         <div class="rd-grptitle" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:12px 0 4px">
           <span style="font-size:11px;font-weight:700;color:#1a1916">${grp}</span>
           <span style="flex:1"></span>
-          <span style="font-size:9.5px;color:#888">🥃 ${_ncRd(gVend)} ${_gU} vendidas</span>
+          <span style="font-size:9.5px;color:#888">${_mixtas ? 'Movimientos por insumo' : _ncRd(gVend) + ' ' + _gU + ' vendidas'}</span>
           <span style="font-size:9.5px;font-weight:600;color:${_netCol}">${_faltTxt}</span>
           <span style="font-size:11px;font-weight:700;color:${gc}">${gDif>=0?'+':''}$${_m2(gDif)}</span>
         </div>
@@ -10461,7 +10496,7 @@ function verReporteDirectivo(gerencial, modo) {
 .rda-ok{background:#eeffee;border-left:4px solid #1a7a4a}
 .rd-t{width:100%;border-collapse:collapse;font-size:10px}
 .rd-t th{padding:5px 7px;text-align:left;background:#f5f5f0;border-bottom:2px solid #ddd;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#666;white-space:nowrap}
-.rd-t td{padding:6px 7px;border-bottom:1px solid #f0f0ec;vertical-align:middle;line-height:1.25}
+.rd-t td{padding:6px 7px;border-bottom:1px solid #f0f0ec;vertical-align:middle;line-height:1.25;color:#1a1916}
 .rd-t tr:last-child td{border-bottom:none}
 .tc{text-align:center!important}.tr{text-align:right!important}
 .rd-rank{display:inline-block;width:18px;height:18px;border-radius:50%;background:#1a1916;color:#f5c842;font-size:9px;font-weight:900;text-align:center;line-height:18px}

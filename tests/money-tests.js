@@ -29036,6 +29036,102 @@ function suitePrebatchRendimiento20261023() {
         eq(P.consumoBasesPorProduccion('vermouth'),1400);eq(n6(valores().fis),350);
     });
 }
+/* Todas las familias usan la unidad de su fila; PZA puede ser un empaque,
+   SUBUNIDAD su contenido contado (cereza/huevo), y G/ML contenido utilizable. */
+function suitePrebatchFamilias20261023() {
+    console.log('\n══ Inventarios · prebatch por familia y unidad ══');
+    const X=crearContexto();cargarJS(X,'etaax-core.js');cargarJS(X,'insumo-label.js');cargarJS(X,'recetas/inventarios.js');
+    X._storage.etaax_negocio_activo='negT';
+    const casos=[
+        ['Licor ML','licor','copa',750,60,'ML',300,5],
+        ['Destilado LT','destilado','copa',750,60,'LT',0.3,5],
+        ['Vino OZ','vino','copa',750,150,'OZ',2,2*29.5735/150],
+        ['Licor por botella','licor','copa',750,60,'PZA',1,12.5],
+        ['Refresco ML','refresco','pza',3000,0,'ML',300,0.1],
+        ['Refresco por botella','refresco','pza',3000,0,'PZA',1,1],
+        ['Cerveza por lata','cerveza','pza',355,0,'PZA',1,1],
+        ['Cerveza parcial','cerveza','pza',355,0,'ML',177.5,0.5],
+        ['Cerveza barril','cerveza_barril','pza',20000,0,'L',2,0.1],
+        ['Abarrote KG','abarrote','peso',1000,0,'KG',0.25,250],
+        ['Abarrote drenado por empaque','abarrote','peso',900,0,'PZA',1,900],
+        ['Cereza por subunidad','abarrote','peso',900,0,'SUBUNIDAD',10,60],
+        ['Fruta G','fruta','peso',1000,0,'G',250,250],
+        ['Carne KG','carne','peso',1000,0,'KG',0.25,250],
+        ['Otro contado por pieza','otro','peso',1,0,'PZA',2,2],
+        ['Cerveza sin volumen contado','cerveza','pza',0,0,'PZA',1,1]
+    ];
+    const n8=v=>Math.round(v*1e8)/1e8;
+    function montar(c,batches=2) {
+        const [nombre,tipo,tipoFila,cn,copa,u,cant,dosis]=c;
+        const fi={insumoId:'base',nombre,tipo:tipoFila,contNeto:cn,copaML:copa,baseUnit:tipo==='otro'?'PZA':tipoFila==='peso'?'G':'ML',existenciaAnterior:10000,entradas:[],ventasCopasDirectas:0,ventasBotella:0,cortesiaCopas:0,mermaCopas:0,pesos:[],cerradasBodega:0,cerradasBarra:0};
+        const fisico=10000-2*dosis;
+        if(tipoFila==='peso')fi.existenciaPeso=fisico;else fi.cerradasBodega=tipoFila==='copa'?fisico*copa/cn:fisico;
+        const pf={...fi,insumoId:'mix',nombre:'Preparación',tipo:'copa',copaML:50,contNeto:1000,existenciaAnterior:0,cerradasBodega:0,cerradasBarra:0,pesos:['0.5']};
+        setVar(X,'_cacheInsumosInv',[{id:'base',nombre,tipoInsumo:tipo,activo:'1',presentaciones:[{contNeto:2.1,umContenido:'KG',masaDrenada:900,umMasaDrenada:'G',unidadesPorPieza:150}]},{id:'mix',esSubReceta:true,recetaId:'sr',activo:'1'}]);
+        setVar(X,'_cacheRecetasInv',[{id:'sr',tipo:'sub-bebidas',camposExtra:{rendimientoFinal:1000,unidadRendimientoFinal:'ML'},ingredientes:[{insumoId:'base',cantidad:cant,unidad:u}]},{id:'menu',tipo:'bebidas',ingredientes:[{insumoId:'mix',cantidad:100,unidad:'ML'}]}]);
+        setVar(X,'invActual',{id:'inv',area:'barra',entradasLog:[],prebatchProducidos:{mix:batches},cocktailsVendidos:{menu:15},cancelaciones:[],descuentos:[],ventasCompuesto:{}});
+        setVar(X,'filasCaptura',[pf,fi]);vm.runInContext('_consumoDirty=true;_cancelDirty=true;_repCache=_repartoPrebatch();',X);
+        return vm.runInContext('filasCaptura[1]',X);
+    }
+    for(const c of casos) {
+        test(c[0]+' · producir descuenta en la unidad correcta',()=>{const f=montar(c);eq(n8(X._consumoBaseProd(f)),n8(2*c[7]));});
+        test(c[0]+' · medio batch restante devuelve solo su ingrediente',()=>{montar(c);eq(n8(X._repartoDe('base').fis),n8(c[7]*0.5));});
+        test(c[0]+' · ventas y diferencia cuadran sin importar los batches registrados',()=>{
+            for(const n of [1,2,3,0.5]){const f=montar(c,n),a=X._repartoDe('base');eq(n8(X.calcDiferencia(f)+a.dif),0);eq(n8(a.venta),n8(1.5*c[7]));}
+        });
+    }
+    test('el desglose respeta gramos de masa drenada y no los etiqueta en ml',()=>{
+        montar(casos[10]);const h=X._step5TablasHTML();
+        eq(h.includes('450 g (900 por cada 1000 ml de receta)'),true);eq(h.includes('8650 g'),true);
+    });
+    test('las piezas parciales no se redondean a una pieza completa en el resultado',()=>{
+        montar(casos[7]);const h=X._step5TablasHTML();eq(h.includes('9999.25 pza'),true);
+        eq(h.includes('88.75 ml (177.5 por cada 1000 ml de receta)'),true);
+    });
+    test('galería de abarrotes suma solo ventas del batch, conservando gramos',()=>{
+        const f=montar(casos[10]);const h=X._step5DesgloseCard(f,{});
+        eq(h.includes('1350 g en recetas'),true);eq(h.includes('1800 g en recetas'),false);
+    });
+    test('galería y formato conservan fracciones pequeñas de piezas',()=>{
+        const f=montar(casos[8]);const h=X._step5DesgloseCard(f,{});
+        eq(h.includes('9999.85 pza'),true);eq(X._fmtEquivalenteBatch(0.0025,'PZA'),'0.0025 pza');
+    });
+    test('el contenido drenado del catálogo llega a la conversión por empaque',()=>{
+        montar(casos[10]);const ins=X._insumoResolver('base');
+        eq(X._contenidoBasePresentacion(ins,ins.presentaciones[0]),900);
+        eq(X.EtaaxCore.cantidadFilaInventario(1,'PZA',{tipo:'peso',baseUnit:'G',contNeto:900}),900);
+    });
+    test('entradas de preparación contada en gramos también se reparten',()=>{
+        montar(casos[9]);vm.runInContext("filasCaptura[0].tipo='peso';filasCaptura[0].baseUnit='G';filasCaptura[0].entradas=[400];_cacheRecetasInv[0].camposExtra.unidadRendimientoFinal='G';_repCache=_repartoPrebatch();",X);
+        eq(X._repartoDe('base').ent,100);
+    });
+    test('un batch contado por pieza conserva su consumo al vender una pieza en receta',()=>{
+        montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';_cacheRecetasInv[1].ingredientes=[{insumoId:'mix',cantidad:1,unidad:'PZA'}];_consumoDirty=true;_repCache=_repartoPrebatch();",X);
+        eq(X._repartoDe('base').venta,75); // 15 envases × 300 ml / 60
+    });
+    test('subreceta contada por envase: rendimiento de 2 L produce dos envases de 1 L',()=>{
+        montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';_cacheRecetasInv[0].camposExtra.rendimientoFinal=2000;",X);
+        eq(vm.runInContext('_prodPrebatchUnidades(filasCaptura[0])',X),4);
+    });
+    test('subreceta por envase también reparte el sobrante a sus ingredientes',()=>{
+        montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';filasCaptura[0].pesos=[];filasCaptura[0].cerradasBodega=0.5;_repCache=_repartoPrebatch();",X);
+        eq(n8(X._repartoDe('base').fis),2.5);
+    });
+    test('subreceta que rinde 12 PZA suma 24 piezas al producir 2 batches',()=>{
+        montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';filasCaptura[0].contNeto=1;_cacheRecetasInv[0].camposExtra={rendimientoFinal:12,unidadRendimientoFinal:'PZA'};",X);
+        eq(vm.runInContext('_prodPrebatchUnidades(filasCaptura[0])',X),24);
+    });
+    test('venta directa en receta: una botella de licor se convierte a copas completas',()=>{
+        montar(casos[0]);vm.runInContext("_cacheRecetasInv[1].ingredientes=[{insumoId:'base',cantidad:1,unidad:'PZA'}];_consumoDirty=true;",X);
+        eq(X.calcVentasCopasRecetas('base',60),187.5); // 15 botellas × 750 / 60
+    });
+    test('venta directa en receta: un empaque drenado se convierte a gramos utilizables',()=>{
+        montar(casos[10]);vm.runInContext("_cacheRecetasInv[1].ingredientes=[{insumoId:'base',cantidad:1,unidad:'PZA'}];_consumoDirty=true;",X);
+        eq(X._consumoRecetasBase('base'),13500); // 15 × 900 g, no 15 g
+    });
+}
+suitePrebatchFamilias20261023();
+
 suitePrebatchRendimiento20261023();
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner

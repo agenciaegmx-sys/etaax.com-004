@@ -1875,7 +1875,33 @@
             contenidoBase: util.base, umBase: util.umBase, drenada: util.drenada };
     }
 
+    // Cantidades de inventario: la familia no cambia la conversión. PZA es
+    // un empaque; su contNeto ya está expresado en g/ml utilizables por la fila.
+    function cantidadBaseInventario(cantidad, unidad) {
+        var u = String(unidad || '').toUpperCase();
+        var factor = (u === 'KG' || u === 'LT' || u === 'L') ? 1000 : (u === 'OZ' ? 29.5735 : 1);
+        return n(cantidad) * factor;
+    }
+    function cantidadFilaInventario(cantidad, unidad, fila) {
+        var u = String(unidad || '').toUpperCase();
+        var base = cantidadBaseInventario(cantidad, u);
+        if (!fila) return base;
+        var entradaPieza = u === 'PZA' || u === 'PZ' || u === '';
+        var salidaPieza = fila.tipo === 'pza' ||
+            (fila.tipo === 'peso' && String(fila.baseUnit || '').toUpperCase() === 'PZA');
+        var contenido = n(fila.contNeto);
+        if (entradaPieza) {
+            if (salidaPieza) return base;
+            base *= contenido;
+        }
+        if (salidaPieza) return contenido > 0 ? base / contenido : 0;
+        if (fila.tipo === 'copa') return n(fila.copaML) > 0 ? base / n(fila.copaML) : 0;
+        return base;
+    }
+
     window.EtaaxCore = {
+        cantidadBaseInventario: cantidadBaseInventario,
+        cantidadFilaInventario: cantidadFilaInventario,
         contenidoUtilPresentacion: contenidoUtilPresentacion,
         factorImpuestoPresentacion: factorImpuestoPresentacion,
         costosAbarrote: costosAbarrote,
