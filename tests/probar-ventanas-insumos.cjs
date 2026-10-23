@@ -57,13 +57,24 @@ function sdkFixture() {
             then(resolve, reject) {
                 window.__calls.push({ type: 'table', table, filters: { ...filters }, value: q.value });
                 let data = null, error = null;
-                if (q.value) data = q.value;
+                if (q.value) {
+                    data = q.value;
+                    if (table === 'negocio_insumos') {
+                        const prev = JSON.parse(sessionStorage.getItem('__fixture_insumos') || '[]');
+                        (Array.isArray(q.value) ? q.value : [q.value]).forEach(r => {
+                            const i = prev.findIndex(x => x.id === r.datos.id);
+                            if (i >= 0) prev[i] = r.datos; else prev.push(r.datos);
+                        });
+                        sessionStorage.setItem('__fixture_insumos', JSON.stringify(prev));
+                    }
+                }
+                else if (table === 'negocio_insumos') data = q.start > 0 ? [] : JSON.parse(sessionStorage.getItem('__fixture_insumos') || '[]').map(datos => ({datos}));
                 else if (table === 'negocios') data = negocios.filter(n => Object.keys(filters).every(k => n[k] === filters[k]));
                 else if (table === 'negocio_sucursales') data = { datos: { sucursales: filters.negocio_id === 'n2' ? [{id:'matriz',nombre:'Matriz',activa:true,fechaCreado:'2026-08-07'}]
                     : [{id:'matriz',nombre:'Centro',activa:true,fechaCreado:'2026-08-07'},{id:'norte',nombre:'Norte',activa:true,fechaCreado:'2026-08-07'}], cfg:{} } };
                 else if (table === 'suscripciones') data = { estado: mode === 'pending' ? 'pendiente' : mode === 'stripe' ? 'vencida' : 'activa', proximo_cobro: '2026-11-13', dias_tolerancia:3,
                     stripe_subscription_id: mode === 'stripe' ? 'sub_fixture' : null };
-                else if (table === 'catalogo_insumos') data = q.start > 0 ? [] : [{datos:{id:'cat-prueba',nombre:'Ron de prueba',marca:'Marca de prueba',familia:'Bebidas',categoria:'Destilados',presentaciones:[{contNeto:1000,umContenido:'ML',precio:300}]}}];
+                else if (table === 'catalogo_insumos') data = q.start > 0 ? [] : JSON.parse(sessionStorage.getItem('__fixture_catalogo') || 'null')?.map(datos => ({datos})) || [{datos:{id:'cat-prueba',nombre:'Ron de prueba',marca:'Marca de prueba',familia:'Bebidas',categoria:'Destilados',presentaciones:[{contNeto:1000,umContenido:'ML',precio:300}]}}];
                 else if (table === 'usuarios') data = { id:'u1',nombre:user.user_metadata.nombre,plan:'pyme' };
                 else data = q.single ? null : [];
                 if (window.__fail && table === 'suscripciones') error = { message:'Fallo controlado' };
@@ -171,6 +182,65 @@ async function run(base) {
   assert.ok(z.modal>z.header&&z.front,JSON.stringify(z));results.push(width+' modal encima del header');
   await close(p);
  }
+ await probarIdentidadCatalogos(base, dir);
+}
+
+async function click(p, selector) {
+    await until(p.sid, `(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e && !e.disabled && e.getClientRects().length && !document.documentElement.classList.contains('etx-ui-pendiente')})()`);
+    const r = await evalPage(p.sid, `(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`);
+    await send('Input.dispatchMouseEvent', {type:'mousePressed',button:'left',clickCount:1,...r}, p.sid);
+    await send('Input.dispatchMouseEvent', {type:'mouseReleased',button:'left',clickCount:1,...r}, p.sid);
+}
+async function probarIdentidadCatalogos(base, dir) {
+    const maestro = {id:'maestro-1',nombre:'Maestro de prueba',marca:'Marca',tipoInsumo:'licor',familia:'Bebidas',categoria:'Licores',activo:'1',sucursales:[],sucursalId:'',
+        presentaciones:[{contNeto:700,umContenido:'ML',precio:799,costoUnitario:1141.428571,umCosto:'LT'}]};
+    const otro = {...maestro,id:'maestro-2',variedad:'Otra presentación'};
+    const tercero = {...maestro,id:'maestro-3',variedad:'Nueva en ETAAX'};
+    const copia = (m, suc) => ({...m,id:m.id+'-'+suc,origenId:m.id,sucursales:[suc],sucursalId:suc});
+    for (const width of [1440,390]) {
+        const p = await page(base,'/hub.html','owner',width,true);
+        await send('Network.setExtraHTTPHeaders',{headers:{}},p.sid);
+        const fixture = [maestro,copia(maestro,'matriz'),copia(maestro,'norte'),otro,copia(otro,'norte')];
+        await evalPage(p.sid, `sessionStorage.setItem('__fixture_insumos',${JSON.stringify(JSON.stringify(fixture))});sessionStorage.setItem('__fixture_catalogo',${JSON.stringify(JSON.stringify([maestro,otro,tercero]))});localStorage.setItem('etaax_n1_insumos',${JSON.stringify(JSON.stringify(fixture))});`);
+        await go(p,'location.href='+JSON.stringify(base+'/recetas/insumos.html'),"typeof abrirInsumosGlobalNeg==='function' && getInsumos().length===5 && document.readyState==='complete'");
+        await evalPage(p.sid,"document.getElementById('etaaxNovOk')?.click()");
+        await click(p,'[onclick="abrirInsumosGlobalNeg()"]');
+        await until(p.sid,"document.getElementById('modalInsumosNeg').style.display==='flex' && _ignTodos.length===2");
+        await check(width+' negocio: solo maestros y copia existente bloqueada', async () => {
+            const r = await evalPage(p.sid,"({ids:_ignTodos.map(x=>x.id),disabled:document.querySelectorAll('#ignLista button:disabled').length,add:document.querySelectorAll('#ignLista button:not(:disabled)').length})");
+            assert.deepEqual(r.ids,['maestro-1','maestro-2']); assert.equal(r.disabled,1); assert.equal(r.add,1);
+        });
+        await click(p,'#ignBtn_maestro-2');
+        await check(width+' negocio: importar conserva una sola copia por destino', async () => {
+            await until(p.sid,"document.querySelectorAll('#ignLista button:disabled').length===2");
+            await evalPage(p.sid,"ignAgregar('maestro-1-norte');ignAgregar('maestro-2')");
+            assert.equal(await evalPage(p.sid,"getInsumos().filter(x=>x.origenId==='maestro-2' && _insumoEnSuc(x,'matriz')).length"),1);
+            assert.equal(await evalPage(p.sid,"getInsumos().length"),6);
+        });
+        let shot = await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(dir,'catalogo-negocio-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        await evalPage(p.sid,'cerrarInsumosNeg()');
+        await click(p,'[onclick="abrirCatalogoGlobal()"]');
+        await until(p.sid,"_cgCargado && _cgTodos.length===3 && document.querySelectorAll('#cgLista button').length===3");
+        await check(width+' ETAAX: reconoce las copias importadas desde ambos catálogos', async () => {
+            assert.equal(await evalPage(p.sid,"document.querySelectorAll('#cgLista button:disabled').length"),2);
+            assert.equal(await evalPage(p.sid,"document.querySelectorAll('#cgLista button:not(:disabled)').length"),1);
+            const anchoNombre = await evalPage(p.sid,"document.querySelector('#cgLista .ins-catalogo-info').getBoundingClientRect().width");
+            assert.ok(anchoNombre >= 200, 'El indicador oculta el nombre del insumo: '+anchoNombre);
+        });
+        await click(p,'#cgBtn_maestro-3');
+        await evalPage(p.sid,"Promise.all([cgAgregar('maestro-3'),cgAgregar('maestro-3')])");
+        await check(width+' ETAAX: repetir el alta no duplica y sobrevive a recargar', async () => {
+            assert.equal(await evalPage(p.sid,"getInsumos().length"),8);
+            await until(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_insumos')).length===8");
+            await go(p,'location.reload()',"typeof abrirCatalogoGlobal==='function' && getInsumos().length===8 && document.readyState==='complete'");
+            await evalPage(p.sid,'abrirCatalogoGlobal()');
+            await until(p.sid,"document.querySelectorAll('#cgLista button:disabled').length===3");
+            assert.equal(await evalPage(p.sid,"document.querySelectorAll('#cgLista button:not(:disabled)').length"),0);
+            assert.deepEqual(await evalPage(p.sid,'window.__errors'),[]);
+        });
+        shot = await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(dir,'catalogo-etaax-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        await close(p);
+    }
 }
 (async()=>{
     server=http.createServer((req,res)=>{

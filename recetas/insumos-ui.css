@@ -154,6 +154,13 @@ body.etx-insumos-page #mainContent .brand-title {font:700 30px/1.2 'DM Sans',san
 .etx-insumos-page :is(#modalCatalogoGlobal,#modalInsumosNeg) > div > div:first-child {gap:12px;border-color:var(--i-line)!important;min-width:0;}
 .etx-insumos-page :is(#modalCatalogoGlobal,#modalInsumosNeg) > div > div:first-child > div {min-width:0;}
 .etx-insumos-page :is(#modalCatalogoGlobal,#modalInsumosNeg) button {display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:9px!important;min-height:40px;padding:9px 12px!important;font:12px 'DM Sans',sans-serif!important;flex-shrink:0;}
+@media(max-width:600px) {
+  .etx-insumos-page .ins-catalogo-fila {display:grid!important;grid-template-columns:40px minmax(0,1fr) auto;gap:8px 10px!important;}
+  .etx-insumos-page .ins-catalogo-fila > :first-child {grid-column:1;grid-row:1;}
+  .etx-insumos-page .ins-catalogo-info {grid-column:2 / -1;grid-row:1;}
+  .etx-insumos-page .ins-catalogo-precio {grid-column:2;grid-row:2;margin-right:0!important;}
+  .etx-insumos-page .ins-catalogo-fila > button {grid-column:3;grid-row:2;justify-self:end;}
+}
 .etx-insumos-page :is(#cgSearch,#cgFamilia,#ignSearch) {background:var(--i-input)!important;border-color:var(--i-line)!important;border-radius:9px!important;min-width:0;min-height:44px;font:13px 'DM Sans',sans-serif!important;}
 @media(max-width:600px) {
  .etx-insumos-page :is(#cgTitulo,#ignTitulo) {font-size:18px!important;}

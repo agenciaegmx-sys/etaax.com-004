@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=45aa97a3">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/recetas/insumos-ui.css?v=cffd7481">
+<link rel="stylesheet" href="/recetas/insumos-ui.css?v=9c1a4a1c">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -531,7 +531,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=39444aed"></script>
-<script src="/recetas/insumos.js?v=4d05c103"></script>
+<script src="/recetas/insumos.js?v=707b8a29"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -928,9 +928,9 @@ function cerrarInsumosNeg() {
 function ignFiltrar() {
     var q = (document.getElementById('ignSearch').value || '').toLowerCase();
     var curEff = _effSucIns(_getSucActivaIns());
-    // Candidatos POR REGISTRO (identidad = id): los que NO viven en esta sucursal.
-    // Nada de agrupar por nombre/marca: productos distintos pueden llamarse igual.
-    var cand = getInsumos().filter(function(x){ return !window._insumoEnSuc(x, curEff); });
+    // Una opción por maestro, incluidas las que ya tienen copia aquí: se muestran
+    // bloqueadas para que se pueda distinguir «ya existe» de «no se encontró».
+    var cand = _identidadCatalogoIns(getInsumos(), curEff).maestros;
     if (q) cand = cand.filter(function(x){
         return (x.nombre || '').toLowerCase().includes(q) || (x.marca || '').toLowerCase().includes(q) || (x.categoria || '').toLowerCase().includes(q);
     });
@@ -939,9 +939,10 @@ function ignFiltrar() {
 }
 function ignRender() {
     var curNom = _sucNombreIgn(_getSucActivaIns() || MATRIZ_ID_INS);
-    document.getElementById('ignTotal').textContent = _ignTodos.length + ' insumos de otras sucursales · destino: ' + curNom;
+    _ignEnSuc = _identidadCatalogoIns(getInsumos(), _getSucActivaIns()).enSucursal;
+    document.getElementById('ignTotal').textContent = _ignTodos.length + ' insumos maestros · destino: ' + curNom;
     var html = _ignTodos.length === 0
-        ? '<div style="text-align:center;color:var(--text-dim);padding:40px 20px;line-height:1.6">No hay insumos de otras sucursales para copiar.<br><span style="font-size:12px">Los insumos sin sucursal pertenecen a la Matriz.</span></div>'
+        ? '<div style="text-align:center;color:var(--text-dim);padding:40px 20px;line-height:1.6">No se encontraron insumos en el catálogo del negocio.</div>'
         : _ignTodos.map(function(ins){
             var p0     = (ins.presentaciones || [])[0];
             var precio = p0 && parseFloat(p0.precio) > 0 ? '$' + parseFloat(p0.precio).toFixed(2) : '';
@@ -949,18 +950,18 @@ function ignRender() {
             // varios insumos comparten nombre+marca y eran indistinguibles).
             var contIgn = p0 && parseFloat(p0.contNeto) > 0 ? (parseFloat(p0.contNeto) + ' ' + String(p0.umContenido || '').toLowerCase()) : '';
             var cat    = etx([ins.subcategoria || ins.categoria || ins.familia, contIgn].filter(Boolean).join(' · '));
-            var ya     = window._insumoEnSuc && window._insumoEnSuc(ins, _effSucIns(_getSucActivaIns()));
-            var sucBadge = '<span style="font-size:10px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:4px;padding:1px 6px;white-space:nowrap">' + etx(_sucNombreIgn(ins.sucursalId)) + '</span>';
+            var ya     = !!_ignEnSuc[ins.id];
+            var sucBadge = '<span style="font-size:10px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:4px;padding:1px 6px;white-space:nowrap">Maestro del catálogo</span>';
             var fotoEl = ins.foto
                 ? '<img src="' + etx(ins.foto) + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0">'
                 : '<div style="width:38px;height:38px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">📦</div>';
-            return '<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border)">' +
+            return '<div class="ins-catalogo-fila" style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border)">' +
                 fotoEl +
-                '<div style="flex:1;min-width:0">' +
+                '<div class="ins-catalogo-info" style="flex:1;min-width:0">' +
                     '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + etx(typeof insumoTitulo === 'function' ? insumoTitulo(ins) : ins.nombre) + (ins.marca ? ' <span style="color:var(--text-muted);font-weight:400">' + etx(ins.marca) + '</span>' : '') + '</div>' +
                     '<div style="font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:6px;align-items:center;margin-top:2px">' + sucBadge + (cat ? '<span>' + cat + '</span>' : '') + '</div>' +
                 '</div>' +
-                (precio ? '<div style="font-size:12px;color:var(--green);white-space:nowrap;flex-shrink:0;margin-right:8px">' + precio + '</div>' : '') +
+                (precio ? '<div class="ins-catalogo-precio" style="font-size:12px;color:var(--green);white-space:nowrap;flex-shrink:0;margin-right:8px">' + precio + '</div>' : '') +
                 (ya
                     ? '<button disabled style="background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 12px;font-size:11px;cursor:default;font-family:inherit">✓ Ya en sucursal</button>'
                     : '<button id="ignBtn_' + ins.id + '" onclick="ignAgregar(\'' + ins.id + '\')" style="background:rgba(61,190,122,.12);border:1px solid var(--green);color:var(--green);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">+ Copiar aquí</button>'
@@ -971,7 +972,9 @@ function ignRender() {
 }
 function ignAgregar(id) {
     var lista = getInsumos();
-    var ins = lista.find(function(x){ return x.id === id; });
+    var identidad = _identidadCatalogoIns(lista, _getSucActivaIns());
+    var canon = identidad.canon[id] || id;
+    var ins = identidad.maestros.find(function(x){ return x.id === canon; });
     if (!ins) return;
     var cur = _effSucIns(_getSucActivaIns()); // sucursal efectiva actual (matriz='suc_principal')
     /* COPIA PROPIA, no membresía compartida. Antes esto sumaba la sucursal al
@@ -989,6 +992,7 @@ function ignAgregar(id) {
     }
     var btn = document.getElementById('ignBtn_' + id);
     if (btn) { btn.textContent = '✓ Copiado aquí'; btn.disabled = true; btn.style.opacity = '.55'; btn.style.cursor = 'default'; btn.onclick = null; }
+    if (typeof ignFiltrar === 'function') ignFiltrar();
 }
 document.addEventListener('DOMContentLoaded', function(){
     var lbl = document.getElementById('lblInsumosNeg');
@@ -1248,11 +1252,9 @@ function _cgRender() {
     var totalPgs = Math.max(1, Math.ceil(total / _cgPgSize));
     var desde    = _cgPagina * _cgPgSize;
     var pagina   = lista.slice(desde, desde + _cgPgSize);
-    var actuales = getInsumos().map(function(x){ return x.id; });
     // Membresía: "ya agregado" = el insumo VIVE en la sucursal activa (no solo en el negocio).
     var _curEffCg = (localStorage.getItem('etaax_sucursal_activa') || '') || 'suc_principal';
-    // "Agregado" = ese id ya vive en la sucursal (identidad = id).
-    var _enSucCg = {}; getInsumos().forEach(function(x){ if (window._insumoEnSuc && window._insumoEnSuc(x, _curEffCg)) _enSucCg[x.id] = true; });
+    var _identCg = _identidadCatalogoIns(getInsumos(), _curEffCg);
 
     document.getElementById('cgTotal').textContent = total + ' insumos · página ' + (_cgPagina+1) + ' de ' + totalPgs;
 
@@ -1264,15 +1266,15 @@ function _cgRender() {
                 ? '$' + parseFloat(p0.precio).toFixed(2) + ' / ' + (p0.contNeto||'') + ' ' + (p0.umContenido||'')
                 : '—';
             var prov      = p0 && p0.proveedor ? etx(p0.proveedor) : '';
-            var yaEsta    = _enSucCg[ins.id] === true;
+            var yaEsta    = !!_identCg.enSucursal[_identCg.canon[ins.id] || ins.id];
             var varLine   = etx([ins.maduracion, ins.variedad].filter(Boolean).join(' · '));
             var cat       = etx([ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · '));
             var fotoEl    = ins.foto
                 ? '<img src="'+etx(ins.foto)+'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0">'
                 : '<div style="width:40px;height:40px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📦</div>';
-            return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">' +
+            return '<div class="ins-catalogo-fila" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">' +
                 fotoEl +
-                '<div style="flex:1;min-width:0">' +
+                '<div class="ins-catalogo-info" style="flex:1;min-width:0">' +
                     '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + etx(ins.nombre) + '</div>' +
                     (varLine ? '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + varLine + '</div>' : '') +
                     '<div style="font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
@@ -1280,9 +1282,9 @@ function _cgRender() {
                         (prov ? '  ·  📍' + prov : '') +
                     '</div>' +
                 '</div>' +
-                '<div style="font-size:12px;color:var(--green);white-space:nowrap;flex-shrink:0;margin-right:8px">' + precio + '</div>' +
+                '<div class="ins-catalogo-precio" style="font-size:12px;color:var(--green);white-space:nowrap;flex-shrink:0;margin-right:8px">' + precio + '</div>' +
                 (yaEsta
-                    ? '<button disabled style="background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 12px;font-size:11px;cursor:default;font-family:inherit">✓ Agregado</button>'
+                    ? '<button disabled style="background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 12px;font-size:11px;cursor:default;font-family:inherit">✓ Ya en sucursal</button>'
                     : '<button onclick="cgAgregar(\''+ins.id+'\')" id="cgBtn_'+ins.id+'" style="background:rgba(61,190,122,.12);border:1px solid var(--green);color:var(--green);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit">+ Agregar</button>'
                 ) +
             '</div>';
@@ -1334,76 +1336,113 @@ function _cgMarcarAgregado(id) {
 async function cgAgregar(id) {
     var ins = _cgTodos.find(function(x){ return x.id === id; });
     if (!ins) return;
-    var lista = getInsumos();
+    var negId = getNegocioActivo();
     var _curEff = _effSucIns(localStorage.getItem('etaax_sucursal_activa') || '');
-    /* ¿Ya vive en el negocio? Las copias de ETAAX conservan el id del catálogo
-       maestro, así que la identidad es el ID — nunca el nombre/marca (productos
-       distintos se llaman igual). */
-    var maestro = lista.find(function(x){ return x.id === id; });
-    var nace = null;
-    if (!maestro) {
-        /* Nace el MAESTRO del negocio: ficha de referencia global, sin sucursal.
-           Antes el registro importado se quedaba con la sucursal activa y la
-           siguiente sucursal que lo pedía se enganchaba al mismo registro —
-           dos sucursales, una sola ficha. */
-        maestro = JSON.parse(JSON.stringify(ins));
-        delete maestro._csvRow;
-        maestro.sucursales = []; maestro.sucursalId = '';
-        /* Si la foto viene como base64 (insumo del catálogo aún sin migrar),
-           súbela a Storage y guarda solo la URL → el negocio queda LIVIANO y no
-           se duplica la imagen pesada. Se hace ANTES de clonar: así la copia de
-           la sucursal nace ya con la URL, no con el base64. */
-        if (window.sbSubirFotoBase64 && maestro.foto && maestro.foto.indexOf('data:') === 0) {
-            var _bUp = document.getElementById('cgBtn_' + id);
-            if (_bUp) { _bUp.textContent = '⏳ Subiendo…'; _bUp.disabled = true; }
-            try {
-                var _url = await sbSubirFotoBase64('insumos', maestro.foto, getNegocioActivo());
-                if (_url) maestro.foto = _url;
-            } catch(e) {}
-        }
-        nace = maestro;
-    }
-    var r = window._importarMaestroASuc(maestro, _curEff, nace ? lista.concat([nace]) : lista);
-    if (r.yaEstaba && !nace) {
-        _cgMarcarAgregado(id);
-        try { filtrar(); } catch(e) {}
-        if (window._avisarPadreIns) window._avisarPadreIns([r.copia]);
-        return;
-    }
-    var frescos = (nace ? [nace] : []).concat(r.nuevas);
-    var guardado = false;
+    var pendientes = window._cgImportando || (window._cgImportando = Object.create(null));
+    var clave = JSON.stringify([negId, _curEff, id]);
+    if (pendientes[clave]) return;
+    pendientes[clave] = true;
+    var terminado = false;
     try {
-        setInsumos(lista.concat(frescos));
-        guardado = true;
-    } catch(e) {
-        console.error('[cgAgregar] setInsumos error:', e);
-        // Último recurso: intentar sin foto de ningún tipo
+        var lista = getInsumos();
+        var identidad = _identidadCatalogoIns(lista, _curEff);
+        var ya = identidad.enSucursal[identidad.canon[id] || id];
+        if (ya) {
+            _cgMarcarAgregado(id); terminado = true;
+            if (window._avisarPadreIns) window._avisarPadreIns([ya]);
+            return;
+        }
+        var btnInicio = document.getElementById('cgBtn_' + id);
+        if (btnInicio) { btnInicio.textContent = 'Agregando…'; btnInicio.disabled = true; }
+        /* ¿Ya vive en el negocio? Las copias de ETAAX conservan el id del catálogo
+           maestro, así que la identidad es el ID — nunca el nombre/marca (productos
+           distintos se llaman igual). */
+        var maestro = lista.find(function(x){ return x.id === id; });
+        var nace = null;
+        if (!maestro) {
+            /* Nace el MAESTRO del negocio: ficha de referencia global, sin sucursal.
+               Antes el registro importado se quedaba con la sucursal activa y la
+               siguiente sucursal que lo pedía se enganchaba al mismo registro —
+               dos sucursales, una sola ficha. */
+            maestro = JSON.parse(JSON.stringify(ins));
+            delete maestro._csvRow;
+            maestro.sucursales = []; maestro.sucursalId = '';
+            /* Si la foto viene como base64 (insumo del catálogo aún sin migrar),
+               súbela a Storage y guarda solo la URL → el negocio queda LIVIANO y no
+               se duplica la imagen pesada. Se hace ANTES de clonar: así la copia de
+               la sucursal nace ya con la URL, no con el base64. */
+            if (window.sbSubirFotoBase64 && maestro.foto && maestro.foto.indexOf('data:') === 0) {
+                var _bUp = document.getElementById('cgBtn_' + id);
+                if (_bUp) { _bUp.textContent = '⏳ Subiendo…'; _bUp.disabled = true; }
+                try {
+                    var _url = await sbSubirFotoBase64('insumos', maestro.foto, getNegocioActivo());
+                    if (_url) maestro.foto = _url;
+                } catch(e) {}
+            }
+            nace = maestro;
+        }
+        // La subida de foto cedió el control: otra importación/pull pudo cambiar la
+        // lista. Releer ANTES de guardar evita duplicar y perder otras altas.
+        // Si cambió de negocio/sucursal durante la espera, no guardar allí.
+        if (getNegocioActivo() !== negId || _effSucIns(_getSucActivaIns()) !== _curEff) return;
+        lista = getInsumos();
+        var maestroAhora = lista.find(function(x){ return x.id === id; });
+        if (maestroAhora) { maestro = maestroAhora; nace = null; }
+        var r = window._importarMaestroASuc(maestro, _curEff, nace ? lista.concat([nace]) : lista);
+        if (r.yaEstaba && !nace) {
+            _cgMarcarAgregado(id); terminado = true;
+            try { filtrar(); } catch(e) {}
+            if (window._avisarPadreIns) window._avisarPadreIns([r.copia]);
+            return;
+        }
+        var frescos = (nace ? [nace] : []).concat(r.nuevas);
+        var guardado = false;
         try {
-            frescos.forEach(function(x){ x.foto = ''; });
             setInsumos(lista.concat(frescos));
             guardado = true;
-        } catch(e2) {
-            console.error('[cgAgregar] setInsumos sin foto también falló:', e2);
+        } catch(e) {
+            console.error('[cgAgregar] setInsumos error:', e);
+            // Último recurso: intentar sin foto de ningún tipo
+            try {
+                frescos.forEach(function(x){ x.foto = ''; });
+                setInsumos(lista.concat(frescos));
+                guardado = true;
+            } catch(e2) {
+                console.error('[cgAgregar] setInsumos sin foto también falló:', e2);
+            }
+        }
+        if (!guardado) {
+            var btn = document.getElementById('cgBtn_' + id);
+            if (btn) {
+                btn.textContent = '⚠ Sin espacio';
+                btn.style.color = 'var(--red)';
+                btn.style.borderColor = 'var(--red)';
+            }
+            return;
+        }
+        if (typeof _sincronizarInsumosSupabase === 'function') {
+            var sincronizar = frescos.concat(r.tocados).filter(function(x, i, a){
+                return a.findIndex(function(y){ return y.id === x.id; }) === i;
+            });
+            try { _sincronizarInsumosSupabase(getNegocioActivo(), sincronizar); } catch(e){}
+        }
+        _cgMarcarAgregado(id); terminado = true;
+        try { filtrar(); } catch(e) { console.warn('[cgAgregar] filtrar error:', e); }
+        /* Si esto corre dentro del modal del escandallo, el padre tiene su propia
+           memoria y no se entera solo (ver _avisarPadreIns). No se cierra el modal:
+           lo normal es agregar varios de un tirón. */
+        if (window._avisarPadreIns) window._avisarPadreIns([r.copia]);
+    } finally {
+        delete pendientes[clave];
+        // Error o navegación durante la carga: permitir reintentar.
+        if (!terminado) {
+            var btnFin = document.getElementById('cgBtn_' + id);
+            if (btnFin) {
+                if (btnFin.textContent.indexOf('⚠') !== 0) btnFin.textContent = '+ Agregar';
+                btnFin.disabled = false;
+            }
         }
     }
-    if (!guardado) {
-        var btn = document.getElementById('cgBtn_' + id);
-        if (btn) {
-            btn.textContent = '⚠ Sin espacio';
-            btn.style.color = 'var(--red)';
-            btn.style.borderColor = 'var(--red)';
-        }
-        return;
-    }
-    if (typeof _sincronizarInsumosSupabase === 'function') {
-        try { _sincronizarInsumosSupabase(getNegocioActivo(), frescos.concat(r.tocados)); } catch(e){}
-    }
-    _cgMarcarAgregado(id);
-    try { filtrar(); } catch(e) { console.warn('[cgAgregar] filtrar error:', e); }
-    /* Si esto corre dentro del modal del escandallo, el padre tiene su propia
-       memoria y no se entera solo (ver _avisarPadreIns). No se cierra el modal:
-       lo normal es agregar varios de un tirón. */
-    if (window._avisarPadreIns) window._avisarPadreIns([r.copia]);
 }
 </script>
 

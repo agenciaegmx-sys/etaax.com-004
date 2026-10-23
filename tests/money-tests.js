@@ -28375,7 +28375,142 @@ console.log('\n══ BE21 · Insumos: cada sucursal, su ficha ══');
 
        Las pruebas corren los manejadores REALES de los botones (`ignAgregar`
        del catálogo de otras sucursales y `cgAgregar` del catálogo ETAAX). */
-    const IMP = ['_effSucIns', '_copiaInsParaSuc', '_copiaDeEnSuc', '_importarMaestroASuc'];
+    const IMP = ['_effSucIns', '_identidadCatalogoIns', '_copiaInsParaSuc', '_copiaDeEnSuc', '_importarMaestroASuc'];
+
+    test('catálogo del negocio: una sola opción con el ID maestro aunque haya varias copias', () => {
+        const c = contexto([copia('s2'), maestro, copia('s1')], 's1');
+        c.cargar('recetas/insumos.js', ...IMP);
+        const idx = c._identidadCatalogoIns(c.catalogo, 's1');
+        eq(JSON.stringify(idx.maestros.map(x => x.id)), '["m"]');
+        return eq(idx.enSucursal.m.id, 'c_s1');
+    });
+    test('dos productos con el mismo texto y diferentes IDs siguen siendo dos opciones', () => {
+        const otro = Object.assign({}, maestro, { id:'otro' });
+        const c = contexto([maestro, copia('s1'), otro], 's2');
+        c.cargar('recetas/insumos.js', ...IMP);
+        return eq(c._identidadCatalogoIns(c.catalogo, 's2').maestros.length, 2);
+    });
+    test('renombrar una copia no rompe la detección por ID de su maestro', () => {
+        const propia = Object.assign(copia('s1'), {nombre:'Nombre local editado'});
+        const c = contexto([maestro, propia], 's1');
+        c.cargar('recetas/insumos.js', ...IMP);
+        return eq(c._identidadCatalogoIns(c.catalogo, 's1').enSucursal.m.id, propia.id);
+    });
+    test('un maestro ausente no produce una opción por cada copia ni modifica los registros', () => {
+        const c = contexto([copia('s1'), copia('s2')], 's3');
+        c.cargar('recetas/insumos.js', ...IMP);
+        const antes = JSON.stringify(c.catalogo), idx = c._identidadCatalogoIns(c.catalogo, 's3');
+        eq(JSON.stringify(idx.maestros.map(x => x.id)), '["m"]');
+        return eq(JSON.stringify(c.catalogo), antes);
+    });
+    test('importar con maestro ausente recupera la referencia sin colgar copias de otras copias', () => {
+        const c = contexto([copia('s1'), copia('s2')], 's3');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'ignAgregar');
+        c.ignAgregar('m');
+        eq(c.catalogo.filter(x => x.id === 'm').length, 1);
+        eq(c.escrituras[0].ids.length, new Set(c.escrituras[0].ids).size, 'maestro repetido en un mismo upsert');
+        const propia = c.catalogo.find(x => x.sucursalId === 's3');
+        eq(propia.origenId, 'm');
+        c.ignAgregar('m');
+        return eq(c.catalogo.length, 4);
+    });
+    test('cadenas antiguas de copias se agrupan por la raíz y bloquean reimportar en el destino', () => {
+        const nieta = Object.assign(copia('s2'), {origenId:'c_s1'});
+        const c = contexto([maestro, copia('s1'), nieta], 's2');
+        c.cargar('recetas/insumos.js', ...IMP);
+        const idx = c._identidadCatalogoIns(c.catalogo, 's2');
+        eq(idx.maestros.length, 1);
+        const r = c._importarMaestroASuc(c.catalogo[1], 's2', c.catalogo);
+        eq(r.yaEstaba, true);
+        return eq(r.copia.id, nieta.id);
+    });
+    test('la membresía antigua del maestro también cuenta como ya existente', () => {
+        const c = contexto([Object.assign({}, maestro, {sucursales:['s1']})], 's1');
+        c.cargar('recetas/insumos.js', ...IMP);
+        const r = c._importarMaestroASuc(c.catalogo[0], 's1', c.catalogo);
+        eq(r.yaEstaba, true);
+        return eq(r.nuevas.length, 0);
+    });
+    test('pausar o inactivar la copia no autoriza duplicar el mismo ID maestro', () => {
+        const c = contexto([maestro, Object.assign(copia('s1'), {activo:'0',inactivoEn:['s1']})], 's1');
+        c.cargar('recetas/insumos.js', ...IMP);
+        return eq(c._importarMaestroASuc(c.catalogo[0], 's1', c.catalogo).yaEstaba, true);
+    });
+    test('Matriz usa la misma identidad con sucursal vacía o suc_principal', () => {
+        const c = contexto([maestro, Object.assign(copia('s1'), {sucursales:[''],sucursalId:''})], 'suc_principal');
+        c.cargar('recetas/insumos.js', ...IMP);
+        return eq(c._identidadCatalogoIns(c.catalogo, '').enSucursal.m.id, 'c_s1');
+    });
+    test('ambos selectores muestran «Ya en sucursal» para una copia del ID maestro', () => {
+        const c = contexto([maestro, copia('s1'), copia('s2')], 's1');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.etx = String; c._sucNombreIgn = () => 'Sucursal de prueba';
+        c.cargar('recetas/insumos.html', 'ignFiltrar', 'ignRender', '_cgRender');
+        c.ignFiltrar();
+        eq(c._ignTodos.length, 1);
+        eq(c.document.getElementById('ignLista').innerHTML.includes('✓ Ya en sucursal'), true);
+        eq(c.document.getElementById('ignLista').innerHTML.includes('+ Copiar aquí'), false);
+        c._cgFiltrada = [maestro]; c._cgPgSize = 80; c._cgPagina = 0;
+        c._cgRender();
+        const html = c.document.getElementById('cgLista').innerHTML;
+        eq(html.includes('✓ Ya en sucursal'), true);
+        return eq(html.includes('+ Agregar'), false);
+    });
+    await testA('ETAAX: doble clic durante una foto pendiente importa una sola vez', async () => {
+        const c = contexto([], 's1');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'cgAgregar');
+        c._cgTodos = [Object.assign({}, maestro, {foto:'data:image/png;base64,AA=='})];
+        let liberar, subidas = 0;
+        c.sbSubirFotoBase64 = () => { subidas++; return new Promise(r => { liberar = r; }); };
+        const primera = c.cgAgregar('m');
+        await c.cgAgregar('m');
+        eq(subidas, 1);
+        liberar('/foto-prueba.png'); await primera;
+        return eq(c.catalogo.length, 2);
+    });
+    await testA('ETAAX: altas simultáneas con fotos no pisan la lista de la otra alta', async () => {
+        const c = contexto([], 's1');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'cgAgregar');
+        c._cgTodos = ['m','otro'].map(id => Object.assign({}, maestro, {id,foto:'data:image/png;base64,AA=='}));
+        const liberar = [];
+        c.sbSubirFotoBase64 = () => new Promise(r => liberar.push(r));
+        const primera = c.cgAgregar('m'), segunda = c.cgAgregar('otro');
+        liberar[1]('/otra.png'); await segunda;
+        liberar[0]('/primera.png'); await primera;
+        eq(c.catalogo.filter(x => !x.origenId).length, 2);
+        return eq(c.catalogo.filter(x => x.origenId).length, 2);
+    });
+    await testA('ETAAX: importar desde el negocio durante la foto pendiente no duplica la copia', async () => {
+        const c = contexto([], 's1');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'cgAgregar', 'ignAgregar');
+        c._cgTodos = [Object.assign({}, maestro, {foto:'data:image/png;base64,AA=='})];
+        let liberar;
+        c.sbSubirFotoBase64 = () => new Promise(r => { liberar = r; });
+        const pendiente = c.cgAgregar('m');
+        c.catalogo = [JSON.parse(JSON.stringify(maestro))];
+        c.ignAgregar('m');
+        liberar('/foto.png'); await pendiente;
+        return eq(c.catalogo.length, 2);
+    });
+    await testA('ETAAX: cambiar de sucursal durante una foto no importa en el destino equivocado', async () => {
+        const c = contexto([], 's1');
+        c.cargar('recetas/insumos.js', ...IMP);
+        c.cargar('recetas/insumos.html', 'cgAgregar');
+        c._cgTodos = [Object.assign({}, maestro, {foto:'data:image/png;base64,AA=='})];
+        let liberar;
+        c.sbSubirFotoBase64 = () => new Promise(r => { liberar = r; });
+        const pendiente = c.cgAgregar('m');
+        c.localStorage.setItem('etaax_sucursal_activa', 's2');
+        liberar('/foto.png'); await pendiente;
+        eq(c.catalogo.length, 0);
+        c.sbSubirFotoBase64 = async () => '/foto.png';
+        await c.cgAgregar('m');
+        return eq(c.catalogo.find(x => x.origenId).sucursalId, 's2');
+    });
 
     await testA('«Copiar aquí» le da a la sucursal una ficha propia (no la ajena)', async () => {
         const c = contexto([maestro, copia('s1')], 's2');
@@ -28405,6 +28540,7 @@ console.log('\n══ BE21 · Insumos: cada sucursal, su ficha ══');
         await c.cgAgregar('m');
         c.localStorage.setItem('etaax_sucursal_activa', 's2');
         await c.cgAgregar('m');
+        eq(c.escrituras[0].ids.length, new Set(c.escrituras[0].ids).size, 'ETAAX mandó el maestro dos veces en un mismo upsert');
         const cops = c.catalogo.filter(x => x.origenId === 'm');
         eq(cops.length, 2, 'las dos sucursales terminaron con una sola ficha compartida');
         eq(new Set(cops.map(x => x.id)).size, 2, 'las dos fichas comparten el mismo id');

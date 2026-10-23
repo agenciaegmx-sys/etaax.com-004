@@ -24,6 +24,43 @@
    // Sin sucursal = matriz (sucursal por defecto), no "global en todas".
    var MATRIZ_ID_INS = 'suc_principal';
    function _effSucIns(id) { return id || MATRIZ_ID_INS; }
+   /* Identidad de importación: id del maestro, nunca nombre/marca. El mismo
+      índice sirve para listar referencias y detectar si CUALQUIERA de sus
+      copias ya vive en el destino (incluso pausada o inactiva).
+      Las cadenas antiguas copia→copia se resuelven hasta su raíz. Si falta el
+      maestro, se ofrece una referencia con SU id, sin modificar las copias;
+      solo se guarda esa referencia si después se solicita una importación. */
+   function _identidadCatalogoIns(lista, suc) {
+       var porId = Object.create(null), canon = Object.create(null);
+       var grupos = Object.create(null), enSucursal = Object.create(null), orden = [];
+       (lista || []).forEach(function(x){ if (x && x.id) porId[x.id] = x; });
+       function raiz(id) {
+           var camino = [], visto = Object.create(null), actual = id;
+           while (porId[actual] && porId[actual].origenId && !canon[actual] && !visto[actual]) {
+               visto[actual] = true; camino.push(actual); actual = porId[actual].origenId;
+           }
+           // Un vínculo circular inválido tampoco debe bloquear el catálogo.
+           var fin = canon[actual] || (visto[actual] ? camino.slice(camino.indexOf(actual)).sort()[0] : actual);
+           camino.forEach(function(k){ canon[k] = fin; });
+           canon[id] = fin;
+           return fin;
+       }
+       (lista || []).forEach(function(x){
+           if (!x || !x.id) return;
+           var k = raiz(x.id);
+           if (!grupos[k]) { grupos[k] = []; orden.push(k); }
+           grupos[k].push(x);
+           if (window._insumoEnSuc(x, _effSucIns(suc)) && (!enSucursal[k] || x.origenId)) enSucursal[k] = x;
+       });
+       var maestros = orden.map(function(k){
+           if (porId[k]) return porId[k];
+           var ref = JSON.parse(JSON.stringify(grupos[k][0]));
+           ref.id = k; delete ref.origenId;
+           ref.sucursales = []; ref.sucursalId = '';
+           return ref;
+       });
+       return { maestros: maestros, canon: canon, enSucursal: enSucursal };
+   }
    // Nombre real de una sucursal (para los badges). Busca en la lista primero (así la Matriz
    // muestra su nombre real, ej. "Mammut Pizza Madero", no un genérico "Matriz").
    function _sucNomIns(id) {
@@ -182,9 +219,11 @@
       a la importación: dos clics no dejan el insumo dos veces en la lista). */
    function _copiaDeEnSuc(lista, masterId, sucEff) {
        var eff = _effSucIns(sucEff);
+       var identidad = _identidadCatalogoIns(lista, eff);
+       var canon = identidad.canon[masterId] || masterId;
        for (var i = 0; i < (lista || []).length; i++) {
            var x = lista[i];
-           if (!x || x.origenId !== masterId) continue;
+           if (!x || !x.origenId || identidad.canon[x.id] !== canon) continue;
            if (window._insumoEnSuc ? window._insumoEnSuc(x, eff)
                                    : (window._insumoSucursales(x) || []).map(_effSucIns).indexOf(eff) >= 0) return x;
        }
@@ -197,15 +236,18 @@
        /* Si te pasan una COPIA, el maestro es su origen: una copia nunca cuelga
           de otra copia (si no, el día que cambie el maestro la cadena decide
           sola por quién pasa la novedad). */
-       var master = ins.origenId
-           ? (lista.find(function (x) { return x.id === ins.origenId; }) || ins)
-           : ins;
+       var identidad = _identidadCatalogoIns(lista, eff);
+       var canon = identidad.canon[ins.id] || ins.origenId || ins.id;
+       var master = identidad.maestros.find(function(x){ return x.id === canon; }) || ins;
 
-       var ya = _copiaDeEnSuc(lista, master.id, eff);
+       var ya = identidad.enSucursal[canon];
        if (ya) return { copia: ya, nuevas: [], tocados: [], yaEstaba: true };
 
        var nuevas = [];
-       var mem = (window._insumoSucursales ? window._insumoSucursales(master) : []).map(_effSucIns);
+       var nuevoMaestro = !lista.some(function(x){ return x.id === master.id; });
+       if (nuevoMaestro) nuevas.push(master);
+       var mem = (window._insumoSucursales ? window._insumoSucursales(master) : []).map(_effSucIns)
+           .filter(function(s, i, a){ return a.indexOf(s) === i; });
        mem.forEach(function (s) {
            if (s === eff) return;                               // esa se crea abajo
            if (_copiaDeEnSuc(lista, master.id, s)) return;       // ya tiene la suya
@@ -216,7 +258,7 @@
        if (mem.length) master._memPreMigra = mem.slice();        // por si hay que revertir
        master.sucursales = [];
        master.sucursalId = '';
-       return { copia: copia, nuevas: nuevas, tocados: [master], yaEstaba: false };
+       return { copia: copia, nuevas: nuevas, tocados: nuevoMaestro ? [] : [master], yaEstaba: false };
    }
    /* ¿Hay ya un insumo con esta identidad canónica (nombre·marca·variedad, la
       misma que usa el resto del sistema para decir "es el mismo insumo")? Gana
@@ -807,15 +849,9 @@
    // ── Identidad y sincronización entre sucursales ──────────────
    // Mismo nombre+marca = el mismo insumo en otra sucursal (igual que _keyIns).
    function _keyInsLocal(x){ return window._keyInsumo(x); } // identidad canónica (insumo-label.js) — no duplicar la lógica
-   // Dedup para el catálogo global: un representante por identidad (prefiere el original).
+   // Un representante por ID maestro. La coincidencia de texto no prueba identidad.
    function _dedupGlobal(lista){
-       var seen = {}, out = [];
-       lista.forEach(function(x){
-           var k = _keyInsLocal(x);
-           if (seen[k] === undefined) { seen[k] = out.length; out.push(x); }
-           else if (!x.origenId && out[seen[k]].origenId) { out[seen[k]] = x; }
-       });
-       return out;
+       return _identidadCatalogoIns(lista, _getSucActivaIns()).maestros;
    }
    // "Actualizar en catálogo global": empuja ficha + presentaciones + precios de este
    // insumo a TODAS las sucursales que tengan el mismo insumo (misma identidad).
