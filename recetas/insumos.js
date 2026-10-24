@@ -1831,8 +1831,8 @@
                </td>
                <td style="color:var(--text-muted)">${etx(ins.categoria||'')} ${ins.subcategoria ? '· '+etx(ins.subcategoria) : ''}</td>
                <td style="white-space:nowrap">
-                   ${pres.map(p =>
-                       `<span class="pill pill-amber" style="margin:2px;font-size:9px;white-space:nowrap">${etx(p.contNeto)} ${etx(p.umContenido)} · ${etx(p.rendimiento||'—')} ${etx(p.umRendimiento||'')}</span>`
+                   ${pres.filter(p => !p.inactiva).map(p =>
+                       `<span class="pill pill-amber" style="margin:2px;font-size:9px;white-space:nowrap">${p.esRendimientoPorcion ? etx(p.nombreRendimiento) + ' · ' + etx(String(p.contenidoPorcionBase)) + ' ' + etx(p.unidadPorcionBase) : etx(p.contNeto) + ' ' + etx(p.umContenido) + ' · ' + etx(p.rendimiento||'—') + ' ' + etx(p.umRendimiento||'')}</span>`
                    ).join('')}
                </td>
                <td class="ins-col-costo" style="color:var(--green);font-weight:500;white-space:nowrap">${etx(costo)}</td>
@@ -5819,7 +5819,7 @@
        if (!insRaw) return;
 
        const ins  = _escCampos(insRaw);
-       const pres = (insRaw.presentaciones || []).map(_escCampos);
+       const pres = (insRaw.presentaciones || []).filter(p => !p.inactiva).map(_escCampos);
    
        document.getElementById('fichaContenido').innerHTML = `
            <div style="display:flex;gap:16px;align-items:flex-start;
@@ -5859,8 +5859,9 @@
                        align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
                        <div>
                            <span style="font-size:15px;font-weight:500;color:var(--text)">
-                               ${p.contNeto} ${p.umContenido}
+                               ${p.esRendimientoPorcion ? p.nombreRendimiento : p.contNeto + ' ' + p.umContenido}
                            </span>
+                           ${p.esRendimientoPorcion ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">${parseFloat(p.contenidoPorcionBase)||0} ${p.unidadPorcionBase} por porción</div>` : ''}
                            ${p.pesoUnidad ? `<span style="font-size:11px;color:var(--text-dim);margin-left:8px">· ${p.pesoUnidad} ${p.umPeso||'G'} llena</span>` : ''}
                            ${p.pesoCristal ? `<span style="font-size:11px;color:var(--text-dim);margin-left:4px">· cristal ${p.pesoCristal}g</span>` : ''}
                        </div>
@@ -5869,7 +5870,7 @@
                            <div style="font-size:16px;font-weight:600;color:var(--text)">
                                $${(+p.precio).toFixed(2)}
                            </div>
-                           <div style="font-size:10px;color:var(--text-dim);margin-top:1px">precio de compra</div>` : ''}
+                           <div style="font-size:10px;color:var(--text-dim);margin-top:1px">${p.esRendimientoPorcion ? 'costo por porción' : p.esProduccionPropia ? 'costo de producción' : 'precio de compra'}</div>` : ''}
                            ${p.costoUnitario ? `
                            <div style="font-size:12px;font-weight:500;color:var(--green);margin-top:4px">
                                $${(+p.costoUnitario).toFixed(2)} / ${p.umCosto||'LT'}

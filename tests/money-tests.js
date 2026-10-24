@@ -1502,6 +1502,7 @@ console.log('\n══ SUITE E · Escandallo de recetas (app.js) ══');
     // va primero porque app.js usa window._makeInsumoResolver al cargar.
     const E = crearContexto();
     cargarJS(E, 'insumo-label.js');
+    cargarJS(E, 'etaax-core.js');
     cargarJS(E, 'app.js');
 
     // Bug 2026-07-22: insumo MANUAL (sin insumoId) a $80/lt con 1 OZ daba $80
@@ -29265,8 +29266,24 @@ function suitePrebatchFamilias20261023() {
         montar(casos[10]);vm.runInContext("_cacheRecetasInv[1].ingredientes=[{insumoId:'base',cantidad:1,unidad:'PZA'}];_consumoDirty=true;",X);
         eq(X._consumoRecetasBase('base'),13500); // 15 × 900 g, no 15 g
     });
+    test('presentación de prebatch: 0.4 vasos de 250 ml equivalen a 100 ml por cóctel',()=>{
+        montar(casos[9]);
+        vm.runInContext("_cacheInsumosInv[1].presentaciones=[{esRendimientoPorcion:true,rendimientoId:'vaso',nombreRendimiento:'Vaso',contenidoPorcionBase:250,unidadPorcionBase:'ML',costoUnitario:10}];_cacheRecetasInv[1].ingredientes=[{insumoId:'mix',cantidad:0.4,unidad:'RENDIMIENTO:vaso'}];_consumoDirty=true;_repCache=_repartoPrebatch();",X);
+        eq(X._consumoRecetasBase('mix'),1500);
+        eq(n8(X._repartoDe('base').venta),375); // 15 × 100/1000 × 250 g de ingrediente
+        eq(n8(X.calcDiferencia(vm.runInContext('filasCaptura[1]',X))+X._repartoDe('base').dif),0);
+    });
+    test('mezclar presentación y mililitros conserva el reparto y no duplica producción',()=>{
+        montar(casos[9]);
+        vm.runInContext("_cacheInsumosInv[1].presentaciones=[{esRendimientoPorcion:true,rendimientoId:'vaso',nombreRendimiento:'Vaso',contenidoPorcionBase:250,unidadPorcionBase:'ML',costoUnitario:10}];_cacheRecetasInv[1].ingredientes=[{insumoId:'mix',cantidad:0.2,unidad:'RENDIMIENTO:vaso'},{insumoId:'mix',cantidad:50,unidad:'ML'}];_consumoDirty=true;_repCache=_repartoPrebatch();",X);
+        eq(X._consumoRecetasBase('mix'),1500);
+        eq(n8(X._repartoDe('base').venta),375);
+        eq(n8(X._consumoBaseProd(vm.runInContext('filasCaptura[1]',X))),500);
+        eq(n8(X.calcDiferencia(vm.runInContext('filasCaptura[1]',X))+X._repartoDe('base').dif),0);
+    });
 }
 suitePrebatchFamilias20261023();
+require('./rendimientos-casos.cjs')({test,eq,crearContexto,cargarJS});
 
 suitePrebatchRendimiento20261023();
 

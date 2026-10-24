@@ -13,7 +13,7 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=e6d5073b">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=fd2dac1b">
     <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=34de802f">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=03cadcf1">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
     <link rel="preload" as="script" href="/recetas/recetas-ui.js?v=6a27913f">
 
@@ -34,7 +34,7 @@
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=45aa97a3">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/recetas/recetas-ui.css?v=b728d1d1">
+<link rel="stylesheet" href="/recetas/recetas-ui.css?v=e483f18f">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -987,7 +987,7 @@
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js?v=599f78b4"></script>
 <script src="/etaax-store.js?v=51ca2ddd"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
-<script src="/etaax-core.js?v=39444aed"></script><!-- fórmulas de dinero: antes de app.js -->
+<script src="/etaax-core.js?v=62b8dead"></script><!-- fórmulas de dinero: antes de app.js -->
 <script src="/insumo-label.js?v=789551ec"></script>
 <script src="/multi-select.js"></script><!-- filtros de grupo/categoría con palomitas -->
 <script src="/reordenar.js"></script><!-- orden manual del catálogo (arrastrar filas) -->
@@ -995,7 +995,8 @@
 <script src="/etaax-nav.js"></script>
 <script src="/qr-pairing.js"></script>
 <script src="../security.js?v=c188734e"></script>
-<script src="../app.js?v=fb9aac1c"></script>
+<script src="../app.js?v=52107514"></script>
+<script src="/recetas/subreceta-rendimientos.js?v=201d53b1"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -1258,7 +1259,12 @@ function actualizarVistaCosteo(tipo) {
 function renderRendimientoSub() {
     var body = document.getElementById("cardRendimientoBody");
     if (!body) return;
-    var getRV = function(id) { var e = document.getElementById(id); return e ? e.value : ""; };
+    if (typeof capturarRendimientosSub === 'function') capturarRendimientosSub();
+    var getRV = function(id) {
+        if (window._rendimientosPendientes && /^(porcionesQty|porcionesUnidad|pesoPorcion|unidadPesoPorcion)$/.test(id))
+            return (_rendimientosSub[0] || {})[id] || '';
+        var e = document.getElementById(id); return e ? e.value : "";
+    };
     var modo  = getTipoMedicion();
 
     var selU = function(id, opts, val) {
@@ -1303,7 +1309,7 @@ function renderRendimientoSub() {
     };
 
     var porcionesBloque =
-        "<div style=\"margin-top:14px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px\">" +
+        "<div class=\"sr-principal\" style=\"margin-top:14px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px\">" +
             "<div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:14px\">" +
                 "<div style=\"font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)\">" +
                     "⚖️ Rendimiento en porciones <span style=\"font-weight:400\">(opcional)</span>" +
@@ -1439,6 +1445,7 @@ function renderRendimientoSub() {
             porcionesBloque;
     }
 
+    if (typeof montarRendimientosSub === 'function') montarRendimientosSub();
     calcSubRecetaCostos();
 }
 
@@ -1471,6 +1478,8 @@ function calcSubRecetaCostos() {
     var elCT = document.getElementById('sub-costoTotal');
     if (elCT) elCT.textContent = '$' + costoTotal.toFixed(2);
 
+    window._subBaseCalc = {cantidad:sumaBase * (1-(parseFloat((document.getElementById('mermaManual')||{}).value)||0)/100),
+        unidad:recetaTipoActual === 'sub-bebidas' ? 'ML' : 'G'};
     // ── MODO A: A Granel ──────────────────────────────────────
     if (modo === 'granel') {
         var rendFinal   = parseFloat(((document.getElementById('rendimientoFinal')||{}).value)||0);
@@ -1530,69 +1539,6 @@ function calcSubRecetaCostos() {
             if (elGMl) elGMl.textContent = '';
         }
 
-        // ── Rendimiento en porciones (opcional) ──────────────
-        var pQty    = parseFloat(((document.getElementById('porcionesQty')||{}).value)||0);
-        var pPeso   = parseFloat(((document.getElementById('pesoPorcion')||{}).value)||0);
-        var pUnidad = (pQty > 0
-            ? ((document.getElementById('unidadPesoAutoDisplay')||{}).value||'G')
-            : ((document.getElementById('unidadPesoPorcion')||{}).value||'G')).toUpperCase();
-        var pUndSel = pPeso > 0
-            ? ((document.getElementById('porcionesUnidadFila2')||{}).value||'pzas')
-            : ((document.getElementById('porcionesUnidad')||{}).value||'pzas');
-        var elCP    = document.getElementById('sub-costoPorcion');
-        var elCPL   = document.getElementById('sub-costoPorcionLabel');
-        var elPesoAuto = document.getElementById('sub-pesoAutoResult');
-        var elCantAuto = document.getElementById('sub-cantAutoResult');
-
-        var fU3 = { G:1, KG:1000, ML:1, LT:1000 };
-        var rendFinalBase3 = rendFinal * (fU[unidadFinal]||1); // en g/ml
-
-        var costoPorcion = 0;
-        var _calcCant    = 0;   // cantidad de porciones que el costeo determinó (qty o peso)
-
-        if (pQty > 0 && rendFinal > 0) {
-            // FILA 1 activa: porciones → calcula peso por porción automáticamente
-            costoPorcion = costoTotal / pQty;
-            _calcCant    = pQty;
-            var pesoPorcionAuto = rendFinalBase3 / pQty;
-            if (elPesoAuto) {
-                elPesoAuto.textContent = pesoPorcionAuto >= 1000
-                    ? (pesoPorcionAuto/1000).toFixed(3) + (pUnidad==='ML'||pUnidad==='LT'?' LT':' KG')
-                    : parseFloat(pesoPorcionAuto.toFixed(1)) + (pUnidad==='ML'||pUnidad==='LT'?' ML':' G');
-            }
-            if (elCantAuto) elCantAuto.textContent = '';
-            if (elCP)  elCP.textContent  = '$' + costoPorcion.toFixed(2);
-            if (elCPL) elCPL.textContent = 'por ' + pUndSel.replace('pzas','pieza').replace('porciones','porción').replace('raciones','ración').replace('tazas','taza');
-
-        } else if (pPeso > 0 && rendFinal > 0) {
-            // FILA 2 activa: peso → calcula porciones automáticamente
-            var pesoPorcionBase = pPeso * (fU3[pUnidad]||1);
-            var cantPorcAuto    = pesoPorcionBase > 0 ? Math.floor(rendFinalBase3 / pesoPorcionBase) : 0;
-            costoPorcion        = cantPorcAuto > 0 ? costoTotal / cantPorcAuto : 0;
-            _calcCant           = cantPorcAuto;
-            if (elCantAuto) {
-                elCantAuto.textContent = cantPorcAuto > 0
-                    ? cantPorcAuto + ' ' + pUndSel
-                    : 'Peso mayor al rendimiento';
-            }
-            if (elPesoAuto) elPesoAuto.textContent = '';
-            if (elCP)  elCP.textContent  = costoPorcion > 0 ? '$' + costoPorcion.toFixed(2) : '—';
-            if (elCPL) elCPL.textContent = costoPorcion > 0 ? cantPorcAuto + ' porciones de ' + pPeso + ' ' + pUnidad : '';
-
-        } else {
-            if (elCP)  elCP.textContent  = '—';
-            if (elCPL) elCPL.textContent = 'Llena una de las filas';
-            if (elPesoAuto) elPesoAuto.textContent = '';
-            if (elCantAuto) elCantAuto.textContent = '';
-        }
-
-        // Guardar el resultado del costeo de porción para que la conversión a insumo
-        // use EXACTAMENTE este valor (evita recalcular del DOM y fallar por timing).
-        window._subPorcionCalc = (costoPorcion > 0 && _calcCant > 0)
-            ? { costo: costoPorcion, cantidad: _calcCant }
-            : null;
-
-
     // ── MODO B: Por Pieza ─────────────────────────────────────
     } else {
         var pesoPieza   = parseFloat(((document.getElementById('pesoPieza')||{}).value)||0);
@@ -1622,6 +1568,7 @@ function calcSubRecetaCostos() {
         if (elMermaD2 && mermaManual > 0) elMermaD2.textContent = sumaBase.toFixed(0)+'g → '+(masaUtil.toFixed(0))+'g útil';
 
     }
+    if (typeof actualizarRendimientosSub === 'function') actualizarRendimientosSub(costoTotal);
 }
 
 // ── Actualizar sub-receta cuando cambian ingredientes ─────────
@@ -1810,14 +1757,14 @@ function _buscarInsumoSubReceta() {
     if (typeof getCatalogoInsumos !== 'function') return null;
     var cat = getCatalogoInsumos();
     if (recetaActualId) {
-        var porId = cat.find(function(x){ return x && x.esSubReceta && x.recetaId === recetaActualId; });
+        var porId = cat.find(function(x){ return x && x.esSubReceta && x.recetaId === recetaActualId && _subInsumoEnSucursal(x) && !_subInsumoBorrado(x.id); });
         if (porId) return porId;
     }
     var el = document.getElementById('nombreReceta');
     var nom = _normNombreSR(el ? el.value : '');
     if (!nom) return null;
     return cat.find(function(x){
-        return x && x.esSubReceta && !x.recetaId && _normNombreSR(x.nombre) === nom;
+        return x && x.esSubReceta && !x.recetaId && _normNombreSR(x.nombre) === nom && _subInsumoEnSucursal(x) && !_subInsumoBorrado(x.id);
     }) || null;
 }
 function _subRecetaYaEsInsumo() { return !!_buscarInsumoSubReceta(); }
@@ -1906,6 +1853,7 @@ function agregarSubRecetaComoInsumo(silent) {
     var nombre   = (document.getElementById('nombreReceta') || {}).value || '';
     var grupo    = (document.getElementById('grupo') || {}).value || '';
     if (!nombre) { if (!silent) alert('Primero agrega el nombre de la sub receta'); return; }
+    if (typeof validarRendimientosSub === 'function' && !validarRendimientosSub()) return;
     // Una sub-receta SIN GUARDAR no tiene identidad (recetaId null): el dedupe
     // no encontraba nada, cada clic creaba OTRO insumo 'prod_...' y el botón
     // nunca se bloqueaba en "✓ Agregado". Se exige guardar primero.
@@ -1924,8 +1872,9 @@ function agregarSubRecetaComoInsumo(silent) {
     var umDefault = esBebida ? 'LT' : 'KG';
 
     // Leer rendimiento final del card de rendimiento
-    var rendFinal   = parseFloat((document.getElementById('rendimientoFinal') || {}).value) || 0;
-    var unidadFinal = ((document.getElementById('unidadRendimientoFinal') || {}).value || umDefault).toUpperCase();
+    var baseSub = typeof datosBaseRendimientosSub === 'function' ? datosBaseRendimientosSub() : {};
+    var rendFinal   = parseFloat((document.getElementById('rendimientoFinal') || {}).value || baseSub.rendimientoFinal) || 0;
+    var unidadFinal = ((document.getElementById('unidadRendimientoFinal') || {}).value || baseSub.unidadRendimientoFinal || umDefault).toUpperCase();
     var unidadBruto = ((document.getElementById('unidadRendBruto') || {}).value || umDefault).toUpperCase();
 
     // Sumar ingredientes (rendimiento bruto en g/ml base)
@@ -2000,6 +1949,24 @@ function agregarSubRecetaComoInsumo(silent) {
     }
 
     // ── Envase físico del prebatch (ficha técnica): si está definido, la presentación
+    if (typeof leerRendimientosSub === 'function') {
+        // Las porciones comparten el insumo: cada una es una unidad seleccionable,
+        // con costo y contenido propios. KG/LT siguen siendo referencias comunes.
+        var cxR = datosBaseRendimientosSub();
+        porciones = porciones.filter(function(p){ return p.umCosto !== 'PZA'; });
+        leerRendimientosSub().forEach(function(r){
+            var c = EtaaxCore.calcularPorcionSubReceta(cxR, r, costoTotal);
+            if (!c.valido) return;
+            porciones.push({ id:'rend_' + r.id, rendimientoId:r.id,
+                nombreRendimiento:r.nombre || nombre, esRendimientoPorcion:true, inactiva:!!r.inactiva,
+                contenidoPorcionBase:c.contenidoBase, unidadPorcionBase:c.unidadBase,
+                contNeto:1, umContenido:'PZA', rendimiento:c.cantidad, umRendimiento:'PZA',
+                precio:c.costo, costoUnitario:c.costo, umCosto:'PZA', proveedor:'Producción propia',
+                esProduccionPropia:true });
+        });
+    }
+
+    // ── Envase físico del prebatch (ficha técnica): si está definido, la presentación
     // PRINCIPAL pasa a ser ese envase → contNeto = capacidad, pesoCristal = tara. Así el
     // Paso 1 de inventarios lo PESA igual que cualquier botella (kg bruto − tara = ml).
     // El rendimiento POR BATCH se conserva en `rendimiento` (la producción sigue por batch).
@@ -2029,7 +1996,7 @@ function agregarSubRecetaComoInsumo(silent) {
 
     // Construir objeto insumo
     var insumoNuevo = {
-        id:            'prod_' + Date.now().toString(36),
+        id:            'prod_' + genId(),
         nombre:        nombre,
         familia:       recetaTipoActual === 'sub-bebidas' ? 'Bebidas' : 'Alimentos',
         categoria:     'Producción propia',
@@ -2051,7 +2018,7 @@ function agregarSubRecetaComoInsumo(silent) {
         // Área del inventario: sin área NO aparece en ningún inventario (misma regla que insumos).
         area:          (function(){ var el = document.getElementById('selAreaSubReceta'); return el ? el.value : _areaDefaultSubReceta(); })(),
         sucursalId:    (localStorage.getItem('etaax_sucursal_activa') || ''),
-        sucursales:    (function(){ var c = localStorage.getItem('etaax_sucursal_activa') || ''; return c ? [c] : []; })(), // membresía: vive en la sucursal donde se convirtió
+        sucursales:    [localStorage.getItem('etaax_sucursal_activa') || 'suc_principal'],
         presentaciones: porciones,
     };
 
@@ -2063,7 +2030,7 @@ function agregarSubRecetaComoInsumo(silent) {
            viejo o directamente vacío. Leerlo de ahí devolvía un catálogo
            incompleto —a veces []— y entonces la búsqueda de duplicados no
            encontraba la sub-receta que ya existía. Hay que leer por el puente. */
-        var catalogo = (function(){ try { return JSON.parse(_skGet('insumos')) || []; } catch(e){ return []; } })();
+        var catalogo = (function(){ try { return (JSON.parse(_skGet('insumos')) || []).filter(function(x){ return !_subInsumoBorrado(x.id); }); } catch(e){ return []; } })();
         // Identidad por recetaId (puede haber una copia por sucursal). Además,
         // HUÉRFANOS: sub-recetas del MISMO nombre creadas sin recetaId (sesiones
         // previas que duplicaban al presionar varias veces con la receta sin
@@ -2072,6 +2039,7 @@ function agregarSubRecetaComoInsumo(silent) {
         var matches = [], _huerfanos = [];
         catalogo.forEach(function(x, i){
             if (!x || !x.esSubReceta) return;
+            if (!_subInsumoEnSucursal(x)) return;
             if (x.recetaId && x.recetaId === insumoNuevo.recetaId) matches.push(i);
             else if (!x.recetaId && _normNombreSR(x.nombre) === _nomN) _huerfanos.push(i);
         });
@@ -2099,7 +2067,7 @@ function agregarSubRecetaComoInsumo(silent) {
                 // Huérfano adoptado sin sucursal: hereda la sucursal activa para que SÍ se vea.
                 var _cur = localStorage.getItem('etaax_sucursal_activa') || '';
                 if (!_memb.length && _cur) _memb.push(_cur);
-                var upd = Object.assign({}, insumoNuevo, { id: prev.id, sucursalId: prev.sucursalId || _cur, sucursales: _memb });
+                var upd = Object.assign({}, prev, insumoNuevo, { id: prev.id, sucursalId: prev.sucursalId || _cur, sucursales: _memb });
                 catalogo[idx] = upd;
                 actualizados.push(upd);
             });
@@ -2192,7 +2160,9 @@ function estadoActual() {
         tiempoUnidad: document.getElementById('tiempoUnidad').value,
         procedimiento:document.getElementById('procedimiento').value,
         precioEnCarta:(document.getElementById('precioFormulario') || document.getElementById('precioEnCarta') || {value:''}).value,
-        ingredientes: JSON.parse(JSON.stringify(ingredientes))
+        ingredientes: JSON.parse(JSON.stringify(ingredientes)),
+        rendimientosPorcion: typeof leerRendimientosSub === 'function' ? leerRendimientosSub() : [],
+        camposExtra: typeof leerCamposExtra === 'function' ? leerCamposExtra(recetaTipoActual) : {}
     };
 }
 
@@ -2220,6 +2190,14 @@ function restaurarEstado(estado) {
     if (pcEl) pcEl.value = estado.precioEnCarta || '';
     if (pfEl) pfEl.value = estado.precioEnCarta || '';
     ingredientes = JSON.parse(JSON.stringify(estado.ingredientes || []));
+    if (typeof cargarRendimientosSub === 'function' && estado.rendimientosPorcion) {
+        Object.keys(estado.camposExtra || {}).forEach(function(k){
+            var el = document.getElementById(k), v = estado.camposExtra[k];
+            if (el && (typeof v === 'string' || typeof v === 'number')) el.value = v;
+        });
+        cargarRendimientosSub(estado.camposExtra || {rendimientosPorcion:estado.rendimientosPorcion}, estado.nombreReceta);
+        if (recetaTipoActual === 'sub-alimentos' || recetaTipoActual === 'sub-bebidas') renderRendimientoSub();
+    }
     renderTabla();
     guardandoHistorial = false;
     actualizarBotonesHistorial();
@@ -2253,7 +2231,7 @@ function actualizarBotonesHistorial() {
 document.addEventListener('input', function(e) {
     if (guardandoHistorial) return;
     const enFormulario = e.target.closest('#nombreReceta, #grupo, #categoria, #cristaleria, #tiempoNum, #procedimiento, #precioEnCarta, #tbodyIngredientes');
-    if (enFormulario || e.target.id === 'tiempoUnidad') {
+    if (enFormulario || e.target.closest('#cardRendimientoSub') || e.target.id === 'tiempoUnidad') {
         clearTimeout(window._histTimer);
         window._histTimer = setTimeout(guardarEnHistorial, 600);
     }
@@ -3023,6 +3001,7 @@ function crearReceta(tipo) {
 
     recetaActualId   = null;
     recetaTipoActual = tipo;
+    if (typeof cargarRendimientosSub === 'function') cargarRendimientosSub({}, '');
     _pobSucursalReceta(localStorage.getItem('etaax_sucursal_activa')||''); // nueva → sucursal activa
     // Receta nueva siempre nace ACTIVA (la pastilla podía quedarse en Inactiva
     // si veníamos de editar una inactiva).
@@ -4101,7 +4080,7 @@ function abrirFichaReceta(id) {
                         <td style="padding:7px 0;font-weight:500">${etx(i.nombre||'—')}</td>
                         <td style="padding:7px 0;color:var(--text-muted);font-size:12px">${etx(i.desc||'—')}</td>
                         <td style="padding:7px 0;text-align:right;color:var(--accent)">${etx(i.cantidad)}</td>
-                        <td style="padding:7px 0;text-align:right;color:var(--text-muted)">${etx(i.unidad)}</td>
+                        <td style="padding:7px 0;text-align:right;color:var(--text-muted)">${etx(unidadIngredienteNombre(i))}</td>
                         <td style="padding:7px 0;text-align:right;color:var(--green);font-weight:600">$${cu.toFixed(2)}</td>
                     </tr>`;
                 }).join('')}
@@ -4352,14 +4331,6 @@ function abrirFichaCosteo() {
         const costoXg     = rendFinalKg > 0 ? costoTotal / (rendFinalKg * 1000) : 0;
 
         // Costo por porción — fila 1 (qty) o fila 2 (peso)
-        let porcionQty = parseFloat(cx.porcionesQty) || 0;
-        if (!porcionQty && cx.pesoPorcion && cx.unidadPesoPorcion && rendFinalKg > 0) {
-            const fU2 = { G:1, KG:1000, ML:1, LT:1000 };
-            const pesoPorzBase = parseFloat(cx.pesoPorcion) * (fU2[(cx.unidadPesoPorcion||'G').toUpperCase()]||1);
-            porcionQty = pesoPorzBase > 0 ? Math.floor(rendFinalKg * 1000 / pesoPorzBase) : 0;
-        }
-        const costoPorcion = porcionQty > 0 ? costoTotal / porcionQty : 0;
-
         // Merma
         let mermaHTML = '';
         if (r.ingredientes && r.ingredientes.length > 0 && rendFinal > 0) {
@@ -4409,50 +4380,7 @@ function abrirFichaCosteo() {
                     Ingresa el rendimiento final en el escandallo
                 </div>`}
             </div>
-            <!-- Costo por Porción -->
-            <div style="background:var(--surface2);border:1px solid var(--accent);border-radius:10px;padding:16px">
-                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;
-                    color:var(--accent);margin-bottom:12px">⚖️ Costo por Porción</div>
-                ${costoPorcion > 0 ? `
-                <div style="display:flex;justify-content:space-between;align-items:center;
-                    padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
-                    <span style="color:var(--text-muted)">Porciones totales</span>
-                    <span style="font-weight:600;color:var(--text)">${porcionQty}</span>
-                </div>
-                ${(()=>{
-                    if (cx.pesoPorcion && cx.unidadPesoPorcion) {
-                        return `<div style="display:flex;justify-content:space-between;align-items:center;
-                            padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
-                            <span style="color:var(--text-muted)">Peso por porción</span>
-                            <span style="font-weight:600;color:var(--text)">${cx.pesoPorcion} ${cx.unidadPesoPorcion}</span>
-                        </div>`;
-                    }
-                    if (cx.porcionesQty && rendFinalKg > 0) {
-                        const fU2 = {G:1,KG:1000,ML:1,LT:1000};
-                        const rendBase = rendFinal * (fU2[unidadFinal]||1);
-                        const pesoAuto = rendBase / parseFloat(cx.porcionesQty);
-                        const unidAuto = (cx.unidadPesoAutoDisplay || (esLiq ? 'ML' : 'G')).toUpperCase();
-                        const pesoConv = (unidAuto==='KG'||unidAuto==='LT') ? pesoAuto/1000 : pesoAuto;
-                        const pesoFmt  = unidAuto==='KG'||unidAuto==='LT' ? pesoConv.toFixed(3) : String(parseFloat(pesoConv.toFixed(1)));
-                        return `<div style="display:flex;justify-content:space-between;align-items:center;
-                            padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
-                            <span style="color:var(--text-muted)">Peso por porción</span>
-                            <span style="font-weight:600;color:var(--text)">${pesoFmt} ${unidAuto}</span>
-                        </div>`;
-                    }
-                    return '';
-                })()}
-                <div style="display:flex;justify-content:space-between;padding:8px 10px;
-                    margin-top:8px;background:var(--accent-dim);border-radius:6px;font-size:14px">
-                    <span style="font-weight:700">Costo / porción</span>
-                    <span style="font-weight:700;color:var(--accent)">$${costoPorcion.toFixed(2)}</span>
-                </div>` : `
-                <div style="text-align:center;padding:32px 0;color:var(--text-dim);font-size:12px">
-                    Sin porciones definidas.<br>
-                    <span onclick="editarDesdeficha()" style="color:var(--green);cursor:pointer;
-                        text-decoration:underline">Agregar en el escandallo</span>
-                </div>`}
-            </div>
+            ${tablaPorcionesSubReceta(r, costoTotal, false)}
         </div>`;
 
         document.getElementById('modalCosteoFlotante').style.display = 'flex';
@@ -4669,7 +4597,7 @@ function _grupoSubcat(r){
     return [ (r && r.grupo) || '', (r && r.categoria) || '' ].filter(Boolean).join(' · ');
 }
 function _fmtNum(n){if(n===0)return '0';return parseFloat(n.toFixed(3))+'';}
-function renderCaratulaTablaSubRecetas(recetas,g){var filas=recetas.map(function(r){var c=(r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0),cx=r.camposExtra||{};var rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNum(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uB=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var pQ=parseFloat(cx.porcionesQty)||0,pUn=(cx.porcionesUnidad||'pzs').toLowerCase(),pP=parseFloat(cx.pesoPorcion)||0,uP=(cx.unidadPesoPorcion||'').toLowerCase(),pD='—',uPD='—',cP=0;if(pQ>0){pD=pQ.toFixed(0)+' porciones';cP=c/pQ;if(rN>0)uPD=_fmtNum(rN/pQ)+' '+rU.toLowerCase();else if(pP>0)uPD=_fmtNum(pP)+' '+uP;}else if(pP>0&&rN>0){var pC=rN/pP;pD=pC.toFixed(0)+' porciones';cP=c/pC;uPD=_fmtNum(pP)+' '+uP;}var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="opacity:'+(in2?'0.5':'1')+'"><td style="font-size:12px;font-weight:600"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button class="btn-ver-ficha" onclick="abrirFichaDesdeCaratula(\''+r.id+'\')">📋 Ver</button>'+r.nombre+(in2?'<span style="font-size:9px;color:var(--text-dim);background:var(--surface2);padding:1px 6px;border-radius:4px">inactiva</span>':'')+'</div>'+(gr?'<div style="font-size:10px;color:var(--text-dim);font-weight:400;margin-top:2px">'+etx(gr)+'</div>':'')+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+rS+'</td><td style="text-align:right;color:var(--accent);font-weight:600">$'+c.toFixed(2)+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+pD+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+uPD+'</td><td style="text-align:right;color:var(--green);font-weight:600">'+(cP>0?'$'+cP.toFixed(2):'—')+'</td><td style="text-align:right;font-weight:600;color:var(--text-muted)">'+(cKL>0?'$'+cKL.toFixed(2)+'<span style="font-size:9px;margin-left:2px;color:var(--text-dim)">/'+uB+'</span>':'—')+'</td></tr>';}).join('');return '<div class="tabla-wrap"><table><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+filas+'</tbody></table></div>';}
+function renderCaratulaTablaSubRecetas(recetas,g){var filas=recetas.map(function(r){var c=(r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0),cx=r.camposExtra||{};var rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNum(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uB=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var ps=datosPorcionesSub(r,c),pD=ps.map(function(p){return '<div>'+etx(p.nombre)+' · '+_fmtNum(p.cantidad)+' porciones</div>';}).join('')||'—',uPD=ps.map(function(p){return '<div>'+_fmtNum(p.contenidoBase)+' '+etx(p.unidadBase)+'</div>';}).join('')||'—',cPH=ps.map(function(p){return '<div>$'+p.costo.toFixed(2)+'</div>';}).join('')||'—';var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="opacity:'+(in2?'0.5':'1')+'"><td style="font-size:12px;font-weight:600"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button class="btn-ver-ficha" onclick="abrirFichaDesdeCaratula(\''+r.id+'\')">📋 Ver</button>'+r.nombre+(in2?'<span style="font-size:9px;color:var(--text-dim);background:var(--surface2);padding:1px 6px;border-radius:4px">inactiva</span>':'')+'</div>'+(gr?'<div style="font-size:10px;color:var(--text-dim);font-weight:400;margin-top:2px">'+etx(gr)+'</div>':'')+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+rS+'</td><td style="text-align:right;color:var(--accent);font-weight:600">$'+c.toFixed(2)+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+pD+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+uPD+'</td><td style="text-align:right;color:var(--green);font-weight:600">'+cPH+'</td><td style="text-align:right;font-weight:600;color:var(--text-muted)">'+(cKL>0?'$'+cKL.toFixed(2)+'<span style="font-size:9px;margin-left:2px;color:var(--text-dim)">/'+uB+'</span>':'—')+'</td></tr>';}).join('');return '<div class="tabla-wrap"><table><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+filas+'</tbody></table></div>';}
 function imprimirCaratula(){if(!_exigeRec('caratulaImprimir','No puedes imprimir la carátula de costos.'))return;if(!caratulaTipoActual)return;var q=(document.getElementById('caratulaBuscar')?.value||'').toLowerCase(),gF=document.getElementById('caratulaFiltroGrupo')?.value||'',sF=document.getElementById('caratulaFiltroStatus')?.value||'';var recetas=getRecetasScope().filter(function(r){return r.tipo===caratulaTipoActual;});if(q)recetas=recetas.filter(function(r){return r.nombre.toLowerCase().includes(q)||(r.grupo||'').toLowerCase().includes(q)||(r.categoria||'').toLowerCase().includes(q);});if(gF)recetas=recetas.filter(function(r){return r.grupo===gF;});if(sF==='activa')recetas=recetas.filter(function(r){return r.status!=='inactiva';});if(sF==='inactiva')recetas=recetas.filter(function(r){return r.status==='inactiva';});if(!recetas.length){alert('No hay recetas para imprimir.');return;}var g=CARATULA_GRUPOS.find(function(x){return x.key===caratulaTipoActual;});abrirVentanaImpresion(buildPlantillaCaratula(recetas,g));}
 
 // Copiar receta/sub-receta DESDE LA LISTA (el botón 📋 de la card, como en
@@ -5036,7 +4964,7 @@ window.addEventListener('load', function() {
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=15a5a6ef"></script>
-<script src="/etaax-modulos-ui.js?v=34de802f"></script>
+<script src="/etaax-modulos-ui.js?v=03cadcf1"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 <script src="/recetas/recetas-ui.js?v=6a27913f"></script>
 </body>

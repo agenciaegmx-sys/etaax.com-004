@@ -257,3 +257,15 @@ body.etx-recetas-page {
   .etx-recetas-page #vistaRecetasBtns {margin-left:0!important;}
 }
 @media(prefers-reduced-motion:reduce) {.etx-recetas-page * {transition:none!important;animation:none!important;scroll-behavior:auto!important;}}
+/* Rendimientos por porción: una subreceta, distintas unidades de uso. */
+.sr-nombre {margin:0 0 14px;display:grid;gap:6px;}
+.sr-nombre label,.sr-presentacion label {font-size:12px;color:var(--text-muted);display:grid;gap:7px;}
+.sr-nombre input,.sr-presentacion input,.sr-presentacion select {width:100%;min-width:0;min-height:42px;padding:10px 12px;box-sizing:border-box;font:inherit;}
+.sr-presentacion {margin-top:14px;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);}
+.sr-presentacion-head {display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}
+.sr-presentacion-head strong {font-size:13px;}
+.sr-presentacion-campos {display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;}
+.sr-presentacion-campos label > div {display:grid;grid-template-columns:minmax(0,1fr) 95px;gap:8px;}
+.sr-presentacion-resultado {margin-top:14px;border-top:1px solid var(--border);padding-top:12px;color:var(--green);font-size:13px;}
+.sr-agregar {margin-top:14px;}
+@media(max-width:620px) {.sr-presentacion-campos {grid-template-columns:1fr;}}

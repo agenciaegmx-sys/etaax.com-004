@@ -217,12 +217,15 @@
             '<div class="ctx-nav-btns"><button class="ctx-btn ctx-btn-icon" onclick="history.back()" aria-label="Atrás">←</button><button class="ctx-btn ctx-btn-icon" onclick="history.forward()" aria-label="Adelante">→</button></div>' +
             '<div class="ctx-right"><span class="ctx-badge-plan">' + esc(ctx.userBadge || 'Mi negocio') + '</span>' +
             (contextoGlobal ? '<a class="ctx-btn" href="' + esc(volver) + '">Ir al negocio ' + ic('flecha',18) + '</a>' :
+            (ctx.ctxType !== 'staff' ? '<button type="button" class="ctx-btn" id="etxCambiarSucursal" aria-haspopup="dialog">' + ic('sh-matriz',20) + 'Cambiar sucursal</button>' : '') +
             '<button type="button" class="ctx-btn" id="etxCambiarModulo">' + ic('sh-cambiar-negocio',20) + 'Cambiar módulo ' + ic('hd-desplegar',14) + '</button><button type="button" class="ctx-btn" id="etxInfoSucursal">' + ic('sh-info-sucursal',20) + 'Información de sucursal</button>') + '</div></div>';
         if (opciones.editorNav) bar.querySelector('.ctx-nav-btns').replaceWith(opciones.editorNav);
         if (typeof window.etaaxHeader === 'function') window.etaaxHeader({marcaBase:'/marca/hub',usuario:ctx.userName,negocio:ctx.negNombre,plan:ctx.userBadge,inicio:'/hub.html',inicioTexto:'Módulos',cerrarSesion:window.ctxSalir});
         var cambiar = bar.querySelector('#etxCambiarModulo'), info = bar.querySelector('#etxInfoSucursal');
         if (cambiar) cambiar.onclick = abrirModulos;
         if (info) info.onclick = abrirInfoSucursal;
+        var sucursal = bar.querySelector('#etxCambiarSucursal');
+        if (sucursal) sucursal.onclick = abrirSucursales;
         if (window.ResizeObserver && !observadorBarra) { observadorBarra = new ResizeObserver(medirLayout);observadorBarra.observe(bar); }
         medirLayout();
     };
@@ -268,6 +271,47 @@
             if (typeof window._escGuardNav === 'function') window._escGuardNav(navegar);
             else navegar();
         };});
+    }
+    async function abrirSucursales() {
+        var c = leer('etaax_ctx');
+        if (!c || !c.negId || c.ctxType === 'staff' || contextoGlobal) return;
+        var trigger = document.getElementById('etxCambiarSucursal');
+        mostrarDialogo('Cambiar sucursal','<p>Actualizando sucursales…</p>',trigger);
+        var token = {}; dialogo._sucSolicitud = token;
+        var ok = true;
+        if (typeof window.sbSucPull === 'function') {
+            try { ok = await sbSucPull(c.negId); } catch(e) { ok = false; }
+        }
+        var fresco = leer('etaax_ctx');
+        if (!dialogo.open || dialogo._sucSolicitud !== token || !fresco || fresco.ctxType === 'staff' || fresco.negId !== c.negId) return;
+        var sucs = leer('etaax_' + c.negId + '_sucursales') || [];
+        mostrarDialogo('Cambiar sucursal','<p>Elige una sucursal de ' + esc(c.negNombre) + '.</p>' +
+            (!ok ? '<p>No se pudo actualizar la lista. Se muestran las sucursales guardadas.</p>' : '') +
+            '<div class="etx-module-options">' + sucs.map(function(s){
+                var actual = s.id === fresco.sucId;
+                return '<button type="button" data-sucursal="' + esc(s.id) + '"' + (s.activa === false ? ' disabled' : '') +
+                    (actual ? ' aria-current="true"' : '') + '>' + ic('sh-matriz',24) + '<span><strong>' + esc(s.nombre || 'Sucursal') +
+                    '</strong><small>' + (s.activa === false ? 'Inactiva' : actual ? 'Actual' : 'Abrir sucursal') + '</small></span></button>';
+            }).join('') + '</div>' + (!sucs.length ? '<p>Todavía no hay sucursales registradas.</p>' : ''),trigger);
+        dialogo.querySelectorAll('[data-sucursal]').forEach(function(b){ b.onclick = function(){
+            var cambiar = function(){
+                var ctx = leer('etaax_ctx');
+                if (!ctx || ctx.ctxType === 'staff' || ctx.negId !== c.negId) return;
+                var suc = (leer('etaax_' + c.negId + '_sucursales') || []).find(function(s){ return s.id === b.dataset.sucursal && s.activa !== false; });
+                if (!suc) return;
+                ctx.sucId = suc.id; ctx.sucNombre = suc.nombre || 'Sucursal';
+                var cfg = leer('etaax_' + c.negId + '_suc_' + suc.id) || {};
+                var neg = (leer('etaax_negocios') || []).find(function(n){ return n.id === c.negId; });
+                ctx.negColor = cfg.color || (neg && neg.color) || '#3dbe7a';
+                localStorage.setItem('etaax_sucursal_activa', suc.id);
+                localStorage.setItem('etaax_ctx', JSON.stringify(ctx));
+                sessionStorage.removeItem('etaax_cat_global'); sessionStorage.removeItem('etaax_fin_global');
+                location.href = location.pathname;
+            };
+            if (b.dataset.sucursal === fresco.sucId) { cerrarDialogo(); return; }
+            cerrarDialogo();
+            if (typeof window._escGuardNav === 'function') window._escGuardNav(cambiar); else cambiar();
+        }; });
     }
     function abrirInfoSucursal() {
         var c = leer('etaax_ctx');if (!c || !c.negId || contextoGlobal) return;

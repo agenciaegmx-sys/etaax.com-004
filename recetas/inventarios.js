@@ -665,6 +665,10 @@ function ingredienteML(cantidad, unidad) {
 function _normIngrediente(ing) {
     var cant = parseFloat(ing && ing.cantidad) || 0;
     var uni  = (ing && ing.unidad || '').toUpperCase();
+    var sr = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing && ing.insumoId) : null;
+    var rp = EtaaxCore.porcionSubRecetaParaUnidad(sr, uni);
+    if (rp) return { cant:cant * (parseFloat(rp.contenidoPorcionBase) || 0), unidad:rp.unidadPorcionBase };
+    if (uni.indexOf('RENDIMIENTO:') === 0) return { cant:0, unidad:'G' };
     if (uni !== 'SUBUNIDAD') return { cant: cant, unidad: ing && ing.unidad };
     var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing.insumoId) : null;
     var p   = ins && (ins.presentaciones || [])[0];
@@ -7183,8 +7187,14 @@ function renderStep3Menu() {
 // (no el ing.costo guardado, que suele venir en 0/viejo).
 function _costoIngrediente(ing) {
     var fila = filasCaptura.find(function(f){ return f.insumoId === ing.insumoId; });
+    var ins = typeof window._insumoResolver === 'function' ? window._insumoResolver(ing.insumoId) : null;
+    var porcion = EtaaxCore.porcionSubRecetaParaUnidad(ins, ing.unidad);
+    if (!fila && porcion) return (parseFloat(ing.cantidad) || 0) * (parseFloat(porcion.costoUnitario) || parseFloat(porcion.precio) || 0);
     if (!fila) return parseFloat(ing.costo) || 0; // insumo fuera de la captura → respaldo
     var cc   = costoCopa(fila); // por copa (licor) / por base g-ml (alimento) / por pza
+    var z = _normIngrediente(ing);
+    if (z.unidad !== ing.unidad || z.cant !== (parseFloat(ing.cantidad) || 0))
+        return cc * EtaaxCore.cantidadFilaInventario(z.cant, z.unidad, fila);
     var cant = parseFloat(ing.cantidad) || 0;
     var u    = (ing.unidad || '').toString().toUpperCase();
     if (fila.tipo === 'pza' || u === 'PZA' || u === 'PZ') return cc * cant;
@@ -7192,6 +7202,11 @@ function _costoIngrediente(ing) {
     // licor: cantidad → ml, ÷ copaML = copas, × costo por copa
     var ml = ingredienteML(cant, ing.unidad);
     return fila.copaML > 0 ? (ml / fila.copaML) * cc : 0;
+}
+function _unidadIngredienteInv(ing) {
+    var ins = typeof window._insumoResolver === 'function' ? window._insumoResolver(ing.insumoId) : null;
+    var p = EtaaxCore.porcionSubRecetaParaUnidad(ins, ing.unidad);
+    return p && String(ing.unidad).indexOf('RENDIMIENTO:') === 0 ? p.nombreRendimiento || 'Presentación' : ing.unidad || '';
 }
 // Ficha técnica de una receta (igual que en escandallos): ingredientes, costo, carta, margen.
 function _frKpi(lbl, val, col) {
@@ -7244,8 +7259,8 @@ function verFichaReceta(recetaId, editar) {
             '<tbody>'+(ings.length?ings.map(function(ing,i){
                 var costo = _costoIngrediente(ing);
                 var cantCell = ed
-                    ? '<input id="frCant-'+i+'" type="number" min="0" step="any" value="'+(ing.cantidad||'')+'" style="'+inpSt+';width:62px;text-align:right"> '+etx(ing.unidad||'')
-                    : (ing.cantidad||'')+' '+etx(ing.unidad||'');
+                    ? '<input id="frCant-'+i+'" type="number" min="0" step="any" value="'+(ing.cantidad||'')+'" style="'+inpSt+';width:62px;text-align:right"> '+etx(_unidadIngredienteInv(ing))
+                    : (ing.cantidad||'')+' '+etx(_unidadIngredienteInv(ing));
                 return '<tr style="border-top:1px solid var(--border)"><td style="padding:7px 8px;color:var(--text)">'+etx(ing.nombre||'—')+'</td>'+
                 '<td style="text-align:right;color:var(--text-muted);white-space:nowrap">'+cantCell+'</td>'+
                 '<td style="text-align:right;padding-right:8px;color:var(--accent)">$'+costo.toFixed(2)+'</td></tr>';

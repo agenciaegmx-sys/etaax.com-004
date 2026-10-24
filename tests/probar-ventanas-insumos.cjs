@@ -59,16 +59,18 @@ function sdkFixture() {
                 let data = null, error = null;
                 if (q.value) {
                     data = q.value;
-                    if (table === 'negocio_insumos') {
-                        const prev = JSON.parse(sessionStorage.getItem('__fixture_insumos') || '[]');
+                    if (table === 'negocio_insumos' || table === 'recetas') {
+                        const key = table === 'recetas' ? '__fixture_recetas' : '__fixture_insumos';
+                        const prev = JSON.parse(sessionStorage.getItem(key) || '[]');
                         (Array.isArray(q.value) ? q.value : [q.value]).forEach(r => {
                             const i = prev.findIndex(x => x.id === r.datos.id);
                             if (i >= 0) prev[i] = r.datos; else prev.push(r.datos);
                         });
-                        sessionStorage.setItem('__fixture_insumos', JSON.stringify(prev));
+                        sessionStorage.setItem(key, JSON.stringify(prev));
                     }
                 }
                 else if (table === 'negocio_insumos') data = q.start > 0 ? [] : JSON.parse(sessionStorage.getItem('__fixture_insumos') || '[]').map(datos => ({datos}));
+                else if (table === 'recetas') data = q.start > 0 ? [] : JSON.parse(sessionStorage.getItem('__fixture_recetas') || '[]').map(datos => ({datos}));
                 else if (table === 'negocios') data = negocios.filter(n => Object.keys(filters).every(k => n[k] === filters[k]));
                 else if (table === 'negocio_sucursales') data = { datos: { sucursales: filters.negocio_id === 'n2' ? [{id:'matriz',nombre:'Matriz',activa:true,fechaCreado:'2026-08-07'}]
                     : [{id:'matriz',nombre:'Centro',activa:true,fechaCreado:'2026-08-07'},{id:'norte',nombre:'Norte',activa:true,fechaCreado:'2026-08-07'}], cfg:{} } };
@@ -153,6 +155,7 @@ async function layout(p, gap) {
 
 async function run(base) {
  const dir=path.join(os.tmpdir(),'etaax-ventanas-insumos');fs.mkdirSync(dir,{recursive:true});
+ if (process.env.ETAAX_PRUEBA_RENDIMIENTOS) { await probarRendimientosSucursales(base,dir); return; }
  for(const width of [1440,768,390]){
   const p=await page(base,'/hub.html','owner',width,true);
   await send('Network.setExtraHTTPHeaders',{headers:{}},p.sid);
@@ -183,6 +186,113 @@ async function run(base) {
   await close(p);
  }
  await probarIdentidadCatalogos(base, dir);
+ await probarRendimientosSucursales(base,dir);
+}
+
+async function probarRendimientosSucursales(base,dir) {
+    const sr = {id:'bizcocho',tipo:'sub-alimentos',nombre:'Bizcocho de prueba',status:'activa',sucursales:['matriz'],sucursalId:'matriz',
+        ingredientes:[{nombre:'Base de prueba',cantidad:2,unidad:'KG',costoPorKgLt:400,insumoId:'',desc:''}],
+        camposExtra:{tipoMedicion:'granel',rendimientoFinal:2,unidadRendimientoFinal:'KG',unidadRendBruto:'KG',porcionesQty:2,porcionesUnidad:'pzas'}};
+    const produccion = {id:'prod_bizcocho',nombre:sr.nombre,recetaId:sr.id,esSubReceta:true,familia:'Alimentos',categoria:'Producción propia',area:'cocina',activo:'1',sucursales:['matriz'],sucursalId:'matriz',
+        presentaciones:[{contNeto:2,umContenido:'KG',rendimiento:2000,umRendimiento:'G',costoUnitario:400,umCosto:'KG',precio:800},
+            {contNeto:1,umContenido:'PZA',rendimiento:2,umRendimiento:'PZA',costoUnitario:400,umCosto:'PZA',precio:400}]};
+    const plato = {id:'pastel',tipo:'alimentos',nombre:'Pastel de prueba',status:'activa',sucursales:['matriz'],sucursalId:'matriz',
+        ingredientes:[{nombre:sr.nombre,insumoId:produccion.id,cantidad:2,unidad:'PZA',costoPorKgLt:400,desc:''}],camposExtra:{porciones:1}};
+    for (const width of [1440,390]) {
+        // Un escenario por ancho: limpiar solo IndexedDB del origen ficticio.
+        // Cerrar una pestaña o limpiar localStorage no borra su caché persistida.
+        const p = await page(base,'/hub.html','owner',width,true);
+        await send('Storage.clearDataForOrigin',{origin:base,storageTypes:'indexeddb'},p.sid);
+        await send('Network.setExtraHTTPHeaders',{headers:{}},p.sid);
+        await evalPage(p.sid, `sessionStorage.setItem('__fixture_insumos',${JSON.stringify(JSON.stringify([produccion]))});sessionStorage.setItem('__fixture_recetas',${JSON.stringify(JSON.stringify([sr,plato]))});`);
+        await go(p,'location.href='+JSON.stringify(base+'/recetas/index.html'),"typeof abrirFichaReceta==='function' && getRecetas().length===2 && document.readyState==='complete'");
+        await evalPage(p.sid,"document.getElementById('etaaxNovOk')?.click();abrirFichaReceta('bizcocho')");
+        await click(p,'#btnFichaEditar');
+        const w="document.getElementById('iframeInsumo').contentWindow";
+        const frame = expression => evalPage(p.sid,w+'.eval('+JSON.stringify(expression)+')');
+        await until(p.sid,w+" && "+w+".document.getElementById('subRendNombre') && "+w+".document.getElementById('porcionesQty').value==='2'");
+        await check(width+' rendimiento anterior se conserva como presentación principal',async()=>{
+            assert.equal(await frame("document.getElementById('subRendNombre').value"),sr.nombre);
+            assert.equal(await frame("document.querySelector('#cardAgregarInsumo button').disabled"),true);
+            assert.equal(await frame("document.getElementById('sub-costoPorcion').textContent"),'$400.00');
+        });
+        await frame("document.getElementById('subRendNombre').value='Grande';agregarRendimientoSub();document.getElementById('sr_1_nombre').value='Mediano';document.getElementById('sr_1_porcionesQty').value=4;calcSubRecetaCostos();agregarRendimientoSub();document.getElementById('sr_2_nombre').value='Chico';document.getElementById('sr_2_porcionesQty').value=8;calcSubRecetaCostos()");
+        await check(width+' agregar presentaciones calcula costos y guarda un único insumo',async()=>{
+            assert.ok((await frame("document.getElementById('sr_1_resultado').textContent")).includes('$200.00'));
+            assert.ok((await frame("document.getElementById('sr_2_resultado').textContent")).includes('$100.00'));
+            await frame("guardarEnHistorial();document.getElementById('sr_1_porcionesQty').value=5;calcSubRecetaCostos();guardarEnHistorial();undoReceta()");
+            assert.equal(await frame("Number(document.getElementById('sr_1_porcionesQty').value)"),4);
+            assert.ok((await frame("document.getElementById('sr_1_resultado').textContent")).includes('$200.00'));
+            await frame("agregarSubRecetaComoInsumo(true)");
+            assert.equal(await frame('getCatalogoInsumos().length'),1);
+            assert.equal(await frame("getCatalogoInsumos()[0].id"),'prod_bizcocho');
+            assert.equal(await frame("getCatalogoInsumos()[0].presentaciones.filter(p=>p.esRendimientoPorcion).length"),3);
+            const layout=await frame("({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,errors:window.__errors})");
+            assert.ok(layout.scroll<=layout.width+1,JSON.stringify(layout));assert.deepEqual(layout.errors,[]);
+        });
+        await frame("document.getElementById('subRendNombre').scrollIntoView({block:'start'})");
+        let shot=await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(dir,'subreceta-presentaciones-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        await frame('guardarReceta()');
+        await until(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_recetas')).find(r=>r.id==='bizcocho').camposExtra.rendimientosPorcion?.length===3");
+        await go(p,'location.reload()',"typeof abrirFichaReceta==='function' && getRecetas().length===2 && document.readyState==='complete'");
+        await evalPage(p.sid,"abrirFichaReceta('bizcocho')");await click(p,'#btnFichaEditar');
+        await until(p.sid,w+" && "+w+".document.getElementById('sr_2_nombre') && "+w+".document.getElementById('sr_2_nombre').value==='Chico'");
+        await check(width+' recargar conserva nombres, porciones y unidades en escandallo',async()=>{
+            assert.equal(await frame("document.getElementById('subRendNombre').value"),'Grande');
+            await frame("cargarReceta('pastel');renderTabla();const u=[...document.querySelector('#tbodyIngredientes select').options].find(o=>o.textContent==='Mediano').value;updateUnidad(0,u)");
+            assert.equal(await frame("ingredientes[0].costoPorKgLt"),200);
+            assert.equal(await frame("getFactor(ingredientes[0].cantidad,ingredientes[0].unidad)*costoUnitVivo(ingredientes[0])"),400);
+            assert.equal(await frame("getPesoBrutoPorUnidad(ingredientes[0])"),500);
+            assert.equal(await frame("document.querySelector('#tbodyIngredientes select').selectedOptions[0].textContent"),'Mediano');
+            await frame("document.querySelector('#tbodyIngredientes').scrollIntoView({block:'center'})");
+            const shot=await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(dir,'unidades-subreceta-'+width+'.png'),Buffer.from(shot.data,'base64'));
+            await frame("updateUnidad(0,'G');updateIng(0,'cantidad',500)");
+            assert.equal(await frame("getFactor(ingredientes[0].cantidad,ingredientes[0].unidad)*costoUnitVivo(ingredientes[0])"),200);
+        });
+        await frame("cargarReceta('bizcocho')");
+        await check(width+' eliminar producción vuelve a habilitar agregar y no revive al guardar',async()=>{
+            await frame("localStorage.setItem(_sk('ins_borrados'),JSON.stringify({prod_bizcocho:Date.now()}));sessionStorage.setItem('__fixture_insumos','[]');refrescarInsumoSubReceta()");
+            await until(p.sid,w+".document.querySelector('#cardAgregarInsumo button').disabled===false");
+            await frame('agregarSubRecetaComoInsumo(true)');
+            assert.equal(await frame('_subRecetaYaEsInsumo()'),false);
+            await frame('agregarSubRecetaComoInsumo()');
+            assert.equal(await frame('_subRecetaYaEsInsumo()'),true);
+            assert.notEqual(await frame('_buscarInsumoSubReceta().id'),'prod_bizcocho');
+        });
+        await close(p);
+    }
+    const p=await page(base,'/hub.html','owner',1440,true);
+    await send('Network.setExtraHTTPHeaders',{headers:{}},p.sid);
+    for(const route of ['/recetas/index.html','/recetas/insumos.html','/administrativo/staff-hub.html','/financiero/ventas.html','/consultoria/index.html']) {
+        await go(p,'location.href='+JSON.stringify(base+route),"document.readyState==='complete' && document.getElementById('etxCambiarSucursal')");
+        await check('cuenta del negocio: Cambiar sucursal visible en '+route,async()=>{
+            assert.ok(await evalPage(p.sid,"document.getElementById('etxCambiarSucursal').getClientRects().length>0"));
+        });
+    }
+    await click(p,'#etxCambiarSucursal');
+    await until(p.sid,"document.querySelectorAll('#etxModuleDialog [data-sucursal]').length===2");
+    await check('cancelar cambio de sucursal conserva el contexto',async()=>{
+        await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'},p.sid);
+        await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'},p.sid);
+        assert.equal(await evalPage(p.sid,"localStorage.getItem('etaax_sucursal_activa')"),'matriz');
+    });
+    await click(p,'#etxCambiarSucursal');await until(p.sid,"document.querySelector('#etxModuleDialog [data-sucursal=norte]')");
+    await check('cambiar sucursal conserva la ruta y actualiza los dos contextos',async()=>{
+        await go(p,"document.querySelector('#etxModuleDialog [data-sucursal=norte]').click()","document.readyState==='complete' && document.getElementById('etxCambiarSucursal')");
+        assert.equal(await evalPage(p.sid,"localStorage.getItem('etaax_sucursal_activa')"),'norte');
+        assert.equal(await evalPage(p.sid,"JSON.parse(localStorage.getItem('etaax_ctx')).sucId"),'norte');
+        assert.equal(await evalPage(p.sid,"location.pathname"),'/consultoria/index.html');
+    });
+    await click(p,'#etxCambiarSucursal');await until(p.sid,"document.querySelectorAll('#etxModuleDialog [data-sucursal]').length===2");
+    const shot=await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(dir,'sucursales-cuenta-negocio.png'),Buffer.from(shot.data,'base64'));
+    await evalPage(p.sid,"document.getElementById('etxModuleDialog').close()");
+    await check('la sesión de colaborador no obtiene el selector de la cuenta del negocio',async()=>{
+        await evalPage(p.sid,"window.__cambioAnterior=document.getElementById('etxCambiarSucursal').onclick;const c=JSON.parse(localStorage.getItem('etaax_ctx'));c.ctxType='staff';c.rol='mesero';localStorage.setItem('etaax_ctx',JSON.stringify(c));window._ctxBarInit()");
+        assert.equal(await evalPage(p.sid,"document.getElementById('etxCambiarSucursal')===null"),true);
+        await evalPage(p.sid,'window.__cambioAnterior()');
+        assert.equal(await evalPage(p.sid,"!!document.querySelector('#etxModuleDialog[open]')"),false);
+    });
+    await close(p);
 }
 
 async function click(p, selector) {
@@ -199,6 +309,7 @@ async function probarIdentidadCatalogos(base, dir) {
     const copia = (m, suc) => ({...m,id:m.id+'-'+suc,origenId:m.id,sucursales:[suc],sucursalId:suc});
     for (const width of [1440,390]) {
         const p = await page(base,'/hub.html','owner',width,true);
+        await send('Storage.clearDataForOrigin',{origin:base,storageTypes:'indexeddb'},p.sid);
         await send('Network.setExtraHTTPHeaders',{headers:{}},p.sid);
         const fixture = [maestro,copia(maestro,'matriz'),copia(maestro,'norte'),otro,copia(otro,'norte')];
         await evalPage(p.sid, `sessionStorage.setItem('__fixture_insumos',${JSON.stringify(JSON.stringify(fixture))});sessionStorage.setItem('__fixture_catalogo',${JSON.stringify(JSON.stringify([maestro,otro,tercero]))});localStorage.setItem('etaax_n1_insumos',${JSON.stringify(JSON.stringify(fixture))});`);

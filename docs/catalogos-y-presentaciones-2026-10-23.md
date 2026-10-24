@@ -2,6 +2,11 @@
 
 23 de octubre de 2026.
 
+Actualización: la aclaración posterior del usuario y la implementación de
+presentaciones se documentan en
+[Subrecetas con presentaciones y selector de sucursal](subrecetas-presentaciones-sucursales-2026-10-23.md).
+La propuesta de abajo se conserva como antecedente.
+
 ## Corrección implementada: importación a sucursales
 
 El selector del catálogo del negocio enumeraba registros fuera de la sucursal

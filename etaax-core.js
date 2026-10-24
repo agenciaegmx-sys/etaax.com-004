@@ -1899,7 +1899,63 @@
         return base;
     }
 
+    // Una subreceta tiene una tanda base y varias maneras de porcionarla.
+    // Los IDs pertenecen a la unidad seleccionada; el insumo sigue siendo uno.
+    function rendimientosSubReceta(cx, nombre) {
+        cx = cx || {};
+        var lista = Array.isArray(cx.rendimientosPorcion) && cx.rendimientosPorcion.length
+            ? cx.rendimientosPorcion : [Object.assign({ id:'principal', nombre:nombre || '' }, cx)];
+        return lista.map(function(r, i){
+            return { id:String(r.id || (i === 0 ? 'principal' : 'rend_' + i)),
+                nombre:String(r.nombre || (i === 0 ? nombre || '' : 'Presentación ' + (i+1))), inactiva:r.inactiva === true,
+                porcionesQty:n(r.porcionesQty) > 0 ? n(r.porcionesQty) : '',
+                porcionesUnidad:r.porcionesUnidad || 'pzas',
+                pesoPorcion:n(r.pesoPorcion) > 0 ? n(r.pesoPorcion) : '',
+                unidadPesoPorcion:r.unidadPesoPorcion || 'G' };
+        });
+    }
+    function calcularPorcionSubReceta(cx, r, costo) {
+        cx = cx || {}; r = r || {};
+        var u = String(cx.unidadRendimientoFinal || 'G').toUpperCase();
+        var base = cantidadBaseInventario(n(cx.rendimientoFinal), u);
+        var unidadBase = u === 'KG' ? 'G' : (u === 'LT' || u === 'L' || u === 'OZ') ? 'ML' : u;
+        if (u === 'PZA' && n(cx.pesoPieza) > 0) {
+            base *= cantidadBaseInventario(n(cx.pesoPieza), cx.unidadPesoPieza);
+            unidadBase = /^(ML|LT|L|OZ)$/i.test(cx.unidadPesoPieza) ? 'ML' : 'G';
+        }
+        var qty = n(r.porcionesQty), peso = n(r.pesoPorcion);
+        var pu = /^(ML|LT|L|OZ)$/i.test(r.unidadPesoPorcion || '') ? 'ML' : 'G';
+        if (!(base > 0) || !isFinite(base)) return { valido:false, cantidad:0, contenidoBase:0, costo:0, unidadBase:unidadBase };
+        if (!(qty > 0) && peso > 0 && pu === unidadBase) qty = base / cantidadBaseInventario(peso, r.unidadPesoPorcion);
+        if (!(qty > 0) || !isFinite(qty)) return { valido:false, cantidad:0, contenidoBase:0, costo:0, unidadBase:unidadBase };
+        return { valido:true, cantidad:qty, contenidoBase:base/qty,
+            costo:n(costo)/qty, unidadBase:unidadBase, rendimientoBase:base };
+    }
+    function porcionesInsumoSubReceta(ins) {
+        if (!ins || !ins.esSubReceta) return [];
+        var pres = ins.presentaciones || [];
+        var definidas = pres.filter(function(p){ return p.esRendimientoPorcion; });
+        if (definidas.length) return definidas;
+        // Compatibilidad: las conversiones antiguas guardaban una sola PZA.
+        var p = pres.find(function(p){ return /^(PZA|PORCION)$/i.test(p.umCosto || p.umContenido); });
+        if (!p) return [];
+        var tanda = pres.find(function(x){ return /^(G|KG|ML|LT)$/i.test(x.umRendimiento || x.umContenido); });
+        var base = tanda ? cantidadBaseInventario(n(tanda.rendimiento) || n(tanda.contNeto), tanda.umRendimiento || tanda.umContenido) : 0;
+        return [Object.assign({}, p, { rendimientoId:'principal', nombreRendimiento:ins.nombre,
+            contenidoPorcionBase:base > 0 && n(p.rendimiento) > 0 ? base/n(p.rendimiento) : 1,
+            unidadPorcionBase:tanda && /^(ML|LT)$/i.test(tanda.umRendimiento || tanda.umContenido) ? 'ML' : tanda ? 'G' : 'PZA' })];
+    }
+    function porcionSubRecetaParaUnidad(ins, unidad) {
+        var u = String(unidad || '').toUpperCase(), lista = porcionesInsumoSubReceta(ins);
+        if (u === 'PZA' || u === 'PORCION') return lista[0] || null;
+        if (u.indexOf('RENDIMIENTO:') !== 0) return null;
+        return lista.find(function(p){ return String(p.rendimientoId).toUpperCase() === u.slice(12); }) || null;
+    }
     window.EtaaxCore = {
+        rendimientosSubReceta: rendimientosSubReceta,
+        calcularPorcionSubReceta: calcularPorcionSubReceta,
+        porcionesInsumoSubReceta: porcionesInsumoSubReceta,
+        porcionSubRecetaParaUnidad: porcionSubRecetaParaUnidad,
         cantidadBaseInventario: cantidadBaseInventario,
         cantidadFilaInventario: cantidadFilaInventario,
         contenidoUtilPresentacion: contenidoUtilPresentacion,
