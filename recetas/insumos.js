@@ -1681,65 +1681,72 @@
        };
        var cuerpo = _CSS_TABLA_PDF + _notaAlcance(g1.length + g2.length);
 
+       // Identidad y dos renglones juntos por producto: copa y botella. Las
+       // columnas conservan las fórmulas de pantalla, con espacio para leerlas.
+       function identidad(ins) {
+           var variedad = [ins.maduracion, ins.variedad].filter(Boolean).join(' · ');
+           return '<strong>' + etx(ins.nombre || '') + '</strong>' +
+               (variedad ? '<div class="costeo-variedad">' + etx(variedad) + '</div>' : '');
+       }
+       function factor(v, texto) { return _u(v) + '<small>' + texto + '</small>'; }
+       cuerpo += '<style>.costeo-par{break-inside:avoid;page-break-inside:avoid}' +
+           '.costeo-par td{vertical-align:top;line-height:1.45}' +
+           '.costeo-par small,.costeo-variedad{display:block;font-size:10px;color:#444;font-weight:400;white-space:normal}' +
+           'table.rt .costeo-par td{padding:7px 8px;font-size:11px}' +
+           'table.rt .costeo-par tr:nth-child(2) td{background:#f7f7f7}' +
+           'table.rt .costeo-par:last-child td{border-bottom:1px solid #aaa}' +
+           '.costeo-modalidad{font-weight:700;color:#333}</style>';
        if (g1.length) {
            cuerpo += '<div class="rsec">Destilados · Licores · Vinos · ' + g1.length + '</div>' +
-               '<table class="rt tnum" style="font-size:10.5px"><thead><tr>' +
-                   '<th class="w" style="width:20%">Bebida</th>' +
-                   '<th>Costo botella</th><th>Costo/oz</th><th>Costo/copa</th><th>Sug. copa</th><th>Precio ref.</th><th>Carta copa</th><th>Utilidad copa</th>' +
-                   '<th>Sug. bot.</th><th>Bot. + servicio</th><th>Carta bot.</th><th>Utilidad bot.</th>' +
-               '</tr></thead><tbody>' +
+               '<table class="rt tnum"><thead><tr>' +
+                   '<th class="w" style="width:21%">Bebida / variedad</th><th>Modalidad</th>' +
+                   '<th>Costo</th><th>Costo/oz</th><th>Precio sugerido</th><th>Refrescos a costo</th><th>Precio carta</th><th>Utilidad</th>' +
+               '</tr></thead>' +
                _agruparPDF(g1, _grupoIns).map(function(G){
-               return _filaGrupoPDF(G.nombre, G.items.length, '', 12) + G.items.map(function(ins){
-                   var D = _costeoCopaDatos(ins, todos), p = D.p;
-                   /* Mismas columnas y mismos números que la pantalla: si el
-                      papel dijera otra cosa, no habría forma de saber cuál de
-                      las dos miente. */
-                   var contML = toML(p.contNeto, p.umContenido||'ML');
-                   var cu = (parseFloat(p.costoUnitario) > 0)
-                       ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '';
-                   var costoBotTxt = D.costoBot > 0
-                       ? _u(D.costoBot) + '<span style="color:#5a5a5a;font-size:9px"><br>' +
-                         (contML>0 ? contML + ' ML' : '') + (cu ? ' · ' + cu : '') + '</span>'
-                       : '—';
-                   var sugCopaVal = D.sugTrago > 0 ? D.sugTrago : D.sugCopa;
-                   var sufCopa = ' ×' + D.fCopa + (D.mezCopaCost > 0 ? ' +' + D.mezCopaPz + ' refr.' : '');
-                   return '<tr>' +
-                       '<td class="w ind">' + etx(ins.nombre) + '</td>' +
-                       '<td>' + costoBotTxt + '</td><td>' + _u(D.costoOz) + '</td><td>' + _u(D.costoCopa) + '</td>' +
-                       '<td>' + _u(sugCopaVal) + '<span style="color:#5a5a5a;font-size:9.5px">' + sufCopa + '</span></td>' +
-                       '<td>' + (D.mezCopaCost > 0
-                           ? _u(D.mezCopaCost) + '<span style="color:#5a5a5a;font-size:9.5px"> ×' + D.mezCopaPz + '</span>'
-                           : '—') + '</td>' +
-                       '<td style="font-weight:700">' + _u(D.cartaCopa) + '</td><td>' + _ut(D.cartaCopa, D.costoTrago) + '</td>' +
-                       '<td>' + _u(D.sugBot) + '<span style="color:#5a5a5a;font-size:9.5px"> ×' + D.fBot + '</span></td>' +
-                       '<td>' + (D.sugBotServ > 0
-                           ? _u(D.sugBotServ) + '<span style="color:#5a5a5a;font-size:9.5px"> +' + D.mezBotPz + ' refr.</span>'
-                           : '—') + '</td>' +
-                       /* Contra el costo de DESPACHAR la botella, refrescos
-                          incluidos: si el papel dijera otro margen que la
-                          pantalla, no habría forma de saber cuál miente. */
-                       '<td style="font-weight:700">' + _u(D.cartaBot) + '</td><td>' + _ut(D.cartaBot, D.costoBotServ) + '</td>' +
-                   '</tr>';
-               }).join(''); }).join('') + '</tbody></table>';
+                   return '<tbody>' + _filaGrupoPDF(G.nombre, G.items.length, '', 8) + '</tbody>' + G.items.map(function(ins){
+                       var D = _costeoCopaDatos(ins, todos), p = D.p;
+                       var contML = toML(p.contNeto, p.umContenido||'ML');
+                       var cu = parseFloat(p.costoUnitario) > 0 ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + etx(p.umCosto || 'LT') : '';
+                       var copaML = toML(p.tamanoCopa, p.umTamanoCopa || 'ML');
+                       var sugCopa = D.sugTrago > 0 ? D.sugTrago : D.sugCopa;
+                       var sugBot = D.sugBotServ > 0 ? D.sugBotServ : D.sugBot;
+                       return '<tbody class="costeo-par" data-insumo="' + etx(ins.id) + '"><tr>' +
+                           '<td rowspan="2" class="w ind">' + identidad(ins) + '</td>' +
+                           '<td class="costeo-modalidad">Por copa' + (copaML > 0 ? '<small>' + copaML + ' ML</small>' : '') + '</td>' +
+                           '<td>' + _u(D.costoCopa) + '</td><td rowspan="2">' + _u(D.costoOz) + '</td>' +
+                           '<td>' + factor(sugCopa, '×' + D.fCopa + (D.mezCopaCost > 0 ? ' + refrescos a costo' : '')) + '</td>' +
+                           '<td>' + (D.mezCopaCost > 0 ? factor(D.mezCopaCost, D.mezCopaPz + ' piezas') : '—') + '</td>' +
+                           '<td><b>' + _u(D.cartaCopa) + '</b></td><td>' + _ut(D.cartaCopa, D.costoTrago) + '</td>' +
+                       '</tr><tr>' +
+                           '<td class="costeo-modalidad">Por botella' + (contML > 0 ? '<small>' + contML + ' ML</small>' : '') + '</td>' +
+                           '<td>' + _u(D.costoBot) + (cu ? '<small>' + cu + '</small>' : '') + '</td>' +
+                           '<td>' + factor(sugBot, '×' + D.fBot + (D.mezBotCost > 0 ? ' + servicio' : '')) +
+                               (D.mezBotCost > 0 ? '<small>Sin servicio: ' + _u(D.sugBot) + '</small>' : '') + '</td>' +
+                           '<td>' + (D.mezBotCost > 0 ? factor(D.mezBotCost, D.mezBotPz + ' piezas') : '—') + '</td>' +
+                           '<td><b>' + _u(D.cartaBot) + '</b></td><td>' + _ut(D.cartaBot, D.costoBotServ) + '</td>' +
+                       '</tr></tbody>';
+                   }).join('');
+               }).join('') + '</table>';
        }
        if (g2.length) {
            cuerpo += '<div class="rsec">Cervezas · Refrescos y Sodas · ' + g2.length + '</div>' +
-               '<table class="rt tnum" style="font-size:10.5px"><thead><tr>' +
-                   '<th class="w" style="width:26%">Bebida</th>' +
-                   '<th>Costo unit.</th><th>Costo/oz</th><th>Costo/pza</th><th>Sug. pza</th><th>Carta</th><th>Utilidad</th>' +
-               '</tr></thead><tbody>' +
+               '<table class="rt tnum"><thead><tr>' +
+                   '<th class="w" style="width:26%">Bebida / variedad</th>' +
+                   '<th>Costo/pza</th><th>Costo/oz</th><th>Precio sugerido</th><th>Precio carta</th><th>Utilidad</th>' +
+               '</tr></thead>' +
                _agruparPDF(g2, _grupoIns).map(function(G){
-               return _filaGrupoPDF(G.nombre, G.items.length, '', 7) + G.items.map(function(ins){
-                   var D = _costeoPiezaDatos(ins), p = D.p;
-                   var cu = (parseFloat(p.costoUnitario) > 0)
-                       ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
-                   return '<tr>' +
-                       '<td class="w ind">' + etx(ins.nombre) + '</td>' +
-                       '<td>' + cu + '</td><td>' + _u(D.costoOz) + '</td><td>' + _u(D.costoPieza) + '</td>' +
-                       '<td>' + _u(D.sugPza) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fP + '</span></td>' +
-                       '<td style="font-weight:700">' + _u(D.carta) + '</td><td>' + _ut(D.carta, D.costoPieza) + '</td>' +
-                   '</tr>';
-               }).join(''); }).join('') + '</tbody></table>';
+                   return '<tbody>' + _filaGrupoPDF(G.nombre, G.items.length, '', 6) + '</tbody>' + G.items.map(function(ins){
+                       var D = _costeoPiezaDatos(ins), p = D.p;
+                       var cu = parseFloat(p.costoUnitario) > 0 ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + etx(p.umCosto || 'LT') : '—';
+                       return '<tbody class="costeo-par" data-insumo="' + etx(ins.id) + '"><tr>' +
+                           '<td rowspan="2" class="w ind">' + identidad(ins) + '</td>' +
+                           '<td>' + _u(D.costoPieza) + '</td><td>' + _u(D.costoOz) + '</td>' +
+                           '<td>' + factor(D.sugPza, '×' + D.fP) + '</td>' +
+                           '<td><b>' + _u(D.carta) + '</b></td><td>' + _ut(D.carta, D.costoPieza) + '</td>' +
+                       '</tr><tr><td colspan="5" class="w" style="text-align:left">' +
+                           '<b>Compra:</b> ' + etx(_presTxtPDF(ins, p)) + ' · <b>Costo de referencia:</b> ' + cu + '</td></tr></tbody>';
+                   }).join('');
+               }).join('') + '</table>';
        }
        _abrirHorizontal(etaaxReporteDoc({
            titulo: 'Costeo de bebidas',

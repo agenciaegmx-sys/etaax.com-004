@@ -2178,6 +2178,74 @@ function calcMLReales(fila) {
     return calcNetLiters(fila) * 1000;
 }
 
+function _liquidoAbiertoHTML(fila) {
+    var e = EtaaxCore.equivalenciasLiquidoInventario(calcMLReales(fila), fila.copaML);
+    var num = function(v){ return (Math.round(v * 100) / 100).toLocaleString('es-MX', {maximumFractionDigits:2}); };
+    var equivalencias = (e.copas !== null ? num(e.copas) + ' copas de ' + num(fila.copaML) + ' ml · ' : '') + num(e.onzas) + ' oz';
+    return '<span style="display:block">' + fmtLt(e.ml / 1000) + '</span>' +
+        '<small style="display:block;font-size:11px;font-weight:500;line-height:1.5;white-space:normal">' + equivalencias + '</small>';
+}
+
+// Misma presentación base que usa la captura. Resolver con sucursal evita leer
+// los límites del maestro cuando esta sucursal tiene su propia configuración.
+function _parametrosStockFila(fila, sucursal) {
+    fila = fila || {};
+    var ins = typeof window._insumoResolver === 'function' ? window._insumoResolver(fila.insumoId, sucursal) : null;
+    var p = ins && ins.presentaciones && ins.presentaciones[0];
+    function leer(k) {
+        if (p && p[k] != null) return p[k]; // incluye cero y vacío explícitos
+        if (ins && ins[k] != null) return ins[k];
+        return fila[k];
+    }
+    return { stockMin:leer('stockMin'), stockMax:leer('stockMax') };
+}
+function _stockDeFila(fila, cantidad, sucursal) {
+    fila = fila || {};
+    var limites = _parametrosStockFila(fila, sucursal);
+    var estado = EtaaxCore.estadoStockInventario(EtaaxCore.unidadesCompraInventario(cantidad, fila), limites.stockMin, limites.stockMax);
+    // Una captura vacía todavía no es un conteo en cero. Los registros viejos
+    // con ceros explícitos y el botón "Registrar en cero" sí cuentan como cero.
+    var capturado = function(v){ return v != null && String(v).trim() !== '' && isFinite(Number(v)); };
+    var contado = fila.registrado === true || (fila.tipo === 'peso' ? capturado(fila.existenciaPeso) :
+        capturado(fila.cerradasBodega) || capturado(fila.cerradasBarra) ||
+        (fila.pesos || []).some(capturado) || (fila.metodoCaptura === 'nivel' && capturado(fila.nivelPct)));
+    if (!contado && estado.estado !== 'sin-parametros' && estado.estado !== 'revisar') {
+        estado.estado = 'sin-conteo'; estado.actual = null;
+    }
+    estado.unidad = fila.tipo === 'copa' ? 'bot' : (fila.tipo === 'pza' || String(fila.baseUnit).toUpperCase() === 'PZA' ? 'pza' : 'unid. de compra');
+    return estado;
+}
+function _stockHTML(stock, papel) {
+    if (!stock) return '';
+    var textos = { ideal:'Stock ideal', intermedio:'Stock intermedio', bajo:'Stock bajo', revisar:'Revisar parámetros de stock', 'sin-parametros':'Stock sin parámetros', 'sin-equivalencia':'Stock sin equivalencia de compra', 'sin-conteo':'Stock pendiente de conteo' };
+    var colores = papel ? { ideal:'#1a7a46', intermedio:'#715600', bajo:'#b83227' } : { ideal:'var(--green)', intermedio:'var(--accent)', bajo:'var(--red)' };
+    var num = function(v){ return v == null || !isFinite(v) ? '—' : (Math.round(v*100)/100).toLocaleString('es-MX'); };
+    return '<div data-stock="' + stock.estado + '" title="Disponible: existencia física del insumo en su unidad de compra. El producto incorporado en subrecetas se controla en la existencia de esas preparaciones." style="font-size:10px;line-height:1.5;margin-top:4px;font-weight:400;color:' + (papel ? '#56514a' : 'var(--text-dim)') + '">' +
+        '<b style="color:' + (colores[stock.estado] || (papel ? '#56514a' : 'var(--text-muted)')) + '">' + textos[stock.estado] + '</b>' +
+        (stock.actual !== null ? ' · Disponible ' + num(stock.actual) : '') +
+        ' · Mín. ' + num(stock.minimo) + ' · Ideal/máx. ' + num(stock.maximo) + ' ' + etx(stock.unidad) + '</div>';
+}
+function _stockFilaHTML(fila, cantidad, papel, sucursal) {
+    if (!fila) return '';
+    if (fila.esCompuesto) {
+        var comp = getCompuestos().find(function(c){ return c.id === fila.compId; });
+        return ((comp && comp.miembros) || []).map(_filaDeMiembro).filter(Boolean).map(function(m){
+            return '<div style="margin-top:4px;font-size:10px">' + etx(insumoTitulo(m)) + _stockFilaHTML(m, calcExistencia(m), papel, sucursal) + '</div>';
+        }).join('');
+    }
+    return _stockHTML(_stockDeFila(fila, cantidad, sucursal || (invActual && invActual.sucursalId)), papel);
+}
+function _stockReporteHTML(row, papel) {
+    if (row.stockMiembros) return row.stockMiembros.map(function(m){
+        return '<div style="font-size:10px;margin-top:4px">' + etx(m.nombre) + _stockReporteHTML(m, papel) + '</div>';
+    }).join('');
+    return _stockHTML(row.stock, papel);
+}
+function _costoCompraStock(fila) {
+    var unidades = EtaaxCore.unidadesCompraInventario(1, fila);
+    return unidades > 0 ? costoCopa(fila) / unidades : 0;
+}
+
 function calcExistenciaBot(fila) {
     if (fila.tipo === 'peso') return parseFloat(fila.existenciaPeso) || 0; // alimentos: conteo en unidad base
     const cerradas = (fila.cerradasBodega || 0) + (fila.cerradasBarra || 0);
@@ -2881,8 +2949,9 @@ function _fusionarRows(rows) {
         // en una unidad que no era la de ninguna de sus columnas vecinas.
         var copasBot = (r.contNeto > 0 && r.copaML > 0) ? r.contNeto / r.copaML : 0;
         var aUnid = function(qty){ return (r.tipo === 'copa' && copasBot > 0) ? qty / copasBot : qty; };
-        if (!acc[c.id]) { acc[c.id] = { _comp:c, barra:0, bodega:0, total:0, capBarra:0, capBodega:0, capital:0, fecha:'', _u:'' }; out.push(acc[c.id]); }
+        if (!acc[c.id]) { acc[c.id] = { _comp:c, barra:0, bodega:0, total:0, capBarra:0, capBodega:0, capital:0, fecha:'', _u:'', stockMiembros:[] }; out.push(acc[c.id]); }
         var fc = acc[c.id];
+        fc.stockMiembros.push(r);
         if (!fc._u) fc._u = r.tipo === 'peso' ? (r.baseUnit || 'u') : (r.tipo === 'pza' ? 'pza' : 'bot');
         fc.barra += aUnid(r.barra); fc.bodega += aUnid(r.bodega); fc.total += aUnid(r.total);
         fc.capBarra += r.capBarra; fc.capBodega += r.capBodega; fc.capital += r.capital;
@@ -2893,7 +2962,7 @@ function _fusionarRows(rows) {
         var c = r._comp;
         // Mismas columnas que cualquier otra fila: existencias en unidades de
         // conteo y costo promedio por unidad (capital ÷ total).
-        return { insumoId:'_comp_'+c.id, nombre:c.nombre, familia:'🧩 Compuesto', tipo:'_comp', unidadComp:r._u||'bot',
+        return { insumoId:'_comp_'+c.id, nombre:c.nombre, familia:'🧩 Compuesto', tipo:'_comp', unidadComp:r._u||'bot', stockMiembros:r.stockMiembros,
             barra:r.barra, bodega:r.bodega, total:r.total,
             costoUnit: r.total>0 ? r.capital/r.total : 0, capital:r.capital, capBarra:r.capBarra, capBodega:r.capBodega, fecha:r.fecha };
     });
@@ -2983,7 +3052,6 @@ function _datosReporteExistencias(area) {
         var barra  = _existenciaArea(f, 'barra',  ins);
         var bodega = _existenciaArea(f, 'bodega', ins);
         var total  = calcExistencia(f); // total real (incluye la botella abierta pesada)
-        if (barra <= 0 && bodega <= 0 && total <= 0) return;
         // Costo prov. = PRECIO DE COMPRA por unidad de conteo (botella/pza/base), no el costo por litro.
         var copasBot = (f.tipo === 'copa' && f.contNeto > 0 && f.copaML > 0) ? f.contNeto / f.copaML : 0;
         var costoCompra = f.tipo === 'copa' ? cc * copasBot : cc; // costo de 1 botella/pza/unidad base
@@ -2992,12 +3060,13 @@ function _datosReporteExistencias(area) {
             subcat: f.subcategoria || f.categoria || '',
             tipo: f.tipo, copaML: f.copaML, contNeto: f.contNeto, baseUnit: f.baseUnit,
             barra: barra, bodega: bodega, total: total,
+            stock:_stockDeFila(f, total, o.sucursalId),
             costoUnit: costoCompra,
             capBarra: barra * cc, capBodega: bodega * cc, capital: total * cc, fecha: o.fecha
         });
     });
     // Filtro por área: muestra solo los insumos con existencia en esa área
-    if (area && area !== 'todas') rows = rows.filter(function(r){ return (area === 'barra' ? r.barra : r.bodega) > 0; });
+    if (area && area !== 'todas') rows = rows.filter(function(r){ return (area === 'barra' ? r.barra : r.bodega) > 0 || r.total === 0; });
     return rows;
 }
 function _fmtCant(qty, r){
@@ -3097,7 +3166,7 @@ function _renderReporteExistencias(){
     rows.forEach(function(r){ var g = r.familia || 'Sin grupo'; (_gruposRep[g] = _gruposRep[g] || []).push(r); });
     var _filaRep = function(r){
         var cont = _fmtContenido(r);
-        return '<tr><td style="font-weight:600;padding-left:16px">'+etx(r.nombre)+(cont?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont+'</div>':'')+'</td>'+
+        return '<tr><td style="font-weight:600;padding-left:16px">'+etx(r.nombre)+_stockReporteHTML(r, false)+(cont?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont+'</div>':'')+'</td>'+
             '<td style="color:var(--text-dim)">'+etx(r.familia)+'</td>'+
             '<td style="text-align:right">'+_fmtCant(r.barra, r)+'</td>'+
             '<td style="text-align:right">'+_fmtCant(r.bodega, r)+'</td>'+
@@ -3144,7 +3213,6 @@ function _rowsDeInventario(inv) {
         var barra = _existenciaArea(f, 'barra', ins);
         var bodega = _existenciaArea(f, 'bodega', ins);
         var total = calcExistencia(f);
-        if (barra <= 0 && bodega <= 0 && total <= 0) return;
         var copasBot = (f.tipo === 'copa' && f.contNeto > 0 && f.copaML > 0) ? f.contNeto/f.copaML : 0;
         var costoCompra = f.tipo === 'copa' ? cc*copasBot : cc;
         /* insumoId SÍ viaja: el encabezado del impreso cuenta insumos únicos
@@ -3166,6 +3234,7 @@ function _rowsDeInventario(inv) {
                         : (f.familia||f.categoria||'Otros')),
             subcat:f.subcategoria||f.categoria||'', tipo:f.tipo,
             copaML:f.copaML, contNeto:f.contNeto, baseUnit:f.baseUnit, barra:barra, bodega:bodega, total:total,
+            stock:_stockDeFila(f, total, suc),
             costoUnit:costoCompra, capital:total*cc, capBarra:barra*cc, capBodega:bodega*cc });
     });
     return rows;
@@ -3249,7 +3318,7 @@ function _renderPreviewTabla() {
             'color:var(--green)">' + etx(g) + ' <span style="font-weight:400;color:var(--text-dim)">· ' +
             lista.length + ' insumo' + (lista.length !== 1 ? 's' : '') + ' · ' + _repMoney(sub) +
             '</span></td></tr>' +
-            lista.map(function(r){ var cont2=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:16px">'+etx(r.nombre)+(cont2?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont2+'</div>':'')+'</td><td style="color:var(--text-dim)">'+etx(r.subcat||'—')+'</td><td style="text-align:right">'+_fmtCant(r.barra,r)+'</td><td style="text-align:right">'+_fmtCant(r.bodega,r)+'</td><td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total,r)+'</td><td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td></tr>'; }).join('');
+            lista.map(function(r){ var cont2=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:16px">'+etx(r.nombre)+_stockReporteHTML(r, false)+(cont2?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont2+'</div>':'')+'</td><td style="color:var(--text-dim)">'+etx(r.subcat||'—')+'</td><td style="text-align:right">'+_fmtCant(r.barra,r)+'</td><td style="text-align:right">'+_fmtCant(r.bodega,r)+'</td><td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total,r)+'</td><td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td></tr>'; }).join('');
       }).join('');
     cont.innerHTML = '<div class="tabla-wrap" style="padding:0 8px"><table style="font-size:12px"><thead><tr><th style="text-align:left">Insumo</th><th style="text-align:left">Subcategoría</th><th style="text-align:right">Exist. Barra</th><th style="text-align:right">Exist. Bodega</th><th style="text-align:right">Total exist.</th><th style="text-align:right">Costo prov.</th><th style="text-align:right">Capital</th></tr></thead><tbody>'+
         _cuerpoP + '</tbody></table></div>';
@@ -3782,7 +3851,7 @@ function imprimirReporteExistencias(opts){
         var head = '<tr class="grp-h"><td colspan="'+_nCols+'">'+etx(g)+
             ' <span style="font-weight:400;color:#888">· '+lista.length+' insumo'+(lista.length!==1?'s':'')+
             (op?'':' · '+_repMoney(sub))+'</span></td></tr>';
-        return head + lista.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:18px">'+etx(r.nombre)+(cont?'<div class="grp" style="color:#5a8fc7">📦 '+cont+'</div>':'')+'</td><td style="color:#56514a">'+etx(r.subcat || '—')+'</td>'+
+        return head + lista.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:18px">'+etx(r.nombre)+_stockReporteHTML(r, true)+(cont?'<div class="grp" style="color:#5a8fc7">📦 '+cont+'</div>':'')+'</td><td style="color:#56514a">'+etx(r.subcat || '—')+'</td>'+
             '<td class="r">'+_fmtCant(r.barra,r)+'</td><td class="r">'+_fmtCant(r.bodega,r)+'</td>'+
             '<td class="r b" style="color:#1a1916">'+_fmtCant(r.total,r)+'</td><td class="r" style="color:#888">'+_repMoney(r.costoUnit)+'</td>'+
             (op?'':'<td class="r b">'+_repMoney(r.capital)+'</td>')+
@@ -5147,6 +5216,7 @@ function cargarProductosCaptura() {
                 const pcEx = parseFloat(pEx.pesoCristal);
                 if (!isNaN(pcEx)) existe.pesoCristal = pcEx; // puede bajar a 0 a propósito
                 existe.rendimientoBatch = parseFloat(pEx.rendimiento) || 0; // sub-recetas: ml/g por batch
+                Object.assign(existe, _parametrosStockFila(existe, invActual && invActual.sucursalId));
                 existe.nombre = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
                 if (ins.familia)  existe.familia  = ins.familia;
                 if (ins.categoria) existe.categoria = ins.categoria;
@@ -5190,7 +5260,8 @@ function cargarProductosCaptura() {
             costoPieza:     parseFloat(p?.costoPieza) || 0,   // costo de compra por pieza (refrescos/latas por rejilla/caja)
             precioCarta:    parseFloat(p?.precioCarta)   || 0,
             precioCartaBot: parseFloat(p?.precioCartaBot)|| 0,
-            stockMin:       parseFloat(ins.stockMin)     || 0,
+            stockMin:       p && p.stockMin != null ? p.stockMin : ins.stockMin,
+            stockMax:       p && p.stockMax != null ? p.stockMax : ins.stockMax,
             existenciaAnterior: getExistenciaAnterior(_cid),
             // Paso 1: existencias físicas
             // Vacías, no 0: un cero escrito significa "conté y no hay"; uno puesto por el
@@ -5485,7 +5556,7 @@ function refreshFilaDisplay(idx) {
     const elML   = document.getElementById('ml-'+idx);
     const elEF   = document.getElementById('ef-'+idx);
     if (elML) {
-        elML.textContent = fmtLt(lts);
+        elML.innerHTML = _liquidoAbiertoHTML(fila);
         elML.style.color = lts > 0 ? 'var(--green)' : 'var(--text-dim)';
     }
     if (elEF) elEF.textContent = fmtBot(exist) + ' ' + efUnit;
@@ -5725,7 +5796,7 @@ function buildInputsExist(fila, idx) {
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
                     <span id="nivel-pct-${idx}" style="font-size:28px;font-weight:700;color:var(--accent)">${pct}%</span>
                     <span id="ml-${idx}" style="font-size:13px;color:${calcNetLiters(fila)>0?'var(--green)':'var(--text-dim)'}">
-                        ${fmtLt(calcNetLiters(fila))}</span>
+                        ${_liquidoAbiertoHTML(fila)}</span>
                 </div>
                 <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Arrastra para ajustar el nivel de la botella abierta</div>
             </div>
@@ -5767,7 +5838,7 @@ function buildInputsExist(fila, idx) {
         <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:12px;color:var(--text-dim)">Neto líquido</span>
             <span id="ml-${idx}" style="font-size:15px;font-weight:700;color:${lts>0?'var(--green)':'var(--text-dim)'}">
-                ${fmtLt(lts)}</span>
+                ${_liquidoAbiertoHTML(fila)}</span>
         </div>
     </div>`;
 }
@@ -6033,7 +6104,7 @@ function renderStep1Lista(filas) {
                         <div style="display:flex;justify-content:space-between;margin-top:2px">
                             <span id="nivel-pct-${idx}" style="font-size:14px;font-weight:700;color:var(--accent)">${pct}%</span>
                             <span id="ml-${idx}" style="font-size:11px;color:${lts>0?'var(--green)':'var(--text-dim)'}">
-                                ${fmtLt(lts)}</span>
+                                ${_liquidoAbiertoHTML(fila)}</span>
                         </div>
                     </div>
                 </div>
@@ -6094,8 +6165,8 @@ function renderStep1Lista(filas) {
             </td>
             ${inputCell}
             <td class="inv-td-result" ${metodo !== 'peso' ? 'style="display:none"' : ''}>
-                <span id="ml-${idx}" style="color:${lts>0?'var(--green)':'var(--text-dim)'}">
-                    ${metodo === 'peso' ? fmtLt(lts) : ''}</span></td>
+                <span ${metodo === 'peso' ? `id="ml-${idx}"` : ''} style="color:${lts>0?'var(--green)':'var(--text-dim)'}">
+                    ${metodo === 'peso' ? _liquidoAbiertoHTML(fila) : ''}</span></td>
             <td class="inv-td-ef" id="ef-${idx}">${fmtBot(existBot)} ${efUnit}</td>
             <td class="inv-td-c" style="width:104px">
                 ${(function(){ var s = _regBtnState(fila);
@@ -6186,7 +6257,7 @@ function renderStep1Galeria(filas) {
                 const eu = fila.tipo==='peso'?(fila.baseUnit||'g').toLowerCase():(fila.tipo==='pza'?'pza':'bot');
                 return `
                 <span id="ml-${idx}" style="font-size:13px;color:${lt>0?'var(--green)':'var(--text-dim)'}">
-                    ${fmtLt(lt)}</span>
+                    ${_liquidoAbiertoHTML(fila)}</span>
                 <span id="ef-${idx}" style="font-weight:700;font-size:15px;color:var(--accent)">
                     ${fmtBot(eb)} ${eu}</span>`;
             })()}</div>
@@ -8414,14 +8485,10 @@ function _resumenEjecutivo() {
     filasCaptura.forEach(function(f){
         if (!f || !f.insumoId) return;
         var cc = costoCopa(f);
-        var copasBot = (f.tipo==='copa' && f.contNeto>0 && f.copaML>0) ? f.contNeto/f.copaML : 0;
-        var costoCompra = f.tipo==='copa' ? cc*copasBot : cc; // costo por botella/pieza/unidad de compra
-        var _ins = (typeof window._insumoResolver==='function') ? window._insumoResolver(f.insumoId) : null;
-        var _p   = _ins && _ins.presentaciones && _ins.presentaciones[0];
-        var smin = parseFloat((_p && _p.stockMin) || (_ins && _ins.stockMin) || f.stockMin) || 0;
-        var smax = parseFloat((_p && _p.stockMax) || (_ins && _ins.stockMax) || f.stockMax) || 0;
-        capStockMin += smin * costoCompra;
-        capStockMax += smax * costoCompra;
+        var costoCompra = _costoCompraStock(f);
+        var limites = _parametrosStockFila(f, invActual && invActual.sucursalId);
+        capStockMin += (parseFloat(limites.stockMin) || 0) * costoCompra;
+        capStockMax += (parseFloat(limites.stockMax) || 0) * costoCompra;
         capActual   += calcExistencia(f) * cc;
     });
     // Vendidos por categoría (a precio carta)
@@ -9402,6 +9469,7 @@ function _step5TablasHTML() {
         const html = `<tr>
                 <td style="min-width:140px">
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
+                    ${_stockFilaHTML(fila, calcExistencia(fila), false)}
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
                     ${(function(){
                         /* ══ UN RENGLÓN SIN INSUMO DETRÁS ══════════════════════
@@ -9473,6 +9541,7 @@ function _step5TablasHTML() {
         const html = `<tr>
                 <td>
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
+                    ${_stockFilaHTML(fila, calcExistencia(fila), false)}
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
                     ${_contP?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contP}</div>`:''}
                     <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}${_btnOcultoImpreso(fila.insumoId)}
@@ -9598,7 +9667,7 @@ function _step5TablasHTML() {
                Las notas ya se guardaban por insumoId —cada miembro tiene el
                suyo—, así que no hacía falta inventar nada: solo faltaba el
                botón en el renglón. */
-            const mNom = `<td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}${mCont?`<div style="font-size:9.5px;color:#7ab8f5;margin-top:1px">📦 ${mCont}</div>`:''}${_btnNotaInsumo(m.insumoId)}</td>`;
+            const mNom = `<td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${_stockFilaHTML(m, calcExistencia(m), false)}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}${mCont?`<div style="font-size:9.5px;color:#7ab8f5;margin-top:1px">📦 ${mCont}</div>`:''}${_btnNotaInsumo(m.insumoId)}</td>`;
             // Miembros de pieza: mismas columnas que la tabla de piezas (con
             // teórico y físico), sin "Botella" ni "Copa", que ahí no existen.
             if (esPzaComp0) {
@@ -9759,10 +9828,11 @@ function _step5TablasHTML() {
         const gid = 's5g' + idx;
         const abierto = !!_s5Abiertos[GPROD];
         const body = _repL.map(function(r){
+            var filaPB = filasCaptura.find(f => f.insumoId === r.insumoId);
             var difML = r.fisML - r.teoML;
             var difTag = Math.abs(difML) < 1 ? '' : ` · dif ${difML>=0?'+':''}${_fmtEquivalenteBatch(difML, r.unidadBase)} repartida`;
             return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
-                <b>${etx(r.nombre)}</b> — ${_fmtEquivalenteBatch(r.fisML, r.unidadBase)} de ${r.unidadBase === 'ML' ? 'mix' : 'preparación'} contados${difTag}
+                <b>${etx(r.nombre)}</b>${_stockFilaHTML(filaPB, filaPB ? calcExistencia(filaPB) : 0, false)} — ${_fmtEquivalenteBatch(r.fisML, r.unidadBase)} de ${r.unidadBase === 'ML' ? 'mix' : 'preparación'} contados${difTag}
                 <div style="color:var(--text-dim);margin-top:2px">Equivalentes por insumo: ${r.desglose.map(function(d){ return etx(d.nombre) + ' ' + _fmtEquivalenteBatch(d.ml, d.unidadBase) + ' (' + _nc(d.porBatch) + ' por cada ' + _fmtEquivalenteBatch(r.rendimientoBase, r.unidadBase) + ' de receta)'; }).join(' · ')}</div>
             </div>`;
         }).join('');
@@ -9853,6 +9923,7 @@ function _step5DesgloseCard(fila, refMap) {
     if (ventaBot>0)  ventasParts.push(_n1(ventaBot)+' bot');
     return '<div class="inv-item-card" style="padding:14px">'+
         '<div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:2px">'+(esComp?'🧩 ':'')+etx(esComp?fila.nombre:insumoTitulo(fila))+'</div>'+
+        _stockFilaHTML(fila, calcExistencia(fila), false)+
         '<div style="font-size:10px;color:var(--text-dim);margin-bottom:10px">'+etx(esComp?'Compuesto':insumoMeta(fila))+'</div>'+
         fila2('Exist. anterior', eaDisp+' '+uEx+(pesosAnt.length?' <span style="font-size:10px;color:var(--text-dim)">('+pesosAnt.join(', ')+')</span>':''))+
         fila2('Entradas', entTotal>0?'+'+_n1(entTotal)+' '+uEnt:'—', entTotal>0?'var(--green)':'var(--text-dim)')+
@@ -10065,11 +10136,10 @@ function verReporteDirectivo(gerencial, modo) {
     let capStockMin=0, capStockMax=0;
     filasCaptura.forEach(f => {
         if(!f||!f.insumoId) return;
-        const costoCompra=_costoCompraF(f);
-        const _ins=(typeof window._insumoResolver==='function')?window._insumoResolver(f.insumoId):null;
-        const _p=_ins&&_ins.presentaciones&&_ins.presentaciones[0];
-        capStockMin += (parseFloat((_p&&_p.stockMin)||(_ins&&_ins.stockMin)||f.stockMin)||0)*costoCompra;
-        capStockMax += (parseFloat((_p&&_p.stockMax)||(_ins&&_ins.stockMax)||f.stockMax)||0)*costoCompra;
+        const costoCompra=_costoCompraStock(f);
+        const limites=_parametrosStockFila(f, invActual && invActual.sucursalId);
+        capStockMin += (parseFloat(limites.stockMin)||0)*costoCompra;
+        capStockMax += (parseFloat(limites.stockMax)||0)*costoCompra;
     });
     // Mismo criterio que la pantalla: solo la COMPRA suma a compras (entEsCompra).
     let comprasU=0, comprasCosto=0, bonifU=0, bonifCosto=0, consigU=0, consigCosto=0, prestU=0, prestCosto=0;
@@ -10260,7 +10330,7 @@ function verReporteDirectivo(gerencial, modo) {
                   const partes = ((_repCache && (_repCache.lista || [])
                       .find(x => x.insumoId === a.f.insumoId) || {}).desglose || []);
                   return `<div style="border-bottom:1px solid #cfcabd;padding:6px 2px">
-                    <div style="font-size:11.5px;font-weight:700;color:#15140f">${etx(a.f.nombre)}</div>
+                    <div style="font-size:11.5px;font-weight:700;color:#15140f">${etx(a.f.nombre)}</div>${_stockFilaHTML(a.f, calcExistencia(a.f), true)}
                     <div style="font-size:10.5px;color:#3f3b33;margin-top:2px">
                       Batches hechos en el periodo: <b>${hechos % 1 ? hechos.toFixed(1) : hechos}</b>
                       &nbsp;·&nbsp; Existencia actual: <b>${_u(a, a.fisico)}${_ml(a, a.fisico)}</b></div>
@@ -10309,7 +10379,7 @@ function verReporteDirectivo(gerencial, modo) {
                     const mFisBot = m.copasBot>0 ? m.fisico/m.copasBot : m.fisico;
                     const mcD = scol(m.dif), mcC = scol(m.difCosto), mCont = _fmtContenido(m.f);
                     return `<tr style="background:#fbfaff">
-              <td style="padding-left:22px;color:#666;font-size:9px">↳ ${etx(m.f.nombre)}${mCont?` · <span style="color:#2471a3">📦 ${mCont}</span>`:''}${_notaInsumo(m.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(m.f.insumoId))}</div>`:''}</td>
+              <td style="padding-left:22px;color:#666;font-size:9px">↳ ${etx(m.f.nombre)}${_stockFilaHTML(m.f, calcExistencia(m.f), true)}${mCont?` · <span style="color:#2471a3">📦 ${mCont}</span>`:''}${_notaInsumo(m.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(m.f.insumoId))}</div>`:''}</td>
               <td class="tc" style="color:#999">${_ncRd(mEaBot)} ${mEx}</td>
               <td class="tc" style="color:${cOk}">${m.entBot>0?'+'+_ncRd(m.entBot)+' '+mEnt:'—'}</td>
               <td class="tc">${m.ventaCopaDir>0?_ncRd(m.ventaCopaDir)+' '+mVta:'—'}</td>
@@ -10337,7 +10407,7 @@ function verReporteDirectivo(gerencial, modo) {
             const coctStr = coctTot > 0 ? _fmtEquivalenteBatch(coctTot, u) + (a.prodPB>0?' *':'') : '—';
             const cDif  = scol(a.dif), cCost = scol(a.difCosto);
             return `<tr>
-              <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}${_fmtContenido(a.f)?`<div style="font-size:8.5px;color:#2471a3;margin-top:1px">📦 ${_fmtContenido(a.f)}</div>`:''}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
+              <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}${_stockFilaHTML(a.f, calcExistencia(a.f), true)}${_fmtContenido(a.f)?`<div style="font-size:8.5px;color:#2471a3;margin-top:1px">📦 ${_fmtContenido(a.f)}</div>`:''}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
               <td class="tc" style="color:#888">${_exFmt(a, a.ea)}</td>
               <td class="tc" style="color:${cOk}">${entStr}</td>
               <td class="tc">${vtaCopaStr}</td>

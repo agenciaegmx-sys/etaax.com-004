@@ -1899,6 +1899,38 @@
         return base;
     }
 
+    // Equivalencias del líquido abierto; las botellas cerradas no entran aquí.
+    function equivalenciasLiquidoInventario(ml, copaML) {
+        var liquido = Math.max(0, n(ml)), copa = n(copaML);
+        return { ml:liquido, copas:copa > 0 ? liquido / copa : null, onzas:liquido / 29.5735 };
+    }
+    // Los límites del catálogo están en botellas/piezas/unidades de compra.
+    // La fila, en cambio, puede estar en copas, gramos o mililitros utilizables.
+    function unidadesCompraInventario(cantidad, fila) {
+        if (!fila) return null;
+        var q = n(cantidad), contenido = n(fila.contNeto);
+        if (fila.tipo === 'pza' || (fila.tipo === 'peso' && String(fila.baseUnit).toUpperCase() === 'PZA')) return q;
+        if (fila.tipo === 'copa') return contenido > 0 && n(fila.copaML) > 0 ? q * n(fila.copaML) / contenido : null;
+        if (fila.tipo === 'peso') return contenido > 0 ? q / contenido : null;
+        return null;
+    }
+    function estadoStockInventario(existencia, minimo, maximo) {
+        function numero(v) { return v == null || String(v).trim() === '' ? null : Number(v); }
+        var min = numero(minimo), max = numero(maximo), actual = numero(existencia);
+        var invalido = [min,max].some(function(v){ return v !== null && (!isFinite(v) || v < 0); });
+        // Cero es el valor histórico de "sin máximo". Un mínimo de cero sí vale.
+        if (max === 0) max = null;
+        if (invalido || (max !== null && min !== null && max < min)) return { estado:'revisar', minimo:min, maximo:max, actual:actual };
+        var estado = 'sin-parametros';
+        if (max !== null || min > 0) {
+            if (actual === null || !isFinite(actual)) estado = 'sin-equivalencia';
+            else if (max !== null && actual >= max - 1e-9) estado = 'ideal';
+            else if (actual <= (min === null ? 0 : min) + 1e-9) estado = 'bajo';
+            else estado = 'intermedio';
+        }
+        return { estado:estado, minimo:min, maximo:max, actual:actual };
+    }
+
     // Una subreceta tiene una tanda base y varias maneras de porcionarla.
     // Los IDs pertenecen a la unidad seleccionada; el insumo sigue siendo uno.
     function rendimientosSubReceta(cx, nombre) {
@@ -1952,6 +1984,9 @@
         return lista.find(function(p){ return String(p.rendimientoId).toUpperCase() === u.slice(12); }) || null;
     }
     window.EtaaxCore = {
+        equivalenciasLiquidoInventario: equivalenciasLiquidoInventario,
+        unidadesCompraInventario: unidadesCompraInventario,
+        estadoStockInventario: estadoStockInventario,
         rendimientosSubReceta: rendimientosSubReceta,
         calcularPorcionSubReceta: calcularPorcionSubReceta,
         porcionesInsumoSubReceta: porcionesInsumoSubReceta,

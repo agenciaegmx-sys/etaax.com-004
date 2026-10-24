@@ -155,6 +155,7 @@ async function layout(p, gap) {
 
 async function run(base) {
  const dir=path.join(os.tmpdir(),'etaax-ventanas-insumos');fs.mkdirSync(dir,{recursive:true});
+ if (process.env.ETAAX_PRUEBA_STOCK) { await probarStockCosteo(base,dir); return; }
  if (process.env.ETAAX_PRUEBA_RENDIMIENTOS) { await probarRendimientosSucursales(base,dir); return; }
  for(const width of [1440,768,390]){
   const p=await page(base,'/hub.html','owner',width,true);
@@ -293,6 +294,91 @@ async function probarRendimientosSucursales(base,dir) {
         assert.equal(await evalPage(p.sid,"!!document.querySelector('#etxModuleDialog[open]')"),false);
     });
     await close(p);
+}
+
+async function probarStockCosteo(base,dir) {
+    const catalogo=[
+        {id:'vodka',nombre:'Vodka American 2',variedad:"Sam’s",marca:'Sam’s',tipoInsumo:'destilado',familia:'Bebidas',categoria:'Destilados',subcategoria:'Vodka',sucursales:['matriz'],presentaciones:[{contNeto:1750,umContenido:'ML',pesoCristal:1100,tamanoCopa:60,umTamanoCopa:'ML',costoUnitario:400,umCosto:'LT',factorCopa:3.3,precioCarta:150,factorBotella:2.5,precioCartaBot:2500,stockMin:2,stockMax:6,mezcladorId:'soda',mezcladores:2,mezcladoresBot:5}]},
+        {id:'vino',nombre:'Vino de prueba',variedad:'Reserva',tipoInsumo:'vino',familia:'Bebidas',categoria:'Vinos',sucursales:['matriz'],presentaciones:[{contNeto:750,umContenido:'ML',tamanoCopa:150,umTamanoCopa:'ML',costoUnitario:400,umCosto:'LT',precioCarta:150,precioCartaBot:1000,stockMin:2,stockMax:6}]},
+        {id:'cerveza',nombre:'Cerveza de prueba',variedad:'Ámbar',tipoInsumo:'cerveza',familia:'Bebidas',categoria:'Cervezas',sucursales:['matriz'],presentaciones:[{contNeto:355,umContenido:'ML',costoPieza:20,precio:20,stockMin:4,stockMax:24}]},
+        {id:'soda',nombre:'Soda',variedad:'Natural',tipoInsumo:'refresco',familia:'Bebidas',categoria:'Refrescos',sucursales:['matriz'],presentaciones:[{contNeto:600,umContenido:'ML',costoPieza:10,precio:10,stockMin:2,stockMax:12}]},
+        {id:'cerezas',nombre:'Cerezas con tallo',variedad:'En almíbar',tipoInsumo:'abarrote',familia:'Alimentos',categoria:'Abarrotes',sucursales:['matriz'],presentaciones:[{contNeto:2100,umContenido:'G',masaDrenada:900,umMasaDrenada:'G',costoUnitario:333.333,umCosto:'KG',stockMin:1,stockMax:4}]}];
+    for(const width of [1440,390]) {
+        const p=await page(base,'/hub.html','owner',width,true);
+        await send('Network.setExtraHTTPHeaders',{headers:{}},p.sid);
+        await send('Storage.clearDataForOrigin',{origin:base,storageTypes:'indexeddb'},p.sid);
+        await evalPage(p.sid,'sessionStorage.setItem("__fixture_insumos",'+JSON.stringify(JSON.stringify(catalogo))+')');
+        await go(p,'location.href='+JSON.stringify(base+'/recetas/inventarios.html'),"typeof renderCardExist==='function' && _cacheInsumosInv && _cacheInsumosInv.length===5");
+        await evalPage(p.sid,`invActual={id:'conteo-prueba',nombre:'Conteo de prueba',sucursalId:'matriz',fecha:'2026-10-23',area:'barra',cerrado:false};filasCaptura=[
+            {insumoId:'vodka',nombre:'Vodka American 2',tipo:'copa',familia:'Bebidas',categoria:'Destilados',contNeto:1750,copaML:60,pesoCristal:1100,pesos:[2.052],cerradasBarra:0,cerradasBodega:0,registrado:true,costoUnitario:400,precioCarta:150},
+            {insumoId:'vino',nombre:'Vino de prueba',tipo:'copa',familia:'Bebidas',categoria:'Vinos',contNeto:750,copaML:150,pesos:[],cerradasBarra:6,cerradasBodega:0,registrado:true,costoUnitario:400},
+            {insumoId:'cerveza',nombre:'Cerveza de prueba',tipo:'pza',familia:'Bebidas',categoria:'Cervezas',contNeto:355,pesos:[],cerradasBarra:0,cerradasBodega:0,registrado:true,costoPieza:20},
+            {insumoId:'cerezas',nombre:'Cerezas con tallo',tipo:'peso',baseUnit:'G',familia:'Alimentos',categoria:'Abarrotes',contNeto:900,existenciaPeso:1800,registrado:true,costoUnitario:333.333}
+        ];invActual.filas=filasCaptura;mostrarVista('vistaCaptura');renderStepContent();_existInsumoId='vodka';renderCardExist()`);
+        await until(p.sid,"document.getElementById('ml-0') && !document.documentElement.classList.contains('etx-ui-pendiente')");
+        await check(width+' abierto muestra litros, copas y onzas, y actualiza al cambiar peso',async()=>{
+            let text=await evalPage(p.sid,"document.getElementById('ml-0').textContent");
+            assert.ok(text.includes('0.952 L')&&text.includes('15.87 copas de 60 ml')&&text.includes('32.19 oz'),text);
+            await evalPage(p.sid,'updPeso(0,0,2.3)');
+            text=await evalPage(p.sid,"document.getElementById('ml-0').textContent");assert.ok(text.includes('20 copas'),text);
+            await evalPage(p.sid,'updPeso(0,0,2.052)');
+            const d=await evalPage(p.sid,"(()=>{const e=document.getElementById('ml-0').getBoundingClientRect();return {right:e.right,width:innerWidth}})()");assert.ok(d.right<=d.width+1,JSON.stringify(d));
+        });
+        await evalPage(p.sid,"document.querySelector('#existCardWrap .ent-form-card').scrollIntoView({block:'center'})");
+        let shot=await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(dir,'inventario-abiertas-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        await check(width+' nivel y lista conservan un único resultado y la copa propia del vino',async()=>{
+            await evalPage(p.sid,"setMetodoCapturaExist('vodka','nivel');updNivel(0,50)");
+            assert.ok((await evalPage(p.sid,"document.getElementById('ml-0').textContent")).includes('14.58 copas'));
+            await evalPage(p.sid,"filtroRegistroActivo='registrados';setVistaExist('lista')");
+            assert.equal(await evalPage(p.sid,"document.querySelectorAll('#ml-0').length"),1);
+            await evalPage(p.sid,"setVistaExist('busqueda');_existInsumoId='vino';setMetodoCapturaExist('vino','nivel');updNivel(1,50)");
+            assert.ok((await evalPage(p.sid,"document.getElementById('ml-1').textContent")).includes('2.5 copas de 150 ml'));
+            await evalPage(p.sid,"filasCaptura[0].metodoCaptura='peso';filasCaptura[1].metodoCaptura='peso';filasCaptura[1].nivelPct=0");
+        });
+        await evalPage(p.sid,'irAPaso(5)');
+        await until(p.sid,"document.querySelector('#step5Tablas [data-stock=bajo]')");
+        await check(width+' resultado incluye bajo, intermedio, ideal y referencias por insumo',async()=>{
+            const text=await evalPage(p.sid,"document.getElementById('step5Tablas').textContent");
+            for(const t of ['Stock bajo','Stock intermedio','Stock ideal','Ideal/máx. 6 bot','Ideal/máx. 4 unid. de compra'])assert.ok(text.includes(t),t);
+            await evalPage(p.sid,"invActual.cerrado=true;_cacheInv=[invActual];abrirReporteFinal()");
+            const rows=await evalPage(p.sid,"_datosReporteExistencias('todas').map(r=>({id:r.insumoId,total:r.total,estado:r.stock.estado}))");
+            assert.equal(rows.find(r=>r.id==='cerveza').total,0);assert.equal(rows.find(r=>r.id==='cerveza').estado,'bajo');
+            const text2=await evalPage(p.sid,"document.getElementById('repExistBody').textContent");assert.ok(text2.includes('Stock bajo')&&text2.includes('Cerveza de prueba'));
+            await evalPage(p.sid,"_previewInv=invActual;_previewRows=_rowsDeInventario(invActual);_renderPreviewInv()");
+            assert.ok((await evalPage(p.sid,"document.getElementById('previewInvBody').textContent")).includes('Stock bajo'));
+        });
+        shot=await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(dir,'inventario-stock-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        await check(width+' impreso de stock conserva agotados y parámetros',async()=>{
+            await evalPage(p.sid,"window.etaaxAbrirReporte=h=>{window.__printStock=h;return true};imprimirReporteExistencias()");
+            const html=await evalPage(p.sid,'window.__printStock');assert.ok(html.includes('Stock bajo')&&html.includes('Ideal/máx. 24 pza'));
+        });
+        await go(p,'location.href='+JSON.stringify(base+'/recetas/insumos.html'),"typeof imprimirInsumos==='function' && typeof getInsumos==='function' && getInsumos().length===5");
+        await evalPage(p.sid,"window.etaaxAbrirReporte=h=>{window.__printCosteo=h};vistaInsumos='costeo';imprimirInsumos()");
+        await until(p.sid,'!!window.__printCosteo');
+        const html=await evalPage(p.sid,'window.__printCosteo');
+        await check(width+' costeo impreso contiene variedad y pares copa/botella',async()=>{
+            assert.ok(html.includes('Sam’s')&&html.includes('Reserva')&&html.includes('Ámbar'));
+            assert.equal((html.match(/class="costeo-par"/g)||[]).length,4);
+        });
+        // Renderizar el documento REAL y comprobar también la impresión carta horizontal.
+        const target=await send('Target.createTarget',{url:'about:blank'}), attached=await send('Target.attachToTarget',{targetId:target.targetId,flatten:true});
+        const sid=attached.sessionId;await send('Page.enable',{},sid);
+        await send('Fetch.enable',{patterns:[{urlPattern:'http*'}]},sid);
+        await send('Emulation.setDeviceMetricsOverride',{width:1056,height:816,deviceScaleFactor:1,mobile:false},sid);
+        const documento=html.replace(/<link[^>]*href="https:[^>]+>/g,'').replace(/<script[\s\S]*?<\/script>/g,'');
+        await send('Page.navigate',{url:'data:text/html;charset=utf-8,'+encodeURIComponent(documento)},sid);
+        await until(sid,"document.readyState==='complete' && document.querySelector('tbody.costeo-par')");
+        await send('Emulation.setEmulatedMedia',{media:'print'},sid);
+        await check(width+' columnas caben en papel y mantienen el par en la misma hoja',async()=>{
+            const m=await evalPage(sid,"Array.from(document.querySelectorAll('tbody.costeo-par')).map(t=>({rows:t.rows.length,width:t.closest('table').scrollWidth,client:t.closest('table').clientWidth,break:getComputedStyle(t).breakInside}))");
+            assert.equal(m.length,4);m.forEach(t=>{assert.equal(t.rows,2);assert.ok(t.width<=t.client+1,JSON.stringify(t));assert.equal(t.break,'avoid');});
+            const pdf=await send('Page.printToPDF',{landscape:true,paperWidth:8.5,paperHeight:11,printBackground:true,preferCSSPageSize:true},sid);
+            fs.writeFileSync(path.join(dir,'costeo-dos-renglones-'+width+'.pdf'),Buffer.from(pdf.data,'base64'));
+        });
+        shot=await send('Page.captureScreenshot',{format:'png'},sid);fs.writeFileSync(path.join(dir,'costeo-dos-renglones-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        assert.deepEqual(await evalPage(p.sid,'window.__errors'),[]);
+        await send('Target.closeTarget',{targetId:target.targetId});await close(p);
+    }
 }
 
 async function click(p, selector) {

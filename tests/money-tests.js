@@ -1854,7 +1854,8 @@ console.log('\n══ J2 · Filas fantasma, renombres y reportes ══');
             {id:'viejo',sucursalId:'s1',cerrado:true,fecha:'2026-10-10',filas:[fila('m',4)]},
             {id:'nuevo',sucursalId:'s1',cerrado:true,fecha:'2026-10-16',filas:[fila('c1',0,{registrado:true})]}
         ]);
-        return eq(R._datosReporteExistencias('todas').length,0);
+        const rows=R._datosReporteExistencias('todas');
+        return eq(rows.length,1) && eq(rows[0].total,0);
     });
     test('dos conteos del mismo día usan el último cierre, incluso cuando es cero',()=>{
         montar([]); R._storage.etaax_sucursal_activa='s1';
@@ -1862,7 +1863,8 @@ console.log('\n══ J2 · Filas fantasma, renombres y reportes ══');
             {id:'a',sucursalId:'s1',cerrado:true,fecha:'2026-10-16',cierreOperativo:'2026-10-16T12:00',filas:[fila('m',4)]},
             {id:'b',sucursalId:'s1',cerrado:true,fecha:'2026-10-16',cierreOperativo:'2026-10-16T20:00',filas:[fila('c1',0,{registrado:true})]}
         ]);
-        return eq(R._datosReporteExistencias('todas').length,0);
+        const rows=R._datosReporteExistencias('todas');
+        return eq(rows.length,1) && eq(rows[0].total,0);
     });
     test('guardar y volver a cargar no revive aliases y conserva el respaldo',()=>{
         montar([fila('m',0,{registrado:true}),fila('c1',3)]); R.cargarProductosCaptura();
@@ -13809,11 +13811,11 @@ console.log('\n══ BG7 · La botella se vende con su servicio ══');
     test('la tabla de costeo trae la columna', () =>
         eq(decl('_costeoTablaCopa').indexOf('Bot. + servicio') > -1, true, 'con columna'));
     test('…y el reporte impreso también', () =>
-        eq(ins.indexOf("<th>Sug. bot.</th><th>Bot. + servicio</th>") > -1, true, 'impreso'));
+        eq(ins.includes("D.sugBotServ > 0 ? D.sugBotServ : D.sugBot") && ins.includes("Sin servicio: "), true, 'botella con servicio y sin servicio'));
     /* La tabla del PDF lleva una fila de grupo que abarca N columnas: si no se
        actualiza el conteo, el encabezado de grupo queda corrido una celda. */
-    test('el PDF ajusta el ancho de la fila de grupo a la columna nueva', () =>
-        eq(ins.indexOf("_filaGrupoPDF(G.nombre, G.items.length, '', 12)") > -1, true, '12 columnas'));
+    test('el PDF ajusta el grupo al formato de ocho columnas en dos renglones', () =>
+        eq(ins.indexOf("_filaGrupoPDF(G.nombre, G.items.length, '', 8)") > -1, true, '8 columnas'));
 
     /* ── Nada cambia para lo que ya está guardado ── */
     /* El valor de arranque va solo en presentaciones NUEVAS: si se aplicara a
@@ -13906,9 +13908,8 @@ console.log('\n══ BG8 · La carátula de costeo y lo que se imprime ══')
 
     /* El papel tiene que decir lo mismo que la pantalla, o no hay forma de
        saber cuál de las dos miente. */
-    test('el PDF impreso trae las mismas columnas', () =>
-        eq(ins.indexOf('<th>Costo botella</th>') > -1 &&
-           ins.indexOf('<th>Precio ref.</th>') > -1, true, 'iguales'));
+    test('el PDF conserva costo de botella y refrescos en sus dos renglones', () =>
+        eq(ins.includes("_u(D.costoBot)") && ins.includes('<th>Refrescos a costo</th>') && ins.includes("factor(D.mezCopaCost"), true, 'mismos importes'));
     test('…y el PDF tampoco repite el costo de botella', () =>
         eq(ins.indexOf('<th>Costo bot.</th>'), -1, 'una sola'));
 
@@ -29284,6 +29285,7 @@ function suitePrebatchFamilias20261023() {
 }
 suitePrebatchFamilias20261023();
 require('./rendimientos-casos.cjs')({test,eq,crearContexto,cargarJS});
+require('./inventarios-stock-casos.cjs')({test,eq,crearContexto,cargarJS});
 
 suitePrebatchRendimiento20261023();
 
