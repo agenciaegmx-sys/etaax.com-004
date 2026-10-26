@@ -83,6 +83,13 @@
         var st = document.createElement('style');
         st.id = 'etx-theme-css';
         st.textContent =
+            /* Los calendarios son controles NATIVOS: necesitan su esquema de
+               color también en páginas que no cargan los estilos de un módulo.
+               No invertir el icono: invertir un calendario nativo oscuro lo
+               vuelve negro. Esta regla cubre también inputs creados en modales. */
+            'html[data-theme="dark"] input:is([type="date"],[type="datetime-local"],[type="month"],[type="week"],[type="time"]){color-scheme:dark!important}' +
+            'html[data-theme="light"] input:is([type="date"],[type="datetime-local"],[type="month"],[type="week"],[type="time"]){color-scheme:light!important}' +
+            'html[data-theme] input:is([type="date"],[type="datetime-local"],[type="month"],[type="week"],[type="time"])::-webkit-calendar-picker-indicator{filter:none!important;opacity:1;cursor:pointer}' +
             '.theme-toggle{position:fixed;bottom:26px;right:22px;z-index:999;' +
             '  background:var(--surface,var(--s1,#141210));' +
             '  border:1px solid var(--border,var(--b1,#2a2825));' +

@@ -59,8 +59,8 @@ function sdkFixture() {
                 let data = null, error = null;
                 if (q.value) {
                     data = q.value;
-                    if (table === 'negocio_insumos' || table === 'recetas') {
-                        const key = table === 'recetas' ? '__fixture_recetas' : '__fixture_insumos';
+                    if (table === 'negocio_insumos' || table === 'recetas' || table === 'inventarios') {
+                        const key = table === 'inventarios' ? '__fixture_inventarios' : table === 'recetas' ? '__fixture_recetas' : '__fixture_insumos';
                         const prev = JSON.parse(sessionStorage.getItem(key) || '[]');
                         (Array.isArray(q.value) ? q.value : [q.value]).forEach(r => {
                             const i = prev.findIndex(x => x.id === r.datos.id);
@@ -70,6 +70,7 @@ function sdkFixture() {
                     }
                 }
                 else if (table === 'negocio_insumos') data = q.start > 0 ? [] : JSON.parse(sessionStorage.getItem('__fixture_insumos') || '[]').map(datos => ({datos}));
+                else if (table === 'inventarios') data = JSON.parse(sessionStorage.getItem('__fixture_inventarios') || '[]').map(datos => ({datos}));
                 else if (table === 'recetas') data = q.start > 0 ? [] : JSON.parse(sessionStorage.getItem('__fixture_recetas') || '[]').map(datos => ({datos}));
                 else if (table === 'negocios') data = negocios.filter(n => Object.keys(filters).every(k => n[k] === filters[k]));
                 else if (table === 'negocio_sucursales') data = { datos: { sucursales: filters.negocio_id === 'n2' ? [{id:'matriz',nombre:'Matriz',activa:true,fechaCreado:'2026-08-07'}]
@@ -155,6 +156,7 @@ async function layout(p, gap) {
 
 async function run(base) {
  const dir=path.join(os.tmpdir(),'etaax-ventanas-insumos');fs.mkdirSync(dir,{recursive:true});
+ if (process.env.ETAAX_PRUEBA_SALIDAS) { await probarSalidasCalendario(base,dir); return; }
  if (process.env.ETAAX_PRUEBA_STOCK) { await probarStockCosteo(base,dir); return; }
  if (process.env.ETAAX_PRUEBA_RENDIMIENTOS) { await probarRendimientosSucursales(base,dir); return; }
  for(const width of [1440,768,390]){
@@ -293,6 +295,86 @@ async function probarRendimientosSucursales(base,dir) {
         await evalPage(p.sid,'window.__cambioAnterior()');
         assert.equal(await evalPage(p.sid,"!!document.querySelector('#etxModuleDialog[open]')"),false);
     });
+    await close(p);
+}
+
+async function probarSalidasCalendario(base,dir) {
+    const catalogo=[{id:'tequila',nombre:'Gran Centenario',variedad:'Plata',tipoInsumo:'destilado',familia:'Bebidas',categoria:'Destilados',subcategoria:'Tequila',area:'barra',sucursales:['matriz'],presentaciones:[{contNeto:700,umContenido:'ML',tamanoCopa:45,umTamanoCopa:'ML',costoUnitario:471.43,umCosto:'LT',precioCarta:90}]}];
+    async function escribir(p,selector,value,event='blur') {
+        await evalPage(p.sid,`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Falta '+${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));})()`);
+    }
+    for(const width of [1440,390]) {
+        const p=await page(base,'/hub.html','owner',width,true);
+        await send('Network.setExtraHTTPHeaders',{headers:{}},p.sid);
+        await send('Storage.clearDataForOrigin',{origin:base,storageTypes:'indexeddb'},p.sid);
+        await evalPage(p.sid,'sessionStorage.setItem("__fixture_insumos",'+JSON.stringify(JSON.stringify(catalogo))+');sessionStorage.setItem("__fixture_inventarios","[]")');
+        await go(p,'location.href='+JSON.stringify(base+'/recetas/inventarios.html'),"typeof renderCardVentas==='function' && _cacheInsumosInv && _cacheInsumosInv.length===1");
+        await evalPage(p.sid,`invActual={id:'salidas-prueba',nombre:'Salidas de prueba',sucursalId:'matriz',fecha:'2026-10-26',area:'barra',cerrado:false,entradasLog:[],cocktailsVendidos:{},prebatchProducidos:{},cancelaciones:[]};filasCaptura=[{insumoId:'tequila',nombre:'Gran Centenario Plata',tipo:'copa',familia:'Bebidas',categoria:'Destilados',contNeto:700,copaML:45,existenciaAnterior:10*700/45,pesos:[],cerradasBarra:6,cerradasBodega:0,registrado:true,costoUnitario:471.43,precioCarta:90}];invActual.filas=filasCaptura;mostrarVista('vistaCaptura');irAPaso(3);setVistaVentas('busqueda');seleccionarProductoVentas('tequila')`);
+        await until(p.sid,"document.getElementById('cortesiaBotella-0') && !document.documentElement.classList.contains('etx-ui-pendiente')");
+        await check(width+' captura de venta, cortesía y merma suma botellas con unidades sueltas',async()=>{
+            await escribir(p,'#venta-copas-0','2');await escribir(p,'#venta-bot-0','1');
+            await escribir(p,'[onblur*="cortesiaCopas"]','3');await escribir(p,'#cortesiaBotella-0','1');
+            await escribir(p,'[onblur*="mermaCopas"]','4');await escribir(p,'#mermaBotella-0','2');
+            await escribir(p,'#venta-comentario-0','Evento <VIP> "mesa 4"','input');
+            await escribir(p,'#cortesia-concepto-0','Invitados','input');await escribir(p,'#merma-concepto-0','Rotura','input');
+            const r=await evalPage(p.sid,'({teorico:calcExistenciaTeorica(filasCaptura[0]),f:filasCaptura[0]})');
+            assert.ok(Math.abs(r.teorico-(6*700/45-9))<1e-8,JSON.stringify(r));
+            assert.equal(r.f.ventasComentario,'Evento <VIP> "mesa 4"');
+            const t=await evalPage(p.sid,'document.getElementById("ventasResumen").textContent');assert.ok(t.includes('1 bot cortesía')&&t.includes('2 bot merma')&&t.includes('Evento <VIP>'),t);
+            assert.equal(await evalPage(p.sid,'getComputedStyle(document.getElementById("venta-comentario-0")).fontSize'),'13px');
+            assert.equal(await evalPage(p.sid,'document.getElementById("ventasResumenCuenta").textContent'),'1 producto');
+            const layout=await evalPage(p.sid,'[...document.querySelectorAll("#ventasCardWrap input")].map(e=>({x:e.getBoundingClientRect().x,right:e.getBoundingClientRect().right,w:innerWidth}))');
+            assert.ok(layout.every(r=>r.x>=0&&r.right<=r.w+1),JSON.stringify(layout));
+        });
+        await evalPage(p.sid,"document.querySelector('#ventasCardWrap').scrollIntoView({block:'center'})");
+        let shot=await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(dir,'inventario-salidas-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        await check(width+' cambiar copa a onza conserva botellas; lista permite editar y guardar',async()=>{
+            await escribir(p,'select[onchange*="cortesiaCopas"]','OZ','change');
+            const q=await evalPage(p.sid,'document.querySelector("[onblur*=cortesiaCopas]").value');assert.equal(Number(q),4.56);
+            assert.equal(await evalPage(p.sid,'document.getElementById("cortesiaBotella-0").value'),'1');
+            await evalPage(p.sid,"setVistaVentas('lista')");
+            assert.equal(await evalPage(p.sid,'document.getElementById("venta-comentario-lista-0").value'),'Evento <VIP> "mesa 4"');
+            await escribir(p,'select[onchange*="mermaCopas"]','OZ','change');
+            assert.equal(Number(await evalPage(p.sid,'document.querySelector("[onblur*=mermaCopas]").value')),6.09);
+            await escribir(p,'#cortesiaBotella-0','2');
+            await evalPage(p.sid,'guardarInventario()');
+            await until(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_inventarios')||'[]')[0]?.filas[0]?.cortesiaBotella===2");
+        });
+        await check(width+' recarga real recupera cantidades, unidades y comentario guardados',async()=>{
+            await go(p,'location.reload()',"typeof abrirInventario==='function' && getInventarios().some(x=>x.id==='salidas-prueba') && _cacheInsumosInv?.length===1");
+            await evalPage(p.sid,"abrirInventario('salidas-prueba');irAPaso(3);setVistaVentas('busqueda');seleccionarProductoVentas('tequila')");
+            assert.equal(await evalPage(p.sid,'document.getElementById("venta-comentario-0").value'),'Evento <VIP> "mesa 4"');
+            const r=await evalPage(p.sid,'({f:filasCaptura[0],suelta:_salidaSuelta(filasCaptura[0],"cortesiaCopas")})');
+            assert.equal(r.f.cortesiaBotella,2);assert.equal(r.f.mermaBotella,2);assert.ok(Math.abs(r.suelta-3)<1e-8,JSON.stringify(r));
+            assert.equal(r.f.umCapCortesia,'OZ');assert.equal(r.f.umCapMerma,'OZ');
+            await evalPage(p.sid,'irAPaso(5)');assert.ok((await evalPage(p.sid,'document.getElementById("stepContent").textContent')).includes('Evento <VIP>'));
+        });
+        await check(width+' borrar la última salida y el comentario persiste incluso sin conteo físico',async()=>{
+            await evalPage(p.sid,"filasCaptura=[{insumoId:'tequila',nombre:'Gran Centenario',tipo:'copa',contNeto:700,copaML:45}];invActual.filas=filasCaptura;updVentasDirectas(0,'mermaBotella',1);updVentasConcepto(0,'ventasComentario','Por borrar');guardarInventario()");
+            await until(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_inventarios')||'[]')[0]?.filas[0]?.mermaBotella===1");
+            await evalPage(p.sid,"updVentasDirectas(0,'mermaBotella',0);updVentasConcepto(0,'ventasComentario','');guardarInventario()");
+            await until(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_inventarios')||'[]')[0]?.filas[0]?.mermaBotella===0");
+            await go(p,'location.reload()',"typeof abrirInventario==='function' && getInventarios().some(x=>x.id==='salidas-prueba') && _cacheInsumosInv?.length===1");
+            await evalPage(p.sid,"abrirInventario('salidas-prueba')");
+            const f=await evalPage(p.sid,'filasCaptura[0]');assert.equal(f.mermaBotella,0);assert.equal(f.mermaCopas,0);assert.equal(f.ventasComentario,'');
+        });
+        await close(p);
+    }
+    const p=await page(base,'/hub.html','owner',1440,true);await send('Network.setExtraHTTPHeaders',{headers:{}},p.sid);
+    for(const route of ['/recetas/inventarios.html','/administrativo/diario.html','/financiero/ventas.html','/recetas/insumos.html']) {
+        await go(p,'location.href='+JSON.stringify(base+route),"!!document.getElementById('etx-theme-css') && typeof toggleTheme==='function' && document.readyState==='complete'");
+        await check('calendario oscuro/claro en '+route,async()=>{
+            // A real date input in a modal also catches rules limited to page load.
+            await evalPage(p.sid,`document.querySelector('#calendar-test')?.remove();var box=document.createElement('div');box.id='calendar-test';box.className='period-picker dxp';box.style='position:fixed;top:160px;left:60px;z-index:99999;padding:20px;background:var(--surface,#171711)';box.innerHTML='<label style="display:block;color:var(--text,#fff)">Fecha</label><input type="date" value="2026-10-26" style="padding:12px;background:var(--bg,#111);color:var(--text,#fff);border:1px solid #777;border-radius:8px">';document.body.appendChild(box)`);
+            for(const theme of ['dark','light']){
+                await evalPage(p.sid,`localStorage.setItem('etaax_theme','${theme}');window.dispatchEvent(new StorageEvent('storage',{key:'etaax_theme',newValue:'${theme}'}))`);
+                const r=await evalPage(p.sid,"(()=>{const e=document.querySelector('#calendar-test input');return {theme:document.documentElement.dataset.theme,scheme:getComputedStyle(e).colorScheme,filter:getComputedStyle(e,'::-webkit-calendar-picker-indicator').filter}})()");
+                assert.equal(r.theme,theme);assert.equal(r.scheme,theme);assert.equal(r.filter,'none');
+                const shot=await send('Page.captureScreenshot',{format:'png',clip:{x:60,y:160,width:300,height:130,scale:2}},p.sid);
+                fs.writeFileSync(path.join(dir,'calendario-'+route.split('/').pop().replace('.html','')+'-'+theme+'.png'),Buffer.from(shot.data,'base64'));
+            }
+        });
+    }
     await close(p);
 }
 

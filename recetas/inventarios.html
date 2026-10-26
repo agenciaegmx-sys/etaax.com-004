@@ -4,7 +4,7 @@
 <script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js?v=4c811fa3"></script>
     <meta charset="UTF-8">
-    <script src="/theme.js?v=e6b90817"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+    <script src="/theme.js?v=64b86f6e"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX - Inventarios</title>
@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=deb22f08"></script>
-<script src="/recetas/inventarios.js?v=e5e641e4"></script>
+<script src="/recetas/inventarios.js?v=1203a476"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -606,6 +606,15 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
 .inv-num-input::-webkit-outer-spin-button,
 .inv-num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .inv-num-input:focus { border-color: var(--accent); outline: none; }
+.inv-num-input.inv-comment-input { width:100%; min-width:0; box-sizing:border-box; font-size:13px; font-weight:400; text-align:left; padding:10px 12px; }
+.inv-sale-comment { flex:1 1 180px; min-width:0; }
+.inv-sale-comment label { display:block; font-size:11px; color:var(--text-dim); margin-bottom:6px; }
+.inv-bottle-out label { display:block; font-size:11px; color:var(--text-dim); margin-bottom:6px; }
+.inv-bottle-out .inv-num-input { width:100px; }
+.inv-bottle-out.is-compact { margin-top:8px; }
+.inv-bottle-out.is-compact label { font-size:10px; text-align:center; }
+.inv-bottle-out.is-compact .inv-num-input { width:76px; }
+.inv-sale-note { display:block; font-size:11px; font-weight:400; line-height:1.4; color:var(--text-muted); margin-top:4px; overflow-wrap:anywhere; white-space:normal; }
 
 /* Pesos botellas abiertas */
 .inv-pesos-row { display: flex; gap: 8px; }
@@ -678,6 +687,9 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
     padding:2px 9px; white-space:nowrap; flex-shrink:0; }
 .ent-log-fecha { font-size:11px; color:var(--text-muted); white-space:nowrap; flex-shrink:0; }
 .ent-log-cant { font-size:14px; font-weight:700; color:var(--green); white-space:nowrap; flex-shrink:0; }
+#ventasResumen .ent-log-fila { flex-wrap:wrap; align-items:flex-start; }
+#ventasResumen .ent-log-nombre { flex-basis:100%; white-space:normal; }
+#ventasResumen .ent-log-cant { white-space:normal; overflow-wrap:anywhere; flex-shrink:1; font-size:12px; }
 .ent-log-del { background:none; border:1px solid var(--border); border-radius:6px; cursor:pointer;
     color:var(--text-dim); font-size:12px; padding:4px 8px; transition:all 0.12s; flex-shrink:0; }
 .ent-log-del.hover, .ent-log-del:hover { border-color:var(--red); color:var(--red); }
@@ -1042,7 +1054,7 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
-<script src="/novedades.js?v=cc92dc44"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=0ec1dc82"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
