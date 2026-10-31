@@ -32,7 +32,7 @@ async function until(sid, expression) {
         catch(e) { if (!/Inspected target navigated|Cannot find context|Execution context was destroyed/.test(e.message)) throw e; }
         await pause(30);
     }
-    throw new Error('No se cumplió: ' + expression);
+    throw new Error('No se cumplió: ' + expression + ' · '+JSON.stringify(await evalPage(sid,'({url:location.href,errors:window.__errors,stacks:window.__stacks,ready:document.readyState,admin:typeof AdminDocs,calls:window.__calls?.slice(-3)})')));
 }
 async function go(p, expression, condition) {
     const generation=await evalPage(p.sid,'window.__fixtureGeneration');
@@ -44,7 +44,7 @@ async function go(p, expression, condition) {
 function sdkFixture() {
     const mode = window.__case || 'owner';
     const staff = mode === 'staff' || mode === 'staff-server';
-    let user = { id: staff ? 's1' : 'u1', email: staff ? 'compartida@fixture.invalid' : 'ana@fixture.invalid',
+    let user = { id: staff ? 's1' : 'u1', email: mode==='admin' ? 'admin@etaax.com' : staff ? 'compartida@fixture.invalid' : 'ana@fixture.invalid',
         user_metadata: { nombre: mode === 'xss' ? 'Ana <img src=x onerror="window.__xss=1">' : 'Ana González' } };
     window.__calls = [];
     const negocios = [{ id: 'n1', usuario_id: 'u1', staff_uid: 's1', datos: { nombre: 'Café de prueba', tipo: 'cafe', organizacion: 'corporativo', color: '#3dbe7a' } },
@@ -52,7 +52,7 @@ function sdkFixture() {
     function query(table) {
         const filters = {}, q = { select() { return q; }, eq(k,v) { filters[k] = v; return q; },
             range(start) { q.start=start; return q; }, in() { return q; }, order() { return q; }, limit() { return q; }, neq() { return q; }, or() { return q; },
-            maybeSingle() { q.single = true; return q; }, update(value) { q.value = value; return q; },
+            single() { q.isSingle=true;return q; }, maybeSingle() { q.isSingle = true; return q; }, update(value) { q.value = value; return q; },
             upsert(value) { q.value = value; return q; }, insert(value) { q.value = value; return q; },
             then(resolve, reject) {
                 window.__calls.push({ type: 'table', table, filters: { ...filters }, value: q.value });
@@ -69,6 +69,7 @@ function sdkFixture() {
                         sessionStorage.setItem(key, JSON.stringify(prev));
                     }
                 }
+                else if (table === 'admin_documentos') data = (q.start>0?[]:JSON.parse(sessionStorage.getItem('__fixture_admin_docs')||'[]')).filter(d=>Object.keys(filters).every(k=>d[k]===filters[k]));
                 else if (table === 'negocio_insumos') data = q.start > 0 ? [] : JSON.parse(sessionStorage.getItem('__fixture_insumos') || '[]').map(datos => ({datos}));
                 else if (table === 'inventarios') data = JSON.parse(sessionStorage.getItem('__fixture_inventarios') || '[]').map(datos => ({datos}));
                 else if (table === 'recetas') data = q.start > 0 ? [] : JSON.parse(sessionStorage.getItem('__fixture_recetas') || '[]').map(datos => ({datos}));
@@ -79,9 +80,14 @@ function sdkFixture() {
                     stripe_subscription_id: mode === 'stripe' ? 'sub_fixture' : null };
                 else if (table === 'catalogo_insumos') data = q.start > 0 ? [] : JSON.parse(sessionStorage.getItem('__fixture_catalogo') || 'null')?.map(datos => ({datos})) || [{datos:{id:'cat-prueba',nombre:'Ron de prueba',marca:'Marca de prueba',familia:'Bebidas',categoria:'Destilados',presentaciones:[{contNeto:1000,umContenido:'ML',precio:300}]}}];
                 else if (table === 'usuarios') data = { id:'u1',nombre:user.user_metadata.nombre,plan:'pyme' };
-                else data = q.single ? null : [];
+                else data = q.isSingle ? null : [];
+                if(mode==='admin' && !q.value && !q.isSingle){
+                    if(table==='usuarios')data=[{id:'u1',nombre:'Admin de prueba',email:'admin@etaax.com',plan:'pyme'}];
+                    if(table==='suscripciones')data=[];
+                    if(table==='negocio_sucursales'&&!filters.negocio_id)data=[{negocio_id:'n1',datos:{sucursales:[{id:'matriz',nombre:'Centro',activa:true},{id:'norte',nombre:'Norte',activa:true}],cfg:{}}}];
+                }
                 if (window.__fail && table === 'suscripciones') error = { message:'Fallo controlado' };
-                if (q.single && Array.isArray(data)) data = data[0] || null;
+                if (q.isSingle && Array.isArray(data)) data = data[0] || null;
                 if(mode === 'race' && filters.negocio_id === 'n1'){
                     (window.__held ||= []).push(()=>({data,error}));
                     return new Promise(r=>{(window.__release ||= []).push(()=>r({data,error}));}).then(resolve,reject);
@@ -110,6 +116,22 @@ function sdkFixture() {
         return {auth,from:query,
             rpc: async (name,args) => {
                 window.__calls.push({type:'rpc',name,args});
+                if(name==='is_platform_admin')return {data:mode==='admin',error:null};
+                if(name==='admin_documento_crear'||name==='admin_documento_actualizar'){
+                    if(mode!=='admin'||window.__failDocs)return {data:null,error:{message:'Fallo controlado de guardado'}};
+                    const docs=JSON.parse(sessionStorage.getItem('__fixture_admin_docs')||'[]');let d;
+                    if(name==='admin_documento_crear'){
+                        d={...args.p_documento,folio:args.p_documento.folio.trim().toUpperCase(),version:1,cambios:[{accion:'creado'}],origen:args.p_documento.origen||'generado'};
+                        const same=docs.find(x=>x.id===d.id);if(same)return {data:same,error:null};
+                        if(docs.some(x=>x.folio===d.folio||d.presupuesto_id&&x.presupuesto_id===d.presupuesto_id))return {data:null,error:{code:'23505',message:'Duplicado'}};
+                        docs.push(d);
+                    }else{
+                        const at=docs.findIndex(x=>x.id===args.p_id);if(at<0||docs[at].version!==args.p_version)return {data:null,error:{message:'El documento cambió en otra ventana'}};
+                        d={...docs[at],...args.p_cambios,version:args.p_version+1};d.cambios=[...docs[at].cambios,{accion:'actualizado'}];if(d.estado!=='pagado')d.fecha_pago=null;docs[at]=d;
+                    }
+                    sessionStorage.setItem('__fixture_admin_docs',JSON.stringify(docs));return {data:d,error:null};
+                }
+
                 return {error:null,data:name === 'negocio_cobro_estado' ? {activo:mode !== 'pending' && mode !== 'stripe',estado:mode === 'pending' ? 'pendiente' : mode === 'stripe' ? 'vencida' : 'activa',proximoCobro:'2026-11-13',diasTolerancia:3,diasRestantes:34} : null};
             },
             functions:{invoke:async (name,args) => {window.__calls.push({type:'invoke',name,args});return {data:{url:'javascript:alert(1)'},error:null};}},
@@ -128,7 +150,7 @@ async function page(base, route, mode = 'owner', width = 1440, navigation = fals
         await send('Network.setExtraHTTPHeaders',{headers:{'X-Etaax-Prueba-Rutas':'1'}},sid);
     }
     await send('Emulation.setDeviceMetricsOverride', {width,height:1000,deviceScaleFactor:1,mobile:width<720}, sid);
-    const init = `window.__case=${JSON.stringify(mode)};window.__errors=[];window.__stacks=[];window.addEventListener('error',e=>window.__stacks.push({stack:e.error?.stack,file:e.filename,line:e.lineno}));window.addEventListener('error',e=>{if(e.message)window.__errors.push(e.message)});
+    const init = `window.__case=${JSON.stringify(mode)};window.__errors=[];window.__stacks=[];window.addEventListener('unhandledrejection',e=>window.__errors.push(String(e.reason?.stack||e.reason)));window.addEventListener('error',e=>window.__stacks.push({stack:e.error?.stack,file:e.filename,line:e.lineno}));window.addEventListener('error',e=>{if(e.message)window.__errors.push(e.message)});
         ${navigation ? "if(!sessionStorage.getItem('__etaax_fixture_seed')){" : ''}
         localStorage.clear();sessionStorage.clear();localStorage.setItem('etaax_negocio_activo','n1');localStorage.setItem('etaax_sucursal_activa','matriz');
         localStorage.setItem('etaax_ctx',JSON.stringify({ctxType:${JSON.stringify(mode === 'staff' ? 'staff' : 'owner')},userName:'Ana González',negId:'n1',negNombre:'Café de prueba'}));
@@ -156,6 +178,7 @@ async function layout(p, gap) {
 
 async function run(base) {
  const dir=path.join(os.tmpdir(),'etaax-ventanas-insumos');fs.mkdirSync(dir,{recursive:true});
+ if (process.env.ETAAX_PRUEBA_DOCUMENTOS) { await probarDocumentosAdmin(base,dir); return; }
  if (process.env.ETAAX_PRUEBA_SALIDAS) { await probarSalidasCalendario(base,dir); return; }
  if (process.env.ETAAX_PRUEBA_STOCK) { await probarStockCosteo(base,dir); return; }
  if (process.env.ETAAX_PRUEBA_RENDIMIENTOS) { await probarRendimientosSucursales(base,dir); return; }
@@ -296,6 +319,55 @@ async function probarRendimientosSucursales(base,dir) {
         assert.equal(await evalPage(p.sid,"!!document.querySelector('#etxModuleDialog[open]')"),false);
     });
     await close(p);
+}
+
+async function probarDocumentosAdmin(base,dir){
+ async function valor(p,key,v,event='input'){await evalPage(p.sid,`(()=>{var e=document.getElementById(${JSON.stringify(key)});e.value=${JSON.stringify(v)};e.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));})()`);}
+ for(const width of [1440,390]){
+  const p=await page(base,'/hub.html','admin',width,true);await send('Network.setExtraHTTPHeaders',{headers:{}},p.sid);
+  await go(p,'location.href='+JSON.stringify(base+'/admin.html'),"typeof AdminDocs==='object' && document.getElementById('viewAdmin').style.display==='block' && _data.negocios.length===2");
+  await evalPage(p.sid,"window.__impresos=[];window.etaaxAbrirReporte=h=>{__impresos.push(h);return true;};document.getElementById('abrirHistorialRecibos').click()");
+  await until(p.sid,"document.getElementById('admDocsTabla').textContent.includes('No hay documentos')");
+  await check(width+' guardar antes de imprimir y evitar doble clic',async()=>{
+    await evalPage(p.sid,"abrirDocumentoModal('recibo','n1')");await valor(p,'doc_cliente','Cliente <VIP>');await valor(p,'doc_meses','12');
+    await valor(p,'doc_total','12500');await valor(p,'doc_recurrente','12000');await valor(p,'doc_desde','2026-10','change');await valor(p,'doc_fecha','2026-10-28','change');
+    await evalPage(p.sid,"window.__folioPrueba=document.getElementById('doc_folio').value;document.getElementById('doc_btnGen').click();document.getElementById('doc_btnGen').click()");
+    await until(p.sid,'!document.getElementById("docOv") && __impresos.length===1');
+    const r=await evalPage(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_admin_docs'))");assert.equal(r.length,1);assert.equal(r[0].total,12500);assert.equal(r[0].suscripcion_monto,12000);assert.equal(r[0].estado,'pendiente');assert.ok(r[0].html.includes('&lt;VIP&gt;'));assert.equal(r[0].fecha_pago,null);
+    await valor(p,'admDocsMes','2026-10','change');assert.ok((await evalPage(p.sid,'document.getElementById("admDocsMetricas").textContent')).includes('$1,000.00'));
+  });
+  await check(width+' cambiar a pagado y reimprimir conserva importes aunque cambien las tarifas',async()=>{
+    const key=await evalPage(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_admin_docs'))[0].id");
+    await evalPage(p.sid,'AdminDocs.ver('+JSON.stringify(key)+')');await until(p.sid,'!!document.getElementById("adoc-guardar")');
+    await valor(p,'adoc-estado','pagado','change');await valor(p,'adoc-pago','2026-10-28','change');await evalPage(p.sid,'document.getElementById("adoc-guardar").click()');
+    await until(p.sid,'!document.getElementById("adocModal")');
+    await evalPage(p.sid,'EtaaxPrecios.precioSucursal=()=>999999;AdminDocs.imprimir('+JSON.stringify(key)+')');await until(p.sid,'__impresos.length===2');
+    const html=await evalPage(p.sid,'__impresos[1]');assert.ok(html.includes('Total pagado'));assert.ok(html.includes('12,500'));assert.ok(!html.includes('999,999'));
+  });
+  await check(width+' el histórico sobrevive recarga y filtra por folio',async()=>{
+    const folio=await evalPage(p.sid,'__folioPrueba');await go(p,'location.reload()',"typeof AdminDocs==='object' && _data.negocios.length===2");
+    await evalPage(p.sid,"switchTab('documentos')");await until(p.sid,'document.getElementById("admDocsTabla").textContent.includes('+JSON.stringify(folio)+')');
+    await evalPage(p.sid,"AdminDocs.filtro('busqueda','inexistente')");assert.ok((await evalPage(p.sid,'document.getElementById("admDocsTabla").textContent')).includes('No hay documentos'));
+    await evalPage(p.sid,'AdminDocs.filtro("busqueda",'+JSON.stringify(folio)+')');assert.ok((await evalPage(p.sid,'document.getElementById("admDocsTabla").textContent')).includes('pagado'));
+  });
+  await check(width+' presupuesto se archiva y se convierte una sola vez en recibo',async()=>{
+    await evalPage(p.sid,"window.etaaxAbrirReporte=()=>true;abrirDocumentoModal('presupuesto','n1')");await valor(p,'doc_cliente','Presupuesto de prueba');
+    await evalPage(p.sid,'document.getElementById("doc_btnGen").click()');await until(p.sid,'!document.getElementById("docOv")');
+    const key=await evalPage(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_admin_docs')).find(d=>d.tipo==='presupuesto').id");
+    await evalPage(p.sid,'AdminDocs.ver('+JSON.stringify(key)+')');await until(p.sid,'!!document.getElementById("adoc-convertir")');await evalPage(p.sid,'document.getElementById("adoc-convertir").click()');
+    await until(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_admin_docs')).some(d=>d.presupuesto_id)");
+    assert.equal(await evalPage(p.sid,"JSON.parse(sessionStorage.getItem('__fixture_admin_docs')).filter(d=>d.presupuesto_id).length"),1);
+    await evalPage(p.sid,"document.getElementById('adocModal')?.remove()");
+  });
+  await check(width+' fallo de guardado mantiene el formulario y no imprime un recibo sin archivo',async()=>{
+    await evalPage(p.sid,"window.__failDocs=true;window.__impresos=[];window.etaaxAbrirReporte=h=>{__impresos.push(h);return true};window.admAlert=x=>{window.__alert=x};abrirDocumentoModal('recibo','n1')");await valor(p,'doc_cliente','No guardado');
+    await evalPage(p.sid,'document.getElementById("doc_btnGen").click()');await until(p.sid,'!!window.__alert');assert.equal(await evalPage(p.sid,'__impresos.length'),0);assert.equal(await evalPage(p.sid,'!!document.getElementById("docOv")'),true);
+    await evalPage(p.sid,"window.__failDocs=false;document.getElementById('docOv').remove();AdminDocs.filtro('busqueda','')");
+  });
+  const shot=await send('Page.captureScreenshot',{format:'png'},p.sid);fs.writeFileSync(path.join(dir,'admin-documentos-'+width+'.png'),Buffer.from(shot.data,'base64'));
+  const errs=await evalPage(p.sid,'__errors');assert.deepEqual(errs,[]);
+  await close(p);
+ }
 }
 
 async function probarSalidasCalendario(base,dir) {

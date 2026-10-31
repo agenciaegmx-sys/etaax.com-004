@@ -1,0 +1,23 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+module.exports=function({test,eq,crearContexto,cargarJS}){
+ const c=crearContexto();cargarJS(c,'etaax-core.js');const core=c.EtaaxCore;
+ const receipt={id:'r1',folio:'REC-1',tipo:'recibo',estado:'pendiente',fecha:'2026-10-28',total:12500,suscripcion_monto:12000,meses:12,periodo_desde:'2026-10-01',moneda:'MXN'};
+ const sum=(docs,m='2026-10')=>core.resumenDocumentosAdmin(docs,m);
+ test('MRR anual divide suscripción entre 12 y excluye el servicio adicional',()=>{eq(sum([receipt]).mrr,1000);eq(sum([receipt]).pendiente,12500);eq(sum([receipt]).cobrado,0);});
+ test('MRR dura los meses cubiertos, incluso al cruzar de año',()=>{eq(sum([receipt],'2026-09').mrr,0);eq(sum([receipt],'2027-09').mrr,1000);eq(sum([receipt],'2027-10').mrr,0);});
+ test('emitido y cobrado siguen sus propias fechas',()=>{const d={...receipt,estado:'pagado',fecha_pago:'2026-11-03'};eq(sum([d]).emitido,12500);eq(sum([d]).cobrado,0);eq(sum([d],'2026-11').cobrado,12500);eq(sum([d]).pendiente,0);});
+ test('presupuestos y anulados no inflan ingresos ni MRR',()=>{const r=sum([{...receipt,tipo:'presupuesto'},{...receipt,id:'x',estado:'anulado'}]);eq(r.mrr,0);eq(r.emitido,0);eq(r.pendiente,0);});
+ test('reimprimir la misma identidad no duplica totales',()=>{eq(sum([receipt,receipt]).mrr,1000);eq(sum([receipt,receipt]).emitido,12500);});
+ test('recibos recuperados sin desglose no inventan MRR; servicios con cero quedan clasificados',()=>{const a={...receipt,suscripcion_monto:null},b={...receipt,id:'b',suscripcion_monto:0,periodo_desde:null};eq(sum([a,b]).mrr,0);eq(sum([a,b]).porClasificar,1);});
+ test('saldo pendiente comprende todos los meses aunque el resumen sea de otro periodo',()=>{eq(sum([receipt],'2026-12').pendiente,12500);eq(sum([receipt],'2026-12').emitido,0);});
+ test('importe manual asigna el ajuste a suscripción, conservando extras',()=>{eq(core.montoRecurrenteDocumento({susOn:true,total:5000,extras:[]}),5000);eq(core.montoRecurrenteDocumento({susOn:true,total:5500,extras:[{monto:1500}]}),4000);eq(core.montoRecurrenteDocumento({susOn:false,total:3500}),0);});
+ test('MRR redondea el total una vez y no inventa meses inválidos',()=>{eq(sum([{...receipt,total:100,suscripcion_monto:100,meses:3}]).mrr,33.33);eq(sum([receipt],'2026-13').mrr,0);});
+ const src=fs.readFileSync(path.resolve(__dirname,'../admin-catalogo-insumos.html'),'utf8');
+ ['_fotoN','_fotoCambioN','_novCatalogoDe','_novFirmaActu','_presFirmaSem','_novClave'].forEach(n=>{const a=src.indexOf('function '+n+'(');let i=src.indexOf('{',a),d=0;for(;i<src.length;i++){if(src[i]==='{')d++;else if(src[i]==='}'&&!--d)break;}vm.runInContext(src.slice(a,i+1),c);});
+ test('foto distinta o nueva se detecta aunque no cambie el precio',()=>{eq(c._fotoCambioN({foto:'https://x/antes.jpg'},{foto:'https://x/nueva.jpg'}),true);eq(c._fotoCambioN({}, {foto:'https://x/nueva.jpg'}),true);eq(c._fotoCambioN({foto:'https://x/a.jpg'},{foto:'https://x/a.jpg'}),false);});
+ test('caché vacía y protocolos no aptos no borran la foto maestra',()=>{eq(c._fotoCambioN({foto:'https://x/a.jpg'},{foto:''}),false);eq(c._fotoN({foto:'javascript:alert(1)'}),'');eq(c._fotoN({foto:'data:text/html;base64,abc'}),'');});
+ test('al cambiar solo la imagen reaparece una actualización descartada',()=>{const d={insumoId:'i',negId:'n',costoNeg:10,datosNeg:{foto:'https://x/a.jpg',presentaciones:[]}};eq(c._novFirmaActu(d)!==c._novFirmaActu({...d,datosNeg:{...d.datosNeg,foto:'https://x/b.jpg'}}),true);});
+ test('fotos de sucursales resuelven el ID maestro hasta dos saltos sin mezclar negocios',()=>{const cat={base:{id:'base'}},row={negocio_id:'n',insumo_id:'c',datos:{id:'c',origenId:'m'}},idx={'n|m':{datos:{id:'m',origenId:'base'}},'otro|m':{datos:{id:'m',origenId:'distinto'}}};eq(c._novCatalogoDe(row,idx,cat).id,'base');eq(c._novCatalogoDe({...row,negocio_id:'otro'},idx,cat),null);});
+ test('cada copia de sucursal conserva su propia decisión de actualización',()=>{eq(c._novClave({insumoId:'i',negId:'n',datosNeg:{id:'a'}})===c._novClave({insumoId:'i',negId:'n',datosNeg:{id:'b'}}),false);});
+};

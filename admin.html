@@ -273,6 +273,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   .admin-table th:nth-child(n+4),.admin-table td:nth-child(n+4){display:none;}
 }
 </style>
+<link rel="stylesheet" href="/admin-documentos.css?v=110cf3f7">
 </head>
 <body>
 
@@ -339,6 +340,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
       <span id="adminNombre">—</span>
       <button class="btn-logout-adm" style="border-color:var(--salmon);color:var(--salmon)" onclick="auditarCruces()" title="Busca recetas que quedaron en el negocio equivocado (solo lectura)">🔎 Auditar cruces</button>
       <button class="btn-logout-adm" style="border-color:var(--green);color:var(--green)" onclick="abrirDocumentoModal('presupuesto','')" title="Genera presupuestos y recibos de pago: suscripción por sucursales y servicios adicionales">🧾 Presupuesto / Recibo</button>
+      <button id="abrirHistorialRecibos" class="btn-logout-adm" onclick="switchTab('documentos');document.getElementById('tab-documentos').scrollIntoView({behavior:'smooth',block:'start'})" title="Consultar recibos y presupuestos, pagos pendientes y reimpresiones">Historial de recibos</button>
       <a href="hub.html" class="btn-logout-adm" style="text-decoration:none;border-color:var(--gold);color:var(--gold)" title="Explorar el hub de módulos como admin">⚡ Hub</a>
       <button class="btn-logout-adm" onclick="adminLogout()">Cerrar sesión</button>
     </div>
@@ -372,6 +374,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   <div class="tabs">
     <button class="tab active" onclick="switchTab('usuarios')">👥 Usuarios</button>
     <button class="tab" onclick="switchTab('negocios')">🏪 Negocios<span id="tabNegBadge" style="display:none;margin-left:6px;background:#e0a93d;color:#1a1916;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700"></span></button>
+    <button class="tab" onclick="switchTab('documentos')">🧾 Historial de recibos</button>
     <button class="tab" onclick="switchTab('invitaciones')">✉️ Invitaciones</button>
     <button class="tab" onclick="switchTab('solicitudes')">📨 Solicitudes<span id="tabSolBadge" style="display:none;margin-left:6px;background:#e0a93d;color:#1a1916;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700"></span></button>
     <button class="tab" onclick="switchTab('staff')">🎯 Staff global</button>
@@ -380,6 +383,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     <button class="tab" onclick="switchTab('rrhh')">🧑‍🍳 Perfiles y evaluaciones</button>
     <button class="tab" onclick="switchTab('papelera')">🗑️ Papelera</button>
   </div>
+
+  <div id="tab-documentos" class="tab-panel"></div>
 
   <!-- TAB: USUARIOS -->
   <div id="tab-usuarios" class="tab-panel active">
@@ -663,7 +668,8 @@ async function betaAppCopiar() {
 <script src="/password.js"></script><!-- medidor y generador: la misma regla que el alta -->
 <script src="/reporte-marca.js?v=eb1fc301"></script>
 <script src="/precios.js?v=f98b43e7"></script><!-- tabla de precios por sucursal (una sola verdad) -->
-<script src="/etaax-core.js?v=deb22f08"></script><!-- importeLetra para recibos y presupuestos -->
+<script src="/admin-documentos.js?v=ca9a7db8"></script>
+<script src="/etaax-core.js?v=10820244"></script><!-- importeLetra para recibos y presupuestos -->
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -1465,7 +1471,8 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
     // getElementById empezaría a leer los campos del viejo.
     var _viejo = document.getElementById('docOv'); if (_viejo) { try { _viejo.remove(); } catch(e){} }
     var P = EtaaxPrecios, TOPE = P.TOPE;
-    var hoy = new Date().toISOString().slice(0,10);
+    var hoy = AdminDocs.hoy();
+    var documentoId = crypto.randomUUID();
     var _EM = _emisorGuardado();
     _docExtras = [];
 
@@ -1579,7 +1586,13 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
                         '<div style="font-size:11px;color:var(--muted);margin-top:-4px">Se recuerdan para el siguiente documento.</div>' +
                     '</div>' +
             '</details>' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
+                '<div style="flex:1">'+_campo('Meses cubiertos','<input id="doc_meses" type="number" min="1" max="120" value="1" style="'+_in+'">')+'</div>'+
+                '<div style="flex:1">'+_campo('Primer mes cubierto','<input id="doc_desde" type="month" value="'+hoy.slice(0,7)+'" style="'+_in+'">')+'</div>'+
+            '</div>'+
+            _campo('Importe de suscripción incluido (para MRR)', '<input id="doc_recurrente" type="number" min="0" step="0.01" style="'+_in+'">')+
             '<div id="doc_soloRecibo">' +
+                _campo('Estado de cobro','<select id="doc_estado" style="'+_in+'"><option value="pendiente">Pendiente de pago</option><option value="pagado">Pagado</option></select>') +
                 // La razón social del receptor se escribe, no se hereda: lo que importa en un
                 // recibo es el nombre fiscal del cliente, que rara vez coincide con el
                 // nombre del negocio en el sistema.
@@ -1591,7 +1604,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
                 '</div>' +
                 '<div style="display:flex;gap:12px">' +
                     '<div style="flex:1">' + _campo('Método de pago', '<select id="doc_metodo" style="'+_in+'">'+_metodos.map(function(m){return '<option>'+m+'</option>';}).join('')+'</select>') + '</div>' +
-                    '<div style="flex:1">' + _campo('Fecha de pago', '<input id="doc_fpago" type="date" style="'+_in+'" value="'+hoy+'">') + '</div>' +
+                    '<div style="flex:1">' + _campo('Fecha de pago (si está pagado)', '<input id="doc_fpago" type="date" style="'+_in+'" value="'+hoy+'">') + '</div>' +
                 '</div>' +
                 _campo('Referencia (opcional)', '<input id="doc_ref" style="'+_in+'" placeholder="No. de operación, últimos 4 dígitos…">') +
             '</div>' +
@@ -1618,11 +1631,9 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
     var _tipo = (tipoIni === 'presupuesto') ? 'presupuesto' : 'recibo';
     var _modo = 'paquete';
     var _totalManual = null;
+    var _recurrenteManual = null;
 
-    function _folioNuevo(){
-        var pre = _tipo === 'recibo' ? 'REC-' : 'PRE-';
-        return pre + hoy.replace(/-/g,'') + '-' + (Date.now().toString(36).slice(-4)).toUpperCase();
-    }
+    function _folioNuevo(){ return AdminDocs.folio(_tipo); }
     function _pintarTipo(){
         ov.querySelectorAll('.doc-tipo').forEach(function(b){
             var on = b.getAttribute('data-tipo') === _tipo;
@@ -1701,9 +1712,10 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
     }
     function _subtotalSus(){
         if (!document.getElementById('doc_susOn').checked) return 0;
-        return _modo === 'paquete'
+        var mensual = _modo === 'paquete'
             ? P.precioMensual(parseInt(document.getElementById('doc_paq').value,10) || 1)
             : P.precioSucursal(parseInt(document.getElementById('doc_ind').value,10) || 1);
+        return mensual * (Math.max(1,parseInt(document.getElementById('doc_meses').value,10)||1));
     }
     function _sumaExtras(){ return _docExtras.reduce(function(a,x){ return a + (parseFloat(x.monto)||0); }, 0); }
     function _recalc(){
@@ -1714,6 +1726,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         document.getElementById('doc_totalHint').textContent = hint.join(' + ') || 'sin conceptos todavía';
         document.getElementById('doc_manual').style.display = (_totalManual !== null) ? '' : 'none';
         if (_totalManual === null) document.getElementById('doc_total').value = auto.toFixed(2);
+        if (_recurrenteManual === null) document.getElementById('doc_recurrente').value = EtaaxCore.montoRecurrenteDocumento({susOn:document.getElementById('doc_susOn').checked,total:Number(document.getElementById('doc_total').value),extras:_docExtras}).toFixed(2);
     }
     function _renderExtras(){
         var c = document.getElementById('doc_extras');
@@ -1735,8 +1748,9 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             _docExtras[+ex][e.target.getAttribute('data-f')] = e.target.value;
             _recalc(); return;
         }
-        if (e.target.id === 'doc_total') { _totalManual = e.target.value; document.getElementById('doc_manual').style.display=''; return; }
+        if (e.target.id === 'doc_total') { _totalManual = e.target.value; _recalc(); return; }
     });
+    ov.addEventListener('input',function(e){if(e.target.id==='doc_recurrente')_recurrenteManual=e.target.value;if(e.target.id==='doc_meses')_recalc();});
     ov.addEventListener('change', function(e){
         if (e.target.id === 'doc_neg') { _pintarSucs(); return; }
         if (e.target.id === 'doc_sucTodas') {
@@ -1751,7 +1765,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         }
     });
     function cerrar(){ try { ov.remove(); } catch(e){} }
-    ov.addEventListener('click', function(e){
+    ov.addEventListener('click', async function(e){
         var t = e.target, act = t.getAttribute && t.getAttribute('data-act');
         if (t === ov || act === 'no') { cerrar(); return; }
         if (t.getAttribute && t.getAttribute('data-tipo')) { _tipo = t.getAttribute('data-tipo'); _pintarTipo(); return; }
@@ -1759,7 +1773,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         if (act === 'addExtra') { _docExtras.push({ concepto:'', monto:'' }); _renderExtras(); return; }
         if (act === 'delExtra') { _docExtras.splice(+t.getAttribute('data-i'),1); _renderExtras(); return; }
         if (act === 'totalAuto') { _totalManual = null; _recalc(); return; }
-        if (act !== 'gen') return;
+        if (act !== 'gen' || t.disabled) return;
 
         var negId = document.getElementById('doc_neg').value;
         var neg = negId ? (_data.negocios||[]).find(function(x){ return x.id===negId; }) : null;
@@ -1767,6 +1781,11 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         var selSucs = _sucsSel();
         var cfg = {
             tipo: _tipo,
+            negocioId: negId || null,
+            estado: _tipo==='recibo' ? document.getElementById('doc_estado').value : 'pendiente',
+            meses: Number(document.getElementById('doc_meses').value),
+            periodoDesde: document.getElementById('doc_desde').value ? document.getElementById('doc_desde').value+'-01' : null,
+            recurrenteMonto: document.getElementById('doc_recurrente').value==='' ? null : Number(document.getElementById('doc_recurrente').value),
             negocio: neg ? ((neg.datos||{}).nombre || '') : '',
             emoji: neg ? ((neg.datos||{}).emoji || '') : '',
             sucursal: selSucs.length === 1 ? selSucs[0].nombre : '',
@@ -1803,13 +1822,20 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             vig: parseInt((document.getElementById('doc_vig')||{}).value,10) || 30,
             anual: !!(document.getElementById('doc_anual')||{}).checked
         };
-        if (!cfg.total) { admAlert('El total no puede ser cero. Agrega la suscripción o un servicio.'); return; }
+        if (!(cfg.total > 0)) { admAlert('El total no puede ser cero. Agrega la suscripción o un servicio.'); return; }
+        if (!(cfg.razonRec||cfg.cliente||cfg.negocio)) { admAlert('Escribe el nombre del cliente.'); return; }
+        if (!Number.isInteger(cfg.meses)||cfg.meses<1||cfg.meses>120) { admAlert('Indica de 1 a 120 meses cubiertos.'); return; }
+        if (cfg.recurrenteMonto!==null && (cfg.recurrenteMonto<0||cfg.recurrenteMonto>cfg.total)) { admAlert('La suscripción debe estar entre 0 y el total del documento.'); return; }
+        if (cfg.estado==='pagado'&&!cfg.fpago) { admAlert('Indica la fecha del pago.'); return; }
         // Se recuerdan para el siguiente documento (sin volver a teclearlos).
         _guardarEmisor({ razon:cfg.emRazon, rfc:cfg.rfcEmisor, web:cfg.emWeb, correo:cfg.emCorreo,
                          tel:cfg.emTel, consultor:cfg.consultor, conTel:cfg.conTel, conCorreo:cfg.conCorreo });
-        cerrar();
-        try { imprimirDocumento(cfg); }
-        catch (err) { admAlert('No se pudo generar el documento:\n' + (err && err.message || err)); }
+        t.disabled=true;t.textContent='Guardando documento…';
+        try {
+            var html=construirDocumentoHTML(cfg);
+            var guardado=await AdminDocs.crear(cfg,html,documentoId);
+            cerrar();AdminDocs.imprimirArchivo(guardado);
+        } catch (err) { t.disabled=false; t.textContent='Guardar y generar'; admAlert('No se pudo completar la operación:\n' + (err && err.message || err)); }
     });
     setTimeout(function(){ var f=document.getElementById('doc_neg'); if(f) f.focus(); }, 60);
 }
@@ -1823,8 +1849,11 @@ function abrirReciboModal2(negId) { abrirDocumentoModal('recibo', negId); }
    dice "se pagó" (folio, método, fecha de pago), el presupuesto "costaría" (vigencia y
    comparativo anual). De aquí saldrá después la factura.
    Sin firmas: el comprobante de un pago es la transferencia, no un garabato. */
-function imprimirDocumento(cfg) {
+function construirDocumentoHTML(cfg) {
     var P = EtaaxPrecios, e = function(x){ return esc(x == null ? '' : String(x)); };
+    // Congelar la tarifa usada: cambiar precios mañana no cambia este documento.
+    if (!cfg.tarifas) cfg.tarifas={base:P.BASE,precios:Array.from({length:P.TOPE},function(_,i){return P.precioSucursal(i+1);}),descuentos:Array.from({length:P.TOPE},function(_,i){return P.descuentoSucursal(i+1);})};
+    var originales=P;P=Object.assign({},originales,{BASE:cfg.tarifas.base,precioSucursal:function(n){return cfg.tarifas.precios[Math.min(n,cfg.tarifas.precios.length)-1]||0;},descuentoSucursal:function(n){return cfg.tarifas.descuentos[Math.min(n,cfg.tarifas.descuentos.length)-1]||0;}});
     var esRec = cfg.tipo === 'recibo';
     var sucs = cfg.sucs || [];
     var fFecha = function(iso){
@@ -1843,6 +1872,7 @@ function imprimirDocumento(cfg) {
         // Con sucursales elegidas se nombran: el cliente ve exactamente qué está pagando.
         var nombres = sucs.map(function(x){ return x.nombre; }).filter(Boolean);
         if (nombres.length) det += ' · ' + nombres.join(', ');
+        if ((cfg.meses||1)>1) det+=' · '+cfg.meses+' meses';
         filas.push({ c:'Suscripción ETAAX', d:det, m:cfg.susMonto });
         subtotal += cfg.susMonto;
     }
@@ -1910,10 +1940,10 @@ function imprimirDocumento(cfg) {
         '<div style="display:flex;gap:28px;flex-wrap:wrap;padding:14px 0 4px;font-size:12.5px;color:#555">' +
             '<div><b style="color:#1a1916">Folio:</b> ' + e(cfg.folio || '—') + '</div>' +
             (esRec
-                ? '<div><b style="color:#1a1916">Fecha de pago:</b> ' + e(fFecha(cfg.fpago)) + '</div>' +
+                ? '<div><b style="color:#1a1916">Estado:</b> <span data-doc-estado>' + e(cfg.estado==='pagado'?'Pagado':'Pendiente de pago') + '</span></div><div><b style="color:#1a1916">Fecha de pago:</b> <span data-doc-fecha-pago>' + e(cfg.estado==='pagado'?fFecha(cfg.fpago):'Pendiente') + '</span></div>' +
                   (cfg.periodo ? '<div><b style="color:#1a1916">Periodo:</b> ' + e(cfg.periodo) + '</div>' : '') +
-                  (cfg.metodo  ? '<div><b style="color:#1a1916">Forma de pago:</b> ' + e(cfg.metodo) + '</div>' : '') +
-                  (cfg.ref     ? '<div><b style="color:#1a1916">Referencia:</b> ' + e(cfg.ref) + '</div>' : '')
+                  ('<div><b style="color:#1a1916">Forma de pago:</b> <span data-doc-metodo>'+e(cfg.metodo||'—')+'</span></div>') +
+                  ('<div><b style="color:#1a1916">Referencia:</b> <span data-doc-referencia>'+e(cfg.ref||'—')+'</span></div>')
                 : '<div><b style="color:#1a1916">Emisión:</b> ' + e(fFecha(cfg.fecha)) + '</div>' +
                   '<div><b style="color:#1a1916">Vigencia:</b> ' + cfg.vig + ' días</div>') +
         '</div>' +
@@ -1931,11 +1961,11 @@ function imprimirDocumento(cfg) {
 
         // Comparativo anual: solo en presupuesto, y solo si hay paquete que comparar.
         ((!esRec && cfg.anual && cfg.susOn && cfg.modo === 'paquete') ? (function(){
-            var lista = P.BASE * cfg.nSucs, ahorroMes = lista - cfg.susMonto;
+            var lista = P.BASE * cfg.nSucs, susMes=cfg.susMonto/(cfg.meses||1), ahorroMes = lista - susMes;
             return '<div class="rsec">Comparativo anual</div>' +
                 '<table class="rt" style="font-size:12.5px"><thead><tr><th style="text-align:left">Concepto</th><th>Mensual</th><th>Anual</th></tr></thead><tbody>' +
                 '<tr><td style="text-align:left">Precio de lista (' + cfg.nSucs + ' × ' + P.fmt(P.BASE) + ')</td><td>' + P.fmt(lista) + '</td><td>' + P.fmt(lista*12) + '</td></tr>' +
-                '<tr><td style="text-align:left">Tu precio ETAAX</td><td>' + P.fmt(cfg.susMonto) + '</td><td>' + P.fmt(cfg.susMonto*12) + '</td></tr>' +
+                '<tr><td style="text-align:left">Tu precio ETAAX</td><td>' + P.fmt(susMes) + '</td><td>' + P.fmt(susMes*12) + '</td></tr>' +
                 '</tbody><tfoot><tr><td style="text-align:left">Ahorro</td><td>' + P.fmt(ahorroMes) + '</td><td>' + P.fmt(ahorroMes*12) + '</td></tr></tfoot></table>';
         })() : '') +
 
@@ -1943,7 +1973,7 @@ function imprimirDocumento(cfg) {
         '<div style="break-inside:avoid;page-break-inside:avoid;display:flex;justify-content:flex-end;margin-top:14px">' +
             '<div style="min-width:280px;border-top:2px solid #3dbe7a;padding-top:10px">' +
                 '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">' +
-                    '<span style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#777;font-weight:700">' + (esRec ? 'Total pagado' : 'Total mensual') + '</span>' +
+                    '<span style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#777;font-weight:700">' + (esRec ? '<span data-doc-total-label>'+(cfg.estado==='pagado'?'Total pagado':'Total por pagar')+'</span>' : ((cfg.meses||1)>1?'Total del periodo':'Total mensual')) + '</span>' +
                     '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:#1a7a46;line-height:1">' + P.fmt(cfg.total) + '</span>' +
                 '</div>' +
                 '<div style="font-size:11px;color:#8a8a8a;text-align:right;margin-top:3px">' + (cfg.iva ? 'IVA incluido' : 'No incluye IVA') + '</div>' +
@@ -1983,7 +2013,7 @@ function imprimirDocumento(cfg) {
                                 ident = { negocio: nomRec, sucursal: '', emoji: cfg.emoji || '', logo: '' };
     else                        ident = { negocio: 'ETAAX', sucursal: 'Sistema de Gestión Empresarial', emoji: '', logo: '' };
 
-    etaaxAbrirReporte(etaaxReporteDoc({
+    return etaaxReporteDoc({
         titulo: (esRec ? 'Recibo' : 'Presupuesto') + ' · ' + (nomRec === '—' ? 'ETAAX' : nomRec),
         subtitulo: (esRec ? 'Recibo de Pago' : 'Presupuesto') + (cfg.folio ? ' · ' + cfg.folio : ''),
         // Sin el total en el encabezado: se lee abajo, después de los conceptos.
@@ -1995,10 +2025,14 @@ function imprimirDocumento(cfg) {
         encabezadoUnaVez: esRec,
         cuerpo: cuerpo,
         opts: ident
-    }));
+    });
 }
 
-function abrirPresupuestoModal() {
+
+async function imprimirDocumento(cfg) { var html=construirDocumentoHTML(cfg);var d=await AdminDocs.crear(cfg,html);AdminDocs.imprimirArchivo(d);return d; }
+
+function abrirPresupuestoModal() { return abrirDocumentoModal('presupuesto','');
+/* Formato anterior conservado por compatibilidad documental. */
     if (typeof EtaaxPrecios === 'undefined' || typeof etaaxReporteDoc !== 'function') {
         admAlert('No se pudieron cargar los precios o el formato de reporte. Recarga la página.');
         return;
@@ -2179,7 +2213,8 @@ function _fFechaLarga(iso){
     return dt.toLocaleDateString('es-MX',{ day:'2-digit', month:'long', year:'numeric' });
 }
 
-function abrirReciboModal(negId) {
+function abrirReciboModal(negId) { return abrirDocumentoModal('recibo',negId);
+/* Formato anterior conservado por compatibilidad documental. */
     var n = _data.negocios.find(function(x){ return x.id === negId; });
     if (!n) return;
     var d     = n.datos || {};
@@ -2724,10 +2759,11 @@ function switchTab(tab) {
     if (tab === 'papelera') { window.location.href = 'admin-papelera.html'; return; }
     if (tab === 'rrhh')     { window.location.href = 'admin-catalogo-rrhh.html'; return; }
     _tabActivo = tab;
+    if (tab === 'documentos') AdminDocs.montar();
     /* OJO: este arreglo se compara POR POSICIÓN contra los botones .tab. Al
        agregar una pestaña hay que meterla aquí en el mismo lugar, o se marca
        como activa la que no es. */
-    var tabs = ['usuarios','negocios','invitaciones','solicitudes','staff','proveedores','insumos'];
+    var tabs = ['usuarios','negocios','documentos','invitaciones','solicitudes','staff','proveedores','insumos'];
     document.querySelectorAll('.tab').forEach(function(b,i){
         b.classList.toggle('active', tabs[i] === tab);
     });
@@ -3097,7 +3133,7 @@ window.onload = init;
 </script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
-<script src="/novedades.js?v=0ec1dc82"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=ac0d48ff"></script><!-- aviso de actualizaciones del sistema -->
 
 <!-- ══ CORREO Y CONTRASEÑA DEL DUEÑO (solo admin de plataforma) ══
      El cambio NO ocurre aquí: ocurre en la Edge Function admin-credenciales,

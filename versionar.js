@@ -30,7 +30,7 @@ const RAIZ = __dirname;
 /* La capa compartida: lo que cargan varias páginas y cambia con el producto.
    No entra `app-movil/` (tiene su propio service worker) ni lo de un solo uso. */
 const COMPARTIDOS = [
-    'etaax-core.js', 'app.js', 'etaax-db.js', 'etaax-store.js', 'etaax-iconos.js', 'etaax-header.js',
+    'admin-documentos.js', 'admin-documentos.css', 'etaax-core.js', 'app.js', 'etaax-db.js', 'etaax-store.js', 'etaax-iconos.js', 'etaax-header.js',
     'etaax-ui-inicio.js', 'etaax-sidebar.js', 'etaax-sidebar.css', 'etaax-modulos-ui.js', 'etaax-modulos-ui.css',
     'hub-modulos.js', 'hub-modulos.css', 'hub-paleta.css', 'hub-globales.css', 'hub-interacciones.js',
     'novedades.js', 'theme.js', 'ctx-bar.js', 'global-nav.js', 'financiero/nav.js',

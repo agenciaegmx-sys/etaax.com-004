@@ -3,7 +3,7 @@
 <head>
 <script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
     <meta charset="UTF-8">
-    <script src="/etaax-core.js?v=deb22f08"></script>
+    <script src="/etaax-core.js?v=10820244"></script>
     <link id="adminInsumosScript" rel="preload" as="script" href="/recetas/insumos.js?v=bbbcbbeb">
     <script src="/theme.js?v=64b86f6e"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -456,7 +456,7 @@
             <button class="modal-close" onclick="cerrarNovedades()">✕</button>
         </div>
         <div style="padding:8px 20px;font-size:12px;color:var(--text-dim);border-bottom:1px solid var(--border)">
-            Cambios de costo/presentación e insumos nuevos detectados en los negocios. Revisa y actualiza el catálogo ETAAX con un clic, sin re-editar.
+            Cambios de costo, presentación o foto e insumos nuevos detectados en los negocios. Revisa y actualiza el catálogo ETAAX con un clic, sin re-editar.
         </div>
         <div id="novBody" style="padding:14px 20px;max-height:64vh;overflow:auto">
             <div style="text-align:center;color:var(--text-dim);padding:40px">Cargando…</div>
@@ -662,6 +662,27 @@ function _presFirmaSem(ps){
                  Math.round((parseFloat(p.precioCarta)||0)*100)/100 ];
     }));
 }
+// Solo imágenes utilizables: una caché sin foto no propone borrar la original.
+function _novCatalogoDe(row, porNegocio, catalogo){
+    var ins=row.datos||{}, id=ins.id||row.insumo_id, vistos={};
+    while(id && !vistos[id]){
+        if(catalogo[id])return catalogo[id];
+        vistos[id]=true;id=ins.origenId;
+        ins=(porNegocio[row.negocio_id+'|'+id]||{}).datos||{};
+    }
+    return null;
+}
+function _fotoN(ins){
+    var f=String(ins&&ins.foto||'').trim();
+    return /^(https?:\/\/|data:image\/(?:png|jpe?g|webp|gif);base64,)/i.test(f) ? f : '';
+}
+function _fotoCambioN(cat, ins){ return !!_fotoN(ins) && _fotoN(ins)!==_fotoN(cat); }
+function _fotoComparacionN(cat, ins, idx){
+    if (!_fotoCambioN(cat,ins)) return '';
+    function vista(f, titulo){return '<div><div style="font-size:11px;margin-bottom:5px">'+titulo+'</div>'+(f?'<img src="'+_escN(f)+'" alt="'+titulo+'" style="width:76px;height:86px;object-fit:contain;background:#fff;border-radius:8px">':'<span style="font-size:11px">Sin foto</span>')+'</div>';}
+    return '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">'+vista(_fotoN(cat),'Foto actual')+vista(_fotoN(ins),'Foto del negocio')+'</div>'+
+        '<label style="display:block;margin-top:8px;font-size:12px"><input type="checkbox" id="novFoto-'+idx+'" checked> Actualizar también la foto</label>';
+}
 function _fmtMN(v){ return '$'+(parseFloat(v)||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Desglose legible de las presentaciones de un insumo (para comparar versiones).
 function _presDesglose(ins){
@@ -723,6 +744,7 @@ function _novDiffFilas(cat, ins){
 }
 function _novDiffHTML(cat, ins){
     var filas = _novDiffFilas(cat, ins);
+    if (!filas.length && _fotoCambioN(cat,ins)) return '<div style="font-size:12px;color:var(--green)">Foto nueva del negocio</div>';
     if (!filas.length) return '<div style="font-size:11.5px;color:var(--text-dim);padding-top:4px">Sin diferencias de campo (cambió el orden o algún dato no comparado).</div>';
     return filas.map(function(f){
         return '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;font-size:12px;padding:4px 0;border-top:1px solid var(--border)">'
@@ -735,8 +757,8 @@ function _novDiffHTML(cat, ins){
 
 /* Descartes persistentes ("No actualizar"): la firma incluye costo y forma de
    las presentaciones — si el negocio vuelve a cambiar algo, la novedad REAPARECE. */
-function _novFirmaActu(it){ return 'a|'+it.insumoId+'|'+it.negId+'|'+it.costoNeg+'|'+_presFirmaSem((it.datosNeg||{}).presentaciones); }
-function _novFirmaNuevo(it){ return 'n|'+it.key+'|'+it.costo; }
+function _novFirmaActu(it){ return 'a|'+it.insumoId+'|'+it.negId+'|'+it.costoNeg+'|'+_presFirmaSem((it.datosNeg||{}).presentaciones)+'|'+_fotoN(it.datosNeg); }
+function _novFirmaNuevo(it){ return 'n|'+it.key+'|'+it.costo+'|'+_fotoN(it.datosNeg); }
 /* La firma se guarda HASHEADA, no completa. Antes se guardaba el JSON entero de las
    presentaciones por cada descarte: ~220 bytes × 190 insumos × 2 negocios ≈ 190 KB en
    localStorage, que ya está cargado con el catálogo (1500+ insumos), recetas e
@@ -778,7 +800,7 @@ function _novGuardarDescartes(d){
    vez de volver a aparecer sin contexto y obligar a re-decidir a ciegas.
    La clave del descarte es por insumo+negocio (no incluye el costo), y la FIRMA
    del estado va adentro: así se puede comparar contra lo de hoy. */
-function _novClave(it){ return 'a|'+it.insumoId+'|'+it.negId; }
+function _novClave(it){ return 'a|'+it.insumoId+'|'+it.negId+'|'+((it.datosNeg||{}).id||''); }
 function _novClaveNuevo(it){ return 'n|'+it.key; }
 function _novDescartarItems(items, claveFn, firmaFn){
     var d=_novDescartes();
@@ -853,7 +875,7 @@ function _novAvisoReaparece(versiones){
         var ahora=(v.costoNeg!=null)?_fmtMN(v.costoNeg):null;
         var cambio = (antes && ahora && antes!==ahora)
             ? ('costo ' + antes + ' → <b style="color:var(--accent)">' + ahora + '</b>')
-            : 'cambió la presentación';
+            : 'cambió la presentación o la foto';
         return '<div style="font-size:11px;color:var(--accent);background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.28);border-radius:7px;padding:5px 9px;margin-top:5px;line-height:1.5">'
             + '🔄 <b>Volvió a cambiar</b> después de que lo descartaste el ' + _escN(_novFechaCorta(d.ts)) + ': ' + cambio
             + '<br><span style="color:var(--text-dim)">en ' + _escN(v.negNombre || d.neg || '—') + '</span></div>';
@@ -914,6 +936,7 @@ async function _cargarNovedades(){
     // Índices del catálogo
     var catById={}, catByKey={};
     (_catalogoMem||[]).forEach(function(c){ catById[c.id]=c; catByKey[_keyN(c)]=c; });
+    var porNegocio={};all.forEach(function(r){porNegocio[r.negocio_id+'|'+((r.datos||{}).id||r.insumo_id)]=r;});
     var actu=[], nuevosMap={};
     all.forEach(function(row){
         var ins=row.datos; if(!ins) return;
@@ -927,12 +950,12 @@ async function _cargarNovedades(){
         var negNombre = negMap[row.negocio_id];
         var sucNombre = ins.sucursalId ? (sucMap[row.negocio_id+'|'+ins.sucursalId]||'') : '';
         if (sucNombre) negNombre += ' · ' + sucNombre;
-        var cat = catById[row.insumo_id];
+        var cat = _novCatalogoDe(row,porNegocio,catById);
         if (cat){
             var cN=_costoN(ins), cC=_costoN(cat);
             var presN=_presFirmaSem(ins.presentaciones), presC=_presFirmaSem(cat.presentaciones);
-            if (cN!==cC || presN!==presC)
-                actu.push({ insumoId:row.insumo_id, negId:row.negocio_id, negNombre:negNombre, nombre:ins.nombre, marca:ins.marca, costoCat:cC, costoNeg:cN, presCambio:(presN!==presC), datosNeg:ins });
+            if (cN!==cC || presN!==presC || _fotoCambioN(cat,ins))
+                actu.push({ insumoId:cat.id, negId:row.negocio_id, negNombre:negNombre, nombre:ins.nombre, marca:ins.marca, costoCat:cC, costoNeg:cN, presCambio:(presN!==presC), datosNeg:ins });
         } else {
             var k=_keyN(ins);
             if (catByKey[k]) return; // existe por identidad con otro id → no es nuevo
@@ -981,8 +1004,8 @@ function _renderNovedades(){
                            _reapareceDesde: it._reapareceDesde });   // para el aviso de "volvió a cambiar"
     });
     var nGrupos=orden.length;
-    html += '<div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin:4px 0 10px">📈 Actualizaciones de costo / presentación ('+nGrupos+' insumo'+(nGrupos!==1?'s':'')+')</div>';
-    if (!nGrupos) html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:18px">Sin cambios de costo pendientes.</div>';
+    html += '<div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin:4px 0 10px">📈 Actualizaciones de costo / presentación / foto ('+nGrupos+' insumo'+(nGrupos!==1?'s':'')+')</div>';
+    if (!nGrupos) html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:18px">Sin cambios pendientes.</div>';
     orden.forEach(function(insumoId){
         var g=grupos[insumoId];
         var cat=(_catalogoMem||[]).find(function(c){ return c.id===insumoId; });
@@ -1016,7 +1039,7 @@ function _renderNovedades(){
                           (diff!==0?'<span style="font-size:10px;color:'+col+'">'+(diff>0?'+':'')+_fmtMN(diff)+' vs catálogo</span>':'')+
                         '</div>'+
                         // Diff campo por campo, igual que las Novedades del negocio.
-                        _novDiffHTML(cat, v.datosNeg)+
+                        _novDiffHTML(cat, v.datosNeg)+_fotoComparacionN(cat, v.datosNeg, v.idx)+
                       '</div>'+
                       '<div style="display:flex;flex-direction:column;gap:6px">'+
                         '<button class="btn-vista" style="color:var(--green);border-color:var(--green);white-space:nowrap" onclick="_aplicarActualizacion('+v.idx+')">↑ Aplicar esta versión</button>'+
@@ -1054,10 +1077,21 @@ async function _aplicarActualizacion(idx){
     if (!it) return;
     var i=_catalogoMem.findIndex(function(c){ return c.id===it.insumoId; });
     if (i<0) return;
-    // Actualizar SOLO costos/presentaciones; conservar la ficha curada del catálogo
-    // (nombre, categoría, foto, etc.). El admin revisó el cambio de costo del negocio.
+    // Actualizar SOLO costos/presentaciones y la foto seleccionada; conservar nombre y clasificación.
+    // Una foto vacía puede venir de una caché ligera: nunca borra la del catálogo.
     var upd=Object.assign({}, _catalogoMem[i]);
     upd.presentaciones=JSON.parse(JSON.stringify(it.datosNeg.presentaciones||[]));
+    var fotoCheck=document.getElementById('novFoto-'+idx);
+    if (_fotoCambioN(upd,it.datosNeg) && (!fotoCheck || fotoCheck.checked)) {
+        var foto=_fotoN(it.datosNeg);
+        if (foto.indexOf('data:')===0 && typeof sbSubirFotoBase64==='function') {
+            var url=await sbSubirFotoBase64('insumos',foto,'catalogo');
+            if (!url) { alert('No se pudo guardar la foto. Intenta de nuevo; el catálogo sigue igual.'); return; }
+            foto=url;
+        }
+        upd.foto=foto;
+    }
+    upd.actualizado=new Date().toISOString();
     var r=await _supabase.from('catalogo_insumos').upsert([{ id:upd.id, datos:upd }]);
     if (r.error){ alert('Error al actualizar: '+r.error.message); return; }
     _catalogoMem[i]=upd;
@@ -1264,7 +1298,7 @@ async function _agregarAlCatalogo(idx){
 </script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
-<script src="/novedades.js?v=0ec1dc82"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=ac0d48ff"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 </body>

@@ -1899,6 +1899,32 @@
         return base;
     }
 
+    // Cobros de plataforma. Los presupuestos no son ingresos; las anulaciones
+    // salen del control. El MRR distribuye solo suscripción entre meses cubiertos.
+    function montoRecurrenteDocumento(cfg) {
+        if (!cfg.susOn) return 0;
+        var extras = (cfg.extras || []).reduce(function(s,x){ return s + Math.round(n(x.monto)*100); },0);
+        var total = Math.round(n(cfg.total)*100);
+        return Math.max(0, Math.min(total, total-extras))/100;
+    }
+    function resumenDocumentosAdmin(documentos, mes) {
+        var r={emitido:0,cobrado:0,pendiente:0,mrr:0,porClasificar:0}, vistos={};
+        function indice(s){var m=String(s||'').match(/^(\d{4})-(\d{2})(?:-|$)/);return m && +m[2]>=1 && +m[2]<=12 ? +m[1]*12 + +m[2]-1 : null;}
+        var actual=indice(mes), recurrente=0;
+        (documentos||[]).forEach(function(d){
+            if (!d || d.tipo!=='recibo' || d.estado==='anulado' || (d.moneda && d.moneda!=='MXN') || (d.id && vistos[d.id])) return;
+            if(d.id)vistos[d.id]=true;
+            var centavos=Math.round(n(d.total)*100);
+            if(String(d.fecha||'').slice(0,7)===mes)r.emitido+=centavos;
+            if(d.estado==='pagado' && String(d.fecha_pago||'').slice(0,7)===mes)r.cobrado+=centavos;
+            if(d.estado==='pendiente')r.pendiente+=centavos;
+            var inicio=indice(d.periodo_desde), meses=Math.max(1,Math.floor(n(d.meses)||1));
+            if(d.suscripcion_monto==null || (n(d.suscripcion_monto)>0 && inicio===null)){r.porClasificar++;return;}
+            if(actual!==null && inicio!==null && actual>=inicio && actual<inicio+meses)recurrente+=n(d.suscripcion_monto)*100/meses;
+        });
+        r.emitido/=100;r.cobrado/=100;r.pendiente/=100;r.mrr=Math.round(recurrente)/100;
+        return r;
+    }
     // Equivalencias del líquido abierto; las botellas cerradas no entran aquí.
     function equivalenciasLiquidoInventario(ml, copaML) {
         var liquido = Math.max(0, n(ml)), copa = n(copaML);
@@ -1985,6 +2011,8 @@
     }
     window.EtaaxCore = {
         equivalenciasLiquidoInventario: equivalenciasLiquidoInventario,
+        montoRecurrenteDocumento: montoRecurrenteDocumento,
+        resumenDocumentosAdmin: resumenDocumentosAdmin,
         unidadesCompraInventario: unidadesCompraInventario,
         estadoStockInventario: estadoStockInventario,
         rendimientosSubReceta: rendimientosSubReceta,
