@@ -20076,6 +20076,11 @@ console.log('\n══ BH27 · Arrastrar para reordenar ══');
             head: nuevoEl('head', {}, null),
             documentElement: nuevoEl('html', {}, null),
             body: nuevoEl('body', {}, null),
+            /* Un documento que SÍ se desplaza, para la lista que no vive en un
+               contenedor con scroll propio: ahí el que baja es la PÁGINA. */
+            scrollingElement: Object.assign(
+                nuevoEl('html', {}, { top: -400, height: 4000, bottom: 3600 }),
+                { scrollTop: 400, scrollHeight: 4000, clientHeight: 800 }),
             /* El punto cae en la fila cuyo rectángulo lo contiene. Si hay
                tirador, se devuelve el tirador: es lo que de verdad hay debajo
                del dedo y el motor tiene que saber subir hasta la fila. */
@@ -20091,8 +20096,13 @@ console.log('\n══ BH27 · Arrastrar para reordenar ══');
     function motor(filas, conGrip) {
         const { cont, items, doc } = miniDOM(filas, conGrip);
         const movs = [];
+        /* Los temporizadores se CUENTAN: el autoscroll vive en un setInterval y
+           un gesto que termina sin apagarlo deja la lista deslizándose sola. */
+        let idInt = 0, auto = null; const vivos = new Set();
         const c = { console, Set, Array, String, Number, parseInt, parseFloat, isNaN, Math, JSON,
-            document: doc, setInterval: () => 0, clearInterval: () => {},
+            document: doc,
+            setInterval: (f) => { vivos.add(++idInt); auto = f; return idInt; },
+            clearInterval: (id) => { vivos.delete(id); },
             getComputedStyle: () => ({ overflowY: 'visible' }) };
         c.window = c;
         vm.createContext(c);
@@ -20112,7 +20122,8 @@ console.log('\n══ BH27 · Arrastrar para reordenar ══');
             doc.disparar('pointermove', { pointerId:1, clientX:x, clientY:yA, preventDefault(){} });
             doc.disparar('pointerup',   { pointerId:1, clientX:x, clientY:yA, preventDefault(){} });
         };
-        return { cont, items, movs, arrastrar, api: c.etaaxReordenar, doc };
+        return { cont, items, movs, arrastrar, api: c.etaaxReordenar, doc, vivos, conGrip,
+                 auto: () => auto && auto() };
     }
 
     /* ── EL MOTOR, CORRIENDO ── */
@@ -20181,6 +20192,123 @@ console.log('\n══ BH27 · Arrastrar para reordenar ══');
         const m = motor(3, false);
         m.arrastrar(2, 0, true);
         return eq(m.movs.join('|'), 'r2>antes>r0', 'sin tirador también');
+    });
+
+    /* ── EL TIRADOR TIENE QUE SER UNA CAJA ──────────────────────────────────
+       `touch-action` NO APLICA a un elemento inline no reemplazado. El tirador
+       del escandallo es un <span> dentro de un <td> —inline—, así que el
+       navegador IGNORABA el `touch-action:none` de arriba, decidía que el dedo
+       quería hacer scroll y mandaba `pointercancel`: en tablet no se podía
+       reordenar nada. Reproducido con touch real en
+       `tests/probar-ventanas-insumos.cjs` (ETAAX_PRUEBA_TOUCH=1), que es donde
+       se comprueba el efecto; aquí se vigila que la regla no se vuelva a caer.
+
+       Esta prueba es de TEXTO a propósito: este DOM de mentira no aplica CSS,
+       así que no puede ver la consecuencia. Por eso existe la otra. */
+    test('TABLET · el tirador es una caja, no un inline', () =>
+        eq(/\.ord-grip\{[^}]*display:inline-flex/.test(cssInyectado), true, 'con caja'));
+    test('…con área suficiente para un dedo', () =>
+        eq(/\.ord-grip\{[^}]*min-height:36px/.test(cssInyectado) &&
+           /\.ord-grip::after\{[^}]*width:44px/.test(cssInyectado), true, 'de dedo'));
+
+    /* ── UN DEDO A LA VEZ ───────────────────────────────────────────────────
+       El segundo dedo que tocara la lista se quedaba con el arrastre: `origen`
+       y `pid` se reescribían, el primer renglón quedaba marcado como
+       arrastrándose para siempre y al soltar se movía el que no era. En una
+       tablet apoyada en la barra eso pasa sin querer. */
+    test('un segundo dedo no le quita el arrastre al primero', () => {
+        const m = motor(4, true);
+        const y1 = m.items[3]._rect.top + 10;
+        m.cont.disparar('pointerdown', { pointerId:1, button:0, clientX:5, clientY:y1,
+            target: m.items[3].children[0], preventDefault(){} });
+        // un segundo dedo toca OTRO renglón a media faena
+        m.cont.disparar('pointerdown', { pointerId:2, button:0, clientX:5, clientY:m.items[1]._rect.top + 10,
+            target: m.items[1].children[0], preventDefault(){} });
+        // y el primero termina su gesto donde quería
+        m.doc.disparar('pointermove', { pointerId:1, clientX:5, clientY:m.items[0]._rect.top + 4, preventDefault(){} });
+        m.doc.disparar('pointerup',   { pointerId:1, clientX:5, clientY:m.items[0]._rect.top + 4, preventDefault(){} });
+        return eq(m.movs.join('|'), 'r3>antes>r0', 'movió el que no era: ' + m.movs.join('|'));
+    });
+    test('…y el dedo ajeno tampoco deja renglones marcados', () => {
+        const m = motor(4, true);
+        m.cont.disparar('pointerdown', { pointerId:1, button:0, clientX:5, clientY:m.items[3]._rect.top + 10,
+            target: m.items[3].children[0], preventDefault(){} });
+        m.cont.disparar('pointerdown', { pointerId:2, button:0, clientX:5, clientY:m.items[1]._rect.top + 10,
+            target: m.items[1].children[0], preventDefault(){} });
+        m.doc.disparar('pointerup', { pointerId:1, clientX:5, clientY:m.items[3]._rect.top + 10, preventDefault(){} });
+        const pegados = m.items.filter(x => x._cl.has('ord-arrastrando')).length;
+        return eq(pegados, 0, pegados + ' renglón(es) quedaron marcados arrastrándose');
+    });
+    /* Y la cancelación de un dedo AJENO no puede tirar el arrastre bueno: el
+       que apoya la mano o el que iba a tocar otro botón mandaba su propio
+       `pointercancel` y el gesto se perdía a media faena. */
+    test('el pointercancel de otro dedo no tira el arrastre en curso', () => {
+        const m = motor(4, true);
+        const y = m.items[3]._rect.top + 10;
+        m.cont.disparar('pointerdown', { pointerId:1, button:0, clientX:5, clientY:y,
+            target: m.items[3].children[0], preventDefault(){} });
+        m.doc.disparar('pointermove',   { pointerId:1, clientX:5, clientY:m.items[0]._rect.top + 4, preventDefault(){} });
+        m.doc.disparar('pointercancel', { pointerId:9 });     // un dedo ajeno
+        m.doc.disparar('pointerup',     { pointerId:1, clientX:5, clientY:m.items[0]._rect.top + 4, preventDefault(){} });
+        return eq(m.movs.join('|'), 'r3>antes>r0', 'un dedo ajeno se llevó el gesto');
+    });
+
+    /* ── EL GESTO SE TERMINA, PASE LO QUE PASE ──────────────────────────────
+       El autoscroll vive en un `setInterval` y el documento queda con una clase
+       que bloquea la selección de texto. Si el gesto no se cierra, la lista se
+       sigue deslizando sola y no se puede seleccionar nada en la página hasta
+       recargar. Repintar es lo normal aquí: `filtrar()` repinta al guardar. */
+    test('soltar apaga el temporizador del autoscroll', () => {
+        const m = motor(4, true);
+        m.arrastrar(3, 0, true);
+        return eq(m.vivos.size, 0, m.vivos.size + ' temporizador(es) siguen vivos');
+    });
+    test('…y suelta el documento', () => {
+        const m = motor(4, true);
+        m.arrastrar(3, 0, true);
+        return eq(m.doc.body._cl.has('ord-arrastrando-doc'), false, 'el documento quedó sin selección');
+    });
+    /* ── ARRASTRAR HASTA EL BORDE DESPLAZA ─────────────────────────────────
+       Y cuando la lista NO vive en un contenedor con scroll propio, el que se
+       desplaza es la PÁGINA. Sin esa caída, arrastrar hasta el borde no hacía
+       nada en la mitad de las pantallas —las que desplazan el documento— y
+       había que soltar, deslizar y volver a agarrar. Se llama al temporizador
+       del autoscroll a mano porque aquí no corre el reloj del navegador. */
+    test('arrastrar pegado al borde desplaza la página', () => {
+        const m = motor(4, true);
+        const antes = m.doc.scrollingElement.scrollTop;
+        m.cont.disparar('pointerdown', { pointerId:1, button:0, clientX:5, clientY:m.items[3]._rect.top + 10,
+            target: m.items[3].children[0], preventDefault(){} });
+        // el dedo sube hasta el borde de arriba de lo que se ve
+        m.doc.disparar('pointermove', { pointerId:1, clientX:5, clientY:4, preventDefault(){} });
+        m.auto();
+        const despues = m.doc.scrollingElement.scrollTop;
+        m.doc.disparar('pointerup', { pointerId:1, clientX:5, clientY:4, preventDefault(){} });
+        return eq(despues < antes, true, 'la página no se movió: ' + antes + ' → ' + despues);
+    });
+    test('…y hacia el otro lado también', () => {
+        const m = motor(4, true);
+        const antes = m.doc.scrollingElement.scrollTop;
+        m.cont.disparar('pointerdown', { pointerId:1, button:0, clientX:5, clientY:m.items[0]._rect.top + 10,
+            target: m.items[0].children[0], preventDefault(){} });
+        /* `clientHeight` del documento es 800 en este DOM de mentira: pegado a
+           ese borde, el autoscroll tiene que bajar. */
+        m.doc.disparar('pointermove', { pointerId:1, clientX:5, clientY:795, preventDefault(){} });
+        m.auto();
+        const despues = m.doc.scrollingElement.scrollTop;
+        m.doc.disparar('pointerup', { pointerId:1, clientX:5, clientY:795, preventDefault(){} });
+        return eq(despues > antes, true, 'la página no bajó: ' + antes + ' → ' + despues);
+    });
+
+    test('repintar a media faena termina el gesto en vez de dejarlo colgado', () => {
+        const m = motor(4, true);
+        m.cont.disparar('pointerdown', { pointerId:1, button:0, clientX:5, clientY:m.items[3]._rect.top + 10,
+            target: m.items[3].children[0], preventDefault(){} });
+        eq(m.vivos.size, 1, 'el autoscroll no arrancó: la prueba no estaría probando nada');
+        m.api.quitar(m.cont);                       // lo que hace un repintado
+        eq(m.vivos.size, 0, 'quedó el temporizador del autoscroll corriendo');
+        eq(m.doc.body._cl.has('ord-arrastrando-doc'), false, 'el documento quedó sin poder seleccionar');
+        return eq(m.items.filter(x => x._cl.has('ord-arrastrando')).length, 0, 'quedó un renglón marcado');
     });
     /* Con tirador, tocar el renglón FUERA del tirador no arrastra: ahí están
        los campos que hay que poder escribir y la ficha que hay que poder abrir. */

@@ -181,6 +181,7 @@ async function run(base) {
  if (process.env.ETAAX_PRUEBA_DOCUMENTOS) { await probarDocumentosAdmin(base,dir); return; }
  if (process.env.ETAAX_PRUEBA_SALIDAS) { await probarSalidasCalendario(base,dir); return; }
  if (process.env.ETAAX_PRUEBA_STOCK) { await probarStockCosteo(base,dir); return; }
+ if (process.env.ETAAX_PRUEBA_TOUCH) { await probarReordenTactil(base,dir); return; }
  if (process.env.ETAAX_PRUEBA_RENDIMIENTOS) { await probarRendimientosSucursales(base,dir); return; }
  for(const width of [1440,768,390]){
   const p=await page(base,'/hub.html','owner',width,true);
@@ -211,6 +212,7 @@ async function run(base) {
   assert.ok(z.modal>z.header&&z.front,JSON.stringify(z));results.push(width+' modal encima del header');
   await close(p);
  }
+ await probarReordenTactil(base, dir);
  await probarIdentidadCatalogos(base, dir);
  await probarRendimientosSucursales(base,dir);
 }
@@ -541,6 +543,321 @@ async function click(p, selector) {
     await send('Input.dispatchMouseEvent', {type:'mousePressed',button:'left',clickCount:1,...r}, p.sid);
     await send('Input.dispatchMouseEvent', {type:'mouseReleased',button:'left',clickCount:1,...r}, p.sid);
 }
+/* ── REORDENAR CON EL DEDO ───────────────────────────────────────────────────
+   Edwin reportó que en tablet no se puede reacomodar: el dedo mueve la pantalla
+   en vez del renglón. La suite de `money-tests.js` no lo ve porque su DOM
+   simulado no aplica reglas CSS, y el fallo ES una regla CSS: `touch-action` no
+   aplica a elementos inline no reemplazados, y el tirador del escandallo es un
+   `<span>` dentro de un `<td>`. El navegador ignora el `touch-action:none`,
+   decide que el gesto es un scroll y manda `pointercancel`.
+
+   Aquí se arrastra con TOUCH de verdad (Input.dispatchTouchEvent con la
+   emulación táctil encendida) sobre las pantallas completas, y se mira la
+   secuencia de eventos además del resultado: un arrastre que "no movió nada" y
+   uno que el navegador canceló se ven igual mirando solo el orden final. */
+async function _arrastrarConDedo(sid, desde, hasta, pasos) {
+    pasos = pasos || 8;
+    await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: desde.x, y: desde.y, id: 1 }] }, sid);
+    await pause(30);
+    for (let i = 1; i <= pasos; i++) {
+        const t = i / pasos;
+        await send('Input.dispatchTouchEvent', { type: 'touchMove',
+            touchPoints: [{ x: desde.x + (hasta.x - desde.x) * t, y: desde.y + (hasta.y - desde.y) * t, id: 1 }] }, sid);
+        await pause(20);
+    }
+    await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sid);
+    await pause(150);
+}
+/* Apunta todo lo que pasa con el puntero: así se distingue "no se movió" de
+   "el navegador se llevó el gesto para hacer scroll". */
+const _ESPIA_PUNTERO = "(function(){window.__ev=[];" +
+    "['pointerdown','pointermove','pointerup','pointercancel'].forEach(function(t){" +
+    "document.addEventListener(t,function(e){window.__ev.push(t+':'+Math.round(e.clientY));},true);});" +
+    "window.__scroll=[];return true;})()";
+
+async function probarReordenTactil(base, dir) {
+    /* 768 de ancho: una tablet en vertical, que es donde se usa detrás de la
+       barra. `mobile:false` a propósito — con la emulación móvil Chrome ensancha
+       el viewport al contenido y tapa justo lo que hay que medir. */
+    let p = await page(base, '/hub.html', 'owner', 768, true);
+    await send('Network.setExtraHTTPHeaders', { headers: {} }, p.sid);
+    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 }, p.sid);
+    /* Alto de tablet de verdad. `page()` usa 1000 px y con eso el `.header`
+       pegajoso (437×268) más una tarjeta de galería de 269 px no dejan sitio
+       para el par de renglones que hace falta para arrastrar uno sobre otro:
+       un iPad en vertical son 1024–1366. */
+    const ALTO = 1300;
+    await send('Emulation.setDeviceMetricsOverride', { width: 768, height: ALTO, deviceScaleFactor: 1, mobile: false }, p.sid);
+
+    /* ── 1) El escandallo ─────────────────────────────────────────────────
+       El editor de receta abre DENTRO de `#iframeInsumo` (`abrirEditorEnModal`),
+       así que la tabla del padre es la oculta: hay que medir y tocar adentro del
+       marco, sumando su desplazamiento para que las coordenadas del toque sean
+       las de la ventana de arriba. */
+    await go(p, 'location.href=' + JSON.stringify(base + '/recetas/index.html'),
+        "typeof abrirEscModal==='function' && document.querySelector('#ctxBar #etxCambiarModulo')");
+    await evalPage(p.sid, "document.getElementById('etaaxNovOk')?.click();abrirEscModal('alimentos');true");
+    const W = "document.getElementById('iframeInsumo').contentWindow";
+    await until(p.sid, W + " && " + W + ".document.readyState==='complete' && !!" + W + ".document.getElementById('tbodyIngredientes')");
+    /* `let ingredientes` es un binding LÉXICO del script: no es propiedad de
+       `window`, así que desde fuera solo se alcanza con el `eval` de ese marco. */
+    const _dentro = (code) => evalPage(p.sid, W + ".eval(" + JSON.stringify(code) + ")");
+    await _dentro("ingredientes.splice(0,ingredientes.length," +
+        "{nombre:'AAA primero',desc:'',cantidad:1,unidad:'KG',costoPorKgLt:10,insumoId:''}," +
+        "{nombre:'BBB segundo',desc:'',cantidad:2,unidad:'KG',costoPorKgLt:20,insumoId:''}," +
+        "{nombre:'CCC tercero',desc:'',cantidad:3,unidad:'KG',costoPorKgLt:30,insumoId:''});renderTabla();true");
+    await until(p.sid, W + ".document.querySelectorAll('#tbodyIngredientes tr[data-ing-i]').length===3");
+    /* La tabla de ingredientes queda abajo de la ficha, y el editor termina de
+       pintar DESPUÉS de abrirse: acercar la fila y medirla en dos pasos dejaba
+       que un repintado tardío devolviera el scroll a cero, y entonces el toque
+       caía fuera del marco (y=1044 en una ventana de 1000). Las dos cosas van
+       en la MISMA evaluación: se acerca, se mide y se comprueba de un tirón. */
+    const _acercarYmedir = (sel) => _dentro(
+        "(function(){var d=document,w=window,el=d.querySelector(" + JSON.stringify(sel) + ");" +
+        "if(!el)return null;" +
+        "function fuera(){var q=el.getBoundingClientRect();return q.top<90||q.bottom>w.innerHeight-90;}" +
+        "el.scrollIntoView({block:'center'});" +
+        "if(fuera()){for(var n=el.parentElement;n;n=n.parentElement){var ov=getComputedStyle(n).overflowY;" +
+        "if((ov==='auto'||ov==='scroll')&&n.scrollHeight>n.clientHeight+4){" +
+        "n.scrollTop+=el.getBoundingClientRect().top-w.innerHeight*0.4;break;}}}" +
+        "if(fuera()){var sc=d.scrollingElement||d.documentElement;" +
+        "sc.scrollTop+=el.getBoundingClientRect().top-w.innerHeight*0.4;}" +
+        "var g=el.querySelector('.ord-grip')||el,cs=getComputedStyle(g),r=g.getBoundingClientRect();" +
+        "function en(x,y){var e=d.elementFromPoint(x,y);return !!(e&&e.closest&&e.closest('.ord-grip'));}" +
+        "var cx=r.left+r.width/2, cy=r.top+r.height/2;" +
+        "var a=0,b=0,i=0,j=0,centro=en(cx,cy);" +
+        "if(centro){for(var k=1;k<40;k++){if(en(cx,cy-k))a=k;else break;}" +
+        "for(var k2=1;k2<40;k2++){if(en(cx,cy+k2))b=k2;else break;}" +
+        "for(var k3=1;k3<40;k3++){if(en(cx-k3,cy))i=k3;else break;}" +
+        "for(var k4=1;k4<40;k4++){if(en(cx+k4,cy))j=k4;else break;}}" +
+        "var fila=el.getBoundingClientRect();" +
+        "return {display:cs.display,touch:cs.touchAction,w:r.width,h:r.height," +
+        "x:cx,y:cy,centro:centro,alto:centro?a+b+1:0,ancho:centro?i+j+1:0," +
+        "filaTop:fila.top,filaBottom:fila.bottom,vh:w.innerHeight};})()");
+
+    const caja = await _acercarYmedir('#tbodyIngredientes tr[data-ing-i="2"]');
+    assert.ok(caja && caja.filaTop > 0 && caja.filaBottom < caja.vh,
+        'no se pudo poner el renglón a la vista: ' + JSON.stringify(caja));
+    assert.ok(caja.w > 0 && caja.h > 0, 'el tirador no está en pantalla: ' + JSON.stringify(caja));
+    assert.ok(caja.centro, 'el centro del tirador no responde al toque: ' + JSON.stringify(caja));
+    /* EL FALLO, EXPLÍCITO: con el tirador inline el navegador ignora
+       `touch-action` por completo. No es que el área sea chica — es que la regla
+       no se aplica a un elemento inline no reemplazado. */
+    assert.notEqual(caja.display, 'inline',
+        'el tirador del escandallo es inline: el navegador ignora su touch-action ' + JSON.stringify(caja));
+    assert.equal(caja.touch, 'none', 'el tirador no tiene touch-action:none efectivo ' + JSON.stringify(caja));
+    /* Área de toque cómoda para un dedo (44 px es la recomendación de Apple y
+       Google). Se mide la REAL —hasta dónde sigue respondiendo— así cuenta
+       también el margen invisible que se le dé. */
+    assert.ok(caja.alto >= 36, 'área de toque demasiado baja para un dedo: ' + JSON.stringify(caja));
+    assert.ok(caja.ancho >= 36, 'área de toque demasiado angosta para un dedo: ' + JSON.stringify(caja));
+    await check('escandallo: el tirador es una caja con área de dedo', async () => {});
+
+    const nombres = () => _dentro("ingredientes.map(function(x){return x.nombre;}).join('|')");
+    assert.equal(await nombres(), 'AAA primero|BBB segundo|CCC tercero');
+    await evalPage(p.sid, "(function(){var d=" + W + ".document;window.__ev=[];" +
+        "['pointerdown','pointermove','pointerup','pointercancel'].forEach(function(t){" +
+        "d.addEventListener(t,function(e){window.__ev.push(t+':'+e.pointerType);},true);});return true;})()");
+    /* Coordenadas del toque en la ventana de ARRIBA: la del tirador dentro del
+       marco más el desplazamiento del marco, tomadas aquí mismo para que un
+       repintado entre medias no las deje viejas.
+
+       Se mueve al renglón DE ARRIBA, no al primero: a 768 px cada ingrediente
+       se apila como una tarjeta de ~390 px y tres no caben en el marco. Mover
+       al adyacente prueba lo mismo —que el dedo reordena— sin que el resultado
+       dependa además del autoscroll, que tiene su propia prueba. */
+    const g3 = await evalPage(p.sid, "(function(){var w=" + W + ",d=w.document;" +
+        "var its=d.querySelectorAll('#tbodyIngredientes tr[data-ing-i]');" +
+        "its[1].scrollIntoView({block:'start'});" +
+        "var off=document.getElementById('iframeInsumo').getBoundingClientRect();" +
+        "var gr=its[2].querySelector('.ord-grip').getBoundingClientRect(), r1=its[1].getBoundingClientRect();" +
+        /* El destino se acota DENTRO del marco: `scrollIntoView({block:'start'})`
+           puede dejar el renglón un pelo arriba del borde (−0.33 px), y un toque
+           en una coordenada negativa no entra a ningún lado. */
+        "var dy=Math.max(r1.top,2)+10;" +
+        "return {gx:off.left+gr.left+gr.width/2,gy:off.top+gr.top+gr.height/2,destino:off.top+dy," +
+        "mitadDeArriba:(dy-r1.top)<r1.height/2," +
+        "dentroDelMarco:(gr.top>0&&gr.bottom<w.innerHeight&&r1.bottom>20&&r1.top<w.innerHeight)};})()");
+    assert.ok(g3.dentroDelMarco, 'el renglón o su destino quedaron fuera del marco: ' + JSON.stringify(g3));
+    /* Y que el destino caiga en la MITAD DE ARRIBA del renglón: ahí es donde
+       `_marcar` decide 'antes', que es lo que esta prueba espera. */
+    assert.ok(g3.mitadDeArriba, 'el destino no cae en la mitad superior: ' + JSON.stringify(g3));
+    await _arrastrarConDedo(p.sid, { x: g3.gx, y: g3.gy }, { x: g3.gx, y: g3.destino });
+    const ev = await evalPage(p.sid, "window.__ev.join(' ')");
+    assert.ok(/pointerdown/.test(ev), 'el tirador no recibió el toque: [' + ev + ']');
+    /* ESTA ES LA FIRMA DEL BUG DE EDWIN, y es lo que se vigila aquí: con el
+       tirador inline la secuencia era `pointerdown → pointercancel` —el
+       navegador se llevaba el gesto para hacer scroll— y la lista no se movía.
+       Que no haya cancelación significa que el dedo YA es dueño del gesto.
+
+       El reordenamiento completo de punta a punta se comprueba abajo, en el
+       catálogo: ahí la lista no vive dentro de un iframe y el arnés puede
+       conducir el gesto entero. Dentro del marco flotante, Chrome deja de
+       entregar los últimos movimientos del toque al cruzar hacia el borde
+       superior, y eso es cosa del arnés, no de la página — por eso aquí se
+       afirma la cancelación y no el resultado, en vez de afirmar algo que la
+       prueba no puede sostener. */
+    assert.ok(!/pointercancel/.test(ev),
+        'el navegador CANCELÓ el gesto en el escandallo (se lo llevó el scroll): [' + ev + ']');
+    assert.ok(/pointermove/.test(ev), 'el gesto no avanzó ni un movimiento: [' + ev + ']');
+    await check('escandallo: el dedo se queda con el gesto (ya no lo cancela el scroll)', async () => {});
+
+    /* El dedo FUERA del tirador tiene que seguir desplazando: si el renglón
+       entero atrapa el gesto, la tabla larga se vuelve una trampa. */
+    assert.notEqual(await evalPage(p.sid, "(function(){var w=" + W + ";" +
+        "return w.getComputedStyle(w.document.querySelector('#tbodyIngredientes tr[data-ing-i]')).touchAction;})()"),
+        'none', 'el renglón entero atrapa el dedo: ya no se puede desplazar la lista');
+    /* Y los campos siguen alcanzables: el área del tirador no puede tapar el
+       nombre del ingrediente. */
+    /* El área de dedo del tirador no puede estar tapando el campo del
+       ingrediente: ensancharla de más fue justo lo que pasó en el primer
+       intento de arreglo, y esta prueba lo cazó. */
+    const tapa = await evalPage(p.sid, "(function(){var d=" + W + ".document;" +
+        "var i=d.querySelector('#tbodyIngredientes [data-ing=\"nombre\"]');" +
+        "i.scrollIntoView({block:'center'});" +    /* tras el gesto la tarjeta se movió */
+        "var r=i.getBoundingClientRect();" +
+        "var e=d.elementFromPoint(r.left+r.width/2,r.top+r.height/2);" +
+        "return {sobre:e?(e.tagName+'|'+(e.className||'')):null," +
+        "esTirador:!!(e&&e.closest&&e.closest('.ord-grip'))," +
+        "alcanzable:!!(e&&(e===i||i.contains(e)||i===e.closest('.ing-name-control')||(e.closest&&e.closest('.ing-name-control')&&e.closest('.ing-name-control').contains(i))))};})()");
+    assert.ok(!tapa.esTirador, 'el área de toque del tirador tapa el campo del ingrediente: ' + JSON.stringify(tapa));
+    assert.ok(tapa.alcanzable, 'el campo del ingrediente quedó cubierto por algo: ' + JSON.stringify(tapa));
+    await check('escandallo: se puede desplazar y escribir como siempre', async () => {});
+    const shot1 = await send('Page.captureScreenshot', { format: 'png' }, p.sid);
+    fs.writeFileSync(dir + '/touch-escandallo.png', Buffer.from(shot1.data, 'base64'));
+    await evalPage(p.sid, "typeof cerrarIframeInsumo==='function'&&cerrarIframeInsumo(true);true");
+
+    /* ── 2) El catálogo de insumos, en sus dos vistas ─────────────────────
+       En pestaña propia: la ventana flotante del escandallo deja su iframe y su
+       estado en la página, y navegar encima de eso dejaba el catálogo a medio
+       arrancar. Una pestaña nueva arranca limpio y además prueba la entrada
+       directa, que es como lo abre quien lo usa. */
+    await close(p);
+    /* Cuatro insumos de la sucursal activa: los suficientes para arrastrar el
+       tercero sobre el primero y que quede claro cuál se movió. */
+    const catTac = ['Agave', 'Betabel', 'Cilantro', 'Durazno'].map((n, i) => ({
+        id: 'tac' + i, nombre: n, variedad: 'de prueba', tipoInsumo: 'abarrote',
+        familia: 'Alimentos', categoria: 'Abarrotes', activo: '1', orden: i,
+        sucursales: ['matriz'], sucursalId: 'matriz',
+        presentaciones: [{ contNeto: 1000, umContenido: 'G', costoUnitario: 50, umCosto: 'KG' }]
+    }));
+    const c = await page(base, '/hub.html', 'owner', 768, true);
+    await send('Network.setExtraHTTPHeaders', { headers: {} }, c.sid);
+    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 }, c.sid);
+    await send('Emulation.setDeviceMetricsOverride', { width: 768, height: ALTO, deviceScaleFactor: 1, mobile: false }, c.sid);
+    await send('Storage.clearDataForOrigin', { origin: base, storageTypes: 'indexeddb' }, c.sid);
+    await evalPage(c.sid, 'sessionStorage.setItem("__fixture_insumos",' + JSON.stringify(JSON.stringify(catTac)) + ')');
+    await go(c, 'location.href=' + JSON.stringify(base + '/recetas/insumos.html'),
+        "typeof toggleModoOrden==='function' && typeof getInsumos==='function' && getInsumos().length>=3 && document.readyState==='complete'");
+    await evalPage(c.sid, "document.getElementById('etaaxNovOk')?.click();true");
+    p = c;
+    for (const vista of ['lista', 'grid']) {
+        await evalPage(p.sid, "if(_modoOrden)toggleModoOrden();setVistaInsumos(" + JSON.stringify(vista) + ");true");
+        await pause(150);
+        await evalPage(p.sid, "if(!_modoOrden)toggleModoOrden();true");
+        const cont = vista === 'lista' ? '#tbodyInsumos' : '#gridInsumos';
+        await until(p.sid, "document.querySelectorAll('" + cont + " [data-ord-id]').length>=3");
+        /* En las dos vistas tiene que haber tirador. Sin él el asa es la tarjeta
+           entera: el dedo que quería desplazar arrastra un insumo, y soltar
+           encima abre su ficha. */
+        const tiradores = await evalPage(p.sid, "document.querySelectorAll('" + cont + " .ord-grip').length");
+        assert.ok(tiradores >= 3, vista + ': sin tirador en modo Ordenar, el asa es la tarjeta entera (' + tiradores + ')');
+        const d = await evalPage(p.sid, "(function(){var g=document.querySelector('" + cont + " .ord-grip');" +
+            "var cs=getComputedStyle(g);return {display:cs.display,touch:cs.touchAction};})()");
+        assert.notEqual(d.display, 'inline', vista + ': tirador inline ' + JSON.stringify(d));
+        assert.equal(d.touch, 'none', vista + ': sin touch-action efectivo ' + JSON.stringify(d));
+
+        const orden = "Array.from(document.querySelectorAll('" + cont + " [data-ord-id]')).slice(0,4).map(function(x){return x.getAttribute('data-ord-id');}).join('|')";
+        await pause(300);   // que termine de pintar la lista en modo Ordenar
+        const antes = (await evalPage(p.sid, orden)).split('|');
+        await evalPage(p.sid, _ESPIA_PUNTERO);
+        /* Acercar y medir en la MISMA evaluación: tomar las coordenadas sin
+           acercar dejaba el toque en y=1226 con una ventana de 1000, y un toque
+           fuera de la ventana se cancela — parecía que el arrastre no servía
+           cuando lo que fallaba era la puntería de la prueba. */
+        /* NI EL ORIGEN NI EL DESTINO SE ADIVINAN: SE BUSCAN.
+           Apuntar a coordenadas calculadas falló por turnos —la fila de la
+           lista es más ancha que la pantalla, el centro de la tarjeta cae sobre
+           el icono de su foto, y a 768 px el `.header` es un bloque pegajoso de
+           437×268 px con z-index 49 que se queda encima del contenido y se come
+           los toques—. Así que se recorre la lista buscando un par vecino donde
+           el tirador del de abajo reciba el toque Y algún punto de la mitad
+           superior del de arriba responda A ESA tarjeta, que es justo la
+           pregunta que hace `_marcar` al soltar. Si no hay ningún par usable,
+           la prueba lo dice en vez de arrastrar al vacío y pasar por la razón
+           equivocada. */
+        const g = await evalPage(p.sid, "(function(){" +
+            "var its=document.querySelectorAll('" + cont + " [data-ord-id]');" +
+            /* Se prueban las tres alineaciones: con la tarjeta centrada, su
+               mitad superior cae dentro de la banda del header pegajoso y no
+               hay dónde soltar; bajándola queda despejada. */
+            "var alin=['end','center','start'];" +
+            "for(var a=0;a<alin.length;a++)" +
+            "for(var k=its.length-1;k>=1;k--){" +
+            "  var mov=its[k], dest=its[k-1];" +
+            "  dest.scrollIntoView({block:alin[a]});" +
+            "  var gt=mov.querySelector('.ord-grip'); if(!gt) continue;" +
+            "  var gr=gt.getBoundingClientRect();" +
+            "  if(!(gr.top>0 && gr.bottom<innerHeight)) continue;" +
+            "  var eo=document.elementFromPoint(gr.left+gr.width/2,gr.top+gr.height/2);" +
+            "  if(!(eo&&eo.closest&&eo.closest('.ord-grip'))) continue;" +
+            "  var r=dest.getBoundingClientRect(), xs=[];" +
+            "  var gd=dest.querySelector('.ord-grip');" +
+            "  if(gd){var q=gd.getBoundingClientRect();xs.push(q.left+q.width/2);}" +
+            "  xs.push(Math.min(Math.max(r.left+24,8),innerWidth-8));" +
+            "  xs.push(Math.min(Math.max(r.left+r.width/2,8),innerWidth-8));" +
+            "  for(var dy=4;dy<r.height/2;dy+=6){" +
+            "    for(var i=0;i<xs.length;i++){" +
+            "      var y=r.top+dy; if(y<=0||y>=innerHeight) continue;" +
+            "      var e=document.elementFromPoint(xs[i],y);" +
+            "      var f=e&&e.closest?e.closest('[data-ord-id]'):null;" +
+            "      if(f===dest) return {gx:gr.left+gr.width/2,gy:gr.top+gr.height/2," +
+            "        destinoX:xs[i],destino:y,mov:mov.getAttribute('data-ord-id')," +
+            "        dest:dest.getAttribute('data-ord-id'),i:k};" +
+            "    }}}" +
+            "return {mov:null};})()");
+        assert.ok(g.mov, vista + ': no hay un par de renglones donde se pueda soltar ' +
+            '(¿el header pegajoso tapa el contenido?): ' + JSON.stringify(g));
+        await _arrastrarConDedo(p.sid, { x: g.gx, y: g.gy }, { x: g.destinoX, y: g.destino });
+        const ev2 = await evalPage(p.sid, "window.__ev.join(' ')");
+        assert.ok(!/pointercancel/.test(ev2), vista + ': el navegador canceló el gesto: [' + ev2 + ']');
+        /* El arrastrado pasa ARRIBA de su vecino: se afirma el orden EXACTO,
+           no solo que "algo cambió" —un repintado que revuelva la lista también
+           cambiaría la cadena—. */
+        const esperado = antes.slice();
+        esperado.splice(g.i - 1, 0, esperado.splice(g.i, 1)[0]);
+        assert.equal(await evalPage(p.sid, orden), esperado.join('|'),
+            vista + ': el dedo no reacomodó el catálogo como se esperaba (movió ' + g.mov +
+            ' sobre ' + g.dest + ') · [' + ev2 + ']');
+        /* Soltar un arrastre no puede abrir la ficha: la tarjeta tiene su
+           propio onclick y en galería ocupa toda el área. */
+        assert.ok(!await evalPage(p.sid, "!!document.querySelector('#modalOverlay[style*=\"flex\"]')"),
+            vista + ': soltar el arrastre abrió la ficha del insumo');
+        await check('catálogo ' + vista + ': el dedo reacomoda y no abre la ficha', async () => {});
+        const shot = await send('Page.captureScreenshot', { format: 'png' }, p.sid);
+        fs.writeFileSync(dir + '/touch-catalogo-' + vista + '.png', Buffer.from(shot.data, 'base64'));
+    }
+
+    /* Costeo agrupa presentaciones: no hay tabla que ordenar a mano, así que el
+       botón no puede quedarse prendido aparentando que sí. */
+    await evalPage(p.sid, "if(_modoOrden)toggleModoOrden();setVistaInsumos('costeo');true");
+    await pause(200);
+    await evalPage(p.sid, "if(!_modoOrden)toggleModoOrden();true");
+    await pause(250);
+    const costeo = await evalPage(p.sid, "({vista:vistaInsumos,modo:!!_modoOrden})");
+    assert.ok(costeo.vista !== 'costeo' || !costeo.modo,
+        'Ordenar quedó prendido en Costeo, donde no hay nada que arrastrar: ' + JSON.stringify(costeo));
+    await check('Costeo: Ordenar no se queda prendido sin poder ordenar', async () => {});
+
+    /* Y al salir no puede quedar basura del gesto: ni el documento sin
+       selección ni marcas de destino pegadas. */
+    const limpio = await evalPage(p.sid, "({doc:document.body.classList.contains('ord-arrastrando-doc')," +
+        "marcas:document.querySelectorAll('.ord-antes,.ord-despues,.ord-arrastrando').length})");
+    assert.ok(!limpio.doc && limpio.marcas === 0, 'quedó rastro del gesto: ' + JSON.stringify(limpio));
+    await check('al salir del modo no queda rastro del gesto', async () => {});
+    await close(p);
+}
+
 async function probarIdentidadCatalogos(base, dir) {
     const maestro = {id:'maestro-1',nombre:'Maestro de prueba',marca:'Marca',tipoInsumo:'licor',familia:'Bebidas',categoria:'Licores',activo:'1',sucursales:[],sucursalId:'',
         presentaciones:[{contNeto:700,umContenido:'ML',precio:799,costoUnitario:1141.428571,umCosto:'LT'}]};

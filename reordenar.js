@@ -25,11 +25,32 @@
         // sin que la fila de abajo salte y cambie de sitio mientras arrastras.
         '.ord-antes{box-shadow:inset 0 3px 0 0 var(--accent,#f5c842)}' +
         '.ord-despues{box-shadow:inset 0 -3px 0 0 var(--accent,#f5c842)}' +
-        '.ord-grip{cursor:grab;color:var(--text-dim,#6b665e);font-size:13px;' +
+        /* EL TIRADOR ES UNA CAJA, Y NO ES UN DETALLE DE ESTILO ────────────────
+           `touch-action` NO APLICA a un elemento inline no reemplazado (lo dice
+           la especificación de Pointer Events). El tirador del escandallo es un
+           <span> dentro de un <td>, o sea inline: el navegador ignoraba el
+           `touch-action:none` de abajo, decidía que el dedo quería hacer scroll
+           y mandaba `pointercancel` — en tablet NO SE PODÍA REORDENAR NADA.
+           Reproducido en Chrome con touch real: `pointerdown → pointercancel` y
+           la lista sin moverse.
+
+           `inline-flex` lo convierte en una caja y entonces la regla sí aplica.
+           Y de paso se le da tamaño de dedo: 19×17 px era un blanco que se
+           falla, y fallarlo significa arrastrar la pantalla en vez del renglón. */
+        '.ord-grip{display:inline-flex;align-items:center;justify-content:center;' +
+            'position:relative;min-width:32px;min-height:36px;' +
+            'cursor:grab;color:var(--text-dim,#6b665e);font-size:13px;' +
             'padding:0 6px;user-select:none;letter-spacing:-1px;' +
             // touch-action:none SOLO en el tirador: así el dedo lo arrastra en
             // vez de hacer scroll, y el resto de la lista se sigue deslizando.
             'touch-action:none;-webkit-user-select:none}' +
+        /* Área de dedo un poco más ancha que lo que se ve, SIN crecer el
+           renglón: el pseudo-elemento es parte del tirador, así que el toque
+           que cae en él lo recibe el tirador. Se ensancha solo a lo ancho —
+           crecer a lo alto se comería el renglón vecino y el dedo movería el
+           equivocado. */
+        '.ord-grip::after{content:"";position:absolute;top:0;bottom:0;left:50%;' +
+            'width:44px;transform:translateX(-50%)}' +
         // Sin tirador, el asa es el renglón entero: ahí sí se toma el dedo.
         '.ord-mov{touch-action:none}' +
         '.ord-con-grip .ord-mov{touch-action:auto}' +
@@ -56,7 +77,12 @@
             var ov = getComputedStyle(n).overflowY;
             if ((ov === 'auto' || ov === 'scroll') && n.scrollHeight > n.clientHeight + 4) return n;
         }
-        return null;
+        /* Y si la lista no vive en un contenedor con scroll propio, el que se
+           desplaza es la PÁGINA. Sin esto, arrastrar hasta el borde no hacía
+           nada en las pantallas que scrollean el documento —la mitad— y había
+           que soltar, deslizar y volver a agarrar. */
+        var doc = document.scrollingElement || document.documentElement;
+        return (doc && doc.scrollHeight > doc.clientHeight + 4) ? doc : null;
     }
 
     /* ══ POR QUÉ NO SE USA EL ARRASTRE DEL NAVEGADOR ══════════════════════
@@ -107,10 +133,16 @@
            larga solo se puede mover dentro de la pantalla actual. */
         function _auto() {
             if (!scr || !origen) return;
-            var r = scr.getBoundingClientRect(), MARGEN = 48, PASO = 12;
-            var d = 0;
-            if (lastY < r.top + MARGEN)         d = -PASO;
-            else if (lastY > r.bottom - MARGEN) d = PASO;
+            /* Cuando el que scrollea es el DOCUMENTO, su caja empieza arriba del
+               todo y puede ser más alta que la pantalla: hay que medir contra lo
+               que se ve, no contra el elemento. */
+            var esDoc = (scr === document.scrollingElement || scr === document.documentElement);
+            var arriba = esDoc ? 0 : scr.getBoundingClientRect().top;
+            var abajo  = esDoc ? (window.innerHeight || scr.clientHeight)
+                               : scr.getBoundingClientRect().bottom;
+            var MARGEN = 48, PASO = 12, d = 0;
+            if (lastY < arriba + MARGEN)      d = -PASO;
+            else if (lastY > abajo - MARGEN)  d = PASO;
             if (d) { scr.scrollTop += d; _marcar(lastX, lastY); }
         }
         var lastX = 0;
@@ -118,6 +150,12 @@
         cont.__ord = {
             down: function (e) {
                 if (e.button != null && e.button !== 0) return;      // solo el principal
+                /* UN DEDO A LA VEZ. Sin esto, el segundo dedo que tocara la
+                   lista se quedaba con el arrastre: `origen` y `pid` se
+                   reescribían, el primer renglón quedaba marcado como
+                   arrastrándose para siempre y al soltar se movía el que no
+                   era. En una tablet apoyada en la barra eso pasa sin querer. */
+                if (origen) return;
                 var t = e.target;
                 if (hayGrip && !(t.closest && t.closest('.ord-grip'))) return;
                 var it = t.closest && t.closest(sel);
@@ -153,7 +191,12 @@
                 var a = _idDe(o, opts), b = _idDe(d, opts);
                 if (a && b && opts.onMover) opts.onMover(a, b, ant);
             },
-            cancel: function () {
+            cancel: function (e) {
+                /* Solo el puntero QUE ARRASTRA puede cancelar. Un dedo ajeno
+                   —el que apoya la mano, el que iba a tocar otro botón— mandaba
+                   su propio `pointercancel` y tiraba el arrastre bueno a media
+                   faena. */
+                if (e && pid !== null && e.pointerId !== undefined && e.pointerId !== pid) return;
                 if (autoT) { clearInterval(autoT); autoT = null; }
                 if (origen) origen.classList.remove('ord-arrastrando');
                 document.body.classList.remove('ord-arrastrando-doc');
@@ -172,6 +215,13 @@
 
     function quitar(cont) {
         if (!cont || !cont.__ord) return;
+        /* SI SE ESTABA ARRASTRANDO, SE TERMINA EL GESTO. Repintar o salir del
+           modo a media faena —que es lo que hace `filtrar()` al guardar—
+           desenganchaba los eventos y dejaba vivos el intervalo del autoscroll
+           y la clase que bloquea la selección del documento: la lista seguía
+           deslizándose sola y no se podía seleccionar texto en la página hasta
+           recargar. */
+        if (cont.__ord.cancel) { try { cont.__ord.cancel(); } catch (e) {} }
         cont.removeEventListener('pointerdown', cont.__ord.down);
         document.removeEventListener('pointermove',   cont.__ord.move);
         document.removeEventListener('pointerup',     cont.__ord.up);

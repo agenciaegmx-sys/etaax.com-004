@@ -1160,6 +1160,18 @@
            : 'Cambia el orden a "A mano" y te deja arrastrar';
    }
    function toggleModoOrden() {
+       /* EN COSTEO NO HAY NADA QUE ARRASTRAR, Y EL BOTÓN NO PUEDE FINGIR QUE SÍ.
+          La vista Costeo agrupa presentaciones —un insumo puede aparecer en
+          varias filas— y por eso `_renderPagina` sale antes de enganchar el
+          arrastre. El botón se quedaba prendido, con su aviso y todo, sobre una
+          tabla que no se movía: el que lo intentaba creía que el arrastre estaba
+          roto. Se cambia a Lista, que es donde el orden a mano existe de verdad,
+          y se dice por qué. */
+       if (!_modoOrden && vistaInsumos === 'costeo') {
+           setVistaInsumos('lista');
+           if (window.etaaxAlert)
+               etaaxAlert('El orden a mano se acomoda en la vista Lista: Costeo agrupa las presentaciones de un mismo insumo.');
+       }
        // Arrastrar implica orden a mano: si venías en A–Z, se cambia solo en vez de
        // dejarte mover filas que iban a rebotar a su lugar.
        if (!_modoOrden && _ordenModoIns !== 'libre') {
@@ -1925,7 +1937,19 @@
                    _insMasBtn(ins.id, 'en-card') +
                '</div>';
 
+           /* TIRADOR EN LA GALERÍA (solo en modo Ordenar) ───────────────────
+              Sin tirador, el asa es la TARJETA ENTERA: el dedo que quería
+              desplazar la galería se llevaba un insumo, y al soltarlo encima se
+              abría su ficha. Con el tirador, el dedo arrastra solo desde el
+              tirador y la galería se sigue deslizando con normalidad. Va arriba
+              a la izquierda, sobre la foto, donde no hay botón que estorbar. */
+           var gripHtml = _modoOrden
+               ? '<span class="ord-grip" title="Arrastra para cambiar el orden" ' +
+                 'style="position:absolute;top:6px;left:6px;z-index:6;background:rgba(0,0,0,.55);' +
+                 'border-radius:8px;color:#fff">⠿</span>'
+               : '';
            return '<div class="insumo-card" data-sel-id="' + ins.id + '" data-ord-id="' + ins.id + '" ' + cardClick + '>' +
+               gripHtml +
                selOverlay +
                '<div class="insumo-card-foto" style="position:relative">' +
                    fotoHTML +
