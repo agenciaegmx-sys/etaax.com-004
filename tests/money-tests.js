@@ -29315,6 +29315,335 @@ console.log('\n══ Staff · mínimo vinculado, domingo y archivo por sucursal
     test('tarifa cero elimina el descuento sin borrar los retardos de Horarios',()=>{el('pnMultaRetardo').value=0;P._pnActualizarRetardos();eq(P._pagoNomConceptos.some(c=>c._retardos),false);eq(P._asistenciaRango('m','2026-10-12','2026-10-18').retardos,2);});
 }
 
+/* ═══════════ SUITE BE23 · CORREGIR UNA CAPTURA DESDE EL QR ══════════════════
+   Factura 3 del plan de Codex, mitad del cliente. El servidor (v82) tiene su
+   propia prueba contra un Postgres de verdad —`tests/probar-sql-v82.mjs`, 32
+   casos— así que aquí NO se vuelve a probar quién puede ni las versiones: eso
+   ya está decidido allá. Lo que se prueba aquí es lo que hace LA PANTALLA con
+   cada respuesta, que es donde viven los criterios de aceptación del plan:
+
+     · corregir el primer conteo lo cambia EN SU SITIO, sin que aparezca un
+       tercero (el bug que esto vino a quitar es contar dos veces),
+     · cancelar no escribe nada,
+     · un conflicto se dice y NO se toca la lista,
+     · si falla la red se conserva lo escrito, se avisa que está pendiente y
+       NO se crea otro registro,
+     · reintentar reusa el mismo identificador de operación,
+     · y el texto del usuario va escapado.
+
+   Se corren las funciones REALES de `entrada.html` sobre un DOM de mentira.  */
+async function suiteCorregirQR() {
+console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) ══');
+
+    const txt = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const trozo = (nombre) => {
+        const p = txt.indexOf('function ' + nombre + '(');
+        if (p < 0) throw new Error('No existe ' + nombre + ' en entrada.html');
+        const ini = txt.slice(Math.max(0, p - 6), p) === 'async ' ? p - 6 : p;
+        const abre = txt.indexOf('{', p);
+        let prof = 0;
+        for (let i = abre; i < txt.length; i++) {
+            if (txt[i] === '{') prof++;
+            else if (txt[i] === '}' && --prof === 0) return txt.slice(ini, i + 1);
+        }
+        throw new Error('Sin cierre: ' + nombre);
+    };
+    /* DOM mínimo: lo justo para que el panel se arme y se lea. Los nodos
+       guardan `value`, `textContent` y `innerHTML` porque es lo que la pantalla
+       escribe y lo que la prueba lee. */
+    const mundo = (respuestas) => {
+        const nodos = {};
+        const nuevo = (tag) => {
+            const el = { tagName: tag, style: {}, children: [], value: '', textContent: '',
+                _html: '', disabled: false, className: '' };
+            Object.defineProperty(el, 'innerHTML', {
+                get() { return el._html; },
+                set(v) {
+                    el._html = String(v);
+                    /* Los ids del HTML inyectado se registran para poder
+                       leerlos después, igual que haría el navegador. */
+                    (String(v).match(/id="([^"]+)"/g) || []).forEach((m) => {
+                        const id = m.slice(4, -1);
+                        if (!nodos[id]) nodos[id] = nuevo('div');
+                    });
+                }
+            });
+            el.appendChild = (h) => { el.children.push(h); return h; };
+            return el;
+        };
+        const doc = {
+            body: nuevo('body'),
+            createElement: nuevo,
+            getElementById: (id) => nodos[id] || null,
+            _crear: (id) => (nodos[id] = nuevo('div')),
+        };
+        doc.body.appendChild = (h) => { if (h.id) nodos[h.id] = h; return h; };
+        const llamadas = [];
+        const c = {
+            console: { log(){}, warn(){}, error(){} }, JSON, Object, Math, Date, String, Number,
+            parseInt, parseFloat, isNaN,
+            document: doc, NEG: 'n1', TOKEN: 'tok', _NIPHASH: 'hA',
+            etx: (v) => String(v == null ? '' : v).replace(/[<>&"]/g,
+                (x) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[x])),
+            CNT_HECHOS: [],
+            _renderCntHechos() { c.pintadas = (c.pintadas || 0) + 1; },
+            irHistorial: async () => { c.histRecargado = (c.histRecargado || 0) + 1; },
+            _supabase: { rpc: async (nombre, args) => { llamadas.push({ nombre, args }); return respuestas.shift() || { data: { ok: true, ver: 2 } }; } },
+            llamadas,
+        };
+        c.window = c;
+        vm.createContext(c);
+        ['_corPanel', '_cerrarCorregir', '_corregir', '_corOpId', '_guardarCorreccion']
+            .forEach((n) => vm.runInContext(trozo(n), c, { filename: 'entrada.html:' + n }));
+        vm.runInContext('var _COR=null, _V82=null;', c);
+        return c;
+    };
+    const abrir = (c, valores) => {
+        c._corregir('conteo', 'c1', 1, 'Ron Añejo', valores || { cerradasBodega: '10', cerradasBarra: '', nota: '' });
+    };
+    const escribir = (c, campo, valor) => { c.document.getElementById('cor_' + campo).value = valor; };
+
+    /* ── EL CASO DEL PLAN: dos conteos, se corrige el primero ──────────── */
+    await testA('corregir un conteo lo cambia EN SU SITIO, sin agregar otro', async () => {
+        const c = mundo([{ data: { ok: true, ver: 2 } }]);
+        c.CNT_HECHOS = [{ id: 'c1', nombre: 'Ron', cerradasBodega: 10, cerradasBarra: '', ver: 1 },
+                        { id: 'c2', nombre: 'Ron', cerradasBodega: 5,  cerradasBarra: '', ver: 1 }];
+        abrir(c, { cerradasBodega: '10', cerradasBarra: '', nota: '' });
+        escribir(c, 'cerradasBodega', '8');
+        await c._guardarCorreccion();
+        eq(c.CNT_HECHOS.length, 2, 'apareció un tercer conteo: volvería a contar doble');
+        eq(c.CNT_HECHOS[0].cerradasBodega, 8, 'no se corrigió el renglón');
+        eq(c.CNT_HECHOS[0].ver, 2, 'no subió la versión del renglón');
+        return eq(c.CNT_HECHOS[1].cerradasBodega, 5, 'le movió el conteo al otro');
+    });
+    await testA('…y manda la versión que tenía y un identificador de operación', async () => {
+        const c = mundo([{ data: { ok: true, ver: 2 } }]);
+        c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+        abrir(c);
+        escribir(c, 'cerradasBodega', '8');
+        await c._guardarCorreccion();
+        const a = c.llamadas[0];
+        eq(a.nombre, 'entrada_editar', 'llamó a otra RPC');
+        eq(a.args.p_ver, 1, 'no mandó la versión');
+        eq(a.args.p_tipo, 'conteo', 'no dijo de qué tipo');
+        eq(a.args.p_cambios.cerradasBodega, 8, 'no mandó el cambio');
+        return eq(!!a.args.p_op, true, 'sin identificador no hay reintento seguro');
+    });
+    /* Una caja de 24 no se vuelve a multiplicar: lo que se manda es lo que se
+       escribió, en piezas, porque `_aPiezas` ya convirtió al capturar. */
+    await testA('corregir 2 cajas a 36 piezas manda 36, no 864', async () => {
+        const c = mundo([{ data: { ok: true, ver: 2 } }]);
+        c._COR = null;
+        c._corregir('entrada', 'e1', 1, 'Ron', { cantidad: '48', nota: '' });
+        escribir(c, 'cantidad', '36');
+        await c._guardarCorreccion();
+        return eq(c.llamadas[0].args.p_cambios.cantidad, 36, 'multiplicó otra vez');
+    });
+
+    /* ── CANCELAR NO ESCRIBE NADA ───────────────────────────────────────── */
+    await testA('cancelar no llama al servidor ni toca la lista', async () => {
+        const c = mundo([]);
+        c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+        abrir(c);
+        escribir(c, 'cerradasBodega', '3');
+        c._cerrarCorregir();
+        eq(c.llamadas.length, 0, 'escribió al cancelar');
+        return eq(c.CNT_HECHOS[0].cerradasBodega, 10, 'cambió la lista al cancelar');
+    });
+    await testA('…y no se manda nada si no se cambió nada', async () => {
+        const c = mundo([]);
+        abrir(c, { cerradasBodega: '', cerradasBarra: '', nota: '' });
+        await c._guardarCorreccion();
+        eq(c.llamadas.length, 0, 'mandó una corrección vacía');
+        return eq(/No cambiaste nada/.test(c.document.getElementById('corMsg').textContent), true,
+            'no lo dijo: ' + c.document.getElementById('corMsg').textContent);
+    });
+    /* Un número vacío NO es cero: mandarlo como 0 borraría un conteo bueno. Un
+       texto vacío SÍ se manda, porque es como se borra un comentario. */
+    await testA('un campo numérico vacío no se manda como cero', async () => {
+        const c = mundo([{ data: { ok: true, ver: 2 } }]);
+        abrir(c, { cerradasBodega: '10', cerradasBarra: '4', nota: 'algo' });
+        escribir(c, 'cerradasBarra', '');
+        escribir(c, 'nota', '');
+        await c._guardarCorreccion();
+        const cam = c.llamadas[0].args.p_cambios;
+        eq('cerradasBarra' in cam, false, 'mandó el vacío como cero: borraría lo contado');
+        return eq(cam.nota, '', 'el comentario vacío no viajó: no se podría borrar');
+    });
+
+    /* ── CONFLICTO: alguien más lo cambió ───────────────────────────────── */
+    await testA('un conflicto se dice y NO se toca la lista', async () => {
+        const c = mundo([{ data: { ok: false, motivo: 'conflicto', ver: 3 } }]);
+        c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+        abrir(c);
+        escribir(c, 'cerradasBodega', '8');
+        await c._guardarCorreccion();
+        eq(c.CNT_HECHOS[0].cerradasBodega, 10, 'cambió la lista con un conflicto');
+        return eq(/Alguien más lo cambió/.test(c.document.getElementById('corMsg').textContent), true,
+            'no explicó el conflicto: ' + c.document.getElementById('corMsg').textContent);
+    });
+    [['aplicado', /ya se aplicó/], ['cerrado', /inventario cerrado/], ['autor', /alguien más/],
+     ['nip', /NIP ya no es válido/], ['espera', /Demasiados intentos/]].forEach(([motivo, pat]) => {
+        testAsyncCola.push(['el rechazo «' + motivo + '» se explica con palabras', async () => {
+            const c = mundo([{ data: { ok: false, motivo: motivo } }]);
+            c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+            abrir(c);
+            escribir(c, 'cerradasBodega', '8');
+            await c._guardarCorreccion();
+            eq(c.CNT_HECHOS[0].cerradasBodega, 10, 'tocó la lista con un rechazo');
+            return eq(pat.test(c.document.getElementById('corMsg').textContent), true,
+                'dijo: ' + c.document.getElementById('corMsg').textContent);
+        }]);
+    });
+
+    /* ── SE CAYÓ LA RED ─────────────────────────────────────────────────── */
+    await testA('si falla la red se avisa que está pendiente y no se crea otro registro', async () => {
+        const c = mundo([{ error: { message: 'Failed to fetch' } }]);
+        c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+        abrir(c);
+        escribir(c, 'cerradasBodega', '8');
+        await c._guardarCorreccion();
+        eq(c.CNT_HECHOS.length, 1, 'creó otro registro al fallar');
+        eq(c.CNT_HECHOS[0].cerradasBodega, 10, 'fingió que se guardó');
+        const m = c.document.getElementById('corMsg').textContent;
+        eq(/no se creó otro registro/.test(m), true, 'no lo tranquilizó: ' + m);
+        /* Y lo escrito se queda en el formulario: si se borrara, habría que
+           volver a teclearlo justo cuando la conexión está peor. */
+        eq(c.document.getElementById('cor_cerradasBodega').value, '8', 'borró lo que había escrito');
+        return eq(c.document.getElementById('corOk').disabled, false, 'dejó el botón muerto');
+    });
+    await testA('…y al reintentar manda el MISMO identificador de operación', async () => {
+        const c = mundo([{ error: { message: 'Failed to fetch' } }, { data: { ok: true, ver: 2 } }]);
+        c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+        abrir(c);
+        escribir(c, 'cerradasBodega', '8');
+        await c._guardarCorreccion();
+        await c._guardarCorreccion();
+        eq(c.llamadas.length, 2, 'no reintentó');
+        return eq(c.llamadas[0].args.p_op, c.llamadas[1].args.p_op,
+            'cambió el identificador: el servidor contaría dos correcciones por una');
+    });
+
+    /* ── TEXTO DEL USUARIO ──────────────────────────────────────────────── */
+    /* El nombre del producto viene de lo que alguien escribió en el catálogo.
+       Va por `textContent`, que el navegador escapa solo; por `innerHTML`
+       habría que escaparlo a mano y es justo lo que se olvida. Este DOM de
+       mentira no escapa nada, así que lo que se comprueba es POR DÓNDE va. */
+    await testA('el nombre del producto va por textContent, no por innerHTML', async () => {
+        const c = mundo([]);
+        const malo = 'Ron <img src=x onerror=alert(1)>';
+        c._corregir('conteo', 'c1', 1, malo, { cerradasBodega: '1' });
+        const tit = c.document.getElementById('corTit');
+        eq(tit.textContent.indexOf(malo) > -1, true, 'no puso el nombre');
+        return eq(String(tit.innerHTML || '').indexOf('<img') === -1, true,
+            'lo inyectó como HTML: ' + tit.innerHTML);
+    });
+    await testA('…y el comentario guardado también', async () => {
+        const c = mundo([]);
+        abrir(c, { cerradasBodega: '1', cerradasBarra: '', nota: '<b>ojo</b>' });
+        const h = c.document.getElementById('corCampos').innerHTML;
+        return eq(h.indexOf('<b>ojo</b>') === -1, true, 'metió HTML del usuario en el campo');
+    });
+
+    /* ── Y QUE EL HISTORIAL SE VUELVA A PEDIR ───────────────────────────── */
+    await testA('al corregir se repinta la sesión', async () => {
+        const c = mundo([{ data: { ok: true, ver: 2 } }]);
+        c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+        abrir(c);
+        escribir(c, 'cerradasBodega', '8');
+        await c._guardarCorreccion();
+        return eq((c.pintadas || 0) > 0, true, 'la lista se quedó con lo viejo en pantalla');
+    });
+    for (const [n, f] of testAsyncCola.splice(0)) await testA(n, f);
+
+    /* ── LA APP INSTALADA TIENE QUE PORTARSE IGUAL ───────────────────────────
+       Las dos pantallas comparten servidor y no comparten interfaz. Si el
+       editor solo vive en una, quien instaló la app tiene que volver al
+       navegador para arreglar un número — y nadie lo hace: manda otro
+       registro, que es el problema de origen. */
+    const movil = (respuestas) => {
+        const mtxt = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
+        const corte = (nombre) => {
+            const p = mtxt.indexOf('function ' + nombre + '(');
+            if (p < 0) throw new Error('la app móvil no tiene ' + nombre);
+            const ini = mtxt.slice(Math.max(0, p - 6), p) === 'async ' ? p - 6 : p;
+            const abre = mtxt.indexOf('{', p);
+            let prof = 0;
+            for (let i = abre; i < mtxt.length; i++) {
+                if (mtxt[i] === '{') prof++;
+                else if (mtxt[i] === '}' && --prof === 0) return mtxt.slice(ini, i + 1);
+            }
+            throw new Error('Sin cierre: ' + nombre);
+        };
+        const nodos = {};
+        const nuevo = (tag) => {
+            const el = { tagName: tag, style: {}, value: '', textContent: '', _html: '',
+                disabled: false, className: '', children: [] };
+            Object.defineProperty(el, 'innerHTML', {
+                get() { return el._html; },
+                set(v) { el._html = String(v);
+                    (String(v).match(/id="([^"]+)"/g) || []).forEach((m) => {
+                        const id = m.slice(4, -1); if (!nodos[id]) nodos[id] = nuevo('div'); }); }
+            });
+            el.appendChild = (h) => { el.children.push(h); return h; };
+            return el;
+        };
+        const llamadas = [];
+        const c = { console: { log(){}, warn(){} }, JSON, Object, Math, Date, String, Number,
+            parseInt, parseFloat, isNaN,
+            document: { body: nuevo('body'), createElement: nuevo,
+                        getElementById: (id) => nodos[id] || null },
+            $: (id) => nodos[id] || null,
+            NEG: 'n1', TOKEN: 'tok', NIPHASH: 'hA',
+            etx: (v) => String(v == null ? '' : v).replace(/[<>&"]/g,
+                (x) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[x])),
+            irHistorial: async () => { c.hist = (c.hist || 0) + 1; },
+            _supabase: { rpc: async (n, a) => { llamadas.push({ nombre: n, args: a });
+                return respuestas.shift() || { data: { ok: true, ver: 2 } }; } },
+            llamadas };
+        c.document.body.appendChild = (h) => { if (h.id) nodos[h.id] = h; return h; };
+        c.window = c;
+        vm.createContext(c);
+        ['corPanel', 'cerrarCorregir', 'corregir', 'guardarCorreccion', 'btnCorregir']
+            .forEach((n) => vm.runInContext(corte(n), c, { filename: 'app-movil/app.js:' + n }));
+        vm.runInContext('var _COR=null;', c);
+        return c;
+    };
+    await testA('la app instalada también corrige, con la misma RPC', async () => {
+        const c = movil([{ data: { ok: true, ver: 2 } }]);
+        c.corregir('conteo', 'c1', 1, 'Ron', { cerradasBodega: '10', cerradasBarra: '', nota: '' });
+        c.document.getElementById('cor_cerradasBodega').value = '8';
+        await c.guardarCorreccion();
+        const a = c.llamadas[0];
+        eq(a.nombre, 'entrada_editar', 'la app móvil llama a otra cosa');
+        eq(a.args.p_ver, 1, 'no manda la versión');
+        eq(a.args.p_cambios.cerradasBodega, 8, 'no manda el cambio');
+        return eq((c.hist || 0) > 0, true, 'no recarga el historial: quedaría con lo viejo');
+    });
+    await testA('…y si falla la red tampoco finge que guardó', async () => {
+        const c = movil([{ error: { message: 'Failed to fetch' } }, { data: { ok: true, ver: 2 } }]);
+        c.corregir('conteo', 'c1', 1, 'Ron', { cerradasBodega: '10', cerradasBarra: '', nota: '' });
+        c.document.getElementById('cor_cerradasBodega').value = '8';
+        await c.guardarCorreccion();
+        eq((c.hist || 0), 0, 'dio por guardado lo que no se guardó');
+        eq(/no se creó otro registro/.test(c.document.getElementById('corMsg').textContent), true,
+            'no lo dijo: ' + c.document.getElementById('corMsg').textContent);
+        await c.guardarCorreccion();
+        return eq(c.llamadas[0].args.p_op, c.llamadas[1].args.p_op,
+            'cambió el identificador al reintentar: el servidor contaría dos correcciones');
+    });
+    await testA('…y sin la v82 corrida no pinta ningún botón', async () => {
+        const c = movil([]);
+        /* El historial viejo no trae `id` ni `puedeEditar`: ahí no hay nada que
+           ofrecer, y ofrecerlo sería un botón que no puede funcionar. */
+        eq(c.btnCorregir({ nombre: 'Ron' }, 'conteo', {}), '', 'pintó botón sin id');
+        eq(c.btnCorregir({ id: 'c1', nombre: 'Ron' }, 'conteo', {}), '', 'pintó botón sin permiso resuelto');
+        const bloq = c.btnCorregir({ id: 'c1', puedeEditar: false, motivoBloqueo: 'Ya se aplicó al inventario' }, 'conteo', {});
+        eq(/Ya se aplicó/.test(bloq), true, 'no dice por qué no se puede: ' + bloq);
+        return eq(/button/.test(bloq), false, 'ofreció un botón que no puede servir');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -29550,4 +29879,4 @@ suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
-    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(suiteInsumosSucursales).then(resumen);
+    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(suiteInsumosSucursales).then(suiteCorregirQR).then(resumen);

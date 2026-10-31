@@ -1221,7 +1221,12 @@ function pintarHist() {
             if (ins) m = metaIns(ins);
         }
         return fila('📋', (c.nombre || '—') + (cant ? '  ·  ' + cant : ''),
-            ['Conteo', m, (c.fecha || '')].filter(Boolean).join(' · ') + horaDe(c), c.quien);
+            ['Conteo', m, (c.fecha || '')].filter(Boolean).join(' · ') + horaDe(c),
+            c.quien + (c.editadoPor ? ' · corregido por ' + c.editadoPor : ''),
+            btnCorregir(c, 'conteo', {
+                cerradasBodega: String(c.cerradasBodega == null ? '' : c.cerradasBodega),
+                cerradasBarra:  String(c.cerradasBarra  == null ? '' : c.cerradasBarra),
+                nota: String(c.nota || '') }));
     }
 
     var f = _HIST.filtro, html = '';
@@ -1236,7 +1241,13 @@ function pintarHist() {
                 return fila(ICONO[m.concepto] || '•',
                     (m.nombre || '—') + (cant ? '  ·  ' + cant : ''),
                     (NOMBRE[m.concepto] || m.concepto || '') + ' · ' + (m.fecha || '') + horaDe(m),
-                    m.quien);
+                    m.quien + (m.editadoPor ? ' · corregido por ' + m.editadoPor : ''),
+                    /* Solo las ENTRADAS: una merma o una cortesía llevan motivo
+                       y evidencia, y su corrección es otra conversación. */
+                    m.concepto === 'entrada'
+                        ? btnCorregir(m, 'entrada', { cantidad: String(m.cantidad == null ? '' : m.cantidad),
+                                                      nota: String(m.nota || '') })
+                        : '');
             }).join('');
         if (f === 'todo' && _HIST.cnts.length) {
             html += _HIST.cnts.map(function (c) {
@@ -1257,10 +1268,123 @@ function horaDe(m) {
     if (isNaN(d)) return '';
     return ' · ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
-function fila(ico, titulo, sub, quien) {
+function fila(ico, titulo, sub, quien, extra) {
     return '<div class="hmov"><div class="hmov-ico">' + ico + '</div><div class="hmov-txt">' +
         '<b>' + etx(titulo) + '</b><small>' + etx(sub) + (quien ? ' · ' + etx(quien) : '') +
-        '</small></div></div>';
+        '</small>' + (extra || '') + '</div></div>';
+}
+/* ══ CORREGIR LO QUE YA SE MANDÓ (la misma idea que en entrada.html) ═════════
+   Las dos pantallas comparten servidor y no comparten interfaz, así que el
+   editor va en las dos: quien instaló la app no tiene por qué volver al
+   navegador para arreglar un número.
+
+   Nada se decide aquí: lo decide la v82 —quién puede, si la versión es la
+   buena, si el conteo ya se aplicó, si el periodo cerró—. Esto pide y traduce
+   la respuesta. Si la v82 no se ha corrido, el historial no trae `id` ni
+   `puedeEditar` y no se pinta ningún botón. */
+function btnCorregir(reg, tipo, valores) {
+    if (!reg || !reg.id) return '';
+    if (reg.puedeEditar === false)
+        return reg.motivoBloqueo ? '<small class="hbloq">🔒 ' + etx(reg.motivoBloqueo) + '</small>' : '';
+    if (reg.puedeEditar !== true) return '';
+    return '<button class="hcorr" onclick="corregir(' + JSON.stringify(tipo) + ',' +
+        JSON.stringify(reg.id) + ',' + (parseInt(reg.ver, 10) || 1) + ',' +
+        JSON.stringify(reg.nombre || '') + ',' + JSON.stringify(valores) + ')">✏️ Corregir</button>';
+}
+var _COR = null;
+function corPanel() {
+    var p = $('corPanel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'corPanel';
+    p.className = 'corwrap';
+    p.innerHTML = '<div class="corcard">' +
+        '<b id="corTit"></b><small id="corSub"></small>' +
+        '<div id="corCampos"></div>' +
+        '<div id="corMsg" class="cormsg" style="display:none"></div>' +
+        '<button class="btn" id="corOk" onclick="guardarCorreccion()">Guardar la corrección</button>' +
+        '<button class="btn ghost" onclick="cerrarCorregir()">Cancelar</button></div>';
+    document.body.appendChild(p);
+    return p;
+}
+function cerrarCorregir() {       // cancelar no escribe nada
+    var p = $('corPanel'); if (p) p.style.display = 'none';
+    _COR = null;
+}
+function corregir(tipo, id, ver, nombre, valores) {
+    _COR = { tipo: tipo, id: id, ver: ver, nombre: nombre, orig: (valores || {}) };
+    var p = corPanel();
+    $('corTit').textContent = 'Corregir · ' + (nombre || '—');
+    $('corSub').textContent = tipo === 'conteo'
+        ? 'Se corrige lo contado. El producto y la fecha no cambian.'
+        : 'Se corrige la cantidad. El producto y la fecha no cambian.';
+    var campos = tipo === 'conteo'
+        ? [['cerradasBodega', 'Bodega', 'number'], ['cerradasBarra', 'Barra', 'number'], ['nota', 'Comentario', 'text']]
+        : [['cantidad', 'Cantidad', 'number'], ['nota', 'Comentario', 'text']];
+    $('corCampos').innerHTML = campos.map(function (c) {
+        var v = (valores && valores[c[0]] != null) ? String(valores[c[0]]) : '';
+        return '<label class="corlbl">' + etx(c[1]) + '</label>' +
+            '<input id="cor_' + c[0] + '" class="corinp" type="' + c[2] + '" value="' + etx(v) + '"' +
+            (c[2] === 'number' ? ' inputmode="decimal" step="any" min="0"' : '') + '>';
+    }).join('');
+    $('corMsg').style.display = 'none'; $('corMsg').textContent = '';
+    $('corOk').disabled = false;
+    p.style.display = 'flex';
+}
+async function guardarCorreccion() {
+    if (!_COR) return;
+    var btn = $('corOk'), msg = $('corMsg');
+    var campos = _COR.tipo === 'conteo' ? ['cerradasBodega', 'cerradasBarra', 'nota'] : ['cantidad', 'nota'];
+    var cambios = {};
+    campos.forEach(function (k) {
+        var el = $('cor_' + k); if (!el) return;
+        var antes = (_COR.orig && _COR.orig[k] != null) ? String(_COR.orig[k]) : '';
+        /* Un número vacío NO es cero —mandarlo borraría lo contado—; un texto
+           vacío SÍ viaja, porque es como se borra un comentario. Y lo que no
+           cambió no se manda: subiría la versión por nada. */
+        if (k === 'nota') { if (el.value !== antes) cambios[k] = el.value; }
+        else if (String(el.value).trim() !== '' && String(el.value) !== antes) cambios[k] = parseFloat(el.value);
+    });
+    if (!Object.keys(cambios).length) {
+        msg.className = 'cormsg err'; msg.style.display = ''; msg.textContent = 'No cambiaste nada.';
+        return;
+    }
+    if (!_COR.op) _COR.op = 'cor_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    btn.disabled = true; msg.className = 'cormsg'; msg.style.display = ''; msg.textContent = 'Guardando…';
+    var r;
+    try {
+        r = await _supabase.rpc('entrada_editar', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH,
+            p_tipo: _COR.tipo, p_id: _COR.id, p_ver: _COR.ver, p_cambios: cambios, p_op: _COR.op });
+    } catch (e) { r = { error: e }; }
+    if (!r || r.error || !r.data) {
+        /* Se conserva lo escrito y se dice que está pendiente: fingir el
+           guardado es lo que hace que alguien cierre la pantalla creyendo que
+           ya quedó. El mismo `op` se reusa al reintentar. */
+        btn.disabled = false; msg.className = 'cormsg err'; msg.style.display = '';
+        msg.textContent = 'No se pudo guardar. Revisa tu conexión y vuelve a intentarlo — no se creó otro registro.';
+        return;
+    }
+    var d = r.data;
+    if (!d.ok) {
+        btn.disabled = (d.motivo === 'conflicto');
+        msg.className = 'cormsg err'; msg.style.display = '';
+        msg.textContent =
+            d.motivo === 'conflicto'  ? 'Alguien más lo cambió mientras lo editabas. Vuelve a abrir el historial para ver cómo quedó.' :
+            d.motivo === 'aplicado'   ? 'Este conteo ya se aplicó al inventario: pídele la corrección a tu encargado.' :
+            d.motivo === 'descartado' ? 'Este conteo se descartó en el inventario.' :
+            d.motivo === 'cerrado'    ? 'Esta captura ya entró en un inventario cerrado.' :
+            d.motivo === 'autor'      ? 'La capturó alguien más: solo tu encargado puede corregirla.' :
+            d.motivo === 'ajeno'      ? 'Esa captura no es de tu sucursal.' :
+            d.motivo === 'cantidad'   ? 'Esa cantidad no es válida.' :
+            d.motivo === 'nip'        ? 'Tu NIP ya no es válido. Vuelve a entrar.' :
+            d.motivo === 'token'      ? 'Este código QR ya venció. Pide uno nuevo.' :
+            d.motivo === 'espera'     ? 'Demasiados intentos. Espera un momento.' :
+            d.motivo === 'sin-cambios'? 'No cambiaste nada de lo que se puede corregir.' :
+            'No se pudo corregir.';
+        return;
+    }
+    cerrarCorregir();
+    try { await irHistorial(); } catch (e) {}      // la vista viene del servidor: se vuelve a pedir
 }
 
 /* ══ INSTALAR ══════════════════════════════════════════════════════════════

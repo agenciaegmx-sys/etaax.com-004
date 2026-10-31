@@ -1099,7 +1099,17 @@ function _renderCntHechos(){
                 + (h.meta ? '<div style="font-size:11px;color:var(--dim);margin-top:2px">'+etx(h.meta)+'</div>' : '')
                 + (mismos.length>1 ? ' <span style="font-size:11px;color:var(--dim)">· conteo '+num+'</span>' : '')
                 + '</span>'
-                + '<span style="font-size:11.5px;color:var(--dim);text-align:right">'+etx(partes.join(' · '))+' <span style="opacity:.7">'+etx(h.hora||'')+'</span></span></div>';
+                + '<span style="font-size:11.5px;color:var(--dim);text-align:right">'+etx(partes.join(' · '))+' <span style="opacity:.7">'+etx(h.hora||'')+'</span>'
+                /* Corregir lo que uno acaba de mandar es el caso más común:
+                   se teclea 10 donde eran 8 y se nota al instante. El botón
+                   solo se pinta si el registro trae id (sin id no hay a qué
+                   referirse) y si el servidor ya tiene el editor de la v82. */
+                + ((h.id && _V82 !== false)
+                    ? '<div><button onclick="_corregir(\'conteo\',' + JSON.stringify(h.id) + ',' + (parseInt(h.ver,10)||1) + ',' + JSON.stringify(h.nombre||'') + ',{cerradasBodega:' + JSON.stringify(String(h.cerradasBodega==null?'':h.cerradasBodega)) + ',cerradasBarra:' + JSON.stringify(String(h.cerradasBarra==null?'':h.cerradasBarra)) + ',nota:' + JSON.stringify(String(h.nota||'')) + '})" '
+                      + 'style="margin-top:6px;min-height:36px;padding:0 12px;font-size:12px;background:transparent;'
+                      + 'border:1px solid var(--border);border-radius:9px;color:var(--text-dim);font-family:inherit;cursor:pointer">✏️ Corregir</button></div>'
+                    : '')
+                + '</span></div>';
         }).join('');
 }
 
@@ -1197,6 +1207,168 @@ function _renderFotos(flujo){
 var ICONO_MOV = { entrada:'📦', merma:'🍷', salida:'🎁' };
 var NOMBRE_MOV = { entrada:'Entrada', merma:'Merma', salida:'Cortesía / préstamo' };
 
+/* ══ CORREGIR LO QUE YA SE MANDÓ ═════════════════════════════════════════════
+   Lo pidió Edwin: quien captura desde el celular se equivoca —teclea 10 donde
+   eran 8— y hasta ahora lo único que podía hacer era mandar OTRO registro, con
+   lo que el inventario contaba los dos.
+
+   Esto NO decide nada: todo lo decide la v82 en el servidor —quién puede, si
+   la versión es la buena, si el conteo ya se aplicó, si el periodo ya cerró—.
+   Aquí solo se pide, y se dice con palabras lo que el servidor contesta.
+   Apagar un botón no es un control; el botón se apaga porque queda mejor, pero
+   la RPC vuelve a comprobarlo todo.
+
+   Si la v82 todavía no se corrió en Supabase, la RPC no existe: el botón no se
+   pinta y la pantalla funciona como siempre. */
+var _COR = null;            // { tipo, id, ver, nombre, campos }
+var _V82 = null;            // ¿existe el editor en el servidor? null = sin saber
+
+function _corPanel(){
+    var p = document.getElementById('corPanel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'corPanel';
+    p.style.cssText = 'position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);' +
+        'display:none;align-items:flex-end;justify-content:center';
+    p.innerHTML =
+        '<div style="background:var(--surface);border-top:1px solid var(--border);' +
+            'border-radius:16px 16px 0 0;width:100%;max-width:520px;padding:18px 16px ' +
+            'calc(18px + env(safe-area-inset-bottom,0px));max-height:88vh;overflow:auto">' +
+          '<div id="corTit" style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:3px"></div>' +
+          '<div id="corSub" style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px"></div>' +
+          '<div id="corCampos"></div>' +
+          '<div id="corMsg" class="cap-msg" style="display:none"></div>' +
+          '<button id="corOk" class="cap-btn" onclick="_guardarCorreccion()">Guardar la corrección</button>' +
+          '<button class="cap-btn ghost" onclick="_cerrarCorregir()">Cancelar</button>' +
+        '</div>';
+    document.body.appendChild(p);
+    return p;
+}
+function _cerrarCorregir(){
+    /* Cancelar NO escribe nada: el panel se cierra y la captura se queda como
+       estaba. */
+    var p = document.getElementById('corPanel');
+    if (p) p.style.display = 'none';
+    _COR = null;
+}
+/* Los campos que se pueden corregir son los MISMOS que acepta la v82: cantidad
+   y texto de captura. Producto, sucursal y fecha operativa no se tocan aquí —
+   mover un movimiento de producto o de periodo es una transferencia de
+   inventario y necesita el flujo autorizado del ERP—. */
+function _corregir(tipo, id, ver, nombre, valores){
+    /* Los valores de partida se guardan para comparar al enviar: sin esto, un
+       comentario vacío que sigue vacío viajaba como cambio y subía la versión
+       por nada —y el que abriera el panel sin tocar nada vería «corregido por»
+       en su propia captura—. */
+    _COR = { tipo:tipo, id:id, ver:ver, nombre:nombre, orig:(valores || {}) };
+    var p = _corPanel();
+    document.getElementById('corTit').textContent = 'Corregir · ' + (nombre || '—');
+    document.getElementById('corSub').textContent = tipo === 'conteo'
+        ? 'Se corrige lo contado. El producto y la fecha no cambian.'
+        : 'Se corrige la cantidad. El producto y la fecha no cambian.';
+    var campos = tipo === 'conteo'
+        ? [['cerradasBodega','Bodega','number'], ['cerradasBarra','Barra','number'], ['nota','Comentario','text']]
+        : [['cantidad','Cantidad','number'], ['nota','Comentario','text']];
+    document.getElementById('corCampos').innerHTML = campos.map(function(c){
+        var v = (valores && valores[c[0]] != null) ? String(valores[c[0]]) : '';
+        return '<label style="display:block;font-size:11.5px;color:var(--text-dim);margin:0 0 4px">' + etx(c[1]) + '</label>' +
+            '<input id="cor_' + c[0] + '" type="' + c[2] + '" value="' + etx(v) + '"' +
+            (c[2] === 'number' ? ' inputmode="decimal" step="any" min="0"' : '') +
+            ' style="width:100%;min-height:48px;font-size:16px;margin-bottom:12px;' +
+            'background:var(--surface2);border:1px solid var(--border);border-radius:10px;' +
+            'padding:0 12px;color:var(--text);font-family:inherit">';
+    }).join('');
+    var m = document.getElementById('corMsg');
+    m.style.display = 'none'; m.textContent = '';
+    document.getElementById('corOk').disabled = false;
+    p.style.display = 'flex';
+}
+/* Un identificador por intento: con mala conexión el celular reintenta, y sin
+   esto el segundo intento contaría como otra corrección (otra versión, otro
+   renglón de auditoría) por un cambio que ya estaba hecho. */
+function _corOpId(){ return 'cor_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
+
+async function _guardarCorreccion(){
+    if (!_COR) return;
+    var btn = document.getElementById('corOk');
+    var msg = document.getElementById('corMsg');
+    var campos = _COR.tipo === 'conteo' ? ['cerradasBodega','cerradasBarra','nota'] : ['cantidad','nota'];
+    var cambios = {};
+    campos.forEach(function(k){
+        var el = document.getElementById('cor_' + k);
+        if (!el) return;
+        /* Un número vacío NO se manda: vacío no es cero. Un texto vacío SÍ se
+           manda, porque es como se borra un comentario. */
+        var antes = (_COR.orig && _COR.orig[k] != null) ? String(_COR.orig[k]) : '';
+        if (k === 'nota') {
+            if (el.value !== antes) cambios[k] = el.value;     // vacío SÍ viaja: así se borra
+        } else if (String(el.value).trim() !== '' && String(el.value) !== antes) {
+            cambios[k] = parseFloat(el.value);                 // vacío NO es cero
+        }
+    });
+    if (!Object.keys(cambios).length){
+        msg.className = 'cap-msg err'; msg.style.display = '';
+        msg.textContent = 'No cambiaste nada.';
+        return;
+    }
+    if (!_COR.op) _COR.op = _corOpId();      // el mismo id si hay que reintentar
+    btn.disabled = true;
+    msg.className = 'cap-msg'; msg.style.display = '';
+    msg.textContent = 'Guardando…';
+    var r;
+    try {
+        r = await _supabase.rpc('entrada_editar', { p_neg:NEG, p_token:TOKEN, p_niphash:_NIPHASH,
+            p_tipo:_COR.tipo, p_id:_COR.id, p_ver:_COR.ver, p_cambios:cambios, p_op:_COR.op });
+    } catch(e){ r = { error:e }; }
+
+    /* SI FALLA LA RED, el formulario se queda con lo escrito y se dice que está
+       pendiente. No se crea otro registro y no se finge un guardado: fingirlo
+       es lo que hace que alguien cierre la pantalla creyendo que ya quedó. */
+    if (!r || r.error || !r.data){
+        btn.disabled = false;
+        msg.className = 'cap-msg err'; msg.style.display = '';
+        msg.textContent = 'No se pudo guardar. Revisa tu conexión y vuelve a intentarlo — no se creó otro registro.';
+        return;
+    }
+    var d = r.data;
+    if (!d.ok){
+        btn.disabled = (d.motivo === 'conflicto');
+        msg.className = 'cap-msg err'; msg.style.display = '';
+        msg.textContent =
+            d.motivo === 'conflicto'  ? 'Alguien más lo cambió mientras lo editabas. Vuelve a abrir el historial para ver cómo quedó.' :
+            d.motivo === 'aplicado'   ? 'Este conteo ya se aplicó al inventario: pídele la corrección a tu encargado.' :
+            d.motivo === 'descartado' ? 'Este conteo se descartó en el inventario.' :
+            d.motivo === 'cerrado'    ? 'Esta captura ya entró en un inventario cerrado.' :
+            d.motivo === 'autor'      ? 'La capturó alguien más: solo tu encargado puede corregirla.' :
+            d.motivo === 'ajeno'      ? 'Esa captura no es de tu sucursal.' :
+            d.motivo === 'cantidad'   ? 'Esa cantidad no es válida.' :
+            d.motivo === 'nip'        ? 'Tu NIP ya no es válido. Vuelve a entrar.' :
+            d.motivo === 'token'      ? 'Este código QR ya venció. Pide uno nuevo.' :
+            d.motivo === 'espera'     ? 'Demasiados intentos. Espera un momento.' :
+            d.motivo === 'sin-cambios'? 'No cambiaste nada de lo que se puede corregir.' :
+            'No se pudo corregir.';
+        return;
+    }
+    /* Quedó. La lista de la sesión se corrige EN SU SITIO, por su id: meterlo
+       con `unshift` lo dejaría como si fuera otro conteo, que es exactamente la
+       confusión que esto vino a quitar. */
+    for (var i = 0; i < CNT_HECHOS.length; i++){
+        if (CNT_HECHOS[i] && CNT_HECHOS[i].id === _COR.id){
+            Object.keys(cambios).forEach(function(k){ CNT_HECHOS[i][k] = cambios[k]; });
+            CNT_HECHOS[i].ver = d.ver;
+            break;
+        }
+    }
+    _cerrarCorregir();
+    try { _renderCntHechos(); } catch(e){}
+    /* Y el historial se vuelve a pedir: es la vista que viene del servidor, y
+       dejarla con lo viejo haría dudar de si la corrección entró. */
+    if (document.getElementById('histScreen') &&
+        document.getElementById('histScreen').style.display !== 'none') {
+        try { await irHistorial(); } catch(e){}
+    }
+}
+
 async function irHistorial(){
     _show('histScreen');
     document.getElementById('histSub').textContent = 'Cargando…';
@@ -1219,7 +1391,14 @@ async function irHistorial(){
     }
 
     var d = r.data;
-    var movs = d.movimientos || [], cnts = d.conteos || [];
+    /* ¿Existe ya el editor en el servidor? La v82 agrega `id` a cada renglón
+       del historial; si no viene, la migración no se ha corrido y el botón de
+       la lista de la sesión tampoco se pinta. Las migraciones se aplican a
+       mano, así que la pantalla tiene que servir antes y después. */
+    var _cns = d.conteos || [];
+    if (_V82 === null && (_cns.length || (d.movimientos||[]).length))
+        _V82 = !!((_cns[0] && _cns[0].id) || ((d.movimientos||[])[0] && (d.movimientos||[])[0].id));
+    var movs = d.movimientos || [], cnts = _cns;
     document.getElementById('histSub').textContent = d.desde
         ? ('Desde el cierre de ' + (d.inventario || 'el último inventario'))
         : 'Todo lo registrado (aún no hay un inventario cerrado)';
@@ -1251,14 +1430,33 @@ async function irHistorial(){
         return;
     }
 
-    function fila(ico, titulo, sub, quien){
+    /* El `extra` es el botón de corregir, o el motivo por el que no se puede.
+       El motivo lo DECIDE EL SERVIDOR y viaja en el historial (v82): un botón
+       apagado sin explicación es justo lo que hace que alguien pregunte. */
+    function fila(ico, titulo, sub, quien, extra){
         return '<div style="display:flex;gap:10px;padding:10px 2px;border-bottom:1px solid var(--border)">' +
             '<span style="font-size:15px;flex-shrink:0">'+ico+'</span>' +
             '<div style="flex:1;min-width:0">' +
               '<div style="font-size:13.5px;color:var(--text);line-height:1.35">'+etx(titulo)+'</div>' +
               '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">'+etx(sub)+
                  (quien ? ' · '+etx(quien) : '')+'</div>' +
+              (extra || '') +
             '</div></div>';
+    }
+    /* El historial VIEJO (antes de la v82) no trae `id` ni `puedeEditar`: ahí
+       no se pinta nada y la pantalla sigue sirviendo igual que siempre. */
+    function _btnCorregir(reg, tipo, valores){
+        if (!reg || !reg.id) return '';
+        if (reg.puedeEditar === false)
+            return reg.motivoBloqueo
+                ? '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;opacity:.85">🔒 ' + etx(reg.motivoBloqueo) + '</div>'
+                : '';
+        if (reg.puedeEditar !== true) return '';
+        return '<div><button onclick="_corregir(' + JSON.stringify(tipo) + ',' + JSON.stringify(reg.id) + ',' +
+            (parseInt(reg.ver,10)||1) + ',' + JSON.stringify(reg.nombre||'') + ',' + JSON.stringify(valores) + ')" ' +
+            'style="margin-top:6px;min-height:36px;padding:0 12px;font-size:12px;background:transparent;' +
+            'border:1px solid var(--border);border-radius:9px;color:var(--text-dim);font-family:inherit;cursor:pointer">' +
+            '✏️ Corregir</button></div>';
     }
 
     /* LA HORA DE CAPTURA. Los conteos la guardan en `hora`; los movimientos
@@ -1298,7 +1496,11 @@ async function irHistorial(){
             return fila('📋',
                 (c.nombre || '—') + (cant ? '  ·  ' + cant : ''),
                 [m, (c.fecha||''), hc].filter(Boolean).join(' · '),
-                c.quien);
+                c.quien + (c.editadoPor ? ' · corregido por ' + c.editadoPor : ''),
+                _btnCorregir(c, 'conteo', {
+                    cerradasBodega: String(c.cerradasBodega == null ? '' : c.cerradasBodega),
+                    cerradasBarra:  String(c.cerradasBarra  == null ? '' : c.cerradasBarra),
+                    nota: String(c.nota || '') }));
         }).join('');
     }
     if (movs.length){
@@ -1308,7 +1510,14 @@ async function irHistorial(){
             return fila(ICONO_MOV[m.concepto] || '•',
                 (m.nombre || '—') + (cant ? '  ·  ' + cant : ''),
                 (NOMBRE_MOV[m.concepto] || m.concepto || '') + ' · ' + (m.fecha||'') + (_horaDe(m) ? ' · '+_horaDe(m) : ''),
-                m.quien);
+                m.quien + (m.editadoPor ? ' · corregido por ' + m.editadoPor : ''),
+                /* Solo las ENTRADAS se corrigen aquí. Una merma o una cortesía
+                   llevan además motivo y evidencia, y su corrección es otra
+                   conversación: no se abre a medias. */
+                m.concepto === 'entrada'
+                    ? _btnCorregir(m, 'entrada', { cantidad: String(m.cantidad == null ? '' : m.cantidad),
+                                                   nota: String(m.nota || '') })
+                    : '');
         }).join('');
     }
     document.getElementById('histBody').innerHTML = html;
