@@ -528,6 +528,96 @@ const filaCopa = {
 };
 setVar(B, 'filasCaptura', [filaCopa]);
 
+/* ══ BE22 · A CUÁNTO EQUIVALE LO QUE HAY, Y LO QUE FALTA ═════════════════════
+   Factura 2 del plan de Codex. En barra las cantidades se calculan en COPAS y
+   así salían en pantalla: «−5.8 copas» no le sirve a quien está contando
+   botellas. La conversión vive en el núcleo, con las referencias de la propia
+   fila.
+
+   Lo que se vigila aquí no es el formato, es la aritmética y sobre todo dos
+   decisiones: que el signo sobreviva —un faltante es negativo— y que lo que no
+   se puede determinar vuelva en `null` y no en cero. */
+console.log('\n══ BE22 · Equivalencias de barra (botellas · onzas · copas) ══');
+{
+    const eq$ = (a, b, msg) => eq(Math.round(a * 100) / 100, b, msg);
+    const ref = { contNeto: 750, copaML: 60 };          // los ejemplos de la factura
+    test('1,500 ml de existencia son 2 botellas, 50.72 oz y 25 copas', () => {
+        const e = B.EtaaxCore.equivalenciasBarra(25, ref);      // 25 copas × 60 ml
+        eq(e.ml, 1500, 'los mililitros');
+        eq$(e.botellas, 2, 'las botellas');
+        eq$(e.onzas, 50.72, 'las onzas');
+        return eq$(e.copas, 25, 'las copas');
+    });
+    /* LA DECISIÓN QUE MÁS IMPORTA. La función de líquido abierto que ya existía
+       recorta en cero —tiene su razón: es líquido medido dentro de una botella—
+       y reusarla aquí habría borrado todos los faltantes, que es justo el
+       número por el que se levanta un inventario. */
+    test('un faltante de 350 ml sigue siendo negativo en las tres lecturas', () => {
+        const e = B.EtaaxCore.equivalenciasBarra(-350 / 60, ref);
+        eq$(e.ml, -350, 'los mililitros');
+        eq$(e.botellas, -0.47, 'las botellas');
+        eq$(e.onzas, -11.83, 'las onzas');
+        return eq$(e.copas, -5.83, 'las copas');
+    });
+    test('…y la de líquido abierto sigue recortando en cero, como debe', () =>
+        eq(B.EtaaxCore.equivalenciasLiquidoInventario(-350, 60).ml, 0, 'esa sí recorta'));
+    test('cero es cero en las tres, sin inventar signo', () => {
+        const e = B.EtaaxCore.equivalenciasBarra(0, ref);
+        return eq([e.ml, e.botellas, e.onzas, e.copas].join('|'), '0|0|0|0', 'limpio');
+    });
+    /* NI 60 ML NI 750 ML PARA TODOS: cada insumo trae su copa y su botella. Si
+       se fijaran, un mezcal de 1,750 con copa de 45 saldría con las botellas de
+       otro producto. */
+    test('cada insumo convierte con SU copa y SU botella', () => {
+        const a = B.EtaaxCore.equivalenciasBarra(10, { contNeto: 1750, copaML: 45 });
+        const b = B.EtaaxCore.equivalenciasBarra(10, { contNeto: 700,  copaML: 45 });
+        eq$(a.ml, 450, 'mismos ml');
+        eq$(a.botellas, 0.26, 'botella grande');
+        return eq$(b.botellas, 0.64, 'botella chica');
+    });
+    [[700, 45], [750, 60], [1000, 45], [1750, 60]].forEach(([cont, copa]) => {
+        test('botella de ' + cont + ' con copa de ' + copa + ': las botellas cuadran con los ml', () => {
+            const e = B.EtaaxCore.equivalenciasBarra(7, { contNeto: cont, copaML: copa });
+            return eq$(e.botellas, Math.round((7 * copa / cont) * 100) / 100, 'cuadra');
+        });
+    });
+    /* LO QUE NO SE SABE NO SE INVENTA. Cero es una cantidad; `null` es «no hay
+       referencia», y la pantalla los pinta distinto: un insumo sin contenido
+       capturado no puede decir «0 botellas», porque eso se lee como que no hay
+       nada. */
+    test('sin tamaño de copa no hay mililitros ni onzas ni botellas', () => {
+        const e = B.EtaaxCore.equivalenciasBarra(25, { contNeto: 750 });
+        eq(e.ml, null, 'ml');
+        eq(e.onzas, null, 'onzas');
+        eq(e.botellas, null, 'botellas');
+        return eq$(e.copas, 25, 'las copas sí: es la cantidad original');
+    });
+    test('sin contenido de botella no se inventa un número de botellas', () => {
+        const e = B.EtaaxCore.equivalenciasBarra(25, { copaML: 60 });
+        eq(e.botellas, null, 'botellas');
+        eq$(e.ml, 1500, 'los ml sí');
+        return eq$(e.onzas, 50.72, 'y las onzas');
+    });
+    test('una referencia en cero o basura cuenta como ausente', () => {
+        const a = B.EtaaxCore.equivalenciasBarra(5, { contNeto: 0, copaML: 60 });
+        const b = B.EtaaxCore.equivalenciasBarra(5, { contNeto: 750, copaML: 'ninguna' });
+        eq(a.botellas, null, 'contenido en cero');
+        return eq(b.ml, null, 'copa que no es número');
+    });
+    test('una cantidad que no es número queda en cero, no en NaN', () =>
+        eq(B.EtaaxCore.equivalenciasBarra(undefined, ref).ml, 0, 'cero'));
+    /* No redondear por el camino: hacerlo deja diferencias de centilitros que
+       el impreso no cuadra con la pantalla. */
+    test('no se redondea por el camino: la conversión es exacta', () => {
+        const e = B.EtaaxCore.equivalenciasBarra(1 / 3, ref);
+        return eq(Math.abs(e.ml - 20) < 1e-9, true, 'exacto: ' + e.ml);
+    });
+    test('las referencias usadas vuelven en el resultado, para poder decirlas', () => {
+        const e = B.EtaaxCore.equivalenciasBarra(1, ref);
+        return eq(e.copaML + '/' + e.contNeto, '60/750', 'las dice');
+    });
+}
+
 test('calcNetLiters: peso bruto − cristal (1.2kg − 500g = 700ml)', () => eq(B.calcMLReales(filaCopa), 700));
 test('calcNetLiters ignora pesos vacíos', () =>
     eq(B.calcMLReales({ ...filaCopa, pesos: ['', '0', '1.2'] }), 700));

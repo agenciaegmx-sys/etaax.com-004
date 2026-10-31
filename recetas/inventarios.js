@@ -3851,7 +3851,11 @@ function imprimirReporteExistencias(opts){
             (op?'':' · '+_repMoney(sub))+'</span></td></tr>';
         return head + lista.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:18px">'+etx(r.nombre)+_stockReporteHTML(r, true)+(cont?'<div class="grp" style="color:#5a8fc7">📦 '+cont+'</div>':'')+'</td><td style="color:#56514a">'+etx(r.subcat || '—')+'</td>'+
             '<td class="r">'+_fmtCant(r.barra,r)+'</td><td class="r">'+_fmtCant(r.bodega,r)+'</td>'+
-            '<td class="r b" style="color:#1a1916">'+_fmtCant(r.total,r)+'</td><td class="r" style="color:#888">'+_repMoney(r.costoUnit)+'</td>'+
+            /* Y en el impreso, la misma equivalencia que en pantalla: este
+               reporte se lleva al anaquel para contar, que es justo donde «25
+               copas» no sirve y «2 botellas» sí. Solo existencias: aquí no hay
+               diferencia que mostrar. */
+            '<td class="r b" style="color:#1a1916">'+_fmtCant(r.total,r)+_equivBarraHTML(r.total, r, {impreso:true})+'</td><td class="r" style="color:#888">'+_repMoney(r.costoUnit)+'</td>'+
             (op?'':'<td class="r b">'+_repMoney(r.capital)+'</td>')+
             (_hayFechas?'<td class="c" style="color:#56514a">'+_repFecha(r.fecha)+'</td>':'')+'</tr>'; }).join('');
     }).join('');
@@ -9293,6 +9297,74 @@ function _fmtCopSgn(copas, fila) {
     return (v >= 0 ? '+' : '') + _fmtCop(v, fila);
 }
 
+/* ══ A CUÁNTAS BOTELLAS, ONZAS Y COPAS EQUIVALE ══════════════════════════════
+   Lo pidió Edwin: en barra las cantidades se calculan en copas y así salían.
+   «−5.8 copas» no le dice nada a quien está parado frente al anaquel contando
+   botellas, y «2 L» tampoco cuando la carta se sirve por onza.
+
+   Son TRES LECTURAS DE LA MISMA CANTIDAD, no tres cantidades que se suman. Van
+   debajo de la cifra principal, sin tocarla: el total, el porcentaje, el
+   teórico y las alertas de stock siguen siendo los mismos números.
+
+   Una sola función para Lista, Galería e impreso. Con una por pantalla se
+   desalinean, y el que compara el impreso con la pantalla deja de creerle a
+   las dos.
+
+   La conversión NO se hace aquí: la hace `EtaaxCore.equivalenciasBarra` con las
+   referencias de ESTA fila. Aquí solo se redondea para mostrar —redondear antes
+   deja centilitros de diferencia entre el impreso y la pantalla— y se decide
+   qué hacer con lo que no se puede determinar. */
+function _equivBarra(copas, fila) {
+    /* Solo líquido servido en copas. Un abarrote en gramos no tiene onzas
+       líquidas y una cerveza por pieza no tiene copas: inventárselas sería
+       peor que no decir nada. */
+    if (!fila || fila.tipo !== 'copa' || typeof EtaaxCore === 'undefined') return null;
+    return EtaaxCore.equivalenciasBarra(copas, { contNeto: fila.contNeto, copaML: fila.copaML });
+}
+/* Un número con su signo y sin `−0.00`: un faltante de 8 microlitros daba
+   «−0.00 bot», que se lee como un error del sistema y no como «cuadró».
+
+   El ida y vuelta por `parseFloat` NO es adorno, es lo que mata el signo:
+   `(-0.004).toFixed(2)` devuelve «-0.00» tal cual, mientras que pasar por
+   `parseFloat` deja −0 y `(-0).toFixed(2)` ya sale «0.00». Formatear directo
+   trae el menos de vuelta. */
+function _nEquiv(v, dec, signo) {
+    if (v === null || v === undefined || !isFinite(v)) return null;
+    var r = parseFloat(v.toFixed(dec));
+    return (signo && r > 0 ? '+' : '') + r.toFixed(dec);
+}
+function _equivBarraHTML(copas, fila, opts) {
+    opts = opts || {};
+    var e = _equivBarra(copas, fila);
+    if (!e) return '';
+    var bot = _nEquiv(e.botellas, 2, opts.signo);
+    var oz  = _nEquiv(e.onzas,    1, opts.signo);
+    var cp  = _nEquiv(e.copas,    1, opts.signo);
+    /* Sin referencia no se inventa el número: se dice que falta, y se dice
+       CUÁL falta, que es lo único accionable. */
+    var faltan = [];
+    if (e.contNeto === null) faltan.push('el contenido de la botella');
+    if (e.copaML   === null) faltan.push('el tamaño de la copa');
+    var partes = [
+        (bot === null ? '—' : bot) + ' bot',
+        (oz  === null ? '—' : oz)  + ' oz',
+        (cp  === null ? '—' : cp)  + ' cp'
+    ].join(' · ');
+    var ref = [e.contNeto !== null ? _fmtBase(e.contNeto) + ' ml/bot' : null,
+               e.copaML   !== null ? _fmtBase(e.copaML)   + ' ml/copa' : null]
+              .filter(Boolean).join(' · ');
+    var titulo = faltan.length
+        ? 'Falta capturar ' + faltan.join(' y ') + ' de este insumo: sin eso no se puede convertir.'
+        : 'La MISMA cantidad, leída de tres maneras (no se suman). Referencia: ' + ref;
+    /* En el IMPRESO no hay variables de tema ni se puede pasar el ratón por
+       encima: el papel se imprime en escala de grises y el `title` no existe
+       ahí. Mismo texto, colores fijos y sin cursor de ayuda. */
+    if (opts.impreso)
+        return '<div style="font-size:8.5px;color:#56514a;white-space:nowrap">≈ ' + partes + '</div>';
+    return '<div style="font-size:9px;color:var(--text-dim);white-space:nowrap;margin-top:2px;cursor:help"' +
+        ' title="' + etx(titulo) + '">≈ ' + partes + '</div>';
+}
+
 /* Diagnóstico manual: en la consola del Paso 5, `diagInsumo('vodka')` imprime
    toda la cadena de un insumo — su fila, qué recetas lo llevan y con qué id,
    cuántas se vendieron, si entra por una sub-receta y qué le tocó del batch.
@@ -9557,7 +9629,7 @@ function _step5TablasHTML() {
                             'inventario. El insumo ya no está en el catálogo, así que su faltante ' +
                             'no lo explica nadie.">⚠️ este insumo ya no está en el catálogo</div>';
                     })()}
-                    ${_contC?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contC}</div>`:''}
+                    ${_contC?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contC}${fila.tipo==='copa'&&parseFloat(fila.copaML)>0?` · copa de ${_fmtBase(parseFloat(fila.copaML))} ml`:''}</div>`:''}
                     <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}${_btnOcultoImpreso(fila.insumoId)}
                 </td>
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot${_dentroBat(adj.ea)}</td>
@@ -9572,8 +9644,8 @@ function _step5TablasHTML() {
                         : '—'}
                 </td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelCop > 0 ? _fmtCop(cancelCop, fila) : '—'}</td>
-                <td style="text-align:center;font-weight:600;white-space:nowrap">${fisicoBot} bot${_dentroBat(adj.fis)}</td>
-                <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${difStr}</td>
+                <td style="text-align:center;font-weight:600;white-space:nowrap">${fisicoBot} bot${_dentroBat(adj.fis)}${_equivBarraHTML(fisico, fila)}</td>
+                <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${difStr}${_equivBarraHTML(dif, fila, {signo:true})}</td>
                 <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
                 <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
             </tr>`;
@@ -10002,8 +10074,13 @@ function _step5DesgloseCard(fila, refMap) {
         fila2('Cortesía / Merma', (cort+merma)>0?_fmtCop(cort+merma, fila):'—', (cort+merma)>0?'var(--red)':'var(--text-dim)')+
         fila2('Cancelaciones', cancel>0?_fmtCop(cancel, fila):'—', 'var(--text-muted)')+
         fila2('Exist. actual', fiDisp+' '+uEx+(pesosAct.length?' <span style="font-size:10px;color:var(--text-dim)">('+pesosAct.join(', ')+')</span>':''))+
+        /* La MISMA línea de equivalencias que la vista Lista, con el MISMO
+           formateador: si cada pantalla la arma, se desalinean y el que compara
+           las dos deja de creerle a ninguna. */
+        _equivBarraHTML(fisico, fila)+
         '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">'+
             fila2('Diferencia', _fmtCopSgn(dif, fila)+' · '+pct, color)+
+            _equivBarraHTML(dif, fila, {signo:true})+
             fila2('Dif. $ (carta)', (difCarta>=0?'+':'')+'$'+difCarta.toFixed(2), color)+
         '</div>'+
     '</div>';

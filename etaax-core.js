@@ -1925,10 +1925,51 @@
         r.emitido/=100;r.cobrado/=100;r.pendiente/=100;r.mrr=Math.round(recurrente)/100;
         return r;
     }
+    var OZ_ML = 29.5735;                 // mililitros por onza líquida
     // Equivalencias del líquido abierto; las botellas cerradas no entran aquí.
+    // OJO: esta recorta en cero a propósito (es líquido medido en una botella,
+    // no puede haber −200 ml). Para EXISTENCIAS Y DIFERENCIAS usar
+    // `equivalenciasBarra`, que conserva el signo: un faltante es negativo.
     function equivalenciasLiquidoInventario(ml, copaML) {
         var liquido = Math.max(0, n(ml)), copa = n(copaML);
-        return { ml:liquido, copas:copa > 0 ? liquido / copa : null, onzas:liquido / 29.5735 };
+        return { ml:liquido, copas:copa > 0 ? liquido / copa : null, onzas:liquido / OZ_ML };
+    }
+    /* ══ A CUÁNTO EQUIVALE LO QUE HAY (Y LO QUE FALTA) ═══════════════════════
+       En barra las cantidades se calculan en COPAS, y así salen en la pantalla:
+       «−5.8 copas» no le dice nada a quien está contando botellas. Esto da las
+       otras dos lecturas de la MISMA cantidad.
+
+       Son tres maneras de decir lo mismo, no tres cantidades que se suman. Y
+       «2 botellas equivalentes» tampoco significa que haya dos botellas
+       cerradas: puede ser una abierta a la mitad y litro y medio en otra.
+
+       EL SIGNO SE CONSERVA. Un faltante de 350 ml son −0.47 botellas; si se
+       recortara en cero —como hace la función de líquido abierto de arriba, que
+       tiene su razón— la diferencia desaparecería justo donde importa.
+
+       Las referencias llegan POR PARÁMETRO, de la misma fila que produjo el
+       resultado: el tamaño de copa y el contenido de botella son de ese insumo.
+       No se fija 60 ml ni 750 ml para todos, y no se consulta el catálogo aquí
+       —una fila puede traer presentaciones ya refrescadas y mezclar esa
+       referencia con una cantidad vieja daría otra conversión—.
+
+       Lo que no se puede determinar vuelve en `null`, nunca en cero: sin
+       contenido de botella no se inventa un número de botellas, y sin tamaño de
+       copa no hay mililitros ni onzas. Cero es una cantidad; `null` es «no se
+       sabe», y la pantalla los pinta distinto.                               */
+    function equivalenciasBarra(copas, refs) {
+        refs = refs || {};
+        var q = n(copas), copaML = n(refs.copaML), contNeto = n(refs.contNeto);
+        if (!isFinite(q)) q = 0;
+        var ml = copaML > 0 ? q * copaML : null;
+        return {
+            copas:    q,
+            ml:       ml,
+            onzas:    ml === null ? null : ml / OZ_ML,
+            botellas: (ml !== null && contNeto > 0) ? ml / contNeto : null,
+            copaML:   copaML  > 0 ? copaML   : null,
+            contNeto: contNeto > 0 ? contNeto : null
+        };
     }
     // Los límites del catálogo están en botellas/piezas/unidades de compra.
     // La fila, en cambio, puede estar en copas, gramos o mililitros utilizables.
@@ -2011,6 +2052,7 @@
     }
     window.EtaaxCore = {
         equivalenciasLiquidoInventario: equivalenciasLiquidoInventario,
+        equivalenciasBarra: equivalenciasBarra,
         montoRecurrenteDocumento: montoRecurrenteDocumento,
         resumenDocumentosAdmin: resumenDocumentosAdmin,
         unidadesCompraInventario: unidadesCompraInventario,
