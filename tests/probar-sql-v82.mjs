@@ -219,6 +219,18 @@ await ok('un NIP inventado o dado de baja no edita nada', async () => {
     assert.equal((await editar('hX', 'conteo', 'c3', 2, { cerradasBodega: 7 })).r.motivo, 'nip');
     assert.equal((await editar('hZ', 'conteo', 'c3', 2, { cerradasBodega: 7 })).r.motivo, 'nip');
 });
+/* La v78 comprobaba el NIP del historial con un EXISTS suelto que aceptaba a
+   un colaborador DADO DE BAJA. La v82 lo cambió por `_entrada_quien`, que
+   además resuelve la identidad y exige estado Activo: la comprobación no se
+   perdió, se endureció. Esto lo demuestra. */
+await ok('el historial ya no abre para un colaborador dado de baja', async () => {
+    const r = (await historial('hZ')).r;
+    assert.equal(r.ok, false);
+    assert.equal(r.motivo, 'nip');
+});
+await ok('…y sigue abriendo para quien está activo', async () => {
+    assert.equal((await historial('hA')).r.ok, true);
+});
 await ok('sin el token del QR tampoco', async () => {
     const r = (await uno('SELECT entrada_editar($1,$2,$3,$4,$5,$6,$7::jsonb,$8) AS r',
         ['neg1', 'token-falso', 'hA', 'conteo', 'c2', null, '{"cerradasBarra":1}', null])).r;

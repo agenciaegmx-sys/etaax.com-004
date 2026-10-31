@@ -25869,12 +25869,12 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
     /* La prueba de que la prueba mira de verdad: si el filtro se quedara vacío,
        los dos tests de arriba pasarían celebrando una lista sin nadie. */
     /* La lista se escribe a mano A PROPÓSITO: cada vez que nace una puerta de
-       NIP, esta prueba falla y obliga a mirarla. `entrada_catalogo` (v80) entró
-       así. */
-    test('la revisión mira de verdad las cinco que comprueban el NIP', () => {
+       NIP, esta prueba falla y obliga a mirarla. Así entraron
+       `entrada_catalogo` (v80) y `entrada_editar` (v82). */
+    test('la revisión mira de verdad las seis que comprueban el NIP', () => {
         const conGuardia = puertas.filter(n => ahora[n].texto.indexOf('_nip_guardia') > -1).sort();
         return eq(conGuardia.join(','),
-            'entrada_catalogo,entrada_historial,entrada_sucursal_de_nip,entrada_validar_nip,portal_perfil',
+            'entrada_catalogo,entrada_editar,entrada_historial,entrada_sucursal_de_nip,entrada_validar_nip,portal_perfil',
             conGuardia.join(','));
     });
 
@@ -25913,19 +25913,51 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
         entrada_validar_nip: ['IF NOT _login_golpe(v_clave) THEN', "RAISE EXCEPTION 'rate_limited';",
                               "DECLARE v_clave TEXT := 'nip|' || coalesce(p_neg, '');",
                               'IF v_nombre IS NOT NULL THEN PERFORM _login_exito(v_clave); END IF;'],
+        /* v82: el `EXISTS` suelto contra `staff` se cambió por `_entrada_quien`,
+           que resuelve la IDENTIDAD (el staffId) además de comprobar el NIP —y
+           hace falta para autorizar una edición: un nombre no autoriza nada—.
+           La comprobación no se perdió, se volvió MÁS ESTRICTA: el EXISTS
+           aceptaba a un colaborador DADO DE BAJA y `_entrada_quien` exige
+           estado Activo. Eso se demuestra corriendo las dos puertas en
+           `tests/probar-sql-v82.mjs`, no aquí. */
+        entrada_historial: ["IF p_niphash IS NULL OR p_niphash = ''",
+                            'OR NOT EXISTS (SELECT 1 FROM staff s',
+                            "WHERE s.negocio_id = p_neg AND s.datos->>'nipHash' = p_niphash) THEN",
+                            "RETURN jsonb_build_object('ok', false, 'motivo', 'nip')",
+                            'END IF',
+                            /* Y este renglón se fue porque ESTABA MAL: leía el
+                               autor del conteo de `registradoPor`, pero el
+                               escritor lo guarda en `contadoPor`. La columna
+                               «quién» de los conteos venía vacía desde la v76.
+                               La v82 lee las dos llaves. */
+                            "'quien',  c.datos->>'registradoPor',"],
     };
     ['entrada_validar_nip', 'portal_perfil', 'entrada_sucursal_de_nip', 'entrada_historial'].forEach(n => {
-        test('v78 · ' + n + ' no perdió ni una línea de su definición anterior', () => {
+        test('la definición VIVA de ' + n + ' no perdió ni una línea de la anterior al guardia', () => {
             /* Se compara SIN espacios y por contenido, no línea contra línea
                idéntica: envolver una consulta en plpgsql la indenta y le pone
                un `v_r := (` delante, y eso no es perder nada. La cabecera va
                aparte —cambia a propósito— y se comprueba abajo, con nombre. */
             const limpia = (t) => t.replace(/\s+/g, '');
+            /* Los comentarios NO son conducta: reescribir una explicación no
+               es perder una comprobación, y si contaran, nadie podría mejorar
+               un comentario sin que esta prueba se queje. Ya se ignoraban los
+               de línea (`--`); también los de bloque. */
             const viejo = antes[n].texto.split('\n').map(l => l.trim().replace(/;$/, ''))
                 .filter(l => l && l !== 'BEGIN' && l !== 'END' && l !== '$$'
-                          && l.indexOf('--') !== 0 && l.indexOf('LANGUAGE ') !== 0);
-            const nuevoTexto = (ahora[n].archivo === 'supabase-migration-v78.sql') ? ahora[n].texto : '';
-            eq(nuevoTexto.length > 0, true, 'la v78 no redefine ' + n);
+                          && l.indexOf('--') !== 0 && l.indexOf('LANGUAGE ') !== 0
+                          && l.indexOf('/*') !== 0 && l.indexOf('*') !== 0
+                          && l.indexOf('*/') === -1);
+            /* La definición VIVA, esté donde esté: la v78 metió el guardia, y
+               una migración posterior puede volver a tocar la función —la v82
+               le agregó campos a `entrada_historial`—. Lo que no puede es
+               perder una línea por el camino, que es exactamente cómo la v63
+               se llevó el freno. Así que se compara contra la ÚLTIMA, y se
+               exige que sea de la v78 o posterior. */
+            const nv = Number((ahora[n].archivo.match(/v(\d+)/) || [0, 0])[1]);
+            eq(nv >= 78, true, 'la definición viva de ' + n + ' es anterior al guardia: ' + ahora[n].archivo);
+            const nuevoTexto = ahora[n].texto;
+            eq(nuevoTexto.length > 0, true, 'nadie define ' + n);
             const nuevo = limpia(nuevoTexto);
             const fuera = (salidasAProposito[n] || []).map(x => limpia(x.replace(/;$/, '')));
             const perdidas = viejo.filter(l => {
