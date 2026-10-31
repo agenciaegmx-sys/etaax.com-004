@@ -203,6 +203,86 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
     test('…y no se le inventa una equivalencia con el envase de uno de ellos',()=>
         eq(c._equivBarra(fus[0].total,fus[0]),null,'se inventó una copa que no existe'));
 
+    /* ══ UNA CAPTURA DEL QR QUE SE CORRIGIÓ DESPUÉS ══════════════════════════
+       Desde la v82 el colaborador puede corregir lo que mandó. El log global
+       sube de versión, pero el inventario calcula con SU copia: si no se
+       reconcilia, el log dice 8 y el inventario sigue diciendo 10, y el que
+       corrigió cree que ya quedó. Lo que no se puede hacer es agregar otra
+       entrada de 8 — eso contaría doble, que es justo lo que el editor vino a
+       evitar. */
+    cargar('recetas/inventarios.js',['_reconciliarEntradaEnInv']);
+    const entrada=(ver,cant)=>({id:'e1',insumoId:'ron1',nombre:'Ron',concepto:'compra',
+        cantidad:cant,unidad:'pza',fecha:'2026-10-20',registrado:'2026-10-20T19:00:00Z',ver:ver});
+    test('corregir una entrada ya importada la actualiza EN SU SITIO',()=>{
+        c.invActual={entradasLog:[Object.assign(entrada(1,10),{importadoEnInv:'inv1'})]};
+        const cambio=c._reconciliarEntradaEnInv(entrada(2,8));
+        eq(cambio,true,'no vio el cambio');
+        eq(c.invActual.entradasLog.length,1,'agregó otra entrada: contaría doble');
+        eq(Number(c.invActual.entradasLog[0].cantidad),8,'quedó en la cantidad vieja');
+        return eq(Number(c.invActual.entradasLog[0].ver),2,'no subió de versión');
+    });
+    test('…sin pisar las marcas que el ERP le puso a su copia',()=>{
+        c.invActual={entradasLog:[Object.assign(entrada(1,10),{importadoEnInv:'inv1',_qrBase:3})]};
+        c._reconciliarEntradaEnInv(entrada(2,8));
+        const le=c.invActual.entradasLog[0];
+        eq(le.importadoEnInv,'inv1','se llevó la marca de importación');
+        return eq(Number(le._qrBase),3,'se llevó el rastro del ERP');
+    });
+    /* Y al contrario: una recarga normal no puede deshacer lo que ya está. */
+    test('la misma versión no toca nada',()=>{
+        c.invActual={entradasLog:[entrada(2,8)]};
+        eq(c._reconciliarEntradaEnInv(entrada(2,99)),false,'se dejó pisar');
+        return eq(Number(c.invActual.entradasLog[0].cantidad),8,'cambió la cantidad');
+    });
+    test('una versión más vieja de la nube no degrada la copia',()=>{
+        c.invActual={entradasLog:[entrada(3,8)]};
+        eq(c._reconciliarEntradaEnInv(entrada(2,10)),false,'aceptó ir hacia atrás');
+        return eq(Number(c.invActual.entradasLog[0].cantidad),8,'la degradó');
+    });
+    test('una entrada que no está en este inventario no se inventa',()=>{
+        c.invActual={entradasLog:[]};
+        eq(c._reconciliarEntradaEnInv(entrada(2,8)),false,'dijo que reconcilió algo');
+        return eq(c.invActual.entradasLog.length,0,'se metió una entrada ajena al periodo');
+    });
+    /* LA PRUEBA QUE DE VERDAD IMPORTA: que el importador LLAME a la
+       reconciliación. Un motor correcto que nadie invoca se ve igual de verde
+       —es la trampa que este proyecto ya lleva anotada—. Así que se corre
+       `_importarEntradasQR`, que es quien recorre el log en cada render. */
+    cargar('recetas/inventarios.js',['_importarEntradasQR']);
+    test('el importador reconcilia lo ya importado en vez de saltárselo',()=>{
+        let invalidado=0;
+        Object.assign(c,{
+            _scopeSucInsumos:l=>l, getInsumos:()=>[{id:'ron1'}],
+            _enPeriodoInvActual:()=>true, _sucActiva:()=>'',
+            _canonInsumoId:x=>x, _insumoResolver:()=>({id:'ron1',tipo:'pza'}),
+            _unidadCompra:()=>'pza', _recomputarMovsQR:()=>{},
+            _guardarELLocal:()=>{}, _sbUpEL:()=>{},
+            _invalidarStep5:()=>{invalidado++;},
+            getEntradasLog:()=>[entrada(2,8)],          // la nube ya trae la corrección
+        });
+        c.window=c; c.window._soloVistaInv=false;
+        c.invActual={id:'inv1',cerrado:false,entradasLog:[entrada(1,10)]};
+        const n=c._importarEntradasQR();
+        eq(c.invActual.entradasLog.length,1,'metió otra entrada: el inventario contaría doble');
+        eq(Number(c.invActual.entradasLog[0].cantidad),8,'el inventario se quedó con la cantidad vieja');
+        eq(n>0,true,'no contó el cambio, así que nada se repinta');
+        return eq(invalidado>0,true,'no invalidó el resultado: el reporte seguiría con lo viejo');
+    });
+    test('…y si nada cambió, no repinta por gusto',()=>{
+        let invalidado=0;
+        c._invalidarStep5=()=>{invalidado++;};
+        c.getEntradasLog=()=>[entrada(1,10)];
+        c.invActual={id:'inv1',cerrado:false,entradasLog:[entrada(1,10)]};
+        eq(c._importarEntradasQR(),0,'contó un cambio que no hubo');
+        return eq(invalidado,0,'invalidó el resultado sin motivo');
+    });
+    /* Un inventario cerrado o en solo-lectura no se toca: ahí la corrección es
+       un ajuste autorizado, no una reconciliación silenciosa. */
+    test('sin inventario abierto no hay nada que reconciliar',()=>{
+        c.invActual=null;
+        return eq(c._reconciliarEntradaEnInv(entrada(2,8)),false,'tocó algo sin inventario');
+    });
+
     /* Y lo de siempre: agregar etiquetas no puede mover el dinero. */
     test('las etiquetas no tocan la diferencia ni su costo',()=>{
         c.calcExistencia=()=>25;c.calcExistenciaTeorica=()=>25+350/60;

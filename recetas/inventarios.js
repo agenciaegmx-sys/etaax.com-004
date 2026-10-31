@@ -2608,6 +2608,37 @@ function _recomputarMovsQR() {
     });
 }
 
+/* ══ UNA CAPTURA DEL QR QUE SE CORRIGIÓ DESPUÉS ══════════════════════════════
+   La copia que vive dentro del inventario abierto es la que se usa para
+   calcular; el log global es de donde viene. Cuando alguien corrige su captura
+   desde el celular (v82), el log sube de versión y esta copia se queda vieja.
+
+   Se actualiza EN SU SITIO y solo los campos de CAPTURA: la copia de adentro
+   lleva además marcas del ERP que no existen en el log y que no hay que
+   pisar. Si la versión de la nube no es más nueva, no se toca nada —así una
+   recarga normal no deshace una corrección hecha aquí—.
+
+   Lo que la nube trae YA PASÓ por `_miCambioGana`: si hay una escritura local
+   pendiente para ese id, gana la local y aquí no llega nada que la deshaga. */
+function _reconciliarEntradaEnInv(e) {
+    if (!e || !e.id || !invActual || !invActual.entradasLog) return false;
+    var i = -1;
+    for (var k = 0; k < invActual.entradasLog.length; k++) {
+        var le = invActual.entradasLog[k];
+        if (le && le.id === e.id) { i = k; break; }
+    }
+    if (i < 0) return false;
+    var copia = invActual.entradasLog[i];
+    var vLocal = parseInt(copia.ver, 10) || 1;        // sin `ver` = la primera
+    var vNube  = parseInt(e.ver,    10) || 1;
+    if (vNube <= vLocal) return false;
+    ['cantidad', 'unidad', 'concepto', 'nota', 'motivo', 'evidencia',
+     'foto_url', 'foto_urls', 'ver', 'editadoPor', 'editadoEn'].forEach(function (campo) {
+        if (campo in e) copia[campo] = e[campo];
+    });
+    return true;
+}
+
 function _importarEntradasQR() {
     if (!invActual || invActual.cerrado || window._soloVistaInv) return 0; // 👁️ solo lectura: no muta el inventario
     if (!invActual.entradasLog) invActual.entradasLog = [];
@@ -2627,7 +2658,19 @@ function _importarEntradasQR() {
         var _sucImp = _sucActiva();
         if (e.sucursalId && _sucImp && e.sucursalId !== _sucImp) return;
         if (!_enPeriodoInvActual(e.fecha, e.registrado)) return;   // periodo: pertenece a OTRO inventario
-        if (e.id && yaEnInv[e.id]) return;      // ya está en este inventario
+        /* YA ESTÁ EN ESTE INVENTARIO… PERO PUEDE HABER CAMBIADO.
+           Desde la v82 una captura del QR se puede corregir, y antes esto
+           salía de largo: el log global quedaba con 8 botellas y la copia de
+           adentro del inventario seguía diciendo 10. El reporte y el resultado
+           se calculan con la copia de adentro, así que la corrección no se
+           veía por ningún lado —y el que la hizo creía que sí—.
+
+           Se reconcilia POR VERSIÓN y EN SU SITIO: no se agrega otra entrada
+           (eso contaría doble, que es justo lo que el editor vino a evitar). */
+        if (e.id && yaEnInv[e.id]) {
+            if (_reconciliarEntradaEnInv(e)) { n++; try { _invalidarStep5(); } catch (x) {} }
+            return;
+        }
         if (e.borrada) return; // borrada a propósito por el usuario (flag explícito).
         // OJO: NO usamos importadoEnInv como candado — confundía "borrada" con "no
         // persistió": tras finalizar/reabrir, el push al log a veces no se guardaba en
