@@ -212,7 +212,17 @@
             'table.rt{width:100%;border-collapse:collapse}' +
             'table.rt thead{display:table-header-group}' +   /* títulos de columna se repiten por hoja */
             'table.rt tr{break-inside:avoid;page-break-inside:avoid}' +
-            'table.rt thead th{background:#2f2b24;padding:8px 10px;font-size:8.5px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:1.2px;border-bottom:2px solid #2f2b24;text-align:right}' +
+            /* TÍTULOS DE COLUMNA: GRIS CLARO CON LETRA NEGRA.
+               Estaban en casi negro (#2f2b24) con letra blanca —se leían en
+               pantalla— pero el bloque de impresión de abajo forzaba la letra
+               a NEGRO sin tocar el fondo: en papel salía negro sobre negro y
+               no se leía nada. Lo reportó Edwin en el recibo de nómina.
+
+               Se arregla por el lado del fondo y no del texto, porque así la
+               pareja funciona IGUAL en pantalla y en papel: un solo estilo que
+               no depende de que nadie se acuerde de cambiar los dos a la vez.
+               Negritas y mayúsculas se quedan: es lo que los hace título. */
+            'table.rt thead th{background:#e8e6e0;padding:8px 10px;font-size:8.5px;font-weight:800;color:#1a1916;text-transform:uppercase;letter-spacing:1.2px;border-bottom:2px solid #8d8778;text-align:right}' +
             'table.rt thead th:first-child{text-align:left}' +
             'table.rt tbody td{padding:7px 10px;font-size:11.5px;color:#1a1916;border-bottom:1px solid #cfcabd;text-align:right;font-variant-numeric:tabular-nums}' +
             'table.rt tbody td:first-child{text-align:left;font-weight:600}' +
@@ -268,7 +278,10 @@
             '@media print{@page{size:letter portrait;margin:0.5cm 0}' +
             '.rfoot{position:fixed;left:0;right:0;bottom:0;background:#fff}.rfoot-sp{height:30px}' +
             'body{-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
-            'table.rt thead th{color:#000;border-bottom-color:#555}' +
+            /* El encabezado YA es negro sobre gris claro: aquí solo se afina la
+               línea. Poner `color:#000` sin tocar el fondo fue justo lo que lo
+               dejó ilegible cuando el fondo era oscuro. */
+            'table.rt thead th{border-bottom-color:#555}' +
             'table.rt tbody td{color:#000;border-bottom-color:#b5b5b5}' +
             '.rcard .l,.rcard .s{color:#333}' +
             '}' +

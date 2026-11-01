@@ -14047,6 +14047,45 @@ console.log('\n══ BG8 · La carátula de costeo y lo que se imprime ══')
         return eq(sep >= 55 && Math.min(_lumRep(m[1]), _lumRep(m[2])) <= 35, true,
                   m[2] + ' sobre ' + m[1] + ' = ' + sep + ' puntos');
     });
+    /* LA PAREJA TIENE QUE SOBREVIVIR AL BLOQUE DE IMPRESIÓN.
+       Este es el agujero por el que se fue el recibo de nómina: el encabezado
+       era letra blanca sobre casi negro —se leía en pantalla y la prueba de
+       arriba lo daba por bueno— y el `@media print` forzaba la letra a NEGRO
+       sin tocar el fondo. En papel salía negro sobre negro.
+
+       Así que no basta medir la regla base: hay que medir la que QUEDA después
+       de aplicarle los cambios de impresión, que es la que ve el papel. */
+    test('…y los títulos de columna se siguen leyendo en PAPEL', () => {
+        const base = rep.match(/table\.rt thead th\{([^}]*)\}/i);
+        if (!base) return eq(false, true, 'sin encabezado');
+        const print = repCss.slice(repCss.indexOf('@media print{'));
+        const pr = print.match(/table\.rt thead th\{([^}]*)\}/i);
+        /* El inicio de la propiedad se ancla: `border-bottom-color:#555`
+           también contiene «color:», y leerlo como el color del texto daba por
+           bueno un encabezado ilegible por la razón equivocada. */
+        const leer = (txt, prop) => {
+            const m = txt.match(new RegExp('(?:^|;)\\s*' + prop + ':\\s*(#[0-9a-f]{3,6})', 'i'));
+            return m ? m[1] : null;
+        };
+        /* Lo que el papel ve: la regla base, pisada por lo que diga el bloque
+           de impresión para cada propiedad por separado. */
+        const fondo = (pr && leer(pr[1], 'background')) || leer(base[1], 'background');
+        const letra = (pr && leer(pr[1], 'color'))      || leer(base[1], 'color');
+        if (!fondo || !letra) return eq(false, true, 'sin pareja: ' + fondo + ' / ' + letra);
+        const sep = Math.abs(_lumRep(letra) - _lumRep(fondo));
+        return eq(sep >= 55 && Math.min(_lumRep(fondo), _lumRep(letra)) <= 35, true,
+            'en papel queda ' + letra + ' sobre ' + fondo + ' = ' + sep + ' puntos');
+    });
+    /* Y que sigan pareciendo títulos: en negritas y en mayúsculas. Lo pidió
+       Edwin junto con el gris — un encabezado que se lee pero no se distingue
+       del resto de la tabla deja de servir de encabezado. */
+    test('…y siguen en negritas y mayúsculas', () => {
+        const m = rep.match(/table\.rt thead th\{([^}]*)\}/i);
+        if (!m) return eq(false, true, 'sin encabezado');
+        const peso = (m[1].match(/font-weight:\s*(\d+)/) || [])[1];
+        eq(Number(peso) >= 700, true, 'font-weight ' + peso + ': dejó de ser negrita');
+        return eq(/text-transform:\s*uppercase/.test(m[1]), true, 'perdió las mayúsculas');
+    });
     /* Al imprimir, la impresora aclara todo un punto más que el monitor. */
     test('al imprimir se sube el contraste otro punto', () =>
         eq(/@media print\{[\s\S]*table\.rt tbody td\{color:#000/.test(repCss), true, 'a negro'));
