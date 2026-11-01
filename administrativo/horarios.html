@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
-<script src="/embed.js?v=bdb5ff10"></script>
+<script src="/embed.js?v=e0d4595d"></script>
 <script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js?v=4c811fa3"></script>
     <meta charset="UTF-8">
@@ -14,7 +14,7 @@
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=fd2dac1b">
     <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
     <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=03cadcf1">
-    <link rel="preload" as="script" href="/administrativo/staff-operativo-ui.js?v=49b7d26d">
+    <link rel="preload" as="script" href="/administrativo/staff-operativo-ui.js?v=152e86d6">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -136,6 +136,46 @@
         .hr-mb-clear:hover { border-color:#e05a3a;color:#e05a3a; }
 
 
+        /* ══ EL TÍTULO NO SE DICE DOS VECES ══════════════════════════════════
+           Abierta desde Gestión de Staff, esta página vive dentro de una ventana
+           que YA tiene arriba, fija, su ícono y su nombre. Repetirlo aquí abajo
+           gasta el alto que más falta en una tablet y empuja hacia abajo lo que
+           sí se usa. El subtítulo no se pierde: sube a esa barra (etaaxEmbedSub). */
+        html.embed .hr-head { display:none; }
+
+        /* ══ SECCIONES: por área o por grupo ══ */
+        .hr-grp { margin-bottom:20px; }
+        .hr-grp-hd { display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 8px;padding-bottom:7px;border-bottom:1px solid var(--border); }
+        .hr-grp-hd .nm { font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--viol); }
+        .hr-grp-hd .mt { font-size:11px;color:var(--text-dim); }
+        .hr-grp-tt { font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:0 0 10px; }
+        .hr-grp-tt b { color:var(--text);letter-spacing:1px; }
+
+        /* Palomitas con forma de botón: áreas, grupos, personas */
+        .hr-chip { display:inline-flex;align-items:center;gap:6px;
+            padding:7px 13px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;
+            border:1.5px solid var(--border);background:transparent;color:var(--text-muted);transition:all .15s; }
+        .hr-chip:hover { border-color:var(--viol);color:var(--viol); }
+        .hr-chip.on { border-color:var(--green);background:rgba(61,190,122,.12);color:var(--green); }
+        .hr-chip.apagado { opacity:.4; }
+        .hr-lbl { font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:14px 0 8px; }
+        .hr-lbl:first-child { margin-top:0; }
+
+        /* Editor de sugerencias y lista de personas de un grupo */
+        .hr-row { display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid var(--border); }
+        .hr-row:last-child { border-bottom:none; }
+        .hr-inp { background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);
+            padding:8px 9px;font-family:'DM Sans',sans-serif;font-size:13px;min-width:0;width:100%;box-sizing:border-box;-webkit-appearance:none;appearance:none; }
+        .hr-del { background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text-dim);cursor:pointer;padding:8px 10px;font-size:12px;flex-shrink:0; }
+        .hr-del:hover { border-color:#e05a3a;color:#e05a3a; }
+        .hr-pers { display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer; }
+        .hr-pers:hover { background:var(--surface2); }
+        .hr-pers .mk { width:19px;height:19px;border-radius:5px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;color:transparent;flex-shrink:0; }
+        .hr-pers.on .mk { border-color:var(--green);background:rgba(61,190,122,.14);color:var(--green); }
+        .hr-pers .nm2 { font-size:13.5px;color:var(--text);line-height:1.25; }
+        .hr-pers .mt2 { font-size:11px;color:var(--text-dim); }
+        .hr-pers .mano { font-size:10px;color:var(--viol);font-weight:600;white-space:nowrap; }
+
         @media (max-width:600px){ .hr-toolbar-right{width:100%;} .hr-wlabel{min-width:150px;} }
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
@@ -206,6 +246,9 @@
             <button class="hr-btn" onclick="abrirAgregar()" title="Suma a alguien al rol de ESTA semana (gerencia, administración, o prestado de otra sucursal)">+ Agregar a la semana</button>
             <button class="hr-btn" onclick="copiarSemanaAnterior()" title="Trae los turnos de la semana pasada a esta">⧉ Copiar semana anterior</button>
             <button class="hr-btn" onclick="abrirPDF()" title="Rol de la semana en PDF, carta horizontal">🖨️ PDF</button>
+            <select class="hr-select" id="grpSel" onchange="setAgrupar(this.value)"
+                    title="Partir el rol por área (cocina, barra, piso…) o por un grupo tuyo"></select>
+            <button class="hr-btn" onclick="abrirGrupos()" title="Crear, editar o borrar grupos: caja+piso+barra, barra+cocina…">Grupos</button>
             <div class="hr-toggle">
                 <button id="tgGrid" class="on" onclick="setVista('grid')">▦ Cuadrícula</button>
                 <button id="tgCards" onclick="setVista('cards')">▤ Tarjetas</button>
@@ -228,6 +271,10 @@
             <label>Salida<input type="time" id="hrmOut"></label>
         </div>
         <div class="hr-presets" id="hrmPresets"></div>
+        <div style="display:flex;justify-content:flex-end;margin:-8px 0 14px">
+            <button class="hr-btn" style="font-size:11px;padding:5px 10px" onclick="abrirPresets()"
+                    title="Las sugerencias son de este negocio: cámbialas a los turnos que de verdad opera">✎ Editar sugerencias</button>
+        </div>
         <div class="hr-modal-acts">
             <button class="hr-mb-clear" onclick="editorLimpiar()">Quitar</button>
             <button class="hr-mb-desc" onclick="editorDescanso()">Descanso</button>
@@ -271,11 +318,15 @@
         <h3>Exportar el rol de la semana</h3>
         <div class="msub" id="hrPdfSub">—</div>
         <div style="margin-top:14px">
-            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Áreas a incluir</div>
+            <div class="hr-lbl">Qué grupo</div>
+            <div id="hrPdfGrupos" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+            <div class="hr-lbl">Áreas a incluir</div>
             <div id="hrPdfAreas" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px" id="hrPdfAreaActs">
                 <button class="hr-btn" style="font-size:11px" onclick="pdfAreasTodas()">Todas</button>
                 <button class="hr-btn" style="font-size:11px" onclick="pdfAreasNinguna()">Ninguna</button>
+                <button class="hr-btn" style="font-size:11px" onclick="pdfGuardarGrupo()"
+                        title="Deja guardada esta combinación para no volver a armarla">💾 Guardar como grupo</button>
             </div>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:16px">
                 <input type="checkbox" id="hrPdfSepar" checked style="width:16px;height:16px;accent-color:var(--green)">
@@ -287,6 +338,36 @@
             <button class="hr-mb-clear" onclick="cerrarPDF()">Cancelar</button>
             <button class="hr-mb-save" onclick="imprimirHorario()">🖨️ Imprimir</button>
         </div>
+    </div>
+</div>
+
+<!-- ══ MODAL: sugerencias de horario ══
+     Van ENCIMA del editor de turno, que se queda abierto detrás: se entra a
+     corregir una sugerencia y se sigue capturando el mismo turno. Por eso el
+     orden en el documento importa — el último pinta arriba. -->
+<div class="hr-modal-bg" id="hrPresetModal">
+    <div class="hr-modal" style="max-width:470px">
+        <h3>Sugerencias de horario</h3>
+        <div class="msub">Los botones rápidos del editor de turno. Son de este negocio: déjalos en los turnos que de verdad opera.</div>
+        <div id="hrPresetList" style="max-height:44vh;overflow-y:auto;margin-top:12px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+            <button class="hr-btn" style="font-size:11.5px" onclick="presetAgregar()">＋ Agregar</button>
+            <button class="hr-btn" style="font-size:11.5px" onclick="presetsFabrica()" title="Vuelve a las cinco que trae el sistema">⟲ Las de fábrica</button>
+        </div>
+        <div class="hr-modal-acts" style="margin-top:16px">
+            <button class="hr-mb-clear" onclick="cerrarPresets()">Cancelar</button>
+            <button class="hr-mb-save" onclick="presetsGuardar()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL: grupos ══ -->
+<div class="hr-modal-bg" id="hrGrupoModal">
+    <div class="hr-modal" style="max-width:580px">
+        <h3 id="hrGrpTitle">Grupos</h3>
+        <div class="msub" id="hrGrpSub">—</div>
+        <div id="hrGrpBody" style="margin-top:14px"></div>
+        <div class="hr-modal-acts" id="hrGrpActs" style="margin-top:16px"></div>
     </div>
 </div>
 
@@ -313,7 +394,10 @@
 var DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 var DIAS_L = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 var MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-var PRESETS = [
+/* Las de FÁBRICA. Son un punto de partida, no la verdad: cada negocio abre a
+   su hora, y hasta hoy estas cinco eran las únicas que había. Se quedan como
+   el "⟲ de fábrica" del editor de sugerencias. */
+var PRESETS_FABRICA = [
     { l:'Apertura',  in:'09:00', out:'17:00' },
     { l:'Intermedio',in:'12:00', out:'20:00' },
     { l:'Cierre',    in:'16:00', out:'00:00' },
@@ -351,6 +435,7 @@ function esc(s){ return (window.etx?etx(String(s==null?'':s)):String(s==null?'':
 var _weekStr = EtaaxCore.getWeekStr(new Date());
 var _sucSel  = '';
 var _view    = localStorage.getItem('etaax_hor_vista') || (window.innerWidth < 720 ? 'cards' : 'grid');
+var _agr     = localStorage.getItem('etaax_hor_agrupar') || '';   // '' | 'area' | 'g:<id>'
 var _horCache = {};   // recordId -> datos
 var _staff = [];
 var _edit  = null;    // { staffId, dayIdx }
@@ -361,6 +446,49 @@ function curRecord(){
     var id = curRecId();
     if (!_horCache[id]) _horCache[id] = { id:id, sucursalId:_effSuc(_sucSel), semana:_weekStr, turnos:{} };
     return _horCache[id];
+}
+
+/* ══ LO QUE ES DEL NEGOCIO, NO DE LA SEMANA ══════════════════════════════
+   Las sugerencias de horario y los grupos no cambian de la semana 43 a la 44:
+   son del negocio. Viven en la MISMA tabla `horarios`, en un registro aparte
+   con su propio id, y no dentro de ninguna semana — meterlos en una sería
+   perderlos al pasar a la siguiente.
+
+   El id lleva el negocio pegado (`horcfg_<negocio>`) a propósito: la llave
+   primaria de esa tabla es global a toda la plataforma, así que un id que no
+   nombre al negocio se lo pelea con el del vecino y el segundo que escriba se
+   queda sin guardar.                                                        */
+var _cfg = { id:'', presets:null, grupos:[], updated:0 };
+function _cfgId(){ return 'horcfg_' + (getNegocioActivo() || 'sin-negocio'); }
+function _esCfg(id){ return String(id||'').indexOf('horcfg_') === 0; }
+/* `presets:null` = nunca se tocaron → las de fábrica. Una lista VACÍA es otra
+   cosa muy distinta: las borró a propósito, y hay que respetárselo. */
+function presetsActuales(){ return _cfg.presets ? _cfg.presets : PRESETS_FABRICA; }
+function _gruposActuales(){ return _cfg.grupos || []; }
+function _grupoPorId(id){
+    var g = _gruposActuales().filter(function(x){ return x && x.id === id; });
+    return g.length ? g[0] : null;
+}
+function _gidHor(){ return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function _cfgEscribirLocal(){
+    try { localStorage.setItem(_sk('horarios_cfg'), JSON.stringify(_cfg)); }
+    catch(e){ console.warn('[horarios] cfg local:', e && e.message); }
+}
+function _cfgGuardar(){
+    /* El mismo candado que el bulto de semanas: no se escribe nada hasta haber
+       cargado de verdad, o el primer cambio borra lo que ya había. */
+    if (!_cargaLista) { console.warn('[horarios] cfg: guardado omitido, el almacén no cargaba'); return; }
+    _cfg.id = _cfgId();
+    _cfg.updated = Date.now();
+    _cfgEscribirLocal();
+    if (window.sbUpsert) sbUpsert('horarios', _cfg);
+}
+function _cfgCargarLocal(){
+    try {
+        var c = JSON.parse(localStorage.getItem(_sk('horarios_cfg')) || 'null');
+        if (c && typeof c === 'object') _cfg = c;
+    } catch(e){}
+    if (!_cfg.grupos) _cfg.grupos = [];
 }
 
 /* ── Persistencia ── */
@@ -433,11 +561,27 @@ async function _syncHorariosDB(){
         var res = await _supabase.from('horarios').select('datos').eq('negocio_id', negId);
         if (res.error || !res.data) return;
 
-        var enNube = {};
+        var enNube = {}, vistoCfg = false;
         res.data.forEach(function(row){
             var d = row.datos;
-            if (d && d.id) { _horCache[d.id] = d; enNube[d.id] = 1; }
+            if (!d || !d.id) return;
+            /* La configuración NO es una semana: no entra al bulto —ahí la
+               contaría el candado de "menos semanas que antes"— y se resuelve
+               por fecha: gana la más reciente, y si la de este equipo es más
+               nueva, sube. */
+            if (_esCfg(d.id)) {
+                vistoCfg = true;
+                if ((d.updated||0) > (_cfg.updated||0)) { _cfg = d; if(!_cfg.grupos) _cfg.grupos=[]; _cfgEscribirLocal(); }
+                else if ((_cfg.updated||0) > (d.updated||0) && window.sbUpsert) sbUpsert('horarios', _cfg);
+                return;
+            }
+            _horCache[d.id] = d; enNube[d.id] = 1;
         });
+        /* Config que solo existe aquí: se sube, igual que las semanas. */
+        if (!vistoCfg && (_cfg.presets || _gruposActuales().length) && window.sbUpsert) {
+            _cfg.id = _cfgId();
+            sbUpsert('horarios', _cfg);
+        }
 
         /* LO QUE ESTÁ SOLO AQUÍ, SE MANDA. Una semana que existe en este
            navegador y no en la nube es una semana a un formateo de distancia de
@@ -522,9 +666,13 @@ function _horasStaff(sid){
     return h;
 }
 function _fmtH(h){ if (!h) return '0h'; var hh=Math.floor(h), mm=Math.round((h-hh)*60); return mm ? (hh+'h '+mm+'m') : (hh+'h'); }
-function _coberturaDia(dayIdx){
+/* Cuánta gente cubre un día. `ambito` dice CON QUIÉN se cuenta: sin él, toda
+   la sucursal —que es lo de siempre—; con él, solo la sección que se está
+   dibujando. En la hoja de cocina, "3 personas el martes" tiene que ser tres
+   cocineros, no tres cualesquiera. */
+function _coberturaDia(dayIdx, ambito){
     var rec = curRecord(); var n=0;
-    _staff.forEach(function(s){ var t=(rec.turnos[s.id]||{})['d'+dayIdx]; if (t && !t.desc && t.in && t.out) n++; });
+    (ambito || _staff).forEach(function(s){ var t=(rec.turnos[s.id]||{})['d'+dayIdx]; if (t && !t.desc && t.in && t.out) n++; });
     return n;
 }
 
@@ -615,6 +763,41 @@ function _porArea(lista){
     return grupos.filter(function(g){ return g.gente.length; });
 }
 
+/* ══ GRUPOS ══════════════════════════════════════════════════════════════
+   Un grupo es "a quiénes mirar juntos": caja, piso y barra; o barra y cocina.
+
+   Se define por ÁREAS —que el sistema ya deduce del puesto y del rol de cada
+   quien, así que el que entre mañana cae solo donde le toca— y se corrige a
+   mano, persona por persona:
+
+     mas   → entra aunque su área no esté elegida (la cajera, que por puesto
+             cae en Administración y en la hoja de piso sí tiene que salir).
+     menos → sale aunque su área sí esté (el gerente, que no se pega en la
+             pared de la cocina).
+
+   Lo que se guarda es la EXCEPCIÓN, no la lista de quienes pertenecen: una
+   lista de nombres se queda vieja con la primera contratación, y a nadie se le
+   ocurre volver a abrir el grupo para meter al cocinero nuevo. Y se guarda el
+   id, no el nombre: renombrar a alguien en el catálogo no puede sacarlo. */
+function _enGrupo(g, s){
+    if (!g || !s) return true;
+    if ((g.menos||[]).indexOf(s.id) >= 0) return false;
+    if ((g.mas||[]).indexOf(s.id) >= 0) return true;
+    return (g.areas||[]).indexOf(_areaDe(s)) >= 0;
+}
+function _cuantosEnGrupo(g){
+    return _staff.filter(function(s){ return _enGrupo(g, s); }).length;
+}
+/* "Barra · Cocina · +1 a mano". El ícono del área se quita: en una línea de
+   resumen, cuatro emojis seguidos se leen peor que las palabras. */
+function _resumenGrupo(g){
+    var nom = (g.areas||[]).map(function(k){ return _areaNom(k).replace(/^[^ ]+ /,''); });
+    var txt = nom.length ? nom.join(' · ') : 'sin áreas';
+    if ((g.mas||[]).length)   txt += ' · +' + g.mas.length + ' a mano';
+    if ((g.menos||[]).length) txt += ' · −' + g.menos.length + ' fuera';
+    return txt;
+}
+
 /* ── Render ── */
 function _staffScope(){
     var inv = _invitacionesSemana(), yo = _effSuc(_sucSel);
@@ -649,11 +832,16 @@ function render(){
     rl.textContent = _fmtDia(mon) + ' – ' + _fmtDia(sun) + ' ' + sun.getFullYear();
     rl.className = 'wr' + (_hoyIdx()>=0 ? ' hoy' : '');
     var _esGlobalTodas = _catGlobalOn() && !_sucSel;
-    document.getElementById('hrSub').textContent = 'Rol semanal · '
+    var _sub = 'Rol semanal · '
         + (_esGlobalTodas ? 'todas las sucursales' : _sucNombre(_sucSel))
         + (_catGlobalOn() ? ' · vista global' : '');
+    document.getElementById('hrSub').textContent = _sub;
+    /* Dentro de la ventana de Gestión de Staff el encabezado de aquí está
+       oculto para no repetir el título: el subtítulo se dice allá arriba. */
+    if (window.etaaxEmbedSub) etaaxEmbedSub(_sub);
     var _selSuc = document.getElementById('sucSel');
     if (_selSuc && _catGlobalOn()) _selSuc.value = _sucSel || '';
+    _pintarAgrupar();
     document.getElementById('tgGrid').className = _view==='grid' ? 'on' : '';
     document.getElementById('tgCards').className = _view==='cards' ? 'on' : '';
 
@@ -673,7 +861,7 @@ function render(){
             : '<div class="hr-empty"><div class="ic">🗓️</div><div style="font-size:15px;color:var(--text)">Sin colaboradores en '+esc(_sucNombre(_sucSel))+'</div><div style="margin-top:6px">Da de alta personal en el <a href="staff.html" style="color:var(--viol)">Catálogo de Staff</a> y asígnalo a esta sucursal, o usa <b>+ Agregar a la semana</b>.</div></div>';
         return;
     }
-    cont.innerHTML = _view==='grid' ? _renderGrid(scope) : _renderCards(scope);
+    cont.innerHTML = _renderScope(scope);
 }
 /* Vista global: se recorre sucursal por sucursal reutilizando el MISMO render de
    siempre. Para que las funciones internas (turnos, cobertura, horas) lean la
@@ -696,13 +884,81 @@ function _renderGlobal(){
             + '<span class="mt">'+lista.length+' colaborador'+(lista.length!==1?'es':'')+' · '+_fmtH(res.h)+' programadas'
             + ((res.si||res.no) ? ' · ✓'+res.si+' ✕'+res.no : '')+'</span>'
             + '<button class="hr-btn" onclick="cambiarSuc(\''+(sid===MATRIZ_ID?'':sid)+'\')">Abrir sucursal →</button></div>'
-            + (_view==='grid' ? _renderGrid(lista) : _renderCards(lista))
+            + _renderScope(lista)
             + '</div>';
     });
     _sucSel = guardado;
     return out;
 }
-function _renderGrid(scope){
+/* ══ AGRUPAR LO QUE SE VE ════════════════════════════════════════════════
+   Sin agrupar es la vista de siempre. "Por área" parte el rol en cocina,
+   barra, piso y administración. Un grupo RECORTA a su gente y la parte igual
+   por dentro, porque un grupo de 20 sigue siendo una pila si viene de corrido. */
+function _renderVista(lista, ambito){
+    return _view==='grid' ? _renderGrid(lista, ambito) : _renderCards(lista);
+}
+function _renderSecciones(grupos, titulo){
+    var h = titulo ? '<div class="hr-grp-tt">Grupo · <b>'+esc(titulo)+'</b></div>' : '';
+    return h + grupos.map(function(g){
+        var hs = 0; g.gente.forEach(function(x){ hs += _horasStaff(x.id); });
+        return '<div class="hr-grp"><div class="hr-grp-hd">'
+            + '<span class="nm">'+esc(g.nom)+'</span>'
+            + '<span class="mt">'+g.gente.length+' colaborador'+(g.gente.length!==1?'es':'')
+            + ' · '+_fmtH(hs)+' programadas</span></div>'
+            + _renderVista(g.gente, g.gente)
+            + '</div>';
+    }).join('');
+}
+function _renderScope(scope){
+    if (_agr === 'area') return _renderSecciones(_porArea(scope));
+    if (_agr.indexOf('g:') === 0){
+        var g = _grupoPorId(_agr.slice(2));
+        /* Grupo borrado desde otro equipo: se enseña el rol COMPLETO, no una
+           pantalla en blanco. Esconder gente por un id que ya no existe es la
+           peor manera posible de enterarse. */
+        if (!g) return _renderVista(scope);
+        var dentro = scope.filter(function(x){ return _enGrupo(g, x); });
+        if (!dentro.length){
+            return '<div class="hr-empty"><div class="ic">👥</div>'
+                 + '<div style="font-size:15px;color:var(--text)">Nadie cae en “'+esc(g.nombre)+'”</div>'
+                 + '<div style="margin-top:6px">en '+esc(_sucNombre(_sucSel))+' esta semana. Ajústalo en <b>Grupos</b>.</div></div>';
+        }
+        return _renderSecciones(_porArea(dentro), g.nombre);
+    }
+    return _renderVista(scope);
+}
+/* Qué dice el selector de agrupar. Se repinta en cada render porque los grupos
+   pueden llegar de otro equipo mientras esta pantalla está abierta. */
+function _pintarAgrupar(){
+    var sel = document.getElementById('grpSel'); if (!sel) return;
+    var gs = _gruposActuales();
+    var html = '<option value="">Sin agrupar</option><option value="area">Por área</option>';
+    if (gs.length) html += '<optgroup label="Mis grupos">' + gs.map(function(g){
+        return '<option value="g:'+esc(g.id)+'">'+esc(g.nombre)+'</option>';
+    }).join('') + '</optgroup>';
+    sel.innerHTML = html;
+    /* Un grupo borrado deja la preferencia apuntando a nada: se vuelve a "sin
+       agrupar" en vez de dejar el selector en blanco. */
+    _olvidarGrupoFantasma();
+    sel.value = _agr;
+}
+/* Un grupo borrado —aquí o en otro equipo— deja la preferencia apuntando a
+   nada. Se vuelve a "sin agrupar", y también en lo GUARDADO: corregirlo solo en
+   memoria lo resucita en la siguiente carga, y la pantalla abriría filtrando
+   por un fantasma. */
+function _olvidarGrupoFantasma(){
+    if (_agr.indexOf('g:') !== 0 || _grupoPorId(_agr.slice(2))) return false;
+    _agr = '';
+    try { localStorage.setItem('etaax_hor_agrupar', ''); } catch(e){}
+    return true;
+}
+function setAgrupar(v){
+    _agr = v || '';
+    try { localStorage.setItem('etaax_hor_agrupar', _agr); } catch(e){}
+    render();
+}
+
+function _renderGrid(scope, ambito){
     var hoy = _hoyIdx();
     var h = '<div class="hr-scroll"><table class="hr-grid"><thead><tr><th>Colaborador</th>';
     for (var i=0;i<7;i++){ var d=_diaDate(i); h += '<th class="'+(i===hoy?'hoy':'')+'">'+DIAS[i]+'<br><span style="font-weight:400;opacity:.7">'+_fmtDia(d)+'</span></th>'; }
@@ -724,7 +980,7 @@ function _renderGrid(scope){
     });
     // fila de cobertura
     h += '<tr><td><div class="hr-cover" style="padding:8px 12px"><strong>Cobertura</strong><br>personas por día</div></td>';
-    for (var i=0;i<7;i++){ h += '<td class="hr-cell '+(i===hoy?'hoy':'')+'"><div class="hr-cover"><strong>'+_coberturaDia(i)+'</strong></div></td>'; }
+    for (var i=0;i<7;i++){ h += '<td class="hr-cell '+(i===hoy?'hoy':'')+'"><div class="hr-cover"><strong>'+_coberturaDia(i, ambito)+'</strong></div></td>'; }
     h += '</tr></tbody></table></div>';
     return h;
 }
@@ -883,6 +1139,7 @@ function _tablaPDF(rec, staffList){
    Un rol de 40 personas en una hoja no lo lee nadie: en la pared de la cocina
    solo importa cocina. De ahí el filtro por área y la separación en bloques. */
 var _pdfAreas = null;    // null = todavía no se ha abierto el modal
+var _pdfGrupo = '';      // '' = se decide con las palomitas de área
 function _areasDelScope(){
     var lista = _catGlobalOn() && !_sucSel
         ? _sucsConStaff().reduce(function(acc,sid){ return acc.concat(_staffScopeDe(sid)); }, [])
@@ -902,33 +1159,79 @@ function abrirPDF(){
     areas.forEach(function(a){ if (_pdfAreas[a.k] === undefined) _pdfAreas[a.k] = true; });
     document.getElementById('hrPdfSub').textContent = 'Semana ' + _weekStr.split('-W')[1] + ' · '
         + ((_catGlobalOn() && !_sucSel) ? 'todas las sucursales' : _sucNombre(_sucSel));
+    /* Si en la pantalla ya se está mirando un grupo, la hoja arranca con ESE:
+       se imprime lo que se está viendo, que es lo que uno espera al darle
+       imprimir. */
+    if (_agr.indexOf('g:') === 0 && _grupoPorId(_agr.slice(2))) _pdfGrupo = _agr.slice(2);
+    if (_pdfGrupo && !_grupoPorId(_pdfGrupo)) _pdfGrupo = '';
     _pintarPdfAreas();
     document.getElementById('hrPdfModal').classList.add('on');
 }
 function cerrarPDF(){ document.getElementById('hrPdfModal').classList.remove('on'); }
-function _pintarPdfAreas(){
-    var areas = _areasDelScope();
-    document.getElementById('hrPdfAreas').innerHTML = areas.map(function(a){
-        var on = !!_pdfAreas[a.k];
-        return '<button onclick="pdfToggleArea(\''+esc(a.k)+'\')" style="padding:7px 13px;border-radius:8px;cursor:pointer;'+
-            'font-family:inherit;font-size:12px;font-weight:600;'+
-            'border:1.5px solid '+(on?'var(--green)':'var(--border)')+';'+
-            'background:'+(on?'rgba(61,190,122,.12)':'transparent')+';'+
-            'color:'+(on?'var(--green)':'var(--text-muted)')+'">'+esc(a.nom)+'</button>';
-    }).join('');
-    var n = _gentePDF().length;
-    document.getElementById('hrPdfMsg').textContent = n
-        ? n + (n===1 ? ' colaborador en la hoja' : ' colaboradores en la hoja')
-        : 'Sin áreas elegidas, la hoja saldría vacía.';
+function _pintarPdfGrupos(){
+    var cont = document.getElementById('hrPdfGrupos'); if (!cont) return;
+    cont.innerHTML = '<button class="hr-chip'+(_pdfGrupo?'':' on')+'" onclick="pdfUsarGrupo(\'\')">Por áreas</button>'
+        + _gruposActuales().map(function(g){
+            return '<button class="hr-chip'+(_pdfGrupo===g.id?' on':'')+'" onclick="pdfUsarGrupo(\''+esc(g.id)+'\')">'+esc(g.nombre)+'</button>';
+          }).join('')
+        + '<button class="hr-chip" onclick="pdfIrAGrupos()" title="Crear o editar grupos">Grupos…</button>';
 }
-function pdfToggleArea(k){ _pdfAreas[k] = !_pdfAreas[k]; _pintarPdfAreas(); }
-function pdfAreasTodas(){ _areasDelScope().forEach(function(a){ _pdfAreas[a.k]=true; }); _pintarPdfAreas(); }
-function pdfAreasNinguna(){ _areasDelScope().forEach(function(a){ _pdfAreas[a.k]=false; }); _pintarPdfAreas(); }
-function _pasaArea(s){ return !_pdfAreas || _pdfAreas[_areaDe(s)]; }
+function _pintarPdfAreas(){
+    _pintarPdfGrupos();
+    var areas = _areasDelScope(), conGrupo = !!(_pdfGrupo && _grupoPorId(_pdfGrupo));
+    /* Con un grupo elegido las áreas NO se esconden: se apagan. Que se vean
+       apagadas dice de un vistazo quién manda; esconderlas dejaría al dueño
+       buscando el filtro que acaba de usar. */
+    document.getElementById('hrPdfAreas').innerHTML = areas.map(function(a){
+        return '<button class="hr-chip'+(!conGrupo && _pdfAreas[a.k] ? ' on' : '')+(conGrupo?' apagado':'')+'" '+
+            'onclick="pdfToggleArea(\''+esc(a.k)+'\')">'+esc(a.nom)+'</button>';
+    }).join('');
+    var acts = document.getElementById('hrPdfAreaActs');
+    if (acts) acts.style.display = conGrupo ? 'none' : '';
+    var n = _gentePDF().length;
+    document.getElementById('hrPdfMsg').textContent =
+        (conGrupo ? 'Grupo “' + _grupoPorId(_pdfGrupo).nombre + '” · ' : '')
+        + (n ? n + (n===1 ? ' colaborador en la hoja' : ' colaboradores en la hoja')
+             : (conGrupo ? 'nadie cae aquí esta semana, la hoja saldría vacía.'
+                         : 'Sin áreas elegidas, la hoja saldría vacía.'));
+}
+/* Tocar un área es decir "yo escojo": suelta el grupo en vez de pelearse con
+   él, porque dos filtros decidiendo a la vez no hay manera de leerlos. */
+function pdfToggleArea(k){
+    if (_pdfGrupo) { _pdfGrupo = ''; }
+    else { _pdfAreas[k] = !_pdfAreas[k]; }
+    _pintarPdfAreas();
+}
+function pdfUsarGrupo(id){ _pdfGrupo = id || ''; _pintarPdfAreas(); }
+function pdfIrAGrupos(){ cerrarPDF(); abrirGrupos(); }
+function pdfAreasTodas(){ _pdfGrupo=''; _areasDelScope().forEach(function(a){ _pdfAreas[a.k]=true; }); _pintarPdfAreas(); }
+function pdfAreasNinguna(){ _pdfGrupo=''; _areasDelScope().forEach(function(a){ _pdfAreas[a.k]=false; }); _pintarPdfAreas(); }
+/* Dejar guardada la combinación que se acaba de armar. Es el camino corto al
+   grupo: se arma una vez para imprimir y queda para la próxima. */
+function pdfGuardarGrupo(){
+    var areas = _areasDelScope().filter(function(a){ return _pdfAreas[a.k]; }).map(function(a){ return a.k; });
+    if (!areas.length){ alert('Elige al menos un área antes de guardarla como grupo.'); return; }
+    var sugerido = areas.map(function(k){ return _areaNom(k).replace(/^[^ ]+ /,''); }).join(' + ');
+    var nom = prompt('¿Cómo se llama este grupo?', sugerido);
+    if (!nom || !nom.trim()) return;
+    var g = { id:_gidHor(), nombre:nom.trim(), areas:areas, mas:[], menos:[] };
+    _cfg.grupos = _gruposActuales().concat([g]);
+    _cfgGuardar();
+    _pdfGrupo = g.id;
+    _pintarPdfAreas();
+    _pintarAgrupar();
+}
+/* ¿Esta persona va en la hoja? Un GRUPO elegido manda sobre las palomitas: es
+   exactamente lo que un grupo guarda —áreas más las correcciones a mano—. */
+function _vaEnLaHoja(s){
+    var g = _pdfGrupo ? _grupoPorId(_pdfGrupo) : null;
+    if (g) return _enGrupo(g, s);
+    return !_pdfAreas || _pdfAreas[_areaDe(s)];
+}
 function _gentePDF(){
     if (_catGlobalOn() && !_sucSel)
-        return _sucsConStaff().reduce(function(acc,sid){ return acc.concat(_staffScopeDe(sid).filter(_pasaArea)); }, []);
-    return _staffScopeDe(_sucSel).filter(_pasaArea);
+        return _sucsConStaff().reduce(function(acc,sid){ return acc.concat(_staffScopeDe(sid).filter(_vaEnLaHoja)); }, []);
+    return _staffScopeDe(_sucSel).filter(_vaEnLaHoja);
 }
 /* Un bloque de tabla: separado por áreas o de corrido, según la casilla. */
 function _bloquePDF(rec, lista, separar){
@@ -943,18 +1246,22 @@ function imprimirHorario(){
     var mon = _diaDate(0), sun = _diaDate(6);
     var rango = _fmtDia(mon) + ' – ' + _fmtDia(sun) + ' ' + sun.getFullYear();
     var separar = (document.getElementById('hrPdfSepar')||{}).checked !== false;
-    if (!_gentePDF().length){ alert('Con esas áreas la hoja saldría vacía. Elige al menos un área.'); return; }
+    if (!_gentePDF().length){
+        alert(_pdfGrupo ? 'Nadie de ese grupo trabaja esta semana aquí: la hoja saldría vacía.'
+                        : 'Con esas áreas la hoja saldría vacía. Elige al menos un área.');
+        return;
+    }
     var cuerpo = '';
     if (_catGlobalOn() && !_sucSel){
         // Vista global: una tabla por sucursal, con el rol de cada una.
         _sucsConStaff().forEach(function (sid) {
-            var lista = _staffScopeDe(sid).filter(_pasaArea);
+            var lista = _staffScopeDe(sid).filter(_vaEnLaHoja);
             if (!lista.length) return;
             var rec = _horCache[recordId(sid, _weekStr)] || { turnos: {} };
             cuerpo += '<div class="rsec">' + esc(_sucNombre(sid)) + '</div>' + _bloquePDF(rec, lista, separar);
         });
     } else {
-        var scope = _staffScopeDe(_sucSel).filter(_pasaArea);
+        var scope = _staffScopeDe(_sucSel).filter(_vaEnLaHoja);
         if (!scope.length){ alert('No hay colaboradores en '+_sucNombre(_sucSel)+'.'); return; }
         cuerpo = _bloquePDF(curRecord(), scope, separar);
     }
@@ -965,10 +1272,12 @@ function imprimirHorario(){
             + ((_catGlobalOn() && !_sucSel) ? ' · Todas las sucursales' : '')
             /* Si se imprimió filtrado, la hoja tiene que DECIRLO: si no, parece el
                rol completo y alguien va a creer que faltó gente por programar. */
-            + (_areasDelScope().some(function(a){ return !_pdfAreas[a.k]; })
-               ? ' · Solo ' + _areasDelScope().filter(function(a){ return _pdfAreas[a.k]; })
-                     .map(function(a){ return a.nom.replace(/^[^ ]+ /,''); }).join(', ')
-               : ''),
+            + ((_pdfGrupo && _grupoPorId(_pdfGrupo))
+               ? ' · ' + _grupoPorId(_pdfGrupo).nombre
+               : (_areasDelScope().some(function(a){ return !_pdfAreas[a.k]; })
+                  ? ' · Solo ' + _areasDelScope().filter(function(a){ return _pdfAreas[a.k]; })
+                        .map(function(a){ return a.nom.replace(/^[^ ]+ /,''); }).join(', ')
+                  : '')),
         derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px">' + esc(rango) + '</div>',
         pie: 'Rol semanal · ✓ asistió · ✕ falta',
         cuerpo: cuerpo,
@@ -1121,13 +1430,233 @@ function abrirEditor(sid, dayIdx){
     document.getElementById('hrmSub').textContent = DIAS_L[dayIdx] + ' · ' + _fmtDia(_diaDate(dayIdx));
     document.getElementById('hrmIn').value  = t.desc ? '' : (t.in || '');
     document.getElementById('hrmOut').value = t.desc ? '' : (t.out || '');
-    document.getElementById('hrmPresets').innerHTML = PRESETS.map(function(p,i){
-        return '<span class="hr-preset" onclick="aplicarPreset('+i+')">'+p.l+'<br><span style="opacity:.6">'+p.in+'–'+p.out+'</span></span>';
-    }).join('');
+    var ps = presetsActuales();
+    document.getElementById('hrmPresets').innerHTML = ps.length
+        ? ps.map(function(p,i){
+            return '<span class="hr-preset" onclick="aplicarPreset('+i+')">'+esc(p.l)+'<br><span style="opacity:.6">'+esc(p.in)+'–'+esc(p.out)+'</span></span>';
+          }).join('')
+        : '<span style="font-size:11.5px;color:var(--text-dim)">Sin sugerencias guardadas. Captura las horas a mano, o créalas abajo.</span>';
     document.getElementById('hrModal').classList.add('on');
 }
 function cerrarEditor(){ document.getElementById('hrModal').classList.remove('on'); _edit=null; }
-function aplicarPreset(i){ document.getElementById('hrmIn').value=PRESETS[i].in; document.getElementById('hrmOut').value=PRESETS[i].out; }
+function aplicarPreset(i){
+    var p = presetsActuales()[i]; if (!p) return;
+    document.getElementById('hrmIn').value = p.in;
+    document.getElementById('hrmOut').value = p.out;
+}
+
+/* ══ EDITOR DE SUGERENCIAS ═══════════════════════════════════════════════
+   Se edita sobre una COPIA y solo al Guardar se escribe: a media corrección,
+   con un renglón sin salida todavía, el editor de turno de atrás no puede
+   quedarse con botones rotos. */
+var _presEdit = null;
+function abrirPresets(){
+    _presEdit = JSON.parse(JSON.stringify(presetsActuales()));
+    _pintarPresets();
+    document.getElementById('hrPresetModal').classList.add('on');
+}
+function cerrarPresets(){ document.getElementById('hrPresetModal').classList.remove('on'); _presEdit = null; }
+/* Lo tecleado vive en los campos, no en el arreglo: antes de repintar hay que
+   recogerlo o se pierde al agregar o borrar un renglón. */
+function _presLeer(){
+    if (!_presEdit) return;
+    _presEdit.forEach(function(p,i){
+        var n = document.getElementById('pr_l_'+i), a = document.getElementById('pr_i_'+i), b = document.getElementById('pr_o_'+i);
+        if (n) p.l = n.value;
+        if (a) p.in = a.value;
+        if (b) p.out = b.value;
+    });
+}
+function _pintarPresets(){
+    var cont = document.getElementById('hrPresetList');
+    if (!_presEdit.length){
+        cont.innerHTML = '<div style="padding:18px 6px;text-align:center;color:var(--text-dim);font-size:13px">'+
+            'Sin sugerencias. El editor de turno pedirá las horas a mano.</div>';
+        return;
+    }
+    cont.innerHTML = _presEdit.map(function(p,i){
+        return '<div class="hr-row">'
+            + '<input class="hr-inp" id="pr_l_'+i+'" value="'+esc(p.l)+'" placeholder="Nombre (Apertura…)" style="flex:1.4">'
+            + '<input class="hr-inp" id="pr_i_'+i+'" type="time" value="'+esc(p.in)+'" style="flex:1" title="Entrada">'
+            + '<input class="hr-inp" id="pr_o_'+i+'" type="time" value="'+esc(p.out)+'" style="flex:1" title="Salida">'
+            + '<button class="hr-del" onclick="presetBorrar('+i+')" title="Borrar esta sugerencia">✕</button>'
+            + '</div>';
+    }).join('');
+}
+function presetAgregar(){ _presLeer(); _presEdit.push({ l:'', in:'', out:'' }); _pintarPresets(); }
+function presetBorrar(i){ _presLeer(); _presEdit.splice(i,1); _pintarPresets(); }
+function presetsFabrica(){ _presEdit = JSON.parse(JSON.stringify(PRESETS_FABRICA)); _pintarPresets(); }
+function presetsGuardar(){
+    _presLeer();
+    /* Un renglón totalmente en blanco es "me arrepentí", no un error: se tira
+       sin molestar. Uno a medias sí se avisa — guardarlo daría un botón que
+       no hace nada. */
+    var limpio = _presEdit
+        .filter(function(p){ return (p.l||'').trim() || p.in || p.out; })
+        .map(function(p){ return { l:(p.l||'').trim(), in:p.in||'', out:p.out||'' }; });
+    var mal = limpio.filter(function(p){ return !p.l || !p.in || !p.out; }).length;
+    if (mal){
+        alert('A ' + mal + (mal===1 ? ' sugerencia le falta' : ' sugerencias les falta') +
+              ' nombre, entrada o salida. Complétala o bórrala con la ✕.');
+        return;
+    }
+    _cfg.presets = limpio;
+    _cfgGuardar();
+    cerrarPresets();
+    /* El editor de turno sigue abierto detrás: se repinta para que los botones
+       nuevos estén ahí mismo, sin cerrarlo y volverlo a abrir. */
+    if (_edit) abrirEditor(_edit.staffId, _edit.dayIdx);
+}
+
+/* ══ GRUPOS: la ventana ═══════════════════════════════════════════════════
+   Dos pantallas en el mismo modal: la LISTA de grupos y el EDITOR de uno.
+   `_grpEdit` dice en cuál se está — y es una copia, así que cancelar es de
+   verdad cancelar. */
+var _grpEdit = null, _grpQ = '';
+function abrirGrupos(){ _grpEdit = null; _grpQ = ''; _pintarGrupos(); document.getElementById('hrGrupoModal').classList.add('on'); }
+function cerrarGrupos(){ document.getElementById('hrGrupoModal').classList.remove('on'); _grpEdit = null; }
+function _pintarGrupos(){
+    if (_grpEdit) return _pintarGrupoEditor();
+    var gs = _gruposActuales();
+    document.getElementById('hrGrpTitle').textContent = 'Grupos';
+    document.getElementById('hrGrpSub').textContent =
+        'Para mirar —y para imprimir— cocina y barra juntas, o caja, piso y barra. ' +
+        'El sistema reparte a cada quien por su área; tú corriges a mano a quien no cuadre.';
+    document.getElementById('hrGrpBody').innerHTML = gs.length
+        ? gs.map(function(g){
+            var n = _cuantosEnGrupo(g);
+            return '<div class="hr-row" style="gap:10px">'
+                + '<div style="flex:1;min-width:0">'
+                +   '<div style="font-size:13.5px;color:var(--text)">'+esc(g.nombre)+'</div>'
+                +   '<div style="font-size:11px;color:var(--text-dim)">'+esc(_resumenGrupo(g))
+                +     ' · '+n+' colaborador'+(n!==1?'es':'')+'</div>'
+                + '</div>'
+                + '<button class="hr-del" onclick="verGrupo(\''+esc(g.id)+'\')" title="Mirar el rol así">Ver</button>'
+                + '<button class="hr-del" onclick="editarGrupo(\''+esc(g.id)+'\')" title="Editar">✎</button>'
+                + '<button class="hr-del" onclick="eliminarGrupo(\''+esc(g.id)+'\')" title="Borrar">🗑</button>'
+                + '</div>';
+          }).join('')
+        : '<div style="padding:22px 8px;text-align:center;color:var(--text-dim);font-size:13px;line-height:1.6">'
+          + 'Todavía no hay grupos.<br>Uno típico: <b>Cocina + Barra</b> para la hoja de producción.</div>';
+    document.getElementById('hrGrpActs').innerHTML =
+        '<button class="hr-mb-clear" onclick="cerrarGrupos()">Cerrar</button>'
+        + '<button class="hr-mb-save" onclick="nuevoGrupo()">＋ Nuevo grupo</button>';
+}
+function verGrupo(id){ setAgrupar('g:'+id); cerrarGrupos(); }
+function nuevoGrupo(){ _grpEdit = { id:'', nombre:'', areas:[], mas:[], menos:[] }; _grpQ=''; _pintarGrupos(); }
+function editarGrupo(id){
+    var g = _grupoPorId(id); if (!g) return;
+    _grpEdit = JSON.parse(JSON.stringify(g));
+    if (!_grpEdit.areas) _grpEdit.areas = [];
+    if (!_grpEdit.mas)   _grpEdit.mas   = [];
+    if (!_grpEdit.menos) _grpEdit.menos = [];
+    _grpQ = '';
+    _pintarGrupos();
+}
+function eliminarGrupo(id){
+    var g = _grupoPorId(id); if (!g) return;
+    if (!confirm('¿Borrar el grupo “'+g.nombre+'”?\n\nNo le pasa nada al rol ni a nadie: solo se deja de agrupar así.')) return;
+    _cfg.grupos = _gruposActuales().filter(function(x){ return x.id !== id; });
+    _cfgGuardar();
+    /* Si se estaba mirando por ese grupo, la pantalla vuelve al rol completo —
+       quedarse filtrando por algo que ya no existe esconde gente sin decirlo—.
+       Lo resuelve el repintado, que es el único que sabe de fantasmas. */
+    _pintarGrupos();
+    render();
+}
+function _grpLeerNombre(){ var e = document.getElementById('hrGrpNom'); if (e && _grpEdit) _grpEdit.nombre = e.value; }
+function _pintarGrupoEditor(){
+    document.getElementById('hrGrpTitle').textContent = _grpEdit.id ? 'Editar grupo' : 'Nuevo grupo';
+    document.getElementById('hrGrpSub').textContent =
+        'Elige las áreas y, si hace falta, ajusta persona por persona. Las áreas salen del puesto y del rol de cada quien, así que el que entre mañana cae solo donde le toca.';
+    var areas = (window.StaffArea ? StaffArea.LISTA : []).map(function(a){
+        return '<button class="hr-chip'+(_grpEdit.areas.indexOf(a.k)>=0?' on':'')+'" '+
+               'onclick="grpToggleArea(\''+esc(a.k)+'\')">'+esc(a.nom)+'</button>';
+    }).join('');
+    document.getElementById('hrGrpBody').innerHTML =
+        '<input class="hr-inp" id="hrGrpNom" value="'+esc(_grpEdit.nombre)+'" placeholder="Nombre del grupo (Caja + Piso + Barra)">'
+        + '<div class="hr-lbl">Áreas</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+areas+'</div>'
+        + '<div class="hr-lbl">Personas <span style="text-transform:none;letter-spacing:0">· palomea para meter o sacar a alguien del grupo</span></div>'
+        + '<input class="hr-inp" id="hrGrpQ" value="'+esc(_grpQ)+'" placeholder="Buscar por nombre o puesto" oninput="grpBuscar(this.value)">'
+        + '<div id="hrGrpPers" style="max-height:32vh;overflow-y:auto;margin:8px -4px 0"></div>';
+    _pintarGrpPersonas();
+    document.getElementById('hrGrpActs').innerHTML =
+        '<button class="hr-mb-clear" onclick="grpCancelar()">Cancelar</button>'
+        + '<button class="hr-mb-save" onclick="guardarGrupo()">Guardar</button>';
+}
+/* Solo la lista: repintar el editor entero le quitaría el foco al buscador
+   después de cada letra. */
+function _pintarGrpPersonas(){
+    var cont = document.getElementById('hrGrpPers'); if (!cont) return;
+    var q = (_grpQ||'').toLowerCase().trim();
+    var gente = _staff.filter(function(s){
+        if (!q) return true;
+        return (s.nombre||'').toLowerCase().indexOf(q) >= 0 || (s.puesto||'').toLowerCase().indexOf(q) >= 0;
+    }).sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+    if (!gente.length){
+        cont.innerHTML = '<div style="padding:18px 8px;text-align:center;color:var(--text-dim);font-size:12.5px">Nadie coincide con “'+esc(_grpQ)+'”.</div>';
+        return;
+    }
+    cont.innerHTML = gente.map(function(s){
+        var dentro = _enGrupo(_grpEdit, s);
+        var porArea = _grpEdit.areas.indexOf(_areaDe(s)) >= 0;
+        /* Se dice CÓMO quedó: "a mano" avisa que ese renglón es una excepción
+           escrita, no el reparto automático, y que sobrevive a que cambie de
+           área en el catálogo. */
+        var nota = (dentro && !porArea) ? 'a mano' : (!dentro && porArea) ? 'fuera a mano' : '';
+        return '<div class="hr-pers'+(dentro?' on':'')+'" onclick="grpTogglePersona(\''+esc(s.id)+'\')">'
+            + '<span class="mk">✓</span>'
+            + '<span style="flex:1;min-width:0"><span class="nm2">'+esc(s.nombre||'—')+'</span><br>'
+            +   '<span class="mt2">'+esc(s.puesto||'')+' · '+esc(_areaNom(_areaDe(s)))+'</span></span>'
+            + (nota ? '<span class="mano">'+nota+'</span>' : '')
+            + '</div>';
+    }).join('');
+}
+function grpBuscar(v){ _grpQ = String(v||''); _pintarGrpPersonas(); }
+function grpToggleArea(k){
+    _grpLeerNombre();
+    var i = _grpEdit.areas.indexOf(k);
+    if (i >= 0) _grpEdit.areas.splice(i,1); else _grpEdit.areas.push(k);
+    _pintarGrupoEditor();
+}
+function grpTogglePersona(sid){
+    _grpLeerNombre();
+    var s = _staff.filter(function(x){ return x.id === sid; })[0]; if (!s) return;
+    var dentro  = _enGrupo(_grpEdit, s);
+    var porArea = _grpEdit.areas.indexOf(_areaDe(s)) >= 0;
+    /* Se apunta la EXCEPCIÓN, no la pertenencia. Al limpiar las dos listas, a
+       quien estaba por su área y se saca le toca un "menos", y a quien no
+       estaba y se mete le toca un "mas"; los otros dos casos eran justamente
+       una excepción que se está deshaciendo, y borrarla basta. */
+    _grpEdit.mas   = _grpEdit.mas.filter(function(x){ return x !== sid; });
+    _grpEdit.menos = _grpEdit.menos.filter(function(x){ return x !== sid; });
+    if (dentro && porArea) _grpEdit.menos.push(sid);
+    else if (!dentro && !porArea) _grpEdit.mas.push(sid);
+    _pintarGrpPersonas();
+}
+function grpCancelar(){ _grpEdit = null; _pintarGrupos(); }
+function guardarGrupo(){
+    _grpLeerNombre();
+    var nom = (_grpEdit.nombre||'').trim();
+    if (!nom){ alert('Ponle nombre al grupo: así se llama en el selector y en la hoja impresa.'); return; }
+    if (!_grpEdit.areas.length && !_grpEdit.mas.length){
+        alert('Un grupo sin áreas ni personas no agrupa a nadie. Elige al menos un área.');
+        return;
+    }
+    _grpEdit.nombre = nom;
+    if (_grpEdit.id){
+        var id = _grpEdit.id, copia = _grpEdit;
+        _cfg.grupos = _gruposActuales().map(function(g){ return g.id === id ? copia : g; });
+    } else {
+        _grpEdit.id = _gidHor();
+        _cfg.grupos = _gruposActuales().concat([_grpEdit]);
+    }
+    _cfgGuardar();
+    _grpEdit = null;
+    _pintarGrupos();
+    render();
+}
+
 function _setTurno(turno){
     var rec = curRecord();
     if (!rec.turnos[_edit.staffId]) rec.turnos[_edit.staffId] = {};
@@ -1165,12 +1694,17 @@ function copiarSemanaAnterior(){
 
 /* ── Init ── */
 document.getElementById('hrModal').addEventListener('click', function(e){ if (e.target===this) cerrarEditor(); });
-[['hrAddModal',cerrarAgregar],['hrPersonaModal',cerrarPersona],['hrPdfModal',cerrarPDF]].forEach(function(par){
+[['hrAddModal',cerrarAgregar],['hrPersonaModal',cerrarPersona],['hrPdfModal',cerrarPDF],
+ ['hrPresetModal',cerrarPresets],['hrGrupoModal',cerrarGrupos]].forEach(function(par){
     var el = document.getElementById(par[0]);
     if (el) el.addEventListener('click', function(e){ if (e.target===this) par[1](); });
 });
 document.addEventListener('keydown', function(e){
     if (e.key !== 'Escape') return;
+    /* De arriba hacia abajo: Escape cierra lo que está ENCIMA. Cerrarlo todo
+       de un golpe sacaría del editor de turno por corregir una sugerencia. */
+    if (document.getElementById('hrPresetModal').classList.contains('on')) return cerrarPresets();
+    if (document.getElementById('hrGrupoModal').classList.contains('on'))  return cerrarGrupos();
     cerrarEditor(); cerrarAgregar(); cerrarPersona(); cerrarPDF();
 });
 
@@ -1181,6 +1715,7 @@ document.addEventListener('keydown', function(e){
         try { await etaaxStore.ready; } catch(e) {}
     }
     _cargarLocal();
+    _cfgCargarLocal();
     _cargaLista = true;      // desde aquí sí se puede guardar sin riesgo
     _resolverScope();
     await _cargarStaff();
@@ -1191,12 +1726,12 @@ document.addEventListener('keydown', function(e){
     }
 })();
 </script>
-<script src="/novedades.js?v=ac0d48ff"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=43d06a67"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=15a5a6ef"></script>
 <script src="/etaax-modulos-ui.js?v=03cadcf1"></script>
-<script src="/administrativo/staff-operativo-ui.js?v=49b7d26d"></script>
+<script src="/administrativo/staff-operativo-ui.js?v=152e86d6"></script>
 </body>
 </html>

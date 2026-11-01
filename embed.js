@@ -10,6 +10,16 @@
    page-guard.js (siembra el contexto por si el navegador aísla el
    storage del iframe). No hace nada si la URL no trae ?embed.
    ============================================================ */
+/* ══ EL SUBTÍTULO SUBE A LA BARRA DE LA VENTANA ══════════════════════════
+   Una herramienta embebida no repite su título —lo dice la barra de arriba—
+   pero sí tiene algo que esa barra no sabe: de qué sucursal, de qué semana, de
+   qué está hablando. Lo manda por aquí.
+
+   Se declara SIEMPRE, también fuera del modo embebido: así la página que lo
+   usa no tiene que preguntar dónde está parada, solo decirlo. Fuera del modal
+   no hace nada, que es exactamente lo correcto. */
+window.etaaxEmbedSub = function () {};
+
 (function () {
     try {
         var p = new URLSearchParams(window.location.search);
@@ -26,6 +36,15 @@
         if (p.get('ctx')) { try { if (!localStorage.getItem('etaax_ctx')) localStorage.setItem('etaax_ctx', decodeURIComponent(p.get('ctx'))); } catch (e) {} }
         var root = document.documentElement;
         root.classList.add('embed');
+        /* Al padre y a nadie más: el mensaje lleva el origen propio, así que un
+           iframe incrustado en otro sitio no lo entrega. */
+        window.etaaxEmbedSub = function (txt) {
+            try {
+                if (window.parent && window.parent !== window)
+                    window.parent.postMessage({ etaax: 'tool-sub', sub: String(txt == null ? '' : txt) },
+                                              location.origin);
+            } catch (e) {}
+        };
         var css =
             /* Ocultar el cromo de navegación */
             'html.embed .top-bar,html.embed .ctx-bar,html.embed #ctxBar,' +

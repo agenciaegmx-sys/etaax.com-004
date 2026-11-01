@@ -9119,6 +9119,9 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
         const frame = nodo('tmFrame');
         frame.contentWindow = { location:{ pathname:'/administrativo/' + archivoEnElIframe },
                                 document:{ title:'Permisos · ETAAX' } };
+        /* La ventana escucha a su iframe: hace falta un window que de verdad
+           registre oyentes, y poder dispararlos. */
+        const oyentes = {};
         const c = {
             console, JSON, Object, Array, String, Number, Date, setTimeout, encodeURIComponent,
             /* El hub pregunta por permisos antes de abrir una herramienta; aquí
@@ -9128,13 +9131,16 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
             sessionStorage:(function(){ const m={}; return { _m:m,
                 getItem:k=>(k in m?m[k]:null), setItem(k,v){ m[k]=String(v); }, removeItem(k){ delete m[k]; } }; })(),
             document:{ getElementById:nodo, body:{ style:{} }, addEventListener(){} },
+            location:{ origin:'https://etaax.com' },
+            addEventListener(ev, fn){ (oyentes[ev] = oyentes[ev] || []).push(fn); },
         };
         c.window = c;
         vm.createContext(c);
         const i = hub.indexOf('/* De la página a su permiso: abrirTool recibe el archivo');
         const fin = hub.indexOf("document.getElementById('toolModal').addEventListener");
         vm.runInContext(hub.slice(i, fin), c, { filename:'staff-hub' });
-        return { ctx:c, nodo, frame };
+        const emitir = (ev, e) => (oyentes[ev] || []).forEach(fn => fn(e));
+        return { ctx:c, nodo, frame, emitir };
     }
 
     /* Abrir el catálogo y luego "entrar" a permisos. */
@@ -9268,6 +9274,57 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
         v.frame.contentWindow.location.pathname = '/administrativo/otra-cosa.html';
         v.ctx._tmSincronizar();
         return eq(v.nodo('tmTitle').textContent, 'Permisos', 'por su título');
+    });
+
+    /* ── EL SUBTÍTULO VIENE DE ADENTRO ──────────────────────────────────────
+       La herramienta ya no repite su título —lo dice esta barra— pero sí sabe
+       algo que la barra no: de qué sucursal es el rol que se está viendo. Lo
+       manda por postMessage, y esto escribe en el encabezado de la ventana: hay
+       que mirar MUY bien de quién viene. */
+    function conSub(datos, delIframe, origen) {
+        const v = ventana('horarios.html');
+        v.ctx.abrirTool('horarios.html', 'Horarios Operativos', '🗓️');
+        v.emitir('message', {
+            origin: origen === undefined ? 'https://etaax.com' : origen,
+            source: delIframe === false ? { otra:'ventana' } : v.frame.contentWindow,
+            data: datos,
+        });
+        return v;
+    }
+    test('la herramienta dice de qué sucursal es y la barra lo pinta', () =>
+        eq(conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' }).nodo('tmSub').textContent,
+           'Rol semanal · Matriz', 'en la barra'));
+    test('…pero un mensaje de OTRO origen no escribe en el encabezado', () =>
+        eq(conSub({ etaax:'tool-sub', sub:'inyectado' }, true, 'https://otro.example').nodo('tmSub').textContent,
+           '', 'rechazado'));
+    test('…ni uno de otra ventana, aunque sea del mismo origen', () =>
+        eq(conSub({ etaax:'tool-sub', sub:'inyectado' }, false).nodo('tmSub').textContent, '', 'rechazado'));
+    test('…ni un mensaje que no sea de los nuestros', () =>
+        eq(conSub({ type:'webpack-ok' }).nodo('tmSub').textContent, '', 'ignorado'));
+    test('abrir otra herramienta borra el subtítulo de la anterior', () => {
+        const v = conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' });
+        v.ctx.abrirTool('checklists.html', 'Checklists Operativos', '✅');
+        return eq(v.nodo('tmSub').textContent, '', 'limpio');
+    });
+    /* LA TRAMPA DEL ORDEN: el aviso de la herramienta puede llegar ANTES de que
+       el iframe dispare su onload. Si sincronizar el encabezado limpiara
+       siempre, el subtítulo se borraría justo después de llegar y la barra se
+       quedaría muda hasta el siguiente repintado de adentro. */
+    test('sincronizar el encabezado en la herramienta base NO borra lo que ya dijo', () => {
+        const v = conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' });
+        v.ctx._tmSincronizar();
+        return eq(v.nodo('tmSub').textContent, 'Rol semanal · Matriz', 'conservado');
+    });
+    test('…pero entrar a una sub-pantalla sí lo borra: ya no habla de eso', () => {
+        const v = conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' });
+        v.frame.contentWindow.location.pathname = '/administrativo/permisos.html';
+        v.ctx._tmSincronizar();
+        return eq(v.nodo('tmSub').textContent, '', 'limpio');
+    });
+    test('cerrar la ventana también lo borra', () => {
+        const v = conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' });
+        v.ctx.cerrarTool();
+        return eq(v.nodo('tmSub').textContent, '', 'limpio');
     });
 }
 
@@ -30008,6 +30065,438 @@ require('./admin-documentos-casos.cjs')({test,eq,crearContexto,cargarJS});
 
 suitePrebatchRendimiento20261023();
 
+
+/* ═══════════ SUITE BH55 · AGRUPAR EL ROL: ÁREAS, GRUPOS Y SUGERENCIAS ═══════════
+   Un rol de 40 personas de corrido no lo lee nadie, y en la pared de la cocina
+   solo importa cocina. Ahora el rol se parte por área —que el sistema deduce
+   del puesto y del rol de cada quien— o por un GRUPO del negocio: caja + piso +
+   barra, barra + cocina. Y las cinco sugerencias de horario dejaron de ser
+   constantes iguales para todos los restaurantes del mundo.
+
+   Lo que se vigila aquí no es que los botones existan, sino las decisiones que,
+   si se tuercen, se notan tarde y mal:
+
+     · un grupo guarda la EXCEPCIÓN, no la lista de quién está dentro. Guardar
+       nombres hace que el cocinero que entre mañana no salga en la hoja de
+       cocina, y nadie vuelve a abrir el grupo para meterlo a mano.
+     · borrar TODAS las sugerencias es una decisión, no un descuido: si al
+       quedarse en cero revivieran las de fábrica, el dueño las borraría una y
+       otra vez sin entender por qué vuelven.
+     · la configuración del negocio no es una semana, y su id lleva el negocio
+       pegado: la llave primaria de esa tabla es global a toda la plataforma.
+     · y la cobertura de una sección cuenta a SU gente: en la hoja de cocina,
+       "3 personas el martes" tiene que ser tres cocineros.                    */
+console.log('\n══ BH55 · Agrupar el rol: áreas, grupos y sugerencias ══');
+(function () {
+    const H = crearContexto();
+    cargarJS(H, 'etaax-core.js');
+    cargarJS(H, 'staff-area.js');
+    H._storage['etaax_negocio_activo'] = 'n1';
+    H._storage['etaax_n1_sucursales'] = JSON.stringify([{ id:'suc_principal', nombre:'Matriz' }]);
+    cargarInline(H, 'administrativo/horarios.html');
+
+    const STAFF = () => ([
+        { id:'coc1', nombre:'Ana',  puesto:'Cocinera', rol:'cocinero', sucursalId:'' },
+        { id:'bar1', nombre:'Beto', puesto:'Barman',   rol:'barman',   sucursalId:'' },
+        { id:'mes1', nombre:'Cris', puesto:'Mesero',   rol:'mesero',   sucursalId:'' },
+        { id:'caj1', nombre:'Dora', puesto:'Cajera',   rol:'',         sucursalId:'' },
+        { id:'ger1', nombre:'Elsa', puesto:'Gerente',  rol:'gerente',  sucursalId:'' },
+    ]);
+    const limpio = () => { setVar(H, '_staff', STAFF()); };
+    limpio();
+    setVar(H, '_weekStr', '2026-W35');
+    setVar(H, '_busq', '');
+    setVar(H, '_agr', '');
+    const sinCfg = () => setVar(H, '_cfg', { id:'', presets:null, grupos:[], updated:0 });
+    sinCfg();
+
+    const dentro = (g) => H._staff.filter(s => H._enGrupo(g, s)).map(s => s.id).join(',');
+
+    /* ── Lo que el sistema deduce solo ── */
+    const area = (id) => H._areaDe(H._staff.filter(s => s.id === id)[0]);
+    test('las áreas salen del puesto y del rol, sin capturar nada', () =>
+        eq(['coc1','bar1','mes1','caj1','ger1'].map(area).join(','),
+           'cocina,barra,piso,administracion,administracion', 'reparto'));
+
+    /* ── La pertenencia a un grupo ── */
+    test('un grupo mete a quien cae en sus áreas', () =>
+        eq(dentro({ areas:['cocina'], mas:[], menos:[] }), 'coc1', 'por área'));
+    test('…y a la cajera metida a mano, aunque su área no esté elegida', () =>
+        eq(dentro({ areas:['barra','piso'], mas:['caj1'], menos:[] }), 'bar1,mes1,caj1', 'con caja'));
+    test('…y saca al gerente aunque su área sí esté', () =>
+        eq(dentro({ areas:['administracion'], mas:[], menos:['ger1'] }), 'caj1', 'sin el gerente'));
+    test('meter a alguien a mano y luego elegir su área no lo saca ni lo duplica', () =>
+        eq(dentro({ areas:['administracion'], mas:['caj1'], menos:[] }), 'caj1,ger1', 'una vez'));
+
+    /* LA RAZÓN DEL MODELO: se guarda la excepción, no la lista de nombres. */
+    test('el cocinero que entre mañana cae SOLO en la hoja de cocina', () => {
+        const g = { areas:['cocina'], mas:[], menos:[] };
+        const antes = dentro(g);
+        setVar(H, '_staff', STAFF().concat([{ id:'coc2', nombre:'Fito', puesto:'Ayudante de cocina', rol:'', sucursalId:'' }]));
+        const despues = dentro(g);
+        limpio();
+        return eq(antes + ' → ' + despues, 'coc1 → coc1,coc2', 'sin tocar el grupo');
+    });
+    test('renombrar a alguien en el catálogo no lo saca del grupo', () => {
+        const st = STAFF(); st.filter(s => s.id === 'caj1')[0].nombre = 'Dora Pérez Hernández';
+        setVar(H, '_staff', st);
+        const r = dentro({ areas:[], mas:['caj1'], menos:[] });
+        limpio();
+        return eq(r, 'caj1', 'sigue dentro');
+    });
+
+    /* ── El editor: palomear escribe la EXCEPCIÓN ── */
+    const campo = (id) => H.document.getElementById(id);
+    test('sacar a quien entró por su área deja una excepción, no borra el área', () => {
+        setVar(H, '_grpEdit', { id:'', nombre:'Cocina', areas:['cocina'], mas:[], menos:[] });
+        campo('hrGrpNom').value = 'Cocina';
+        H.grpTogglePersona('coc1');
+        const g = getVar(H, '_grpEdit');
+        return eq(g.areas.join(',') + ' | menos=' + g.menos.join(',') + ' | ' + H._enGrupo(g, H._staff[0]),
+                  'cocina | menos=coc1 | false', 'la excepción');
+    });
+    test('…y volver a palomearlo lo devuelve, sin dejar basura', () => {
+        H.grpTogglePersona('coc1');
+        const g = getVar(H, '_grpEdit');
+        return eq(g.menos.length + '/' + g.mas.length + ' ' + H._enGrupo(g, H._staff[0]), '0/0 true', 'limpio');
+    });
+    test('palomear a alguien de fuera lo mete a mano', () => {
+        H.grpTogglePersona('caj1');
+        const g = getVar(H, '_grpEdit');
+        return eq(g.mas.join(',') + ' ' + dentro(g), 'caj1 coc1,caj1', 'a mano');
+    });
+    test('…y despalomearlo lo saca sin inventar un "menos"', () => {
+        H.grpTogglePersona('caj1');
+        const g = getVar(H, '_grpEdit');
+        return eq(g.mas.length + '/' + g.menos.length + ' ' + dentro(g), '0/0 coc1', 'limpio');
+    });
+
+    /* ── Guardar, editar y borrar ── */
+    test('un grupo sin nombre no se guarda: así se llama en el selector y en la hoja', () => {
+        sinCfg();
+        setVar(H, '_grpEdit', { id:'', nombre:'', areas:['cocina'], mas:[], menos:[] });
+        campo('hrGrpNom').value = '   ';
+        H.guardarGrupo();
+        return eq(H._gruposActuales().length, 0, 'sin guardar');
+    });
+    test('un grupo con nombre y áreas se guarda con id propio', () => {
+        setVar(H, '_grpEdit', { id:'', nombre:'', areas:['cocina','barra'], mas:[], menos:[] });
+        campo('hrGrpNom').value = 'Producción';
+        H.guardarGrupo();
+        const gs = H._gruposActuales();
+        return eq(gs.length + ' ' + gs[0].nombre + ' ' + (gs[0].id ? 'con-id' : 'SIN-ID'), '1 Producción con-id', 'guardado');
+    });
+    test('editarlo lo REEMPLAZA, no lo duplica', () => {
+        H.editarGrupo(H._gruposActuales()[0].id);
+        campo('hrGrpNom').value = 'Producción B';
+        H.guardarGrupo();
+        const gs = H._gruposActuales();
+        return eq(gs.length + ' ' + gs[0].nombre, '1 Producción B', 'reemplazado');
+    });
+    test('borrar el grupo que se está mirando devuelve el rol completo', () => {
+        const id = H._gruposActuales()[0].id;
+        H.setAgrupar('g:' + id);
+        H.eliminarGrupo(id);
+        /* También lo GUARDADO: corregirlo solo en memoria lo resucita en la
+           siguiente carga y la pantalla abre filtrando por un fantasma. */
+        return eq(H._gruposActuales().length + '|' + getVar(H, '_agr') + '|' + (H._storage['etaax_hor_agrupar'] || ''),
+                  '0||', 'sin filtro colgando, ni guardado');
+    });
+
+    /* ── Lo que se ve en pantalla ── */
+    test('la preferencia de agrupado se recuerda', () => {
+        H.setAgrupar('area');
+        return eq(H._storage['etaax_hor_agrupar'], 'area', 'recordada');
+    });
+    test('agrupar por área parte el rol en secciones con su nombre', () => {
+        setVar(H, '_agr', 'area');
+        setVar(H, '_view', 'grid');
+        const html = H._renderScope(H._staff);
+        setVar(H, '_agr', '');
+        return eq(['🍸 Barra','🍳 Cocina','🍽️ Piso','🗃️ Administración'].filter(n => html.indexOf(n) < 0).join(','),
+                  '', 'las cuatro');
+    });
+    test('mirando por un grupo, la pantalla dice cuál y recorta a su gente', () => {
+        setVar(H, '_cfg', { id:'', presets:null, updated:0,
+            grupos:[{ id:'gX', nombre:'Caja + Piso', areas:['piso'], mas:['caj1'], menos:[] }] });
+        setVar(H, '_agr', 'g:gX');
+        const html = H._renderScope(H._staff);
+        setVar(H, '_agr', '');
+        return eq(['Caja + Piso','Cris','Dora'].every(t => html.indexOf(t) > -1) &&
+                  html.indexOf('Ana') < 0 && html.indexOf('Beto') < 0, true, 'recortado y rotulado');
+    });
+    /* Esconder gente por un id que ya no existe es la peor forma de enterarse. */
+    test('un grupo borrado en otro equipo no esconde a nadie', () => {
+        setVar(H, '_agr', 'g:fantasma');
+        const html = H._renderScope(H._staff);
+        setVar(H, '_agr', '');
+        return eq(['Ana','Beto','Cris','Dora','Elsa'].filter(n => html.indexOf(n) < 0).join(','), '', 'rol completo');
+    });
+    test('el selector tampoco se queda apuntando a un grupo que ya no existe', () => {
+        setVar(H, '_agr', 'g:fantasma');
+        H._storage['etaax_hor_agrupar'] = 'g:fantasma';
+        H._pintarAgrupar();
+        return eq(getVar(H, '_agr') + '|' + (H._storage['etaax_hor_agrupar'] || ''), '|', 'olvidado de los dos lados');
+    });
+
+    /* ── Cobertura por sección ── */
+    test('la cobertura de una sección cuenta a SU gente, no a toda la sucursal', () => {
+        const rec = H.curRecord();
+        rec.turnos = { coc1:{ d0:{ in:'07:00', out:'15:00' } }, bar1:{ d0:{ in:'16:00', out:'00:00' } } };
+        return eq(H._coberturaDia(0) + ' / ' + H._coberturaDia(0, H._staff.filter(s => s.id === 'coc1')),
+                  '2 / 1', 'por ámbito');
+    });
+    /* Y que la CUADRÍCULA de verdad use ese número: el error clásico es tener el
+       motor bien y la pantalla pintando el de siempre. */
+    test('…y la cuadrícula de cada sección imprime ESE número', () => {
+        setVar(H, '_view', 'grid');
+        const html = H._renderSecciones(H._porArea(H._staff.filter(s => s.id === 'coc1' || s.id === 'bar1')));
+        const porSeccion = html.split('<div class="hr-grp">').slice(1)
+            .map(sec => (sec.match(/<div class="hr-cover"><strong>(\d+)<\/strong>/) || [])[1]);
+        return eq(porSeccion.join(','), '1,1', 'cada una la suya');
+    });
+
+    /* ── Sugerencias de horario ── */
+    const limpiarCampos = () => { for (let i = 0; i < 9; i++)
+        ['pr_l_','pr_i_','pr_o_'].forEach(k => { campo(k + i).value = ''; }); };
+    /* El repintado de verdad escribe los valores en los campos; el DOM de
+       mentira no parsea HTML, así que aquí se hace a mano. Sin esto, leer los
+       campos antes de guardar devolvería blancos y el test mediría otra cosa. */
+    const pintarCampos = () => {
+        limpiarCampos();
+        getVar(H, '_presEdit').forEach((p, i) => {
+            campo('pr_l_' + i).value = p.l; campo('pr_i_' + i).value = p.in; campo('pr_o_' + i).value = p.out;
+        });
+    };
+
+    test('de entrada, las sugerencias son las cinco de fábrica', () => {
+        sinCfg();
+        return eq(H.presetsActuales().map(p => p.l).join(','),
+                  'Apertura,Intermedio,Cierre,Matutino,Completo', 'de fábrica');
+    });
+    test('borrarlas TODAS es una decisión: no reviven las de fábrica', () => {
+        setVar(H, '_cfg', { id:'', presets:[], grupos:[], updated:0 });
+        return eq(H.presetsActuales().length, 0, 'respetado');
+    });
+    test('lo tecleado se guarda y el editor de turno estrena los botones nuevos', () => {
+        sinCfg();
+        H.abrirPresets();
+        pintarCampos();
+        campo('pr_l_0').value = 'Partido'; campo('pr_i_0').value = '08:30'; campo('pr_o_0').value = '13:30';
+        ['pr_l_1','pr_l_2','pr_l_3','pr_l_4','pr_i_1','pr_i_2','pr_i_3','pr_i_4',
+         'pr_o_1','pr_o_2','pr_o_3','pr_o_4'].forEach(k => { campo(k).value = ''; });
+        H.presetsGuardar();                      // los renglones en blanco se tiran solos
+        H.aplicarPreset(0);
+        return eq(H.presetsActuales().map(p => p.l + ' ' + p.in + '-' + p.out).join(' | ') +
+                  ' → ' + campo('hrmIn').value + '–' + campo('hrmOut').value,
+                  'Partido 08:30-13:30 → 08:30–13:30', 'de punta a punta');
+    });
+    test('una sugerencia a medias no se guarda: sería un botón que no hace nada', () => {
+        const antes = JSON.stringify(H.presetsActuales());
+        H.abrirPresets();
+        pintarCampos();
+        H.presetAgregar();
+        campo('pr_l_1').value = 'Nocturno';      // sin horas
+        H.presetsGuardar();
+        return eq(JSON.stringify(H.presetsActuales()), antes, 'sin guardar');
+    });
+    test('⟲ las de fábrica las devuelve todas', () => {
+        H.abrirPresets();
+        H.presetsFabrica();
+        pintarCampos();
+        H.presetsGuardar();
+        return eq(H.presetsActuales().length, 5, 'de vuelta');
+    });
+    test('borrar una sugerencia la quita de verdad', () => {
+        H.abrirPresets();
+        pintarCampos();
+        H.presetBorrar(0);
+        pintarCampos();
+        H.presetsGuardar();
+        return eq(H.presetsActuales().map(p => p.l).join(','), 'Intermedio,Cierre,Matutino,Completo', 'una menos');
+    });
+
+    /* ── Dónde vive la configuración ── */
+    test('la configuración NO es una semana', () =>
+        eq(H._esCfg('horcfg_n1') + ' ' + H._esCfg('hor_suc_principal_2026-W35'), 'true false', 'separadas'));
+    /* El bulto de semanas se recorre por el prefijo `hor_`: un id de
+       configuración que empezara así —`hor_cfg_…`— se leería como una semana y
+       sus llaves entrarían al rol. */
+    test('un registro de configuración en el bulto no se lee como semana', () => {
+        const cache = getVar(H, '_horCache');
+        cache[H._cfgId()] = { id:H._cfgId(), semana:'2026-W35', invitados:['coc1'] };
+        const inv = H._invitacionesSemana();
+        delete cache[H._cfgId()];
+        return eq(Object.keys(inv).length, 0, 'no es una semana');
+    });
+    /* La llave primaria de la tabla `horarios` es global a toda la plataforma:
+       un id que no nombre al negocio se lo pelea con el del vecino. */
+    test('su id lleva el negocio pegado', () => eq(H._cfgId(), 'horcfg_n1', 'con negocio'));
+    test('…así que dos negocios no se pelean el mismo registro', () => {
+        const a = H._cfgId();
+        H._storage['etaax_negocio_activo'] = 'n2';
+        const b = H._cfgId();
+        H._storage['etaax_negocio_activo'] = 'n1';
+        return eq(a !== b, true, a + ' vs ' + b);
+    });
+    /* El mismo candado que el bulto de semanas: leer-y-escribir antes de que el
+       almacén hidrate es como se borraron los roles de agosto. */
+    test('la configuración no se escribe antes de que cargue el almacén', () => {
+        delete H._storage['etaax_n1_horarios_cfg'];
+        setVar(H, '_cargaLista', false);
+        H._cfgGuardar();
+        const escrito = H._storage['etaax_n1_horarios_cfg'];
+        setVar(H, '_cargaLista', true);
+        return eq(escrito === undefined, true, 'no escribió');
+    });
+    test('…y ya cargado, sí se escribe', () => {
+        sinCfg();
+        H._cfgGuardar();
+        return eq(typeof H._storage['etaax_n1_horarios_cfg'], 'string', 'guardado');
+    });
+
+    /* ── La hoja impresa ── */
+    test('el grupo manda sobre las palomitas de área en la hoja', () => {
+        setVar(H, '_cfg', { id:'', presets:null, updated:0,
+            grupos:[{ id:'gX', nombre:'Caja + Piso', areas:['piso'], mas:['caj1'], menos:[] }] });
+        setVar(H, '_pdfAreas', { cocina:true, barra:true, piso:true, administracion:true });
+        setVar(H, '_pdfGrupo', 'gX');
+        const hoja = H._staff.filter(H._vaEnLaHoja).map(s => s.id).join(',');
+        setVar(H, '_pdfGrupo', '');
+        return eq(hoja, 'mes1,caj1', 'el grupo manda');
+    });
+    test('sin grupo elegido, mandan las palomitas', () => {
+        setVar(H, '_pdfAreas', { cocina:true, barra:false, piso:false, administracion:false });
+        return eq(H._staff.filter(H._vaEnLaHoja).map(s => s.id).join(','), 'coc1', 'por área');
+    });
+    /* Si la hoja salió filtrada tiene que DECIRLO: si no, parece el rol completo
+       y alguien va a creer que faltó gente por programar. */
+    test('la hoja impresa dice de qué grupo es', () => {
+        let doc = null;
+        H.etaaxReporteDoc = (o) => { doc = o; return '@page{size:letter portrait;margin:0.5cm 0}'; };
+        H.etaaxAbrirReporte = () => {};
+        setVar(H, '_pdfAreas', { cocina:true, barra:true, piso:true, administracion:true });
+        setVar(H, '_pdfGrupo', 'gX');
+        H.imprimirHorario();
+        setVar(H, '_pdfGrupo', '');
+        return eq(doc && doc.subtitulo.indexOf('Caja + Piso') > -1, true,
+                  'rotulada → ' + (doc && doc.subtitulo));
+    });
+
+    /* ── El subtítulo sube a la barra de la ventana ── */
+    test('la pantalla le dice a la ventana de qué sucursal es el rol', () => {
+        let subio = null;
+        H.etaaxEmbedSub = (t) => { subio = t; };
+        H.render();
+        return eq(subio, 'Rol semanal · Matriz', 'lo dijo');
+    });
+    /* Y el encabezado de adentro se apaga dentro del modal: el valor EFECTIVO
+       de `display`, no un indexOf de "display:none" que pasaría igual aunque
+       otra regla más abajo lo volviera a enseñar. */
+    test('dentro de la ventana el título no se dice dos veces', () => {
+        const hor = fs.readFileSync(path.join(RAIZ, 'administrativo/horarios.html'), 'utf8');
+        const css = (hor.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+        let display = 'flex';
+        [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].forEach(par => {
+            const sel = par[1], cuerpo = par[2];
+            if (!/html\.embed\s+\.hr-head\b/.test(sel) && !/^\s*\.hr-head\b/.test(sel)) return;
+            const m = /(?:^|;)\s*display\s*:\s*([^;]+)/.exec(cuerpo);
+            if (m) display = m[1].trim();
+        });
+        return eq(display, 'none', 'oculto en el modal');
+    });
+
+    /* ── El canal (embed.js) ── */
+    function embedCtx(busqueda, padre) {
+        const c = { console, String, URLSearchParams,
+            location:{ search:busqueda, origin:'https://etaax.com' },
+            localStorage:{ getItem:()=>null, setItem(){} },
+            document:{ documentElement:{ classList:{ add(){} }, appendChild(){} },
+                       head:{ appendChild(){} }, createElement:()=>({}) } };
+        c.window = c;
+        c.parent = padre || c;
+        vm.createContext(c);
+        cargarJS(c, 'embed.js');
+        return c;
+    }
+    test('fuera de la ventana, decir el subtítulo no hace nada', () => {
+        const c = embedCtx('');
+        return eq(typeof c.etaaxEmbedSub === 'function' && c.etaaxEmbedSub('hola') === undefined, true, 'no-op');
+    });
+    test('dentro, se lo manda al padre y solo a su propio origen', () => {
+        const recibido = [];
+        const c = embedCtx('?embed=1', { postMessage:(d, o) => recibido.push({ d:d, o:o }) });
+        c.etaaxEmbedSub('Rol semanal · Matriz');
+        return eq(recibido.length + ' ' + recibido[0].d.etaax + ' ' + recibido[0].d.sub + ' ' + recibido[0].o,
+                  '1 tool-sub Rol semanal · Matriz https://etaax.com', 'al padre');
+    });
+})();
+
+
+/* ═══════════ BH56 · LA CONFIGURACIÓN, BAJANDO DE LA NUBE ═══════════
+   Las sugerencias y los grupos viajan por la MISMA tabla que las semanas.
+   Meterlos al bulto los haría contar como una semana —el candado de "menos
+   semanas que antes" se dispararía solo— y los dejaría al alcance del guardado
+   que reescribe el bulto entero. Y entre dos equipos tiene que ganar la más
+   reciente, sin perder la de nadie. */
+async function suiteCfgEnLaNube() {
+    console.log('\n══ BH56 · La configuración de horarios, bajando de la nube ══');
+
+    function pantalla(cfgLocal) {
+        const H = crearContexto();
+        cargarJS(H, 'etaax-core.js');
+        cargarJS(H, 'staff-area.js');
+        H._storage['etaax_negocio_activo'] = 'n1';
+        cargarInline(H, 'administrativo/horarios.html');
+        setVar(H, '_cargaLista', true);
+        setVar(H, '_horCache', {});
+        setVar(H, '_staff', []);
+        setVar(H, '_cfg', cfgLocal);
+        H.subidas = [];
+        H.sbUpsert = (tabla, rec) => { H.subidas.push(rec.id); };
+        return H;
+    }
+    const SEMANA = { id:'hor_suc_principal_2026-W35', sucursalId:'suc_principal',
+                     semana:'2026-W35', turnos:{ a:{ d0:{ in:'09:00', out:'17:00' } } } };
+    const CFG_NUBE = { id:'horcfg_n1', updated:500, presets:[{ l:'Partido', in:'08:30', out:'13:30' }],
+                       grupos:[{ id:'gX', nombre:'Cocina + Barra', areas:['cocina','barra'], mas:[], menos:[] }] };
+    const conFilas = (H, filas) => {
+        H._supabase = {
+            auth:{ getSession: async () => ({ data:{ session:{ user:{ id:'u1' } } } }) },
+            from: () => ({ select: function(){ return this; }, eq: async () => ({ data:filas, error:null }) }),
+        };
+    };
+
+    const A = pantalla({ id:'horcfg_n1', presets:null, grupos:[], updated:100 });
+    conFilas(A, [{ datos:SEMANA }, { datos:CFG_NUBE }]);
+    await A._syncHorariosDB();
+    await testA('la configuración que baja NO entra al bulto de semanas', async () =>
+        eq(Object.keys(getVar(A, '_horCache')).join(','), 'hor_suc_principal_2026-W35', 'solo semanas'));
+    await testA('…y sí se adopta: entre dos equipos gana la más reciente', async () =>
+        eq(A.presetsActuales().map(p => p.l).join(',') + ' | ' + A._gruposActuales().map(g => g.nombre).join(','),
+           'Partido | Cocina + Barra', 'adoptada'));
+
+    /* Al revés: lo de este equipo es más nuevo. Adoptar lo viejo de la nube
+       borraría un grupo que alguien acaba de crear. */
+    const B = pantalla({ id:'horcfg_n1', updated:900, grupos:[{ id:'gY', nombre:'Solo piso', areas:['piso'], mas:[], menos:[] }],
+                         presets:[{ l:'Mío', in:'10:00', out:'18:00' }] });
+    conFilas(B, [{ datos:SEMANA }, { datos:CFG_NUBE }]);
+    await B._syncHorariosDB();
+    await testA('lo más nuevo de este equipo no lo pisa lo viejo de la nube', async () =>
+        eq(B._gruposActuales().map(g => g.nombre).join(','), 'Solo piso', 'conservado'));
+    await testA('…y se sube, para que el otro equipo lo vea', async () =>
+        eq(B.subidas.indexOf('horcfg_n1') > -1, true, 'subida: ' + B.subidas.join(',')));
+
+    /* Y la que solo existe aquí: sin esto, un grupo creado en la tablet se
+       queda en la tablet hasta que alguien lo vuelva a tocar. */
+    const C = pantalla({ id:'', updated:0, presets:null,
+                         grupos:[{ id:'gZ', nombre:'Caja', areas:[], mas:['x'], menos:[] }] });
+    conFilas(C, [{ datos:SEMANA }]);
+    await C._syncHorariosDB();
+    await testA('una configuración que solo existe en este equipo se sube sola', async () =>
+        eq(C.subidas.indexOf('horcfg_n1') > -1, true, 'subida: ' + C.subidas.join(',')));
+}
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
@@ -30017,4 +30506,4 @@ suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
     .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
-    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(suiteInsumosSucursales).then(suiteCorregirQR).then(resumen);
+    .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(suiteInsumosSucursales).then(suiteCorregirQR).then(suiteCfgEnLaNube).then(resumen);

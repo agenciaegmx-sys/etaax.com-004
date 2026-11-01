@@ -14,7 +14,7 @@
     <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
     <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=03cadcf1">
     <link rel="preload" as="script" href="/administrativo/staff-ui.js?v=8409e757">
-    <link rel="preload" as="script" href="/administrativo/staff-operativo-ui.js?v=49b7d26d">
+    <link rel="preload" as="script" href="/administrativo/staff-operativo-ui.js?v=152e86d6">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -63,6 +63,15 @@
         .tool-modal-hd { display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0; }
         .tool-modal-hd .tm-ic { font-size:20px;line-height:1; }
         .tool-modal-hd .tm-tt { font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text);line-height:1; }
+        /* El título y lo que la herramienta tenga que decir, en columna. El
+           `flex:none` es a propósito: en la hoja de estilos operativa .tm-tt
+           lleva `flex:1` y una base en %, pensados para cuando era hijo
+           directo de una fila — aquí dentro, en columna, eso estira el
+           renglón. */
+        .tool-modal-hd .tm-ttwrap { display:flex;flex-direction:column;gap:3px;flex:1;min-width:0; }
+        .tool-modal-hd .tm-ttwrap .tm-tt { flex:none;flex-basis:auto; }
+        .tool-modal-hd .tm-sub { font-family:'DM Sans',sans-serif;font-size:11.5px;letter-spacing:0;
+            color:var(--text-dim);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
         /* Sin margin-left:auto: quien manda a la derecha es el grupo de botones
            (.etx-hd-btns). Con el auto aquí, cada botón se peleaba el espacio y
            terminaban repartidos por el encabezado en vez de juntos. */
@@ -231,7 +240,7 @@
     <div class="tool-modal">
         <div class="tool-modal-hd">
             <span class="tm-ic" id="tmIcon">🧠</span>
-            <span class="tm-tt" id="tmTitle">Herramienta</span>
+            <span class="tm-ttwrap"><span class="tm-tt" id="tmTitle">Herramienta</span><span class="tm-sub" id="tmSub" style="display:none"></span></span>
             <button class="tm-back etx-hd-extra" id="tmBack" style="display:none" onclick="volverTool()">← Volver</button>
             <button class="tm-x" id="tmClose" onclick="cerrarTool()">✕ Cerrar</button>
         </div>
@@ -324,7 +333,34 @@ function _tmSincronizar(){
     }
     document.getElementById('tmTitle').textContent = titulo;
     document.getElementById('tmIcon').textContent  = icono;
+    /* En una sub-pantalla, lo que dijo la herramienta base ya no aplica. En la
+       base NO se toca: su aviso puede haber llegado antes que este repintado,
+       y borrarlo lo dejaría mudo hasta el siguiente. */
+    if (dentro) _tmSub('');
 }
+/* ══ EL SUBTÍTULO VIENE DE ADENTRO ═══════════════════════════════════════
+   La herramienta embebida ya no repite su título —lo dice esta barra— pero sí
+   sabe algo que esta barra no: de qué sucursal es el rol que se está viendo.
+   Lo manda por postMessage.
+
+   Se acepta SOLO del mismo origen y SOLO del propio iframe: un mensaje de
+   cualquier otra ventana es de alguien más, y esto escribe en el encabezado.
+   Va como texto, nunca como HTML. */
+function _tmSub(txt){
+    var el = document.getElementById('tmSub');
+    if (!el) return;
+    el.textContent = txt || '';
+    el.style.display = txt ? '' : 'none';
+}
+window.addEventListener('message', function(e){
+    if (e.origin !== location.origin) return;
+    var f = document.getElementById('tmFrame');
+    if (!f || e.source !== f.contentWindow) return;
+    var d = e.data;
+    if (!d || d.etaax !== 'tool-sub') return;
+    _tmSub(String(d.sub == null ? '' : d.sub).slice(0, 140));
+});
+
 function _tmURL(page){
     var q='embed=1';
     try {
@@ -348,6 +384,7 @@ function abrirTool(page, titulo, icono){
     _toolIcono  = icono||'🧩';
     document.getElementById('tmTitle').textContent=_toolTitulo;
     document.getElementById('tmIcon').textContent=_toolIcono;
+    _tmSub('');
     loading.style.display='flex';
     frame.onload=function(){ loading.style.display='none'; _tmSincronizar(); };
     // Pasamos el contexto de sesión por la URL para que el iframe funcione aunque
@@ -376,6 +413,7 @@ function volverTool(){
     if(cerrar) cerrar.style.display='';
     document.getElementById('tmTitle').textContent=_toolTitulo;
     document.getElementById('tmIcon').textContent=_toolIcono;
+    _tmSub('');
     frame.src=_tmURL(_toolBase);
 }
 function cerrarTool(){
@@ -385,6 +423,7 @@ function cerrarTool(){
     var bg=document.getElementById('toolModal');
     bg.classList.remove('on');
     document.body.style.overflow='';
+    _tmSub('');
     /* Cerrar la ventana REARMA el candado del catálogo: cerrar es salirse a
        propósito, y volver a entrar tiene que volver a pedir la contraseña. La
        gracia solo sirve mientras se está adentro trabajando. */
@@ -410,13 +449,13 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape' && documen
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
-<script src="/novedades.js?v=ac0d48ff"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=43d06a67"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=15a5a6ef"></script>
 <script src="/etaax-modulos-ui.js?v=03cadcf1"></script>
 <script src="/administrativo/staff-ui.js?v=8409e757"></script>
-<script src="/administrativo/staff-operativo-ui.js?v=49b7d26d"></script>
+<script src="/administrativo/staff-operativo-ui.js?v=152e86d6"></script>
 </body>
 </html>

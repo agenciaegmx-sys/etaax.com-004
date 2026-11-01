@@ -29,7 +29,7 @@
   icono(p,k,true);
  }
  var acciones={
-  abrirAgregar:'agregar',copiarSemanaAnterior:'copiar',abrirPDF:'imprimir',irHoy:'calendario',editorLimpiar:'eliminar',editorDescanso:'descanso',editorGuardar:'guardar',cerrarAgregar:'cerrar',cerrarPersona:'cerrar',cerrarPDF:'volver',imprimirHorario:'imprimir',regresarASuSucursal:'volver',
+  abrirAgregar:'agregar',copiarSemanaAnterior:'copiar',abrirPDF:'imprimir',irHoy:'calendario',abrirGrupos:'seccion',pdfIrAGrupos:'seccion',nuevoGrupo:'agregar',editarGrupo:'editar',eliminarGrupo:'eliminar',verGrupo:'detalle',guardarGrupo:'guardar',grpCancelar:'volver',cerrarGrupos:'cerrar',abrirPresets:'editar',presetAgregar:'agregar',presetBorrar:'eliminar',presetsFabrica:'estado',presetsGuardar:'guardar',cerrarPresets:'volver',pdfGuardarGrupo:'guardar',editorLimpiar:'eliminar',editorDescanso:'descanso',editorGuardar:'guardar',cerrarAgregar:'cerrar',cerrarPersona:'cerrar',cerrarPDF:'volver',imprimirHorario:'imprimir',regresarASuSucursal:'volver',
   abrirQrChecklist:'qr',setTab:'plantillas',nuevaPlantilla:'agregar',abrirEjecDe:'ejecutar',abrirImprimir:'imprimir',editarPlantilla:'editar',copiarPlantASucursal:'copiar',eliminarPlantilla:'eliminar',addTareaRow:'agregar',cerrarEditor:'volver',guardarPlantilla:'guardar',cerrarImprimir:'cerrar',imprimirPlantilla:'imprimir',imprimirChecklist:'imprimir',descargarQrCk:'descargar',verEjecucion:'detalle',purgarEvidencias:'eliminar',
   nuevoNodo:'agregar',toggleConnect:'conectar',toggleDisconnect:'desconectar',resetVista:'centrar',abrirPerfilDeNodo:'perfiles',borrarNodo:'eliminar',cerrarModal:'volver',guardarNodo:'guardar',
   nuevoPerfil:'agregar',abrirPerfilesEtaax:'global',verLista:'volver',editarPerfil:'editar',guardarPerfil:'guardar',eliminarPerfil:'eliminar',
