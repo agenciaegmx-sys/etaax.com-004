@@ -1287,11 +1287,25 @@ function btnCorregir(reg, tipo, valores) {
     if (reg.puedeEditar === false)
         return reg.motivoBloqueo ? '<small class="hbloq">🔒 ' + etx(reg.motivoBloqueo) + '</small>' : '';
     if (reg.puedeEditar !== true) return '';
-    return '<button class="hcorr" onclick="corregir(' + JSON.stringify(tipo) + ',' +
-        JSON.stringify(reg.id) + ',' + (parseInt(reg.ver, 10) || 1) + ',' +
-        JSON.stringify(reg.nombre || '') + ',' + JSON.stringify(valores) + ')">✏️ Corregir</button>';
+    /* El encargo viaja en un `data-`, NO en un `onclick`: `JSON.stringify` mete
+       comillas dobles y el atributo también las usa, así que el navegador lo
+       cortaba en la primera comilla del id —el botón se pintaba bien y al
+       tocarlo no pasaba nada—. Escapado con `etx()` no hay nada que cortar. */
+    return '<button class="hcorr" data-cor="' +
+        etx(JSON.stringify({ t:tipo, id:reg.id, v:(parseInt(reg.ver, 10) || 1),
+                             n:(reg.nombre || ''), val:valores })) + '">✏️ Corregir</button>';
 }
 var _COR = null;
+/* Un solo escucha para todos los botones de corregir: el historial se repinta
+   entero en cada recarga y enganchar uno por botón deja escuchas colgando de
+   nodos que ya no existen. */
+document.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('[data-cor]') : null;
+    if (!b) return;
+    var d;
+    try { d = JSON.parse(b.getAttribute('data-cor')); } catch (e) { return; }
+    corregir(d.t, d.id, d.v, d.n, d.val);
+});
 function corPanel() {
     var p = $('corPanel');
     if (p) return p;

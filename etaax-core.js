@@ -1966,6 +1966,10 @@
             copas:    q,
             ml:       ml,
             onzas:    ml === null ? null : ml / OZ_ML,
+            /* Los litros se pueden decir SIEMPRE que haya mililitros, aunque
+               nadie haya capturado el contenido de la botella. Sirven de
+               relevo: «— bot» no ayuda a nadie y «1.5 L» sí. */
+            litros:   ml === null ? null : ml / 1000,
             botellas: (ml !== null && contNeto > 0) ? ml / contNeto : null,
             copaML:   copaML  > 0 ? copaML   : null,
             contNeto: contNeto > 0 ? contNeto : null

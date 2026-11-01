@@ -1105,8 +1105,12 @@ function _renderCntHechos(){
                    solo se pinta si el registro trae id (sin id no hay a qué
                    referirse) y si el servidor ya tiene el editor de la v82. */
                 + ((h.id && _V82 !== false)
-                    ? '<div><button onclick="_corregir(\'conteo\',' + JSON.stringify(h.id) + ',' + (parseInt(h.ver,10)||1) + ',' + JSON.stringify(h.nombre||'') + ',{cerradasBodega:' + JSON.stringify(String(h.cerradasBodega==null?'':h.cerradasBodega)) + ',cerradasBarra:' + JSON.stringify(String(h.cerradasBarra==null?'':h.cerradasBarra)) + ',nota:' + JSON.stringify(String(h.nota||'')) + '})" '
-                      + 'style="margin-top:6px;min-height:36px;padding:0 12px;font-size:12px;background:transparent;'
+                    ? '<div><button class="cor-abrir" data-cor="' +
+                      etx(JSON.stringify({ t:'conteo', id:h.id, v:(parseInt(h.ver,10)||1), n:(h.nombre||''),
+                          val:{ cerradasBodega:String(h.cerradasBodega==null?'':h.cerradasBodega),
+                                cerradasBarra:String(h.cerradasBarra==null?'':h.cerradasBarra),
+                                nota:String(h.nota||'') } })) + '" ' +
+                      'style="margin-top:6px;min-height:36px;padding:0 12px;font-size:12px;background:transparent;'
                       + 'border:1px solid var(--border);border-radius:9px;color:var(--text-dim);font-family:inherit;cursor:pointer">✏️ Corregir</button></div>'
                     : '')
                 + '</span></div>';
@@ -1221,6 +1225,16 @@ var NOMBRE_MOV = { entrada:'Entrada', merma:'Merma', salida:'Cortesía / présta
    Si la v82 todavía no se corrió en Supabase, la RPC no existe: el botón no se
    pinta y la pantalla funciona como siempre. */
 var _COR = null;            // { tipo, id, ver, nombre, campos }
+/* UN SOLO ESCUCHA para todos los botones de corregir, presentes y futuros: la
+   lista se repinta entera en cada recarga del historial y enganchar uno por
+   botón deja escuchas colgando de nodos que ya no existen. */
+document.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('[data-cor]') : null;
+    if (!b) return;
+    var d;
+    try { d = JSON.parse(b.getAttribute('data-cor')); } catch (e) { return; }
+    _corregir(d.t, d.id, d.v, d.n, d.val);
+});
 var _V82 = null;            // ¿existe el editor en el servidor? null = sin saber
 
 function _corPanel(){
@@ -1452,8 +1466,16 @@ async function irHistorial(){
                 ? '<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;opacity:.85">🔒 ' + etx(reg.motivoBloqueo) + '</div>'
                 : '';
         if (reg.puedeEditar !== true) return '';
-        return '<div><button onclick="_corregir(' + JSON.stringify(tipo) + ',' + JSON.stringify(reg.id) + ',' +
-            (parseInt(reg.ver,10)||1) + ',' + JSON.stringify(reg.nombre||'') + ',' + JSON.stringify(valores) + ')" ' +
+        /* EL ENCARGO VIAJA EN UN `data-`, NO EN UN `onclick`.
+           Así nació roto y así se publicó: `JSON.stringify` mete comillas
+           DOBLES y el atributo es `onclick="…"`, también con comillas dobles.
+           El navegador cerraba el atributo en la primera comilla del id, el
+           botón se pintaba perfecto y al tocarlo no pasaba nada. Metido en un
+           `data-` y escapado con `etx()`, las comillas se vuelven `&quot;` y
+           no hay nada que cortar. */
+        return '<div><button class="cor-abrir" data-cor="' +
+            etx(JSON.stringify({ t:tipo, id:reg.id, v:(parseInt(reg.ver,10)||1),
+                                 n:(reg.nombre||''), val:valores })) + '" ' +
             'style="margin-top:6px;min-height:36px;padding:0 12px;font-size:12px;background:transparent;' +
             'border:1px solid var(--border);border-radius:9px;color:var(--text-dim);font-family:inherit;cursor:pointer">' +
             '✏️ Corregir</button></div>';

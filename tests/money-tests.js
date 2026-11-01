@@ -29348,6 +29348,16 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
         }
         throw new Error('Sin cierre: ' + nombre);
     };
+    /* El escucha delegado NO está dentro de ninguna función, así que se saca
+       aparte: sin él los botones se pintan y no hacen nada, que es el mismo
+       síntoma del bug de las comillas. */
+    const delegado = (fuente) => {
+        const p = fuente.indexOf("document.addEventListener('click', function (ev) {");
+        if (p < 0) throw new Error('no hay escucha delegado para los botones de corregir');
+        const fin = fuente.indexOf('\n});', p);
+        if (fin < 0) throw new Error('escucha delegado sin cierre');
+        return fuente.slice(p, fin + 4);
+    };
     /* DOM mínimo: lo justo para que el panel se arme y se lea. Los nodos
        guardan `value`, `textContent` y `innerHTML` porque es lo que la pantalla
        escribe y lo que la prueba lee. */
@@ -29371,11 +29381,14 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
             el.appendChild = (h) => { el.children.push(h); return h; };
             return el;
         };
+        const escuchas = {};
         const doc = {
             body: nuevo('body'),
             createElement: nuevo,
             getElementById: (id) => nodos[id] || null,
+            addEventListener: (t, f) => { (escuchas[t] = escuchas[t] || []).push(f); },
             _crear: (id) => (nodos[id] = nuevo('div')),
+            _click: (el) => (escuchas.click || []).forEach(f => f({ target: el })),
         };
         doc.body.appendChild = (h) => { if (h.id) nodos[h.id] = h; return h; };
         const llamadas = [];
@@ -29396,6 +29409,7 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
         ['_corPanel', '_cerrarCorregir', '_corregir', '_corOpId', '_guardarCorreccion']
             .forEach((n) => vm.runInContext(trozo(n), c, { filename: 'entrada.html:' + n }));
         vm.runInContext('var _COR=null, _V82=null;', c);
+        vm.runInContext(delegado(txt), c, { filename: 'entrada.html:delegado' });
         return c;
     };
     const abrir = (c, valores) => {
@@ -29556,6 +29570,69 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
     });
     for (const [n, f] of testAsyncCola.splice(0)) await testA(n, f);
 
+    /* ── EL BOTÓN TIENE QUE SOBREVIVIR AL HTML ──────────────────────────────
+       ESTE BUG SE PUBLICÓ. El botón se pintaba perfecto y al tocarlo no pasaba
+       nada: el encargo iba en un `onclick="_corregir("c1",…)"` armado con
+       `JSON.stringify`, que mete comillas DOBLES dentro de un atributo
+       delimitado por comillas dobles. El navegador cierra el atributo en la
+       primera comilla y lo demás es basura.
+
+       Las pruebas de arriba no lo vieron porque llaman a las funciones
+       DIRECTAMENTE: la conducta estaba bien, el cableado no. Así que aquí se
+       lee el atributo COMO LO LEE EL NAVEGADOR —cortando en la primera comilla
+       sin escapar— y se comprueba que el encargo llegue entero. */
+    const comoElNavegador = (html, attr) => {
+        const m = html.match(new RegExp(attr + '="([^"]*)"'));
+        if (!m) return null;
+        return m[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+                   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    };
+    await testA('el botón del historial llega entero al navegador', async () => {
+        const c = mundo([]);
+        /* `_btnCorregir` vive DENTRO de `irHistorial`, así que se saca de ahí
+           con el mismo recorte por llaves que el resto. */
+        const cuerpo = trozo('irHistorial');
+        const p = cuerpo.indexOf('function _btnCorregir(');
+        eq(p > -1, true, 'ya no existe _btnCorregir');
+        let prof = 0, fin = -1;
+        for (let i = cuerpo.indexOf('{', p); i < cuerpo.length; i++) {
+            if (cuerpo[i] === '{') prof++;
+            else if (cuerpo[i] === '}' && --prof === 0) { fin = i + 1; break; }
+        }
+        vm.runInContext(cuerpo.slice(p, fin), c, { filename: 'entrada.html:_btnCorregir' });
+        const html = c._btnCorregir(
+            { id: 'c1', ver: 2, nombre: 'Ron "del bueno"', puedeEditar: true },
+            'conteo', { cerradasBodega: '10', cerradasBarra: '', nota: 'con "comillas"' });
+        const crudo = comoElNavegador(html, 'data-cor');
+        eq(crudo !== null, true, 'no hay encargo en el botón: ' + html.slice(0, 120));
+        const d = JSON.parse(crudo);          // si el atributo se cortó, esto truena
+        eq(d.id, 'c1', 'se perdió el id');
+        eq(d.v, 2, 'se perdió la versión');
+        eq(d.t, 'conteo', 'se perdió el tipo');
+        eq(d.val.cerradasBodega, '10', 'se perdieron los valores');
+        return eq(d.n, 'Ron "del bueno"', 'un nombre con comillas rompe el encargo');
+    });
+    /* Y QUE EL CLIC LLEGUE. Sin el escucha delegado el botón también se queda
+       muerto —mismo síntoma, otra causa— y las pruebas de arriba no lo verían:
+       comprueban que el ENCARGO esté bien escrito, no que alguien lo recoja. */
+    await testA('tocar el botón abre el panel de corregir', async () => {
+        const c = mundo([]);
+        const boton = { getAttribute: () => JSON.stringify({ t:'conteo', id:'c7', v:4, n:'Ron',
+                            val:{ cerradasBodega:'10', cerradasBarra:'', nota:'' } }),
+                        closest: function (sel) { return sel === '[data-cor]' ? this : null; } };
+        c.document._click(boton);
+        eq(!!c._COR, true, 'nadie recogió el clic: el botón se queda muerto');
+        eq(c._COR.id, 'c7', 'abrió el registro equivocado');
+        eq(c._COR.ver, 4, 'perdió la versión por el camino');
+        return eq(c.document.getElementById('corPanel').style.display, 'flex', 'no abrió el panel');
+    });
+    /* Un clic en cualquier otro lado no abre nada. */
+    await testA('tocar fuera de un botón de corregir no abre el panel', async () => {
+        const c = mundo([]);
+        c.document._click({ closest: () => null });
+        return eq(c._COR, null, 'se abrió solo');
+    });
+
     /* ── LA APP INSTALADA TIENE QUE PORTARSE IGUAL ───────────────────────────
        Las dos pantallas comparten servidor y no comparten interfaz. Si el
        editor solo vive en una, quien instaló la app tiene que volver al
@@ -29588,11 +29665,13 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
             el.appendChild = (h) => { el.children.push(h); return h; };
             return el;
         };
-        const llamadas = [];
+        const llamadas = [], escuchasM = {};
         const c = { console: { log(){}, warn(){} }, JSON, Object, Math, Date, String, Number,
             parseInt, parseFloat, isNaN,
             document: { body: nuevo('body'), createElement: nuevo,
-                        getElementById: (id) => nodos[id] || null },
+                        getElementById: (id) => nodos[id] || null,
+                        addEventListener: (t, f) => { (escuchasM[t] = escuchasM[t] || []).push(f); },
+                        _click: (el) => (escuchasM.click || []).forEach(f => f({ target: el })) },
             $: (id) => nodos[id] || null,
             NEG: 'n1', TOKEN: 'tok', NIPHASH: 'hA',
             etx: (v) => String(v == null ? '' : v).replace(/[<>&"]/g,
@@ -29607,8 +29686,28 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
         ['corPanel', 'cerrarCorregir', 'corregir', 'guardarCorreccion', 'btnCorregir']
             .forEach((n) => vm.runInContext(corte(n), c, { filename: 'app-movil/app.js:' + n }));
         vm.runInContext('var _COR=null;', c);
+        vm.runInContext(delegado(mtxt), c, { filename: 'app-movil/app.js:delegado' });
         return c;
     };
+    await testA('tocar el botón de la app instalada también abre el panel', async () => {
+        const c = movil([]);
+        const boton = { getAttribute: () => JSON.stringify({ t:'entrada', id:'e3', v:1, n:'Ginebra',
+                            val:{ cantidad:'8', nota:'' } }),
+                        closest: function (sel) { return sel === '[data-cor]' ? this : null; } };
+        c.document._click(boton);
+        eq(!!c._COR, true, 'nadie recogió el clic en la app: el botón se queda muerto');
+        return eq(c._COR.id, 'e3', 'abrió el registro equivocado');
+    });
+    await testA('el botón de la app instalada también llega entero al navegador', async () => {
+        const c = movil([]);
+        const html = c.btnCorregir({ id: 'c9', ver: 3, nombre: 'Ginebra "seca"', puedeEditar: true },
+            'entrada', { cantidad: '8', nota: '' });
+        const crudo = comoElNavegador(html, 'data-cor');
+        eq(crudo !== null, true, 'no hay encargo en el botón: ' + html.slice(0, 120));
+        const d = JSON.parse(crudo);          // si el atributo se cortó, esto truena
+        eq(d.id, 'c9', 'se perdió el id');
+        return eq(d.n, 'Ginebra "seca"', 'un nombre con comillas rompe el encargo');
+    });
     await testA('la app instalada también corrige, con la misma RPC', async () => {
         const c = movil([{ data: { ok: true, ver: 2 } }]);
         c.corregir('conteo', 'c1', 1, 'Ron', { cerradasBodega: '10', cerradasBarra: '', nota: '' });

@@ -150,11 +150,21 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         return eq(r.html.includes('0.00 bot'),true,'y sí dice que cuadró');
     });
     /* Sin referencia no se inventa: se dice qué falta capturar. */
-    test('sin contenido de botella no inventa botellas, y dice qué falta',()=>{
+    /* Sin contenido de botella capturado no hay botellas que decir — pero los
+       LITROS sí se saben, y «1.5 L» ayuda donde «— bot» no ayuda a nadie. */
+    test('sin contenido de botella lo dice en litros, no con un guion',()=>{
         c.calcExistencia=()=>25;c.calcExistenciaTeorica=()=>25;
         const r=c._rowCopa({...fcopa,contNeto:0});
-        eq(r.html.includes('— bot'),true,'debería decir que no sabe');
-        return eq(r.html.includes('Falta capturar el contenido de la botella'),true,'y por qué');
+        eq(r.html.includes('1.50 L'),true,'no dijo los litros: '+(r.html.match(/≈[^<]*/g)||[]).join(' // '));
+        return eq(r.html.includes('— bot'),false,'dejó el guion pudiendo decir litros');
+    });
+    /* Y si NO hay ni tamaño de copa, no hay mililitros: ahí sí no se sabe nada
+       y lo que toca es decir qué falta capturar. */
+    test('sin tamaño de copa no se inventa nada y dice qué falta',()=>{
+        const r=c._rowCopa({...fcopa,copaML:0});
+        eq(r.html.includes('— bot'),true,'inventó botellas sin saber la copa');
+        eq(r.html.includes('— oz'),true,'inventó onzas sin saber la copa');
+        return eq(r.html.includes('Falta capturar'),true,'no dijo qué falta');
     });
     test('y un abarrote por peso no recibe onzas líquidas',()=>
         eq(c._equivBarra(5,{tipo:'peso',contNeto:1000,baseUnit:'G'}),null,'nada de onzas'));
@@ -168,6 +178,20 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         eq(h.includes('2.00 bot · 50.7 oz · 25.0 cp'),true,'dice lo mismo');
         eq(/var\(--/.test(h),false,'se llevó una variable de tema al papel');
         return eq(/cursor:help|title=/.test(h),false,'puso ayuda de ratón en el papel');
+    });
+    /* EL DESGLOSE IMPRESO lo pidió Edwin: se lleva al anaquel para contar, así
+       que ahí «−23.3 cop» tampoco sirve. Correr `verReporteDirectivo` entero
+       pediría media pantalla de dobles; lo que se vigila es que sus dos
+       columnas de cantidad —lo que hay y la varianza— pidan la línea en
+       versión de papel, incluidos los miembros de un compuesto. */
+    test('el desglose impreso pide la equivalencia en sus dos cantidades',()=>{
+        const src=fs.readFileSync(path.join(root,'recetas/inventarios.js'),'utf8');
+        const a=src.indexOf('function verReporteDirectivo(');
+        const cuerpo=src.slice(a,src.indexOf('\nfunction ',a+10));
+        eq(/_equivBarraHTML\(a\.fisico, a\.f, \{impreso:true\}\)/.test(cuerpo),true,'falta en lo que hay');
+        eq(/_equivBarraHTML\(a\.dif, a\.f, \{signo:true, impreso:true\}\)/.test(cuerpo),true,'falta en la varianza');
+        eq(/_equivBarraHTML\(m\.fisico, m\.f/.test(cuerpo),true,'falta en los miembros de un compuesto');
+        return eq(/_equivBarraHTML\(m\.dif, m\.f/.test(cuerpo),true,'falta en la varianza de los miembros');
     });
     /* Complemento, no sustituto: que el reporte impreso de existencias siga
        pidiendo la versión de papel. Correr ese reporte entero aquí pediría

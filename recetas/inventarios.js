@@ -9383,13 +9383,16 @@ function _equivBarraHTML(copas, fila, opts) {
     var bot = _nEquiv(e.botellas, 2, opts.signo);
     var oz  = _nEquiv(e.onzas,    1, opts.signo);
     var cp  = _nEquiv(e.copas,    1, opts.signo);
+    /* Sin contenido de botella capturado no hay botellas que decir, pero los
+       LITROS sí se saben: mejor «1.5 L» que un guion. */
+    var lt  = (bot === null) ? _nEquiv(e.litros, 2, opts.signo) : null;
     /* Sin referencia no se inventa el número: se dice que falta, y se dice
        CUÁL falta, que es lo único accionable. */
     var faltan = [];
-    if (e.contNeto === null) faltan.push('el contenido de la botella');
+    if (e.contNeto === null && e.ml === null) faltan.push('el contenido de la botella');
     if (e.copaML   === null) faltan.push('el tamaño de la copa');
     var partes = [
-        (bot === null ? '—' : bot) + ' bot',
+        bot !== null ? bot + ' bot' : (lt !== null ? lt + ' L' : '— bot'),
         (oz  === null ? '—' : oz)  + ' oz',
         (cp  === null ? '—' : cp)  + ' cp'
     ].join(' · ');
@@ -10575,8 +10578,8 @@ function verReporteDirectivo(gerencial, modo) {
               <td class="tc">${m.ventaCopaDir>0?_ncRd(m.ventaCopaDir)+' '+mVta:'—'}</td>
               <td class="tc">${m.ventaBot>0?_ncRd(m.ventaBot)+' '+mEnt:'—'}</td>
               <td class="tc" style="color:#9b8de8">${m.ventaCoct>0?_ncRd(m.ventaCoct)+' '+mVta:'—'}</td>
-              <td class="tc">${_ncRd(mFisBot)} ${mEx}</td>
-              <td class="tc" style="color:${mcD};font-weight:600">${m.dif>=0?'+':''}${_ncRd(m.dif)} ${mMov}</td>
+              <td class="tc">${_ncRd(mFisBot)} ${mEx}${_equivBarraHTML(m.fisico, m.f, {impreso:true})}</td>
+              <td class="tc" style="color:${mcD};font-weight:600">${m.dif>=0?'+':''}${_ncRd(m.dif)} ${mMov}${_equivBarraHTML(m.dif, m.f, {signo:true, impreso:true})}</td>
               <td class="tc" style="color:${mcD}">${m.varPct.toFixed(0)}%</td>
               <td class="tr" style="color:${mcC}">${m.difCosto>=0?'+':''}$${_m2(m.difCosto)}</td>
             </tr>`;
@@ -10603,8 +10606,12 @@ function verReporteDirectivo(gerencial, modo) {
               <td class="tc">${vtaCopaStr}</td>
               <td class="tc">${vtaBotStr}</td>
               <td class="tc" style="color:#9b8de8">${coctStr}</td>
-              <td class="tc" style="font-weight:600">${_exFmt(a, a.fisico)}</td>
-              <td class="tc" style="color:${cDif};font-weight:700">${a.dif>=0?'+':''}${_fmtEquivalenteBatch(a.dif, u)}</td>
+              <!-- LAS MISMAS EQUIVALENCIAS QUE EN PANTALLA. El desglose se
+                   imprime para leerlo en el anaquel, y ahí «−23.3 cop» no le
+                   dice nada a quien está contando botellas. Mismo formateador,
+                   en versión de papel. -->
+              <td class="tc" style="font-weight:600">${_exFmt(a, a.fisico)}${_equivBarraHTML(a.fisico, a.f, {impreso:true})}</td>
+              <td class="tc" style="color:${cDif};font-weight:700">${a.dif>=0?'+':''}${_fmtEquivalenteBatch(a.dif, u)}${_equivBarraHTML(a.dif, a.f, {signo:true, impreso:true})}</td>
               <td class="tc" style="color:${cDif}">${a.varPct.toFixed(0)}%</td>
               <td class="tr" style="color:${cCost};font-weight:700">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td>
             </tr>`;
