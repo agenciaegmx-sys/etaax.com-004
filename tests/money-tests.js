@@ -31134,6 +31134,114 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
         eq(/Faltantes|Sobrantes/.test(texto(cRes) + texto(cDes)), false, 'fuera'));
 })();
 
+
+/* ═══════════ SUITE BH58 · EL COSTEO IMPRESO, SOLO CON LO ACTIVO ═══════════
+   EL BUG (lo vio Edwin): el costeo de insumos salía con los productos dados
+   de baja mezclados entre los activos. La causa no estaba en imprimir sino en
+   filtrar: el filtro de ESTADO vivía DENTRO de un `if (_sucVista)`, y sin
+   sucursal en la vista —que es lo normal en Matriz, donde
+   `etaax_sucursal_activa` viene vacío— no se filtraba nada. El estado
+   (`activo === '0'`) es del negocio entero y no tiene por qué depender de que
+   haya una sucursal elegida.
+
+   Y un segundo agujero del mismo renglón: si todavía no se había filtrado
+   nunca, imprimir volcaba `getInsumos()` tal cual — el catálogo COMPLETO,
+   inactivos incluidos— bajo el rótulo de «lo que estás viendo».            */
+console.log('\n══ BH58 · El costeo impreso, solo con lo activo ══');
+(function () {
+    const CATALOGO = [
+        { id:'a1', nombre:'Tequila activo', activo:'1', tipoInsumo:'destilado', categoria:'Tequila',
+          presentaciones:[{ contNeto:750, umContenido:'ML', costoUnitario:500 }] },
+        { id:'i1', nombre:'Ron de baja',    activo:'0', tipoInsumo:'destilado', categoria:'Ron',
+          presentaciones:[{ contNeto:750, umContenido:'ML', costoUnitario:300 }] },
+        { id:'a2', nombre:'Vodka activo',   activo:'1', tipoInsumo:'destilado', categoria:'Vodka',
+          presentaciones:[{ contNeto:750, umContenido:'ML', costoUnitario:400 }] },
+    ];
+    function pantalla(sucursalActiva) {
+        const I = crearContexto();
+        cargarJS(I, 'insumo-label.js');
+        cargarJS(I, 'etaax-core.js');
+        cargarJS(I, 'recetas/insumos.js');
+        I._storage['etaax_negocio_activo'] = 'n1';
+        I._storage['etaax_n1_insumos'] = JSON.stringify(CATALOGO);
+        if (sucursalActiva) {
+            I._storage['etaax_sucursal_activa'] = sucursalActiva;
+            /* Con sucursal en la vista manda la MEMBRESÍA: un insumo sin
+               `sucursales` vive en Matriz por regla histórica. */
+            I._storage['etaax_n1_insumos'] = JSON.stringify(
+                CATALOGO.map(x => Object.assign({}, x, { sucursales:[sucursalActiva] })));
+        }
+        return I;
+    }
+    const nombres = l => (l || []).map(x => x.nombre).join(',');
+
+    /* EL CASO DE EDWIN: Matriz, sin `etaax_sucursal_activa`. */
+    const SIN = pantalla('');
+    SIN.filtrar();
+    test('sin sucursal en la vista, el de baja no entra a la lista', () =>
+        eq(nombres(getVar(SIN, '_listaFiltrada')), 'Tequila activo,Vodka activo', 'solo activos'));
+    test('…ni al papel', () =>
+        eq(nombres(SIN._insumosAImprimir()), 'Tequila activo,Vodka activo', 'solo activos'));
+
+    /* Y con sucursal sigue igual: lo que ya funcionaba no se tocó. */
+    const CON = pantalla('sucB');
+    CON.filtrar();
+    test('con sucursal en la vista, tampoco', () =>
+        eq(nombres(CON._insumosAImprimir()), 'Tequila activo,Vodka activo', 'solo activos'));
+
+    /* No se escondieron para siempre: el filtro «Inactivos» sigue sirviendo
+       para encontrarlos y reactivarlos. */
+    test('el filtro de inactivos sí los enseña, que para eso está', () => {
+        const I = pantalla('');
+        I.document.getElementById('filtroEstadoIns').value = 'inactivos';
+        I.filtrar();
+        return eq(nombres(getVar(I, '_listaFiltrada')), 'Ron de baja', 'los de baja');
+    });
+
+    /* «Solo los insumos activos SELECCIONADOS»: palomear uno dado de baja no
+       lo mete al papel. La selección se cruza con lo que está en pantalla. */
+    test('seleccionar a mano un insumo de baja no lo imprime', () => {
+        const I = pantalla('');
+        I.filtrar();
+        setVar(I, '_modoSeleccion', true);
+        setVar(I, '_seleccionados', new Set(['a1', 'i1']));
+        return eq(nombres(I._insumosAImprimir()), 'Tequila activo', 'sin el de baja');
+    });
+
+    /* El segundo agujero: imprimir ANTES de que la pantalla haya filtrado. */
+    test('sin haber filtrado nunca, imprimir no vuelca el catálogo entero', () => {
+        const I = pantalla('');
+        return eq(nombres(I._insumosAImprimir()), 'Tequila activo,Vodka activo',
+                  'lo que se vería, no todo');
+    });
+
+    /* Y de punta a punta: el PAPEL del costeo, con su HTML de verdad. */
+    test('el costeo impreso sale sin los productos de baja', () => {
+        const I = pantalla('');
+        I.filtrar();
+        let doc = null;
+        I.etaaxReporteDoc = (o) => { doc = o; return '@page{size:letter portrait;margin:0.5cm 0}'; };
+        I.etaaxAbrirReporte = () => {};
+        setVar(I, 'vistaInsumos', 'costeo');
+        I.imprimirInsumos();
+        if (!doc) throw new Error('no se armó la hoja');
+        return eq((doc.cuerpo.indexOf('Tequila activo') > -1) + '|' + (doc.cuerpo.indexOf('Ron de baja') > -1),
+                  'true|false', 'solo activos en el papel');
+    });
+    /* Y el catálogo en filas, que comparte el mismo origen de la lista. */
+    test('…y el catálogo impreso tampoco los trae', () => {
+        const I = pantalla('');
+        I.filtrar();
+        let doc = null;
+        I.etaaxReporteDoc = (o) => { doc = o; return '@page{size:letter portrait;margin:0.5cm 0}'; };
+        I.etaaxAbrirReporte = () => {};
+        setVar(I, 'vistaInsumos', 'lista');
+        I.imprimirInsumos();
+        if (!doc) throw new Error('no se armó la hoja');
+        return eq(doc.cuerpo.indexOf('Ron de baja'), -1, 'sin el de baja');
+    });
+})();
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }

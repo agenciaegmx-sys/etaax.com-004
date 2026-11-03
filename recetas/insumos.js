@@ -1038,15 +1038,20 @@
        if (!catGlobal) {
            // Membresía: el insumo aparece si VIVE en esa sucursal (array `sucursales`), no por sucursalId único.
            var _sucVista = sucFil || sucActiva;
-           if (_sucVista) {
-               lista = lista.filter(x => window._insumoEnSuc(x, _sucVista));
-               var _pausado = x => window._insumoPausadoEn && window._insumoPausadoEn(x, _effSucIns(_sucVista));
-               // "Inactivos" de la sucursal = pausados AQUÍ (⏸) + inactivos GLOBALES
-               // (pastilla del editor) que viven aquí — cada uno con su botón.
-               lista = (estadoIns === 'inactivos')
-                   ? lista.filter(x => x.activo === '0' || _pausado(x))
-                   : lista.filter(x => x.activo !== '0' && !_pausado(x));
-           }
+           if (_sucVista) lista = lista.filter(x => window._insumoEnSuc(x, _sucVista));
+           /* EL ESTADO NO DEPENDE DE LA SUCURSAL: `activo === '0'` es del negocio
+              entero. Esto vivía DENTRO del `if (_sucVista)` de arriba, así que
+              sin sucursal en la vista —que es lo normal en Matriz, donde
+              `etaax_sucursal_activa` viene vacío— no se filtraba nada: los
+              insumos dados de baja seguían en la lista y salían en el papel
+              junto a los activos. Va fuera, que es donde le toca. */
+           var _effVista = _effSucIns(_sucVista);
+           var _pausado = x => window._insumoPausadoEn && window._insumoPausadoEn(x, _effVista);
+           // "Inactivos" de la sucursal = pausados AQUÍ (⏸) + inactivos GLOBALES
+           // (pastilla del editor) que viven aquí — cada uno con su botón.
+           lista = (estadoIns === 'inactivos')
+               ? lista.filter(x => x.activo === '0' || _pausado(x))
+               : lista.filter(x => x.activo !== '0' && !_pausado(x));
        } else {
            // Catálogo GLOBAL = maestros. Las COPIAS por sucursal (origenId) NO se listan aquí
            // (viven en su sucursal); se administran/actualizan vía el botón de Novedades.
@@ -1060,6 +1065,7 @@
        // el dedup por texto colapsaba productos legítimos e invertía contadores).
 
        _listaFiltrada = lista;
+       _yaFiltrado = true;
        // La página se resetea SOLO cuando cambia algún filtro/búsqueda. En los
        // demás re-renders (guardar un insumo, pausar, eliminar, realtime) se
        // CONSERVA la página actual — antes editar en la página 2 te regresaba a la 1.
@@ -1110,6 +1116,7 @@
    const _PG_SIZE = 100;
    let _paginaActual = 0;
    let _listaFiltrada = [];
+   let _yaFiltrado = false;   // ¿ya corrió filtrar() al menos una vez?
    let _filtroFirmaAnt = null; // firma de filtros: si no cambia, se conserva la página
 
    /* ══ ORDEN MANUAL DEL CATÁLOGO ═══════════════════════════════════════════
@@ -1547,7 +1554,12 @@
       palomeaste, solo lo palomeado. Un reporte que no coincide con la pantalla
       de la que salió es un reporte en el que nadie vuelve a confiar. */
    function _insumosAImprimir(){
-       var base = (_listaFiltrada && _listaFiltrada.length) ? _listaFiltrada.slice() : (getInsumos()||[]).slice();
+       /* Se imprime LO QUE ESTÁ EN PANTALLA. Si todavía no se ha filtrado
+          nunca, se filtra ahora: el respaldo de antes volcaba `getInsumos()`
+          tal cual —el catálogo entero, inactivos incluidos— y eso no es «lo
+          que estás viendo» por ninguna definición. */
+       if (!_listaFiltrada.length && !_yaFiltrado) { try { filtrar(); } catch(e) {} }
+       var base = _listaFiltrada.slice();
        if (_modoSeleccion && _seleccionados.size)
            base = base.filter(function(x){ return _seleccionados.has(x.id); });
        return base;
