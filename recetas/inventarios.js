@@ -10149,14 +10149,18 @@ function _step5DesgloseCard(fila, refMap) {
    cuando hay que levantar media pantalla para llegar a ellas.             */
 function _rdPodarPorModo(src, modo) {
     if (!src) return;
-    const fs = src.querySelector('#rd-faltsobr');
+    /* `rd-fs` marca las piezas de faltantes y sobrantes. Van SUELTAS, una por
+       una, y no envueltas en un contenedor: el paginador solo sabe partir lo
+       que cuelga directo de aquí, y un bloque entero que no cabe en la hoja se
+       recorta en silencio. */
+    const esFS = n => !!(n.classList && n.classList.contains('rd-fs'));
     if (modo === 'faltsobr') {
         // Este reporte es solo él: se va todo lo demás, incluido el resumen.
-        Array.from(src.children).forEach(n => { if (n !== fs) n.remove(); });
+        Array.from(src.children).forEach(n => { if (!esFS(n)) n.remove(); });
     } else {
-        if (fs) fs.remove();        // en los otros dos no va: tiene su propio exporte
         let enDesglose = false;
         Array.from(src.children).forEach(n => {
+            if (esFS(n)) return n.remove();   // tiene su propio exporte
             if (n.classList && n.classList.contains('rd-sec') && /Inventario completo/i.test(n.textContent)) enDesglose = true;
             if (modo === 'desglose' ? !enDesglose : enDesglose) n.remove();
         });
@@ -10328,7 +10332,14 @@ function verReporteDirectivo(gerencial, modo) {
            por una varianza que, contra el producto que de verdad manipuló, es chica.
            Sin uso alguno → 0 (sin base de comparación, no dispara alerta). */
         const ventaNetaF = f.tipo === 'pza' ? ventaPzaTot : (ventaCopa + ventaBot * copasBot);
-        const varPct     = esPBo ? 0 : (_pctVarianza(dif, _usoTotal(ventaNetaF, prodPBver, prodPB)) ?? 0);
+        /* `?? 0` convierte «no hay contra qué compararlo» en «0%», y un 0% se
+           lee como «aquí no pasa nada» — justo encima del renglón que más
+           producto perdió, porque un insumo que no se vendió nada es
+           exactamente el que no tiene base. Se guarda la diferencia para que
+           quien pinta pueda decir «—» en vez de inventar un cero. */
+        const _varCruda  = esPBo ? 0 : _pctVarianza(dif, _usoTotal(ventaNetaF, prodPBver, prodPB));
+        const varPct     = _varCruda ?? 0;
+        const varSinBase = _varCruda === null;
         const _bat       = esBateo(f.insumoId) || esPBo; // de bateo / prebatch repartido: sin alerta propia
         /* Misma regla que el Resultado y que el reporte de existencias: el
            capital es lo que hay, valuado como está. El batch cuenta con su
@@ -10343,7 +10354,7 @@ function verReporteDirectivo(gerencial, modo) {
         else conOk++;
         // Prebatch repartido: dif y consumo van en CERO aquí — ya viajan repartidos en
         // sus insumos (si no, faltCosto/vendidoCosto los contarían DOBLE).
-        return { f, fisico, teorico, dif: esPBo ? 0 : dif, cc, difCosto, ea, entBot, copasBot,
+        return { f, fisico, teorico, dif: esPBo ? 0 : dif, cc, difCosto, ea, entBot, copasBot, varSinBase,
                  ventaCopa, ventaCoct, prodPB, prodPBver, ventaCopaDir, ventaBot, ventaPzaTot, cortesia, merma, cancel,
                  consumo: esPBo ? 0 : consumo,
                  disponible, pctConsumo, varPct, esBateo:_bat, esPB: esPBo };
@@ -10504,50 +10515,85 @@ function verReporteDirectivo(gerencial, modo) {
     const _ordImpactoFS = (x, y) => Math.abs(y.dif * y.cc) - Math.abs(x.dif * x.cc);
     const faltantesFS = analisis.filter(a => a.dif < -0.001).sort(_ordImpactoFS);
     const sobrantesFS = analisis.filter(a => a.dif >  0.001).sort(_ordImpactoFS);
-    function _rdTablaFS(items, esFalta){
-        const col = esFalta ? cCrit : cOk;
-        if (!items.length)
-            return `<div style="font-size:10.5px;color:#aaa;padding:6px 0 14px">Sin ${esFalta?'faltantes':'sobrantes'} en este inventario. ✅</div>`;
-        let tCosto = 0, tCarta = 0;
+    /* La lista de un lado: partida POR GRUPO, con su subtotal, y al final el
+       total del lado. «Me faltan $4,700» no dice qué hacer; «me faltan $4,300
+       en destilados y $400 en refrescos» ya apunta a una barra o a una bodega.
+
+       Cada grupo sale en su PROPIA tabla, y todas cuelgan directo del
+       documento: así el paginador puede partirlas por renglón. Envueltas en
+       un contenedor mide el bulto entero, no cabe, y lo que sobra lo recorta
+       sin avisar — que es como esta hoja salía sin sobrantes. */
+    function _lineaTotalFS(etiqueta, n, costo, carta, col, fuerte){
+        const borde = fuerte ? '2px solid #1a1916' : '1px solid #ddd';
+        const peso  = fuerte ? 900 : 700;
+        return `<tr style="background:${fuerte ? '#f0efe9' : '#f8f8f4'}">
+            <td colspan="5" style="font-weight:${peso};border-top:${borde}">${etiqueta} · ${n} producto${n!==1?'s':''}</td>
+            <td class="tr" style="font-weight:${peso};color:${col};border-top:${borde}">${$g('$'+_m2(costo))}</td>
+            <td class="tr" style="font-weight:${peso};color:${col};border-top:${borde}">${$g('$'+_m2(carta))}</td></tr>`;
+    }
+    function _rdFilaFS(a, col){
+        const u     = a.f.tipo === 'pza' ? 'pza' : 'cop';
+        const costo = Math.abs(a.dif) * a.cc;       // lo que costó comprarlo
+        const carta = Math.abs(a.difCosto);         // lo que se hubiera cobrado
         /* «¿Cuántas botellas me faltan?» es LA pregunta de esta hoja, y «−26
            cop» no la contesta: debajo de la diferencia van las equivalencias
-           de barra, con el signo puesto. Salen del mismo sitio que en el
-           resultado y en el desglose impreso (_equivBarraHTML) — una sola
-           verdad. En piezas devuelve vacío, que es lo correcto: una cerveza no
-           se mide en botellas de licor.
+           de barra, con el signo puesto, desde el mismo sitio que el resultado
+           y el desglose impreso. En piezas devuelve vacío, que es lo correcto.
 
-           OJO: cualquier comentario aquí dentro va en el CÓDIGO, no en la
-           plantilla de abajo. Metido en el template literal viaja al HTML y se
-           repite una vez por renglón. */
-        const filas = items.map(a => {
-            const u     = a.f.tipo === 'pza' ? 'pza' : 'cop';
-            const costo = Math.abs(a.dif) * a.cc;       // lo que costó comprarlo
-            const carta = Math.abs(a.difCosto);         // lo que se hubiera cobrado
-            tCosto += costo; tCarta += carta;
-            return `<tr>
-                <td style="font-weight:600">${etx(a.f.nombre)}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
-                <td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td>
-                <td class="tc">${_exFmt(a, a.fisico)}</td>
-                <td class="tc">${_exFmt(a, a.teorico)}</td>
-                <td class="tc" style="font-weight:700;color:${col}">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}${_equivBarraHTML(a.dif, a.f, { signo:true, impreso:true })}</td>
-                <td class="tc" style="color:${vc(a.varPct)};font-weight:700">${a.varPct>=0?'+':''}${a.varPct.toFixed(1)}%</td>
-                <td class="tr" style="font-weight:700;color:${col}">${$g('$'+_m2(costo))}</td>
-                <td class="tr" style="color:${col}">${$g('$'+_m2(carta))}</td></tr>`;
-        }).join('');
-        return `<table class="rd-t" style="margin-bottom:14px">
-            <thead><tr><th>Producto</th><th class="tc">Grupo</th><th class="tc">Físico</th><th class="tc">Teórico</th>
-              <th class="tc">Diferencia</th><th class="tc">Varianza %</th><th class="tr">A costo</th><th class="tr">A carta</th></tr></thead>
-            <tbody>${filas}
-              <!-- Los totales van DENTRO del tbody, como una fila más. En un
-                   <tfoot> se perderían: cuando el paginador parte una tabla
-                   larga en varias hojas clona la cabecera, no el pie — y un
-                   reporte de totales sin totales no se ve roto, se ve corto,
-                   que es peor. Como fila, cae sola en la última hoja. -->
-              <tr style="background:#f5f5f0">
-                <td colspan="6" style="font-weight:700;border-top:2px solid #ddd">Total ${esFalta?'faltante':'sobrante'} · ${items.length} producto${items.length!==1?'s':''}</td>
-                <td class="tr" style="font-weight:900;color:${col};border-top:2px solid #ddd">${$g('$'+_m2(tCosto))}</td>
-                <td class="tr" style="font-weight:900;color:${col};border-top:2px solid #ddd">${$g('$'+_m2(tCarta))}</td>
-              </tr></tbody></table>`;
+           El COLOR de la varianza lo decide el SIGNO, no la magnitud: el
+           código de colores del directivo pinta por tamaño, y un −0.4% salía
+           verde en la lista de faltantes — un renglón que dice que falta
+           producto, en el color de que todo está bien.
+
+           OJO: cualquier comentario va en el CÓDIGO, no en la plantilla de
+           abajo. Dentro del texto viaja al HTML y se repite por renglón. */
+        return { costo, carta, html: `<tr>
+            <td style="font-weight:600">${etx(a.f.nombre)}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
+            <td class="tc">${_exFmt(a, a.fisico)}</td>
+            <td class="tc">${_exFmt(a, a.teorico)}</td>
+            <td class="tc" style="font-weight:700;color:${col}">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}${_equivBarraHTML(a.dif, a.f, { signo:true, impreso:true })}</td>
+            <td class="tc" style="color:${a.varSinBase ? '#aaa' : (a.varPct < 0 ? cCrit : cOk)};font-weight:700" title="${a.varSinBase ? 'Sin ventas ni producción en el período: no hay contra qué medir la varianza.' : ''}">${a.varSinBase ? '—' : (a.varPct>=0?'+':'') + a.varPct.toFixed(1) + '%'}</td>
+            <td class="tr" style="font-weight:700;color:${col}">${$g('$'+_m2(costo))}</td>
+            <td class="tr" style="color:${col}">${$g('$'+_m2(carta))}</td></tr>` };
+    }
+    const _CAB_FS = `<thead><tr><th>Producto</th><th class="tc">Físico</th><th class="tc">Teórico</th>
+        <th class="tc">Diferencia</th><th class="tc">Varianza %</th><th class="tr">A costo</th><th class="tr">A carta</th></tr></thead>`;
+    function _rdListaFS(items, esFalta){
+        const col = esFalta ? cCrit : cOk;
+        const quees = esFalta ? 'faltante' : 'sobrante';
+        if (!items.length)
+            return `<div class="rd-fs" style="font-size:10.5px;color:#aaa;padding:6px 0 14px">Sin ${esFalta?'faltantes':'sobrantes'} en este inventario. ✅</div>`;
+        // Agrupar conservando el orden por impacto de adentro de cada grupo…
+        const porGrupo = {}, orden = [];
+        items.forEach(a => {
+            const g = _grupoCategoria(a.f) || 'Sin grupo';
+            if (!porGrupo[g]) { porGrupo[g] = []; orden.push(g); }
+            porGrupo[g].push(a);
+        });
+        let tCosto = 0, tCarta = 0;
+        const bloques = [];
+        // …y los GRUPOS también por impacto: el que más dinero mueve, arriba.
+        orden.map(g => {
+            let c = 0, k = 0;
+            const filas = porGrupo[g].map(a => { const r = _rdFilaFS(a, col); c += r.costo; k += r.carta; return r.html; });
+            return { g, filas, costo:c, carta:k, n:porGrupo[g].length };
+        }).sort((x, y) => y.costo - x.costo).forEach(b => {
+            tCosto += b.costo; tCarta += b.carta;
+            bloques.push(
+                `<div class="rd-grptitle rd-fs" style="font-size:11px;font-weight:700;color:${col};margin:12px 0 4px">${etx(b.g)}</div>` +
+                `<table class="rd-t rd-fs" style="margin-bottom:6px">${_CAB_FS}<tbody>${b.filas.join('')}` +
+                /* El subtotal va DENTRO del tbody, como una fila más: en un
+                   <tfoot> se perdería, porque al partir una tabla larga el
+                   paginador clona la cabecera y no el pie — y una hoja de
+                   totales sin totales no se ve rota, se ve corta. */
+                _lineaTotalFS('Subtotal ' + b.g, b.n, b.costo, b.carta, col, false) +
+                `</tbody></table>`);
+        });
+        bloques.push(
+            `<table class="rd-t rd-fs" style="margin-bottom:14px"><tbody>` +
+            _lineaTotalFS('TOTAL ' + quees.toUpperCase(), items.length, tCosto, tCarta, col, true) +
+            `</tbody></table>`);
+        return bloques.join('');
     }
     const inv      = invActual;
     const fecha    = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
@@ -11115,27 +11161,31 @@ function verReporteDirectivo(gerencial, modo) {
   <div class="rd-break"></div>
   ${inventarioHTML}
 
-  <!-- Exporte aparte: las dos caras de la diferencia. Hijo DIRECTO de #rd-src
-       y con id propio, que es como la poda de abajo lo aísla de los otros
-       dos reportes sin tener que adivinar dónde empieza y dónde acaba. -->
-  <div id="rd-faltsobr">
-    <div class="rd-sec">Faltantes — lo que no apareció</div>
-    <div style="font-size:10px;color:#888;margin:-4px 0 8px">Físico por debajo del teórico. «A costo» es lo que costó reponerlo; «a carta», lo que se hubiera cobrado.</div>
-    ${_rdTablaFS(faltantesFS, true)}
-    <div class="rd-sec">Sobrantes — lo que apareció de más</div>
-    <div style="font-size:10px;color:#888;margin:-4px 0 8px">Físico por encima del teórico. Casi siempre es una entrada capturada dos veces, una salida sin registrar o una existencia anterior equivocada.</div>
-    ${_rdTablaFS(sobrantesFS, false)}
-    <table class="rd-t">
-      <thead><tr><th>Resultado neto del período</th><th class="tr">A costo</th><th class="tr">A carta</th></tr></thead>
-      <tbody>
-        <tr><td style="color:${cCrit}">Faltantes (${faltantesFS.length})</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(faltCosto))}</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(faltCarta))}</td></tr>
-        <tr><td style="color:${cOk}">Sobrantes (${sobrantesFS.length})</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(sobrCosto))}</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(sobrCarta))}</td></tr>
-        <tr style="background:#f5f5f0"><td style="font-weight:900;border-top:2px solid #ddd">Neto</td>
-          <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${netCosto>=0?cOk:cCrit}">${netCosto>=0?'+':'−'}${$g('$'+_m2(Math.abs(netCosto)))}</td>
-          <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${netCarta>=0?cOk:cCrit}">${netCarta>=0?'+':'−'}${$g('$'+_m2(Math.abs(netCarta)))}</td></tr>
-      </tbody></table>
-    <div style="font-size:9px;color:#aaa;margin-top:6px">Las unidades no se suman entre sí a propósito: copas, piezas y gramos no son la misma cosa. Lo que se totaliza es el dinero.</div>
-  </div>
+  <!-- Exporte aparte: las dos caras de la diferencia.
+       CADA PIEZA VA SUELTA, hermana de las demás, y marcada con la clase
+       rd-fs para que la poda la reconozca. Envueltas en un solo div el
+       paginador no puede partirlas: mide el nodo entero, no cabe en la hoja,
+       y como .rd-pagebody recorta lo que sobra, todo lo que pasaba de la
+       primera hoja —media lista, los sobrantes y el neto— desaparecía sin
+       avisar. OJO: aquí dentro NO se pueden usar comillas invertidas; esto
+       vive en una plantilla de texto y las cerraría. -->
+  <div class="rd-sec rd-fs" style="color:${cCrit};border-bottom-color:${cCrit};font-size:12px">▼ Faltantes — lo que NO apareció</div>
+  <div class="rd-fs" style="font-size:10px;color:#888;margin:-4px 0 8px">Físico por debajo del teórico. «A costo» es lo que costó reponerlo; «a carta», lo que se hubiera cobrado.</div>
+  ${_rdListaFS(faltantesFS, true)}
+  <div class="rd-sec rd-fs" style="color:${cOk};border-bottom-color:${cOk};font-size:12px;margin-top:26px">▲ Sobrantes — lo que apareció DE MÁS</div>
+  <div class="rd-fs" style="font-size:10px;color:#888;margin:-4px 0 8px">Físico por encima del teórico. Casi siempre es una entrada capturada dos veces, una salida sin registrar o una existencia anterior equivocada.</div>
+  ${_rdListaFS(sobrantesFS, false)}
+  <div class="rd-sec rd-fs">Resultado neto del período</div>
+  <table class="rd-t rd-fs">
+    <thead><tr><th>Concepto</th><th class="tr">A costo</th><th class="tr">A carta</th></tr></thead>
+    <tbody>
+      <tr><td style="color:${cCrit}">Faltantes (${faltantesFS.length})</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(faltCosto))}</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(faltCarta))}</td></tr>
+      <tr><td style="color:${cOk}">Sobrantes (${sobrantesFS.length})</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(sobrCosto))}</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(sobrCarta))}</td></tr>
+      <tr style="background:#f5f5f0"><td style="font-weight:900;border-top:2px solid #ddd">Neto</td>
+        <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${netCosto>=0?cOk:cCrit}">${netCosto>=0?'+':'−'}${$g('$'+_m2(Math.abs(netCosto)))}</td>
+        <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${netCarta>=0?cOk:cCrit}">${netCarta>=0?'+':'−'}${$g('$'+_m2(Math.abs(netCarta)))}</td></tr>
+    </tbody></table>
+  <div class="rd-fs" style="font-size:9px;color:#aaa;margin-top:6px">Las unidades no se suman entre sí a propósito: copas, piezas y gramos no son la misma cosa. Lo que se totaliza es el dinero.</div>
 
 </div>`;
 

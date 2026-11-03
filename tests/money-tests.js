@@ -30526,6 +30526,9 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
        prueba del orden pasaría por casualidad, que es como un candado deja
        entrar justo lo que venía a detener. */
     const FILAS = [
+        { insumoId:'f3', nombre:'Agua mineral', tipo:'pza', categoria:'Refrescos',
+          existenciaAnterior:20, cerradasBarra:14, ventasCopasDirectas:2,
+          costoUnitario:15, precioCarta:40, entradas:[] },   // faltan 4 pza × $15 = $60
         { insumoId:'f2', nombre:'Ron barato', tipo:'copa', contNeto:750, copaML:75, categoria:'Destilados',
           existenciaAnterior:30, cerradasBarra:0, pesos:[], ventasCopasDirectas:2,
           costoUnitario:200, precioCarta:60, entradas:[] },     // faltan 28 cop × $20 = $560
@@ -30533,11 +30536,27 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
           existenciaAnterior:10, cerradasBarra:0, pesos:[], ventasCopasDirectas:2,
           costoUnitario:2000, precioCarta:400, entradas:[] },   // faltan  8 cop × $200 = $1,600
         { insumoId:'s1', nombre:'Cerveza', tipo:'pza', categoria:'Cervezas',
-          existenciaAnterior:10, cerradasBarra:12, ventasCopasDirectas:0,
-          costoUnitario:20, precioCarta:50, entradas:[] },
+          existenciaAnterior:10, cerradasBarra:12, ventasCopasDirectas:2,
+          costoUnitario:20, precioCarta:50, entradas:[] },   // +4 pza sobre 2 vendidas = +200%
         { insumoId:'ok', nombre:'Refresco', tipo:'pza', categoria:'Refrescos',
           existenciaAnterior:10, cerradasBarra:8, ventasCopasDirectas:2,
           costoUnitario:10, precioCarta:30, entradas:[] },
+        /* Dos refrescos que, SUMADOS, pesan más que los destilados, aunque
+           ninguno llegue al renglón del tequila. Sin esto, el grupo del
+           renglón más caro es también el primero que se encuentra y no
+           ordenar por total daría el mismo resultado por casualidad. */
+        { insumoId:'f4', nombre:'Jugo de naranja 1L', tipo:'pza', categoria:'Refrescos',
+          existenciaAnterior:100, cerradasBarra:20, ventasCopasDirectas:0,
+          costoUnitario:15, precioCarta:40, entradas:[] },   // faltan 80 pza × $15 = $1,200
+        { insumoId:'f5', nombre:'Agua embotellada 500ml', tipo:'pza', categoria:'Refrescos',
+          existenciaAnterior:100, cerradasBarra:20, ventasCopasDirectas:0,
+          costoUnitario:15, precioCarta:40, entradas:[] },   // faltan 80 pza × $15 = $1,200
+        /* Faltante CHICO contra una venta grande: −0.6% de varianza. El código
+           de colores por magnitud lo pintaría verde —«todo bien»— en una lista
+           que dice que falta producto. */
+        { insumoId:'f6', nombre:'Coca Cola 355 ml', tipo:'pza', categoria:'Refrescos',
+          existenciaAnterior:1000, cerradasBarra:95, ventasCopasDirectas:900,
+          costoUnitario:12, precioCarta:35, entradas:[] },   // teórico 100, físico 95 → −5 pza
     ];
     function reporte(modo, filas) {
         setVar(F, 'filasCaptura', filas || FILAS);
@@ -30559,16 +30578,16 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
        que buscar un nombre a secas lo encontraría en las tablas del inventario
        completo. Todo lo de este reporte se busca DENTRO de su bloque. */
     function bloqueFS(html) {
-        const i = html.indexOf('Faltantes — lo que no apareció');
+        const i = html.indexOf('Faltantes — lo que NO apareció');
         const j = html.indexOf('Las unidades no se suman entre sí a propósito', i);
         return i < 0 ? '' : html.slice(i, j < 0 ? html.length : j);
     }
     /* Lo que de verdad quedó en cada lista: se recorta el bloque de cada
        sección del HTML que salió y se leen los nombres de sus renglones. */
     function lista(html, cual) {
-        const ini = html.indexOf(cual === 'falta' ? 'Faltantes — lo que no apareció' : 'Sobrantes — lo que apareció de más');
+        const ini = html.indexOf(cual === 'falta' ? 'Faltantes — lo que NO apareció' : 'Sobrantes — lo que apareció DE MÁS');
         if (ini < 0) return '(sin sección)';
-        const fin = html.indexOf('Total ' + (cual === 'falta' ? 'faltante' : 'sobrante'), ini);
+        const fin = html.indexOf('TOTAL ' + (cual === 'falta' ? 'FALTANTE' : 'SOBRANTE'), ini);
         const trozo = html.slice(ini, fin < 0 ? html.length : fin);
         return FILAS.map(f => f.nombre).filter(n => trozo.indexOf('>' + n + '<') > -1).join(',');
     }
@@ -30576,10 +30595,12 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
     const H = reporte('faltsobr');
 
     test('el reporte de faltantes y sobrantes sale con sus dos listas', () =>
-        eq(H.indexOf('Faltantes — lo que no apareció') > -1 && H.indexOf('Sobrantes — lo que apareció de más') > -1,
+        eq(H.indexOf('Faltantes — lo que NO apareció') > -1 && H.indexOf('Sobrantes — lo que apareció DE MÁS') > -1,
            true, 'las dos'));
     test('en faltantes van los que no aparecieron', () =>
-        eq(lista(H, 'falta'), 'Ron barato,Tequila caro', 'faltantes'));
+        eq(lista(H, 'falta'),
+           'Agua mineral,Ron barato,Tequila caro,Jugo de naranja 1L,Agua embotellada 500ml,Coca Cola 355 ml',
+           'faltantes'));
     test('…y en sobrantes los que aparecieron de más', () =>
         eq(lista(H, 'sobra'), 'Cerveza', 'sobrantes'));
     test('el que cuadró clavado no sale en ninguna lista', () =>
@@ -30600,7 +30621,7 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
        mismo. Se comparan contra el resumen de verdad, no contra un número
        escrito a mano aquí. */
     function totalDe(html, cual) {
-        const i = html.indexOf('Total ' + cual);
+        const i = html.indexOf('TOTAL ' + cual);
         if (i < 0) return null;
         const m = /\$([\d,]+\.\d\d)/.exec(html.slice(i, i + 400));
         return m ? parseFloat(m[1].replace(/,/g, '')) : null;
@@ -30625,19 +30646,32 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
        mismo recorrido que alimenta al resumen ejecutivo. Son dos cuentas. */
     test('el total de cada lista cuadra con su renglón del resumen al pie', () => {
         const b = bloqueFS(H);
-        const tot = /Total faltante[\s\S]*?\$([\d,]+\.\d\d)/.exec(b);
+        const tot = /TOTAL FALTANTE[\s\S]*?\$([\d,]+\.\d\d)/.exec(b);
         const lin = /Faltantes \(\d+\)[\s\S]*?−\$([\d,]+\.\d\d)/.exec(b);
         if (!tot || !lin) throw new Error('faltó un total · tot=' + !!tot + ' lin=' + !!lin);
         return eq(tot[1], lin[1], 'el mismo número');
     });
     test('hay un total por cada lista y un neto al final', () =>
-        eq((H.indexOf('Total faltante') > -1) + '|' + (H.indexOf('Total sobrante') > -1) + '|' +
+        eq((H.indexOf('TOTAL FALTANTE') > -1) + '|' + (H.indexOf('TOTAL SOBRANTE') > -1) + '|' +
            (H.indexOf('Resultado neto del período') > -1), 'true|true|true', 'los tres'));
     /* Sumar copas con piezas con gramos no significa nada. La fila de totales
        solo lleva dinero: la columna de Diferencia se queda dentro del colspan. */
-    test('las unidades NO se suman entre sí', () =>
-        eq(/Total faltante[^<]*<\/td>/.test(H.replace(/\s+/g, ' ')) ||
-           H.indexOf('colspan="6"') > -1, true, 'sin total de unidades'));
+    /* El renglón de totales no puede llevar un total de unidades: «12 cop + 3
+       pza + 500 g» no significa nada. Se comprueba contando: la etiqueta tapa
+       con su colspan todas las columnas hasta el dinero, y después van DOS
+       celdas y ni una más. Contar columnas aguanta que se agregue o se quite
+       una; buscar un colspan fijo no. */
+    test('las unidades NO se suman entre sí', () => {
+        const b = bloqueFS(H);
+        const cols = (b.slice(b.indexOf('<thead>'), b.indexOf('</thead>')).match(/<th\b/g) || []).length;
+        const fila = b.slice(b.indexOf('TOTAL FALTANTE'));
+        const cs = parseInt((/colspan="(\d+)"/.exec(b.slice(b.lastIndexOf('<td colspan', b.indexOf('TOTAL FALTANTE')))) || [])[1], 10);
+        // `fila` arranca DENTRO de la celda de la etiqueta, así que lo que se
+        // cuenta son las celdas de dinero que vienen después.
+        const dinero = (fila.slice(0, fila.indexOf('</tr>')).match(/<td\b/g) || []).length;
+        return eq(cols + '|' + dinero + '|' + (cs + dinero), cols + '|2|' + cols,
+                  'columnas=' + cols + ' colspan=' + cs + ' dinero=' + dinero);
+    });
     test('…y la hoja lo dice, para que nadie lo busque', () =>
         eq(H.indexOf('Las unidades no se suman entre sí a propósito') > -1, true, 'explicado'));
 
@@ -30658,6 +30692,85 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
         const b = bloqueFS(H);
         const fila = b.slice(b.indexOf('>Cerveza<'), b.indexOf('>Cerveza<') + 900);
         return eq(fila.indexOf(' bot'), -1, 'sin botellas');
+    });
+
+    /* UN 0% QUE NUNCA SE CALCULÓ. La varianza se mide contra lo que se usó;
+       un insumo sin ventas ni producción no tiene contra qué medirse, y el
+       reporte lo redondeaba a «+0.0%» — el color de «aquí no pasa nada»,
+       justo encima del renglón que más producto perdió, porque el que no
+       vendió nada es exactamente el que se queda sin base. */
+    test('sin con qué comparar, la varianza dice «—» y no un 0% inventado', () => {
+        const b = bloqueFS(H);
+        const fila = b.slice(b.indexOf('>Jugo de naranja 1L<'), b.indexOf('>Jugo de naranja 1L<') + 1200);
+        return eq(/font-weight:700"[^>]*>—</.test(fila) && fila.indexOf('>+0.0%<') === -1, true,
+                  'sin cero inventado');
+    });
+    test('…y lo explica al pasar el ratón, en vez de dejar un guion mudo', () => {
+        const b = bloqueFS(H);
+        const fila = b.slice(b.indexOf('>Jugo de naranja 1L<'), b.indexOf('>Jugo de naranja 1L<') + 1200);
+        return eq(fila.indexOf('no hay contra qué medir la varianza') > -1, true, 'explicado');
+    });
+
+    /* ── PARTIDO POR GRUPO ──
+       «Me faltan $4,700» no dice qué hacer. «Me faltan $4,300 en destilados y
+       $400 en refrescos» ya apunta a una barra o a una bodega. */
+    const soloFalt = () => { const b = bloqueFS(H); return b.slice(0, b.indexOf('TOTAL FALTANTE')); };
+    test('cada lista se parte por grupo, con su subtotal en dinero', () => {
+        const sub = [...soloFalt().matchAll(/Subtotal ([^·<]+) ·/g)].map(m => m[1].trim());
+        return eq(sub.length >= 2 && sub.indexOf('Destilados') > -1, true, 'subtotales: ' + sub.join(' / '));
+    });
+    /* Y que los subtotales SUMEN el total del lado: son dos cuentas distintas
+       —cada grupo por su lado, el total acumulando todo— y si se separan, la
+       hoja se contradice a sí misma a la vista de cualquiera. */
+    /* Las DOS columnas de dinero, no solo la de costo: un total que dejara de
+       sumar la de carta se escaparía entero mirando una sola. */
+    test('los subtotales de un lado suman exactamente su total', () => {
+        const dosCifras = txt => [...txt.matchAll(/\$([\d,]+\.\d\d)/g)]
+            .slice(0, 2).map(m => parseFloat(m[1].replace(/,/g, '')));
+        const subs = [...soloFalt().matchAll(/Subtotal [^<]*<\/td>([\s\S]*?)<\/tr>/g)].map(m => dosCifras(m[1]));
+        const b = bloqueFS(H);
+        const tot = dosCifras(b.slice(b.indexOf('TOTAL FALTANTE')));
+        if (!subs.length || tot.length < 2) throw new Error('subtotales=' + subs.length + ' total=' + tot.join(','));
+        const suma = i => subs.reduce((a, c) => a + (c[i] || 0), 0).toFixed(2);
+        return eq(suma(0) + ' / ' + suma(1), tot[0].toFixed(2) + ' / ' + tot[1].toFixed(2), 'cuadran las dos');
+    });
+    /* Por el TOTAL del grupo, no por su renglón más caro: el tequila es el
+       renglón que más duele y está en destilados, pero los refrescos juntos
+       pesan más. Ordenar por "el primero que apareció" daría destilados. */
+    test('el grupo que más dinero mueve va arriba, aunque el renglón top esté en otro', () => {
+        const f = soloFalt();
+        return eq(f.indexOf('>Refrescos') > -1 && f.indexOf('>Refrescos') < f.indexOf('>Destilados<'),
+                  true, 'por total del grupo');
+    });
+    /* Y que las dos listas no se puedan confundir de un vistazo: el rótulo de
+       faltantes va en rojo y el de sobrantes en verde. Edwin vio la hoja
+       entera en rojo —porque los sobrantes se habían recortado— y lo primero
+       que preguntó fue cuál era cuál. */
+    test('los dos rótulos se distinguen por color', () => {
+        const f = /class="rd-sec rd-fs" style="color:(#[0-9a-f]{6})[^"]*">▼ Faltantes/.exec(H);
+        const o = /class="rd-sec rd-fs" style="color:(#[0-9a-f]{6})[^"]*">▲ Sobrantes/.exec(H);
+        return eq((f && f[1]) + '/' + (o && o[1]), '#c0392b/#1a7a4a', 'rojo y verde');
+    });
+
+    /* ── El color de la varianza ──
+       En esta hoja manda el SIGNO, no la magnitud. El código de colores del
+       reporte directivo pinta por tamaño (verde hasta 10%, ámbar hasta 25%),
+       así que un −0.4% salía verde en la lista de faltantes: un renglón que
+       dice que falta producto, en el color de que todo está bien. */
+    /* La Coca falta −0.6% contra una venta de 900 piezas: por MAGNITUD el
+       código de colores del directivo la pintaría verde, que en una lista de
+       faltantes se lee como «aquí no pasa nada». */
+    test('una varianza negativa va en rojo aunque sea chica', () => {
+        const b = bloqueFS(H);
+        const fila = b.slice(b.indexOf('>Coca Cola 355 ml<'), b.indexOf('>Coca Cola 355 ml<') + 1200);
+        const m = /color:(#[0-9a-f]{6});font-weight:700"[^>]*>-0\.6%/.exec(fila);
+        return eq(m && m[1], '#c0392b', 'rojo · ' + (m && m[1]) + ' · ' + /(-?[\d.]+)%/.exec(fila));
+    });
+    test('…y una positiva en verde', () => {
+        const b = bloqueFS(H);
+        const fila = b.slice(b.indexOf('>Cerveza<'), b.indexOf('>Cerveza<') + 1200);
+        const m = /color:(#[0-9a-f]{6});font-weight:700"[^>]*>\+/.exec(fila);
+        return eq(m && m[1], '#1a7a4a', 'verde · ' + (m && m[1]));
     });
 
     /* ── Cómo se rotula y cómo se salta de un reporte a otro ── */
@@ -30692,27 +30805,69 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
     test('…y con permiso se queda donde está', () =>
         eq((permisos(true)['btnRepFaltSobr'] || { style:{} }).style.display, undefined, 'visible'));
 
+    /* ── LAS PIEZAS VAN SUELTAS, NO ENVUELTAS ───────────────────────────────
+       EL BUG QUE EDWIN VIO: el reporte salía con los faltantes y ya — ni los
+       sobrantes ni el neto. Iban los cinco dentro de un solo <div>, y el
+       paginador solo sabe partir lo que cuelga DIRECTO de #rd-src: midió el
+       bloque entero, no cupo en la hoja, y como .rd-pagebody recorta lo que
+       sobra, todo lo que pasaba de la primera página desapareció en silencio.
+       Nada falló, nada se quejó: la hoja simplemente salía corta.
+
+       Por eso esto no cuenta cuántas veces aparece cada sección, sino a qué
+       PROFUNDIDAD cuelga cada una. */
+    function hijosDirectos(html) {
+        const i = html.indexOf('<div id="rd-src">');
+        if (i < 0) return [];
+        const VACIAS = /^(br|img|hr|input|meta|link|col|source)$/i;
+        const re = /<!--[\s\S]*?-->|<\/?([a-zA-Z][\w-]*)([^>]*)>/g;
+        re.lastIndex = html.indexOf('>', i) + 1;
+        let m, prof = 0;
+        const directos = [];
+        while ((m = re.exec(html))) {
+            if (m[0].indexOf('<!--') === 0) continue;
+            const tag = m[1], cierra = m[0][1] === '/', auto = /\/>$/.test(m[0]) || VACIAS.test(tag);
+            if (cierra) { if (prof === 0) break; prof--; continue; }   // el </div> de #rd-src
+            if (prof === 0) directos.push({ tag: tag.toLowerCase(), attrs: m[2] || '' });
+            if (!auto) prof++;
+        }
+        return directos;
+    }
+    test('las piezas del reporte cuelgan DIRECTO del documento, no envueltas', () => {
+        const dir = hijosDirectos(H).filter(n => / class="[^"]*\brd-fs\b/.test(n.attrs));
+        const todas = (H.replace(/<!--[\s\S]*?-->/g, '').match(/\brd-fs\b/g) || []).length;
+        return eq(dir.length + '/' + todas, todas + '/' + todas,
+                  'sueltas · directas=' + dir.length + ' marcadas=' + todas);
+    });
+    test('…y son las dos listas, sus rótulos y el neto', () => {
+        const dir = hijosDirectos(H).filter(n => / class="[^"]*\brd-fs\b/.test(n.attrs));
+        return eq(dir.filter(n => n.tag === 'table').length >= 3 && dir.length >= 7, true,
+                  'completas · ' + dir.map(n => n.tag).join(','));
+    });
+
     /* ── La poda: cada reporte se lleva SOLO su parte ── */
     /* Un contenedor de mentira con lo mínimo que la regla toca. Correrla de
-       verdad es la única forma de saber que el bloque nuevo no se cuela en el
-       resumen ni se queda fuera del suyo. */
+       verdad es la única forma de saber que las piezas nuevas no se cuelan en
+       el resumen ni se quedan fuera del suyo. */
     function fuente() {
-        const hijo = (cls, txt, id) => ({
-            id: id || '', textContent: txt || '',
+        const hijo = (cls, txt) => ({
+            textContent: txt || '',
             classList: { _c:(cls||'').split(' ').filter(Boolean), contains(x){ return this._c.indexOf(x) > -1; } },
             remove() { cont.children = cont.children.filter(n => n !== this); },
         });
         const cont = {
             children: [hijo('rd-sec','Resumen ejecutivo'), hijo('','tabla-kpis'),
                        hijo('rd-break'), hijo('rd-sec','Inventario completo por grupo'),
-                       hijo('','tablas-por-insumo'), hijo('', '', 'rd-faltsobr')],
-            querySelector(sel) { const id = String(sel).replace('#', ''); return this.children.filter(n => n.id === id)[0] || null; },
+                       hijo('','tablas-por-insumo'),
+                       hijo('rd-sec rd-fs','Faltantes'), hijo('rd-t rd-fs','tabla-faltantes'),
+                       hijo('rd-sec rd-fs','Sobrantes'), hijo('rd-t rd-fs','tabla-sobrantes'),
+                       hijo('rd-t rd-fs','tabla-neto')],
+            querySelector() { return null; },
             get firstElementChild(){ return this.children[0] || null; },
             get lastElementChild(){ return this.children[this.children.length-1] || null; },
         };
         return cont;
     }
-    const texto = c => c.children.map(n => n.id || n.textContent).join('|');
+    const texto = c => c.children.map(n => n.textContent).join('|');
 
     const cRes = fuente(); F._rdPodarPorModo(cRes, '');
     test('el resumen se queda con lo general y suelta el resto', () =>
@@ -30723,10 +30878,10 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
         eq(texto(cDes), 'Inventario completo por grupo|tablas-por-insumo', 'podado'));
 
     const cFS = fuente(); F._rdPodarPorModo(cFS, 'faltsobr');
-    test('faltantes y sobrantes se lleva SOLO su bloque', () =>
-        eq(texto(cFS), 'rd-faltsobr', 'podado'));
-    test('…y su bloque no se cuela en los otros dos', () =>
-        eq(texto(cRes).indexOf('rd-faltsobr') + texto(cDes).indexOf('rd-faltsobr'), -2, 'fuera'));
+    test('faltantes y sobrantes se lleva SOLO sus piezas, las CINCO', () =>
+        eq(texto(cFS), 'Faltantes|tabla-faltantes|Sobrantes|tabla-sobrantes|tabla-neto', 'podado'));
+    test('…y no se cuelan en los otros dos', () =>
+        eq(/Faltantes|Sobrantes/.test(texto(cRes) + texto(cDes)), false, 'fuera'));
 })();
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
