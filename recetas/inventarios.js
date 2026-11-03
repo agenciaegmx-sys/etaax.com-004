@@ -10660,18 +10660,52 @@ function verReporteDirectivo(gerencial, modo) {
        documento: así el paginador puede partirlas por renglón. Envueltas en
        un contenedor mide el bulto entero, no cabe, y lo que sobra lo recorta
        sin avisar — que es como esta hoja salía sin sobrantes. */
-    function _lineaTotalFS(etiqueta, n, costo, carta, col, fuerte){
-        const borde = fuerte ? '2px solid #1a1916' : '1px solid #ddd';
-        const peso  = fuerte ? 900 : 700;
-        return `<tr style="background:${fuerte ? '#f0efe9' : '#f8f8f4'}">
-            <td colspan="5" style="font-weight:${peso};border-top:${borde}">${etiqueta} · ${n} producto${n!==1?'s':''}</td>
-            <td class="tr" style="font-weight:${peso};color:${col};border-top:${borde}">${$g('$'+_m2(costo))}</td>
-            <td class="tr" style="font-weight:${peso};color:${col};border-top:${borde}">${$g('$'+_m2(carta))}</td></tr>`;
+    /* El dinero de un renglón, definido UNA vez: lo usan la fila, el subtotal
+       del compuesto, el del grupo y el total del lado. Cuatro sumas sobre dos
+       definiciones distintas es como una hoja acaba sin cuadrar consigo misma. */
+    const _costoFS = a => Math.abs(a.dif) * a.cc;      // lo que costó reponerlo
+    const _cartaFS = a => Math.abs(a.difCosto);        // lo que se hubiera cobrado
+    function _lineaTotalFS(etiqueta, n, costo, carta, col, nivel, sust){
+        const est = nivel === 'total' ? { borde:'2px solid #1a1916', peso:900, bg:'#f0efe9' }
+                  : nivel === 'comp'  ? { borde:'1px dashed #ccc',   peso:600, bg:'#fbfbf8' }
+                  :                     { borde:'1px solid #ddd',    peso:700, bg:'#f8f8f4' };
+        sust = sust || ['producto', 'productos'];
+        return `<tr style="background:${est.bg}">
+            <td colspan="5" style="font-weight:${est.peso};border-top:${est.borde}">${etiqueta} · ${n} ${n === 1 ? sust[0] : sust[1]}</td>
+            <td class="tr" style="font-weight:${est.peso};color:${col};border-top:${est.borde}">${$g('$'+_m2(costo))}</td>
+            <td class="tr" style="font-weight:${est.peso};color:${col};border-top:${est.borde}">${$g('$'+_m2(carta))}</td></tr>`;
+    }
+    /* QUÉ ES ESTE RENGLÓN, además de su nombre. «Bacardí Blanco» sale dos
+       veces en la hoja —una por presentación— y sin decir cuál es de 700 y
+       cuál de 980 no hay manera de saber a cuál le falta.
+
+       Sale de la etiqueta canónica (insumo-label.js), la misma que usan la
+       captura y las fichas, y no de un formato propio de esta hoja. Si el
+       catálogo todavía no tiene la presentación, se cae al contenido del
+       propio renglón antes que dejar la línea muda. Y si el producto está en
+       un compuesto, se dice: así se entiende por qué dos renglones distintos
+       traen abajo una línea que los suma. */
+    function _metaFS(f) {
+        if (!f) return '';
+        const partes = [];
+        let meta = '';
+        try { meta = (typeof insumoMeta === 'function') ? insumoMeta(f) : ''; } catch (e) {}
+        if (meta) partes.push(meta);
+        else {
+            const cn = parseFloat(f.contNeto) || 0;
+            if (cn > 0) { try { partes.push(_fmtEquivalenteBatch(cn, _unidadBaseDeFila(f))); } catch (e) {} }
+        }
+        const c = _compDeMiembro[f.insumoId];
+        if (c && c.nombre) partes.push('🧩 ' + c.nombre);
+        return partes.join(' · ');
     }
     function _rdFilaFS(a, col){
         const u     = a.f.tipo === 'pza' ? 'pza' : 'cop';
-        const costo = Math.abs(a.dif) * a.cc;       // lo que costó comprarlo
-        const carta = Math.abs(a.difCosto);         // lo que se hubiera cobrado
+        const costo = _costoFS(a);
+        const carta = _cartaFS(a);
+        const meta  = _metaFS(a.f);
+        let nom = a.f.nombre || '';
+        try { nom = (typeof insumoTitulo === 'function' && insumoTitulo(a.f)) || nom; } catch (e) {}
         /* «¿Cuántas botellas me faltan?» es LA pregunta de esta hoja, y «−26
            cop» no la contesta: debajo de la diferencia van las equivalencias
            de barra, con el signo puesto, desde el mismo sitio que el resultado
@@ -10685,7 +10719,7 @@ function verReporteDirectivo(gerencial, modo) {
            OJO: cualquier comentario va en el CÓDIGO, no en la plantilla de
            abajo. Dentro del texto viaja al HTML y se repite por renglón. */
         return { costo, carta, html: `<tr>
-            <td style="font-weight:600">${etx(a.f.nombre)}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
+            <td style="font-weight:600">${etx(nom)}${meta?`<div style="font-size:8.5px;color:#777;font-weight:400;margin-top:1px">${etx(meta)}</div>`:''}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
             <td class="tc">${_exFmt(a, a.fisico)}</td>
             <td class="tc">${_exFmt(a, a.teorico)}</td>
             <td class="tc" style="font-weight:700;color:${col}">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}${_equivBarraHTML(a.dif, a.f, { signo:true, impreso:true })}</td>
@@ -10712,12 +10746,47 @@ function verReporteDirectivo(gerencial, modo) {
             if (!porGrupo[g]) { porGrupo[g] = []; orden.push(g); }
             porGrupo[g].push(a);
         });
+        /* LAS PRESENTACIONES DE UN COMPUESTO VAN JUNTAS, con su línea
+           combinada debajo. «Caguamas» no es una cosa y otra: es un producto
+           que se vende en dos envases, y con los renglones repartidos por la
+           tabla no hay manera de ver cuánto le falta AL PRODUCTO. Cada
+           presentación sigue en su renglón —ese es el desglose— y la línea de
+           abajo es el resumen. */
+        const _filasDeGrupo = (lista) => {
+            const unidades = [], porComp = {};
+            lista.forEach(a => {
+                const c = _compDeMiembro[a.f.insumoId];
+                if (!c) { unidades.push({ solo:a, costo:_costoFS(a), carta:_cartaFS(a) }); return; }
+                let u = porComp[c.id];
+                if (!u) { u = porComp[c.id] = { comp:c, items:[], costo:0, carta:0 }; unidades.push(u); }
+                u.items.push(a); u.costo += _costoFS(a); u.carta += _cartaFS(a);
+            });
+            // El compuesto pesa lo que pesan sus presentaciones juntas: así se
+            // ordena entre los demás, no por su renglón más caro.
+            unidades.sort((x, y) => y.costo - x.costo);
+            let html = '', costo = 0, carta = 0, n = 0;
+            unidades.forEach(u => {
+                if (u.solo) { html += _rdFilaFS(u.solo, col).html; }
+                else {
+                    html += u.items.map(a => _rdFilaFS(a, col).html).join('');
+                    /* Con UNA sola presentación en esta lista la línea
+                       combinada repetiría el renglón de arriba palabra por
+                       palabra. Un total de un solo sumando no es un total:
+                       es ruido que hace más larga la hoja. (Puede pasar de
+                       sobra: un envase falta y el otro sobra, y cada uno cae
+                       en su lista.) */
+                    if (u.items.length > 1)
+                        html += _lineaTotalFS('🧩 ' + u.comp.nombre, u.items.length, u.costo, u.carta, col, 'comp', ['presentación', 'presentaciones']);
+                }
+                costo += u.costo; carta += u.carta; n += u.solo ? 1 : u.items.length;
+            });
+            return { html, costo, carta, n };
+        };
         const bloques = [];
         // …y los GRUPOS también por impacto: el que más dinero mueve, arriba.
         orden.map(g => {
-            let c = 0, k = 0;
-            const filas = porGrupo[g].map(a => { const r = _rdFilaFS(a, col); c += r.costo; k += r.carta; return r.html; });
-            return { g, filas, costo:c, carta:k, n:porGrupo[g].length };
+            const r = _filasDeGrupo(porGrupo[g]);
+            return { g, filas:[r.html], costo:r.costo, carta:r.carta, n:r.n };
         }).sort((x, y) => y.costo - x.costo).forEach(b => {
             out.costo += b.costo; out.carta += b.carta;
             bloques.push(
@@ -10727,12 +10796,12 @@ function verReporteDirectivo(gerencial, modo) {
                    <tfoot> se perdería, porque al partir una tabla larga el
                    paginador clona la cabecera y no el pie — y una hoja de
                    totales sin totales no se ve rota, se ve corta. */
-                _lineaTotalFS('Subtotal ' + b.g, b.n, b.costo, b.carta, col, false) +
+                _lineaTotalFS('Subtotal ' + b.g, b.n, b.costo, b.carta, col, 'grupo') +
                 `</tbody></table>`);
         });
         bloques.push(
             `<table class="rd-t rd-fs" style="margin-bottom:14px"><tbody>` +
-            _lineaTotalFS('TOTAL ' + quees.toUpperCase(), items.length, out.costo, out.carta, col, true) +
+            _lineaTotalFS('TOTAL ' + quees.toUpperCase(), items.length, out.costo, out.carta, col, 'total') +
             `</tbody></table>`);
         return bloques.join('');
     }

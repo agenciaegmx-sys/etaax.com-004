@@ -30586,6 +30586,16 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
         const j = html.indexOf('Las unidades no se suman entre sí a propósito', i);
         return i < 0 ? '' : html.slice(i, j < 0 ? html.length : j);
     }
+    /* Las dos celdas de dinero de un renglón —a costo y a carta—, leídas del
+       HTML que salió. Son las dos últimas cifras con $ antes de cerrar la
+       fila; la línea del contenido y la de equivalencias no llevan $. */
+    function dineroDe(html, nombre) {
+        const i = html.indexOf('>' + nombre + '<');
+        if (i < 0) throw new Error('sin renglón: ' + nombre);
+        const trozo = html.slice(i, html.indexOf('</tr>', i));
+        return [...trozo.matchAll(/\$([\d,]+\.\d\d)/g)]
+            .map(x => parseFloat(x[1].replace(/,/g, ''))).slice(-2);
+    }
     /* Lo que de verdad quedó en cada lista: se recorta el bloque de cada
        sección del HTML que salió y se leen los nombres de sus renglones. */
     function lista(html, cual) {
@@ -30713,6 +30723,103 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
         const b = bloqueFS(H);
         const fila = b.slice(b.indexOf('>Jugo de naranja 1L<'), b.indexOf('>Jugo de naranja 1L<') + 1200);
         return eq(fila.indexOf('no hay contra qué medir la varianza') > -1, true, 'explicado');
+    });
+
+    /* LAS DOS COLUMNAS MIDEN COSAS DISTINTAS: «a costo» es lo que costó
+       reponer el producto y «a carta» lo que se hubiera cobrado por él. Se
+       comprueban contra las funciones de producción que definen cada cosa
+       —costoCopa y el precio de carta del renglón—, no contra una cifra
+       escrita aquí: si las dos columnas se calcularan igual, los totales
+       seguirían cuadrando entre sí y nadie lo notaría. */
+    test('«a costo» es lo que costó reponerlo y «a carta» lo que se hubiera cobrado', () => {
+        const fila = getVar(F, 'filasCaptura').filter(x => x.insumoId === 'f6')[0];
+        const dif = Math.abs(F._difS5(fila));
+        const [c, k] = dineroDe(bloqueFS(H), 'Coca Cola 355 ml');
+        return eq(c.toFixed(2) + ' / ' + k.toFixed(2),
+                  (dif * F.costoCopa(fila)).toFixed(2) + ' / ' + (dif * fila.precioCarta).toFixed(2),
+                  'cada columna lo suyo');
+    });
+
+    /* ══ QUÉ ES CADA RENGLÓN, ADEMÁS DE SU NOMBRE ════════════════════════
+       «Bacardí Blanco» sale dos veces en la hoja de Edwin —una por
+       presentación— y sin decir cuál es de 700 y cuál de 980 no hay manera de
+       saber a cuál le falta. Dos renglones con el mismo nombre y números
+       distintos no son un reporte, son una adivinanza. */
+    const DOS_PRESENT = [
+        { insumoId:'b7', nombre:'Bacardí Blanco', tipo:'copa', contNeto:700, copaML:45, categoria:'Destilados',
+          existenciaAnterior:20, cerradasBarra:0, pesos:[], ventasCopasDirectas:2, costoUnitario:300, precioCarta:90, entradas:[] },
+        { insumoId:'b9', nombre:'Bacardí Blanco', tipo:'copa', contNeto:980, copaML:45, categoria:'Destilados',
+          existenciaAnterior:20, cerradasBarra:0, pesos:[], ventasCopasDirectas:2, costoUnitario:380, precioCarta:90, entradas:[] },
+    ];
+    test('dos presentaciones del mismo producto se distinguen por su contenido', () => {
+        const b = bloqueFS(reporte('faltsobr', DOS_PRESENT));
+        return eq(b.indexOf('700 ml') > -1 && b.indexOf('980 ml') > -1, true,
+                  'con contenido · ' + (b.match(/\d+ ml/g) || []).join(','));
+    });
+
+    /* ══ LAS PRESENTACIONES DE UN COMPUESTO, JUNTAS ══════════════════════
+       «Caguamas» no es una cosa y otra: es un producto que se vende en dos
+       envases. Con los renglones repartidos por la tabla se puede ver cuánto
+       le falta a cada envase y nunca cuánto le falta AL PRODUCTO. Cada
+       presentación conserva su renglón —el desglose— y debajo va la línea que
+       las suma —el resumen—. */
+    function conCompuesto(fn) {
+        const comp = { id:'cg', nombre:'Caguamas', miembros:['g1','g2'] };
+        const prev = F._storage[F._compuestosKey()];
+        F._storage[F._compuestosKey()] = JSON.stringify([comp]);
+        try {
+            return fn([
+                { insumoId:'g1', nombre:'XX Lager Caguama', tipo:'pza', contNeto:940, categoria:'Cervezas',
+                  existenciaAnterior:30, cerradasBarra:20, ventasCopasDirectas:4, costoUnitario:45, precioCarta:99, entradas:[] },
+                { insumoId:'g2', nombre:'Carta Blanca Caguama', tipo:'pza', contNeto:940, categoria:'Cervezas',
+                  existenciaAnterior:30, cerradasBarra:22, ventasCopasDirectas:4, costoUnitario:45, precioCarta:99, entradas:[] },
+                { insumoId:'x1', nombre:'Suelto sin compuesto', tipo:'pza', categoria:'Cervezas',
+                  existenciaAnterior:50, cerradasBarra:10, ventasCopasDirectas:5, costoUnitario:60, precioCarta:120, entradas:[] },
+            ]);
+        } finally {
+            if (prev === undefined) delete F._storage[F._compuestosKey()];
+            else F._storage[F._compuestosKey()] = prev;
+        }
+    }
+    test('las presentaciones de un compuesto traen su línea combinada', () => {
+        const b = conCompuesto(filas => bloqueFS(reporte('faltsobr', filas)));
+        return eq(/🧩 Caguamas · 2 presentaciones/.test(b), true, 'resumen del producto');
+    });
+    /* Contra la SUMA DE LOS RENGLONES que están arriba, no contra un número
+       escrito aquí a mano: una cifra inventada en la prueba solo comprueba
+       que el código sigue haciendo lo mismo, no que esté bien. */
+    test('…y esa línea suma exactamente las dos presentaciones', () => {
+        const b = conCompuesto(filas => bloqueFS(reporte('faltsobr', filas)));
+        const a1 = dineroDe(b, 'XX Lager Caguama'), a2 = dineroDe(b, 'Carta Blanca Caguama');
+        const m = /🧩 Caguamas · 2 presentaciones<\/td>\s*<td[^>]*>\$([\d,]+\.\d\d)<\/td>\s*<td[^>]*>\$([\d,]+\.\d\d)/.exec(b);
+        if (!m) throw new Error('no se encontró la línea combinada');
+        const n2 = x => parseFloat(String(x).replace(/,/g, '')).toFixed(2);
+        return eq(n2(m[1]) + ' / ' + n2(m[2]),
+                  (a1[0] + a2[0]).toFixed(2) + ' / ' + (a1[1] + a2[1]).toFixed(2), 'la suma de las dos');
+    });
+    test('…y van pegadas, sin otro producto en medio', () => {
+        const b = conCompuesto(filas => bloqueFS(reporte('faltsobr', filas)));
+        const i = b.indexOf('>XX Lager Caguama<'), j = b.indexOf('>Carta Blanca Caguama<');
+        const k = b.indexOf('>Suelto sin compuesto<');
+        if (i < 0 || j < 0 || k < 0) throw new Error('faltó un renglón · ' + i + ',' + j + ',' + k);
+        const entre = Math.min(i, j) < k && k < Math.max(i, j);
+        return eq(entre, false, 'juntas');
+    });
+    /* Un total de un solo sumando no es un total: repetiría el renglón de
+       arriba palabra por palabra. Pasa a menudo — un envase falta y el otro
+       sobra, y cada uno cae en una lista distinta. */
+    test('con una sola presentación en la lista, no se repite el renglón', () => {
+        const b = conCompuesto(filas => bloqueFS(reporte('faltsobr', filas.slice(1))));
+        return eq(/🧩 Caguamas · 1 presentación/.test(b), false, 'sin línea de un solo sumando');
+    });
+    test('…pero el renglón sigue diciendo de qué compuesto es', () => {
+        const b = conCompuesto(filas => bloqueFS(reporte('faltsobr', filas.slice(1))));
+        return eq(b.indexOf('🧩 Caguamas') > -1, true, 'rotulado');
+    });
+    test('…y cada renglón dice a qué compuesto pertenece', () => {
+        const b = conCompuesto(filas => bloqueFS(reporte('faltsobr', filas)));
+        return eq((b.match(/🧩 Caguamas/g) || []).length >= 3, true,
+                  'rotulados · ' + (b.match(/🧩 Caguamas/g) || []).length);
     });
 
     /* ── PARTIDO POR GRUPO ──
