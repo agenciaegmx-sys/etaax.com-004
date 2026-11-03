@@ -84,7 +84,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         const r=c._fusionarRows([row('a'),row('b')]);eq(r.length,1);eq(r[0].stockMiembros.length,2);eq((c._stockReporteHTML(r[0],true).match(/Stock bajo/g)||[]).length,2);
     });
     // Impreso real: comprobar valores, variedad y dos renglones sin duplicar fórmulas.
-    cargar('recetas/insumos.js',['_costoPorMLp','_mezBotDatos','_costeoCopaDatos','_costeoPiezaDatos','_refrescoCostoPorPieza','calcCostoCopa','toML','_grupoIns','_agruparPDF','_filaGrupoPDF','_presTxtPDF','_costeoUtil','_costeoCeldas','_imprimirCosteoPDF']);
+    cargar('recetas/insumos.js',['_costoPorMLp','_mezBotDatos','_costeoCopaDatos','_costeoPiezaDatos','_refrescoCostoPorPieza','calcCostoCopa','toML','_grupoIns','_agruparPDF','_filaGrupoPDF','_presTxtPDF','_partesIns','_costeoUtil','_costeoCeldas','_imprimirCosteoPDF']);
     c.OZ_ML=29.5735;c.COPA_ML=60;c._CSS_TABLA_PDF='';c._notaAlcance=()=>'';c._optsReporteIns=()=>({});c._abrirHorizontal=html=>{c.impreso=html;};c.etaaxReporteDoc=o=>o.cuerpo;c.fmtMXN=v=>'$'+Number(v).toFixed(2);c._subUnidadNombre=()=>'';
     const soda={id:'soda',nombre:'Soda',variedad:'Natural',tipoInsumo:'refresco',presentaciones:[{contNeto:600,umContenido:'ML',precio:10,costoPieza:10,costoUnitario:10/0.6,factorPieza:2,precioCarta:25}]};
     const ron={id:'ron',nombre:'Ron',variedad:'Añejo <script>',tipoInsumo:'destilado',subcategoria:'Ron',presentaciones:[{contNeto:750,umContenido:'ML',costoUnitario:400,umCosto:'LT',tamanoCopa:60,umTamanoCopa:'ML',factorCopa:3.3,precioCarta:150,factorBotella:2.5,precioCartaBot:1000,mezcladorId:'soda',mezcladores:2,mezcladoresBot:5}]};

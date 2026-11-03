@@ -31387,6 +31387,64 @@ console.log('\n══ BH59 · El costeo: seis columnas, dos renglones ══');
         return eq(a.join(' ') , b.join(' '), 'iguales · pantalla=' + a.length + ' papel=' + b.length);
     });
 
+    /* ══ EL NOMBRE Y LA VARIEDAD, UNA SOLA VEZ ══════════════════════════
+       Lo vio Edwin: «Havana Club · Añejo 7 años · Añejo 7 años». Muchos
+       insumos traen el mismo texto en `maduracion` y en `variedad`, y
+       pegarlos a mano lo repetía. La etiqueta canónica (insumo-label.js) ya
+       decide cuál manda — concatenar por nuestra cuenta fue el error. */
+    const HAVANA = { id:'h1', nombre:'Havana Club', maduracion:'Añejo 7 años', variedad:'Añejo 7 años',
+        activo:'1', tipoInsumo:'destilado', categoria:'Ron',
+        presentaciones:[{ contNeto:700, umContenido:'ML', costoUnitario:692.86, umCosto:'LT',
+            tamanoCopa:60, umTamanoCopa:'ML', factorCopa:3.3, factorBotella:2.5, precioCarta:'150' }] };
+    test('la variedad no se repite cuando viene igual en los dos campos', () => {
+        const J = pantalla([HAVANA, REFR]);
+        const C = J._costeoCeldas(HAVANA, [HAVANA, REFR]);
+        return eq(C.bebida.nombre + ' | ' + C.bebida.variedad, 'Havana Club | Añejo 7 años', 'una vez');
+    });
+    test('…ni en la pantalla ni en el papel', () => {
+        const J = pantalla([HAVANA, REFR]);
+        const cuenta = h => (h.match(/Añejo 7 años/g) || []).length;
+        return eq(cuenta(pant(J)) + '|' + cuenta(papel(J)), '1|1', 'una vez en cada una');
+    });
+    /* Y cuando SÍ son cosas distintas, manda la variedad: es la decisión de la
+       etiqueta canónica, la misma que ven la captura y las fichas. */
+    test('con maduración y variedad distintas, la hoja dice lo mismo que el resto del sistema', () => {
+        const dos = JSON.parse(JSON.stringify(HAVANA));
+        dos.maduracion = 'Añejo'; dos.variedad = '7 años';
+        const J = pantalla([dos, REFR]);
+        const C = J._costeoCeldas(dos, [dos, REFR]);
+        return eq(C.bebida.variedad, J.insumoPartes(dos).variedad, 'la canónica');
+    });
+
+    /* Y la razón de fondo para usar la canónica y no un respaldo propio: en
+       datos viejos la variedad viene PEGADA al nombre, y `nombreBase` es el
+       campo limpio. Sin la etiqueta, el costeo diría «Havana Club Añejo 7
+       años» con «Añejo 7 años» otra vez debajo — la misma repetición por
+       otro camino. */
+    test('con el nombre viejo que trae la variedad pegada, se usa el campo limpio', () => {
+        const viejo = JSON.parse(JSON.stringify(HAVANA));
+        viejo.nombre = 'Havana Club Añejo 7 años';
+        viejo.nombreBase = 'Havana Club';
+        const J = pantalla([viejo, REFR]);
+        const C = J._costeoCeldas(viejo, [viejo, REFR]);
+        return eq(C.bebida.nombre + ' | ' + C.bebida.variedad, 'Havana Club | Añejo 7 años', 'limpio');
+    });
+
+    /* El respaldo por si la etiqueta canónica NO cargó. En este proyecto ya
+       pasó —una pantalla reventó con «StaffArea.veInsumo is not a function»
+       porque el compartido no estaba—, y quedarse sin nombre en el costeo es
+       peor que repetir un texto. Se corre SIN insumo-label.js para que el
+       respaldo no sea código que nadie ejecuta nunca. */
+    test('si la etiqueta canónica no cargó, el costeo igual dice su nombre', () => {
+        const J = crearContexto();
+        cargarJS(J, 'etaax-core.js'); cargarJS(J, 'security.js');
+        cargarJS(J, 'recetas/insumos.js');          // ← a propósito, sin insumo-label.js
+        J._storage['etaax_negocio_activo'] = 'n1';
+        const C = J._costeoCeldas(HAVANA, [HAVANA, REFR]);
+        return eq(typeof J.insumoPartes + ' · ' + C.bebida.nombre + ' | ' + C.bebida.variedad,
+                  'undefined · Havana Club | Añejo 7 años', 'con respaldo');
+    });
+
     /* ══ LAS REGLAS QUE YA SE VIGILABAN, AHORA CORRIÉNDOLAS ══════════════
        Estas conductas estaban cubiertas por pruebas que buscaban su texto en
        el código fuente. Al rediseñar la hoja todas se pusieron rojas sin que

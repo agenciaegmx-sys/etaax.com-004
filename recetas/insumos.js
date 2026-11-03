@@ -1481,6 +1481,12 @@
         4 Sugerido    el precio que sale de la cuenta
         5 Cómo sale   esa cuenta, escrita: costo × múltiplo + refrescos
         6 En carta    lo que de verdad se cobra y cuánto deja              */
+   /* La etiqueta canónica, con respaldo por si el compartido no cargó: sin
+      él, el costeo se quedaría sin nombre, que es peor que repetir texto. */
+   function _partesIns(ins) {
+       if (typeof insumoPartes === 'function') { try { return insumoPartes(ins) || {}; } catch (e) {} }
+       return { nombre: (ins && ins.nombre) || '', variedad: (ins && (ins.variedad || ins.maduracion)) || '' };
+   }
    function _costeoUtil(precio, costo) {
        if (!(precio > 0) || !(costo > 0)) return null;
        return { pct: (precio - costo) / costo * 100, mult: precio / costo };
@@ -1498,8 +1504,14 @@
        return {
            D: D,
            bebida: {
-               nombre:   ins.nombre || '',
-               variedad: [ins.maduracion, ins.variedad].filter(Boolean).join(' · '),
+               /* EL NOMBRE Y LA VARIEDAD SALEN DE LA ETIQUETA CANÓNICA
+                  (insumo-label.js), no de una concatenación propia. Pegar
+                  `maduracion · variedad` a mano repetía el texto en los
+                  insumos que traen lo mismo en los dos campos: «Havana Club ·
+                  Añejo 7 años · Añejo 7 años». La etiqueta ya decide cuál
+                  manda, y es la misma que usan la captura y las fichas. */
+               nombre:   (_partesIns(ins).nombre || ins.nombre || ''),
+               variedad: _partesIns(ins).variedad || '',
                grupo:    _grupoIns(ins),
                present:  contML > 0 ? contML + ' ML' : '',
                compra:   n(D.costoBot),
