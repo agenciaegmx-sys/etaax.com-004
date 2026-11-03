@@ -45,7 +45,7 @@ function _aplicarPermisosInv(){
     if(!_puedeInv('capturar')) ['btnNuevoInv','btnPrimerLev','btnIniciarInv'].forEach(_invOcultar);
     if(!_puedeInv('entradas')) _invOcultar('btnAgregarEntrada');
     if(!_puedeInv('qr'))       _invOcultar('btnQrEntradas');
-    if(!_puedeInv('reporte'))  ['btnReporteExistencias','btnRepGerencial','btnRepDirectivo','btnRepDesglose','btnRepFaltSobr']
+    if(!_puedeInv('reporte'))  ['btnReporteExistencias','btnRepGerencial','btnRepDirectivo','btnRepDesglose']
                                   .forEach(_invOcultar);
     if(!_puedeInv('cerrar'))   ['btnFinalizarInv','btnFinalizarLev'].forEach(_invOcultar);
     /* El dinero del reporte se quita por CSS: las tablas se repintan con cada
@@ -282,7 +282,6 @@ document.addEventListener('DOMContentLoaded', function(){
                         <button class="btn-vista" id="btnRepGerencial" style="color:#3dbe7a;border-color:#3dbe7a" onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
                         <button class="btn-vista" id="btnRepDirectivo" style="color:var(--accent);border-color:var(--accent)" onclick="verReporteDirectivo()">📄 Reporte directivo</button>
                         <button class="btn-vista" id="btnRepDesglose" onclick="verReporteDirectivo(false,'desglose')" title="Solo las tablas por insumo — se exporta aparte del resumen">📑 Desglose por insumo</button>
-                        <button class="btn-vista" id="btnRepFaltSobr" style="color:#c0392b;border-color:#c0392b" onclick="verReporteDirectivo(false,'faltsobr')" title="Lo que faltó y lo que sobró, cada lista con su total, en la misma hoja">📉 Faltantes y sobrantes</button>
                     </span>
                     <button class="btn-vista" onclick="pasoAnterior()" id="btnPasoAnt" style="display:none">← Anterior</button>
                     <button class="btn-vista" onclick="pasoSiguiente()" id="btnPasoSig">Siguiente →</button>
@@ -349,7 +348,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=697b2fc5"></script>
-<script src="/recetas/inventarios.js?v=38310e82"></script>
+<script src="/recetas/inventarios.js?v=a6063727"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -1002,6 +1001,33 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
       </div>
     </div>
     <div id="repExistBody" style="padding:0 4px 20px"></div>
+  </div>
+</div>
+
+<!-- ── Imprimir lo que se está viendo en el Resultado ──
+     El filtro vive en la pantalla (buscador, categoría, faltantes/sobrantes) y
+     aquí solo se elige qué grupos van a la hoja. Dos sitios para filtrar lo
+     mismo es cómo se acaba imprimiendo algo distinto de lo que se ve. -->
+<div id="modalImprS5" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:720;align-items:center;justify-content:center;padding:24px 16px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;max-height:88vh;display:flex;flex-direction:column">
+    <div class="etx-modal-hd" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:21px;letter-spacing:1.5px;color:var(--text)">🖨️ Imprimir lo filtrado</div>
+      <button class="btn-vista" onclick="cerrarImprimirS5()">✕</button>
+    </div>
+    <div style="padding:16px 20px;overflow-y:auto">
+      <div id="imprS5Filtro" style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:14px"></div>
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Grupos a incluir</div>
+      <div id="imprS5Grupos"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn-vista" style="font-size:11px" onclick="imprS5Todos(true)">Todos</button>
+        <button class="btn-vista" style="font-size:11px" onclick="imprS5Todos(false)">Ninguno</button>
+      </div>
+      <div id="imprS5Msg" style="font-size:11.5px;color:var(--text-dim);margin-top:12px;line-height:1.5"></div>
+    </div>
+    <div style="display:flex;gap:8px;padding:14px 20px;border-top:1px solid var(--border)">
+      <button class="btn-vista" style="flex:1" onclick="cerrarImprimirS5()">Cancelar</button>
+      <button class="btn-vista" style="flex:1;color:var(--accent);border-color:var(--accent)" onclick="imprimirS5Filtrado()">🖨️ Imprimir</button>
+    </div>
   </div>
 </div>
 

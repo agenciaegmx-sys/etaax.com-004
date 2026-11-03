@@ -8773,6 +8773,14 @@ function renderStep5() {
             <option value="">Todas las categorías</option>
             ${_subcatsS5.map(s => `<option value="${etx(s)}" ${_subcatStep5===s?'selected':''}>${etx(s)}</option>`).join('')}
         </select>
+        <select class="filtro-select" onchange="setDifStep5(this.value)" style="font-size:11px;padding:6px 8px;max-width:180px"
+                title="Deja en la pantalla solo lo que faltó o solo lo que sobró">
+            <option value="" ${_difStep5===''?'selected':''}>Faltantes y sobrantes</option>
+            <option value="falta" ${_difStep5==='falta'?'selected':''}>Solo faltantes</option>
+            <option value="sobra" ${_difStep5==='sobra'?'selected':''}>Solo sobrantes</option>
+        </select>
+        <button class="btn-vista" style="font-size:11px" onclick="abrirImprimirS5()"
+                title="Imprime exactamente lo que está en pantalla, eligiendo qué grupos van en la hoja">🖨️ Imprimir lo filtrado</button>
         <div class="vista-toggle" style="margin-left:auto">
             <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">≡ Lista</button>
             <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
@@ -8785,6 +8793,42 @@ function renderStep5() {
 var _busqStep5 = '';
 var _step5Modo = 'lista';
 var _subcatStep5 = '';
+/* '' = todo · 'falta' = solo lo que faltó · 'sobra' = solo lo que sobró.
+   Lo usan la pantalla Y la hoja impresa: el botón de imprimir saca lo que se
+   está viendo, y dos definiciones de «faltante» acaban imprimiendo algo
+   distinto de lo que se mira. */
+var _difStep5 = '';
+/* Grupos elegidos en el modal de impresión. null = todavía no se abre. */
+var _gruposImprS5 = null;
+
+/* La diferencia de un renglón del Resultado, sea insumo o compuesto, con el
+   reparto del prebatch ya aplicado — la MISMA cuenta que hace el reporte
+   impreso (físico+reparto menos teórico+reparto). Un compuesto no tiene
+   existencia propia: la suya es la de sus miembros, que es como lo dibuja su
+   renglón. */
+function _difS5(f) {
+    if (!f) return 0;
+    if (f.esCompuesto) {
+        var comp = getCompuestos().find(function (c) { return c.id === f.compId; }) || {};
+        return (comp.miembros || []).map(_filaDeMiembro).filter(Boolean)
+            .reduce(function (t, m) { var a = _repartoDe(m.insumoId); return t + calcDiferencia(m) + a.fis - a.teo; }, 0);
+    }
+    var adj = _repartoDe(f.insumoId);
+    return calcDiferencia(f) + adj.fis - adj.teo;
+}
+/* El mismo umbral que el reporte impreso (0.001): por debajo de eso es ruido
+   de redondeo, no un faltante. Si los dos no usaran el mismo número, la hoja
+   traería renglones que la pantalla no enseña. */
+function _pasaDifS5(f) {
+    if (!_difStep5) return true;
+    var d = _difS5(f);
+    return _difStep5 === 'falta' ? d < -0.001 : d > 0.001;
+}
+function setDifStep5(v) {
+    _difStep5 = v || '';
+    const cont = document.getElementById('step5Tablas');
+    if (cont) cont.innerHTML = _step5TablasHTML();
+}
 // Grupos del resultado abiertos (colapsados por defecto). Keyed por nombre de grupo
 // para sobrevivir a re-renders de búsqueda/filtro.
 var _s5Abiertos = {};
@@ -8811,6 +8855,77 @@ function onBusqStep5(val) {
         if (cont) cont.innerHTML = _step5TablasHTML();
     }, 220);
 }
+/* ══ IMPRIMIR LO QUE SE ESTÁ VIENDO ══════════════════════════════════════
+   El filtro vive en la pantalla —buscador, categoría, faltantes/sobrantes— y
+   aquí solo se elige qué GRUPOS van a la hoja. Poner los mismos filtros otra
+   vez en el modal es cómo se acaba imprimiendo algo distinto de lo que se
+   mira, y entonces la hoja deja de servir para revisar la pantalla. */
+function _gruposVisiblesS5() {
+    const q = (_busqStep5 || '').toLowerCase();
+    const mapaC5 = _compDeInsumo(), vistos = {}, out = [];
+    const mete = g => { if (g && !vistos[g]) { vistos[g] = 1; out.push(g); } };
+    filasCaptura.forEach(f => {
+        if (mapaC5[f.insumoId] || _esPrebatchRepartido(f.insumoId)) return;
+        if (q && !(f.nombre || '').toLowerCase().includes(q)) return;
+        if (_subcatStep5 && (f.subcategoria || f.categoria) !== _subcatStep5) return;
+        if (!_pasaDifS5(f)) return;
+        mete(_grupoCategoria(f));
+    });
+    _compuestosActivos().map(_virtualFilaCompuesto).forEach(vf => {
+        if (q && !(vf.nombre || '').toLowerCase().includes(q)) return;
+        if (!_pasaDifS5(vf)) return;
+        const comp = getCompuestos().find(c => c.id === vf.compId) || {};
+        const m0 = (comp.miembros || []).map(_filaDeMiembro).find(Boolean);
+        if (_subcatStep5 && m0 && (m0.subcategoria || m0.categoria) !== _subcatStep5) return;
+        mete(m0 ? _grupoCategoria(m0) : '🧩 Compuestos');
+    });
+    return out.sort((a, b) => String(a).localeCompare(String(b), 'es'));
+}
+function abrirImprimirS5() {
+    if (typeof _exigeInv === 'function' &&
+        !_exigeInv('reporte', 'No puedes imprimir los reportes del inventario.')) return;
+    const grupos = _gruposVisiblesS5();
+    if (!grupos.length) {
+        alert('Con ese filtro no queda nada en pantalla, así que la hoja saldría vacía.');
+        return;
+    }
+    /* Lo que entra encendido es lo que se está VIENDO. Un grupo que aparece
+       después —al soltar el filtro— entra encendido también, no invisible. */
+    if (!_gruposImprS5) _gruposImprS5 = {};
+    grupos.forEach(g => { if (_gruposImprS5[g] === undefined) _gruposImprS5[g] = true; });
+    _pintarImprimirS5();
+    document.getElementById('modalImprS5').style.display = 'flex';
+}
+function cerrarImprimirS5() { document.getElementById('modalImprS5').style.display = 'none'; }
+function _pintarImprimirS5() {
+    const grupos = _gruposVisiblesS5();
+    const filtro = [
+        _difStep5 === 'falta' ? 'solo <b>faltantes</b>' : _difStep5 === 'sobra' ? 'solo <b>sobrantes</b>' : 'faltantes <b>y</b> sobrantes',
+        _subcatStep5 ? 'categoría <b>' + etx(_subcatStep5) + '</b>' : '',
+        _busqStep5 ? 'que digan <b>“' + etx(_busqStep5) + '”</b>' : '',
+    ].filter(Boolean).join(' · ');
+    document.getElementById('imprS5Filtro').innerHTML =
+        'Se imprime lo que estás viendo: ' + filtro + '.<br>' +
+        '<span style="color:var(--text-dim)">Para cambiarlo, cierra y ajusta los filtros de la pantalla.</span>';
+    document.getElementById('imprS5Grupos').innerHTML = grupos.map(g =>
+        '<label style="display:flex;align-items:center;gap:9px;padding:7px 2px;cursor:pointer;font-size:13.5px;color:var(--text)">' +
+        '<input type="checkbox" ' + (_gruposImprS5[g] ? 'checked' : '') +
+        ' onchange="imprS5Toggle(' + JSON.stringify(g).replace(/"/g, '&quot;') + ', this.checked)"' +
+        ' style="width:16px;height:16px;accent-color:var(--green)">' + etx(g) + '</label>').join('');
+    const n = grupos.filter(g => _gruposImprS5[g]).length;
+    document.getElementById('imprS5Msg').textContent = n
+        ? n + (n === 1 ? ' grupo en la hoja' : ' grupos en la hoja')
+        : 'Sin grupos elegidos, la hoja saldría vacía.';
+}
+function imprS5Toggle(g, on) { _gruposImprS5[g] = !!on; _pintarImprimirS5(); }
+function imprS5Todos(on) { _gruposVisiblesS5().forEach(g => { _gruposImprS5[g] = !!on; }); _pintarImprimirS5(); }
+function imprimirS5Filtrado() {
+    const grupos = _gruposVisiblesS5().filter(g => _gruposImprS5[g]);
+    if (!grupos.length) { alert('Elige al menos un grupo: así la hoja saldría vacía.'); return; }
+    cerrarImprimirS5();
+    verReporteDirectivo(false, 'faltsobr');
+}
+
 function setStep5Modo(m) {
     _step5Modo = m;
     const cont = document.getElementById('step5Tablas');
@@ -9535,6 +9650,7 @@ function _step5TablasHTML() {
         if (_esPrebatchRepartido(f.insumoId)) return;   // prebatch → Producción propia
         if (q && !(f.nombre||'').toLowerCase().includes(q)) return;
         if (_subcatStep5 && (f.subcategoria||f.categoria) !== _subcatStep5) return;
+        if (!_pasaDifS5(f)) return;
         const b = _ens(_grupoCategoria(f));
         (f.tipo === 'copa' ? b.copa : b.pza).push(f);
     });
@@ -9542,6 +9658,7 @@ function _step5TablasHTML() {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
         const m0   = (comp.miembros||[]).map(_filaDeMiembro).find(Boolean);
         if (_subcatStep5 && m0 && (m0.subcategoria||m0.categoria) !== _subcatStep5) return;
+        if (!_pasaDifS5(vf)) return;
         _ens(m0 ? _grupoCategoria(m0) : '🧩 Compuestos').comp.push(vf);
     });
 
@@ -10011,7 +10128,7 @@ function _step5TablasHTML() {
     const _repL = (_repCache && _repCache.lista) || [];
     let prodCard = '';
     const _prodMatch = !q || GPROD.toLowerCase().includes(q) || _repL.some(r => (r.nombre||'').toLowerCase().includes(q));
-    if (_repL.length && !_subcatStep5 && _prodMatch) {
+    if (_repL.length && !_subcatStep5 && !_difStep5 && _prodMatch) {
         idx++;
         const gid = 's5g' + idx;
         const abierto = !!_s5Abiertos[GPROD];
@@ -10048,10 +10165,11 @@ function _entradasDeInsumo(insumoId) {
 }
 // Vista GALERÍA del resultado: una tarjeta de desglose por insumo.
 function _step5GaleriaHTML(q, mapaC5, vcomps) {
-    var items = vcomps.concat(filasCaptura.filter(function(f){
+    var items = vcomps.filter(_pasaDifS5).concat(filasCaptura.filter(function(f){
         if (mapaC5[f.insumoId]) return false;
         if (q && !(f.nombre||'').toLowerCase().includes(q)) return false;
         if (_subcatStep5 && (f.subcategoria||f.categoria) !== _subcatStep5) return false;
+        if (!_pasaDifS5(f)) return false;
         return calcExistencia(f) > 0 || (parseFloat(f.existenciaAnterior)||0) > 0
             || getEntradasBottles(f.insumoId) > 0 || _esRegistrado(f)
             || (f.ventasCopasDirectas||0) > 0 || (f.ventasBotella||0) > 0;
@@ -10513,8 +10631,27 @@ function verReporteDirectivo(gerencial, modo) {
        El orden es por IMPACTO en dinero, no alfabético: la junta empieza por
        arriba y lo que más duele tiene que estar ahí. */
     const _ordImpactoFS = (x, y) => Math.abs(y.dif * y.cc) - Math.abs(x.dif * x.cc);
-    const faltantesFS = analisis.filter(a => a.dif < -0.001).sort(_ordImpactoFS);
-    const sobrantesFS = analisis.filter(a => a.dif >  0.001).sort(_ordImpactoFS);
+    /* LA HOJA SALE DE LO QUE SE ESTÁ VIENDO en el Resultado: el mismo
+       buscador, la misma categoría, el mismo filtro de faltantes/sobrantes y
+       los grupos palomeados antes de imprimir. Darle filtros propios a la hoja
+       es cómo se acaba imprimiendo algo distinto de lo que se mira, y entonces
+       no sirve ni para revisar la pantalla ni para llevarla a la junta. */
+    const _qFS = (typeof _busqStep5 === 'string' ? _busqStep5 : '').toLowerCase();
+    const _grupoApagadoFS = g => !!(_gruposImprS5 && _gruposImprS5[g] === false);
+    const _pasaFiltroFS = (a) => {
+        const f = a.f;
+        if (_qFS && !(f.nombre || '').toLowerCase().includes(_qFS)) return false;
+        if (_subcatStep5 && (f.subcategoria || f.categoria) !== _subcatStep5) return false;
+        return !_grupoApagadoFS(_grupoCategoria(f));
+    };
+    const faltantesFS = (_difStep5 === 'sobra' ? [] : analisis.filter(a => a.dif < -0.001 && _pasaFiltroFS(a))).sort(_ordImpactoFS);
+    const sobrantesFS = (_difStep5 === 'falta' ? [] : analisis.filter(a => a.dif >  0.001 && _pasaFiltroFS(a))).sort(_ordImpactoFS);
+    const _txtFiltroFS = [
+        _difStep5 === 'falta' ? 'solo faltantes' : _difStep5 === 'sobra' ? 'solo sobrantes' : '',
+        _subcatStep5 ? 'categoría ' + _subcatStep5 : '',
+        _qFS ? 'que digan “' + _qFS + '”' : '',
+        (_gruposImprS5 && Object.keys(_gruposImprS5).some(_grupoApagadoFS)) ? 'algunos grupos fuera' : '',
+    ].filter(Boolean).join(' · ');
     /* La lista de un lado: partida POR GRUPO, con su subtotal, y al final el
        total del lado. «Me faltan $4,700» no dice qué hacer; «me faltan $4,300
        en destilados y $400 en refrescos» ya apunta a una barra o a una bodega.
@@ -10558,9 +10695,14 @@ function verReporteDirectivo(gerencial, modo) {
     }
     const _CAB_FS = `<thead><tr><th>Producto</th><th class="tc">Físico</th><th class="tc">Teórico</th>
         <th class="tc">Diferencia</th><th class="tc">Varianza %</th><th class="tr">A costo</th><th class="tr">A carta</th></tr></thead>`;
-    function _rdListaFS(items, esFalta){
+    /* `out` recibe los totales de la lista. Se devuelven desde aquí en vez de
+       volver a sumarlos afuera para el renglón del neto: dos recorridos del
+       mismo arreglo es como una hoja acaba contradiciéndose a sí misma. */
+    function _rdListaFS(items, esFalta, out){
         const col = esFalta ? cCrit : cOk;
         const quees = esFalta ? 'faltante' : 'sobrante';
+        out = out || {};
+        out.costo = 0; out.carta = 0; out.n = items.length;
         if (!items.length)
             return `<div class="rd-fs" style="font-size:10.5px;color:#aaa;padding:6px 0 14px">Sin ${esFalta?'faltantes':'sobrantes'} en este inventario. ✅</div>`;
         // Agrupar conservando el orden por impacto de adentro de cada grupo…
@@ -10570,7 +10712,6 @@ function verReporteDirectivo(gerencial, modo) {
             if (!porGrupo[g]) { porGrupo[g] = []; orden.push(g); }
             porGrupo[g].push(a);
         });
-        let tCosto = 0, tCarta = 0;
         const bloques = [];
         // …y los GRUPOS también por impacto: el que más dinero mueve, arriba.
         orden.map(g => {
@@ -10578,7 +10719,7 @@ function verReporteDirectivo(gerencial, modo) {
             const filas = porGrupo[g].map(a => { const r = _rdFilaFS(a, col); c += r.costo; k += r.carta; return r.html; });
             return { g, filas, costo:c, carta:k, n:porGrupo[g].length };
         }).sort((x, y) => y.costo - x.costo).forEach(b => {
-            tCosto += b.costo; tCarta += b.carta;
+            out.costo += b.costo; out.carta += b.carta;
             bloques.push(
                 `<div class="rd-grptitle rd-fs" style="font-size:11px;font-weight:700;color:${col};margin:12px 0 4px">${etx(b.g)}</div>` +
                 `<table class="rd-t rd-fs" style="margin-bottom:6px">${_CAB_FS}<tbody>${b.filas.join('')}` +
@@ -10591,10 +10732,19 @@ function verReporteDirectivo(gerencial, modo) {
         });
         bloques.push(
             `<table class="rd-t rd-fs" style="margin-bottom:14px"><tbody>` +
-            _lineaTotalFS('TOTAL ' + quees.toUpperCase(), items.length, tCosto, tCarta, col, true) +
+            _lineaTotalFS('TOTAL ' + quees.toUpperCase(), items.length, out.costo, out.carta, col, true) +
             `</tbody></table>`);
         return bloques.join('');
     }
+    /* Las dos listas se arman AQUÍ, antes de la plantilla, para que el
+       renglón del neto lea totales ya hechos en vez de depender del orden en
+       que se evalúan los trozos de un texto. */
+    const _totFaltFS = {}, _totSobrFS = {};
+    const _htmlFaltFS = _rdListaFS(faltantesFS, true,  _totFaltFS);
+    const _htmlSobrFS = _rdListaFS(sobrantesFS, false, _totSobrFS);
+    const _netoCostoFS = _totSobrFS.costo - _totFaltFS.costo;
+    const _netoCartaFS = _totSobrFS.carta - _totFaltFS.carta;
+
     const inv      = invActual;
     const fecha    = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
     const invFecha = inv.fecha ? new Date(inv.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' }) : '—';
@@ -10851,7 +11001,7 @@ function verReporteDirectivo(gerencial, modo) {
       <div class="rd-sec">Inventario completo por grupo de categoría</div>
       ${_gruposInvOrden.map(_grupoInvHTML).join('')}`;
     // Encabezado grande y pie que un PAGINADOR (mide alturas) replica en cada hoja A4 discreta.
-    const _headHtml = rdHeader(`Inventario ${_tipoTxt} · ${periodoTxt} · ${_estadoInv}${desglose ? ' · Desglose por insumo' : faltsobr ? ' · Faltantes y sobrantes' : ''}`);
+    const _headHtml = rdHeader(`Inventario ${_tipoTxt} · ${periodoTxt} · ${_estadoInv}${desglose ? ' · Desglose por insumo' : faltsobr ? (' · ' + (_difStep5==='falta' ? 'Faltantes' : _difStep5==='sobra' ? 'Sobrantes' : 'Faltantes y sobrantes')) : ''}`);
     const _footHtml = rdFoot;
 
     // Digest de texto para COMPARTIR por WhatsApp/Correo (el PDF no se puede
@@ -10943,7 +11093,6 @@ function verReporteDirectivo(gerencial, modo) {
   <div style="display:flex;gap:8px">
     ${(desglose || faltsobr) ? `<button onclick="verReporteDirectivo(${ger?'true':'false'}, '')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">📊 Ver resumen</button>` : ''}
     ${desglose ? '' : `<button onclick="verReporteDirectivo(${ger?'true':'false'}, 'desglose')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">📑 Ver desglose por insumo</button>`}
-    ${faltsobr ? '' : `<button onclick="verReporteDirectivo(${ger?'true':'false'}, 'faltsobr')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">📉 Faltantes y sobrantes</button>`}
     <div style="position:relative">
       <button onclick="_toggleRdShare(event)" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">📤 Compartir ▾</button>
       <div id="rdShareMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#1a1916;border:1px solid rgba(255,255,255,.22);border-radius:10px;overflow:hidden;min-width:230px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
@@ -11169,21 +11318,25 @@ function verReporteDirectivo(gerencial, modo) {
        primera hoja —media lista, los sobrantes y el neto— desaparecía sin
        avisar. OJO: aquí dentro NO se pueden usar comillas invertidas; esto
        vive en una plantilla de texto y las cerraría. -->
+  ${_txtFiltroFS ? `<div class="rd-fs" style="font-size:10.5px;color:#9a6f00;background:#fffaf0;border-left:3px solid #e0a800;padding:7px 10px;margin:0 0 10px">
+    <b>Hoja filtrada:</b> ${etx(_txtFiltroFS)}. Los totales de abajo son de lo que sale impreso, no del inventario completo.</div>` : ''}
+  ${_difStep5 === 'sobra' ? '' : `
   <div class="rd-sec rd-fs" style="color:${cCrit};border-bottom-color:${cCrit};font-size:12px">▼ Faltantes — lo que NO apareció</div>
   <div class="rd-fs" style="font-size:10px;color:#888;margin:-4px 0 8px">Físico por debajo del teórico. «A costo» es lo que costó reponerlo; «a carta», lo que se hubiera cobrado.</div>
-  ${_rdListaFS(faltantesFS, true)}
+  ${_htmlFaltFS}`}
+  ${_difStep5 === 'falta' ? '' : `
   <div class="rd-sec rd-fs" style="color:${cOk};border-bottom-color:${cOk};font-size:12px;margin-top:26px">▲ Sobrantes — lo que apareció DE MÁS</div>
   <div class="rd-fs" style="font-size:10px;color:#888;margin:-4px 0 8px">Físico por encima del teórico. Casi siempre es una entrada capturada dos veces, una salida sin registrar o una existencia anterior equivocada.</div>
-  ${_rdListaFS(sobrantesFS, false)}
-  <div class="rd-sec rd-fs">Resultado neto del período</div>
+  ${_htmlSobrFS}`}
+  <div class="rd-sec rd-fs">Resultado neto ${_txtFiltroFS ? 'de lo impreso' : 'del período'}</div>
   <table class="rd-t rd-fs">
     <thead><tr><th>Concepto</th><th class="tr">A costo</th><th class="tr">A carta</th></tr></thead>
     <tbody>
-      <tr><td style="color:${cCrit}">Faltantes (${faltantesFS.length})</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(faltCosto))}</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(faltCarta))}</td></tr>
-      <tr><td style="color:${cOk}">Sobrantes (${sobrantesFS.length})</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(sobrCosto))}</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(sobrCarta))}</td></tr>
+      <tr><td style="color:${cCrit}">Faltantes (${_totFaltFS.n})</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(_totFaltFS.costo))}</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(_totFaltFS.carta))}</td></tr>
+      <tr><td style="color:${cOk}">Sobrantes (${_totSobrFS.n})</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(_totSobrFS.costo))}</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(_totSobrFS.carta))}</td></tr>
       <tr style="background:#f5f5f0"><td style="font-weight:900;border-top:2px solid #ddd">Neto</td>
-        <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${netCosto>=0?cOk:cCrit}">${netCosto>=0?'+':'−'}${$g('$'+_m2(Math.abs(netCosto)))}</td>
-        <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${netCarta>=0?cOk:cCrit}">${netCarta>=0?'+':'−'}${$g('$'+_m2(Math.abs(netCarta)))}</td></tr>
+        <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${_netoCostoFS>=0?cOk:cCrit}">${_netoCostoFS>=0?'+':'−'}${$g('$'+_m2(Math.abs(_netoCostoFS)))}</td>
+        <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${_netoCartaFS>=0?cOk:cCrit}">${_netoCartaFS>=0?'+':'−'}${$g('$'+_m2(Math.abs(_netoCartaFS)))}</td></tr>
     </tbody></table>
   <div class="rd-fs" style="font-size:9px;color:#aaa;margin-top:6px">Las unidades no se suman entre sí a propósito: copas, piezas y gramos no son la misma cosa. Lo que se totaliza es el dinero.</div>
 

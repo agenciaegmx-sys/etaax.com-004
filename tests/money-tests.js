@@ -30571,6 +30571,10 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
         try { F.verReporteDirectivo(false, modo); } catch (e) {}
         F.console.warn = w; F.console.error = e2; F.console.log = l;
         F.document.body.appendChild = _ap;
+        /* Quien pida un inventario distinto lo pide SOLO para esa llamada. Sin
+           esto, la prueba de al lado hereda un inventario de un renglón y mide
+           otra cosa — y pasa o falla por donde quedó la anterior. */
+        if (filas) setVar(F, 'filasCaptura', FILAS);
         return cap;
     }
     /* OJO: lo que se captura es el documento fuente ENTERO. La poda por modo
@@ -30779,31 +30783,26 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
     test('…y desde ahí se llega a los otros dos, pero no a sí misma', () =>
         eq((H.indexOf('📊 Ver resumen') > -1) + '|' + (H.indexOf('📑 Ver desglose por insumo') > -1) +
            '|' + (H.indexOf('>📉 Faltantes y sobrantes<') > -1), 'true|true|false', 'navegable'));
-    test('…y desde el resumen se puede saltar a él', () =>
-        eq(RES.indexOf('>📉 Faltantes y sobrantes<') > -1, true, 'ofrecido'));
-
-    /* ── El botón, bajo el mismo permiso que los otros reportes ──
-       No basta con que exista el id en la lista: se corre el código real de
-       permisos de la página y se mira si el botón quedó escondido. */
-    function permisos(puede) {
+    /* La hoja ya no tiene botón propio arriba: se llega desde el filtro del
+       Resultado. Ofrecerla también desde otro reporte la abriría SIN ese
+       contexto, e imprimiría algo distinto de lo que se está mirando. */
+    test('a esta hoja no se llega desde otro reporte, sino desde el filtro', () =>
+        eq(RES.indexOf('>📉 Faltantes y sobrantes<'), -1, 'sin atajo ciego'));
+    test('…y el botón de arriba ya no existe', () => {
         const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
-        const blo = [...inv.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-            .map(m => m[1]).find(b => b.indexOf('function _aplicarPermisosInv') > -1);
-        const nodos = {};
-        const c = { console,
-            document: { getElementById: id => (nodos[id] = nodos[id] || { style:{} }),
-                        body: { classList: { toggle(){} } }, addEventListener(){} },
-            etaaxPuedeSub: () => puede, etaaxExigeSub: () => puede };
-        c.window = c;
-        vm.createContext(c);
-        vm.runInContext(blo, c, { filename:'inventarios.html' });
-        c._aplicarPermisosInv();
-        return nodos;
-    }
-    test('sin permiso de reportes, el botón nuevo se esconde como los demás', () =>
-        eq((permisos(false)['btnRepFaltSobr'] || {}).style.display, 'none', 'escondido'));
-    test('…y con permiso se queda donde está', () =>
-        eq((permisos(true)['btnRepFaltSobr'] || { style:{} }).style.display, undefined, 'visible'));
+        return eq(inv.indexOf('btnRepFaltSobr'), -1, 'fuera');
+    });
+    /* Imprimir es un reporte: el mismo candado que los demás. Se corre la
+       función de verdad con el permiso negado y se mira si abrió. */
+    test('imprimir lo filtrado pide el permiso de reportes', () => {
+        let pedido = '';
+        F._exigeInv = (sub) => { pedido = sub; return false; };
+        F.document.getElementById('modalImprS5').style.display = 'none';
+        F.abrirImprimirS5();
+        const abrio = F.document.getElementById('modalImprS5').style.display;
+        delete F._exigeInv;
+        return eq(pedido + '|' + abrio, 'reporte|none', 'con candado');
+    });
 
     /* ── LAS PIEZAS VAN SUELTAS, NO ENVUELTAS ───────────────────────────────
        EL BUG QUE EDWIN VIO: el reporte salía con los faltantes y ya — ni los
@@ -30842,6 +30841,150 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
         const dir = hijosDirectos(H).filter(n => / class="[^"]*\brd-fs\b/.test(n.attrs));
         return eq(dir.filter(n => n.tag === 'table').length >= 3 && dir.length >= 7, true,
                   'completas · ' + dir.map(n => n.tag).join(','));
+    });
+
+    /* ══ EL FILTRO DE LA PANTALLA ES EL DE LA HOJA ═══════════════════════
+       El botón imprime lo que se está viendo. Si la pantalla y la hoja
+       tuvieran cada una su idea de «faltante», el dueño revisaría una cosa y
+       se llevaría otra a la junta — y no hay forma de que lo note. */
+    const conFiltro = (dif, fn) => {
+        setVar(F, '_difStep5', dif);
+        try { return fn(); } finally { setVar(F, '_difStep5', ''); }
+    };
+    test('en pantalla, «solo faltantes» deja fuera a los sobrantes', () => {
+        const html = conFiltro('falta', () => F._step5TablasHTML());
+        return eq(html.indexOf('Tequila caro') > -1 && html.indexOf('Cerveza') === -1, true,
+                  'filtrada');
+    });
+    test('…y «solo sobrantes» al revés', () => {
+        const html = conFiltro('sobra', () => F._step5TablasHTML());
+        return eq(html.indexOf('Cerveza') > -1 && html.indexOf('Tequila caro') === -1, true, 'filtrada');
+    });
+    test('el que cuadró clavado no sale con ninguno de los dos filtros', () => {
+        const a = conFiltro('falta', () => F._step5TablasHTML());
+        const b = conFiltro('sobra', () => F._step5TablasHTML());
+        return eq((a + b).indexOf('>Refresco<'), -1, 'fuera');
+    });
+    test('la hoja impresa obedece el mismo filtro: solo faltantes, sin sobrantes', () => {
+        const h = conFiltro('falta', () => reporte('faltsobr'));
+        return eq(h.indexOf('Faltantes — lo que NO apareció') > -1 &&
+                  h.indexOf('Sobrantes — lo que apareció DE MÁS') === -1, true, 'una sola lista');
+    });
+    /* Y los totales son los de LO IMPRESO, no los del inventario completo:
+       una hoja filtrada que presume el total de todo es una hoja que miente
+       con números correctos. */
+    test('filtrada, el neto es el de lo impreso y la hoja lo avisa', () => {
+        const h = conFiltro('falta', () => reporte('faltsobr'));
+        const b = h.slice(h.indexOf('Hoja filtrada'));
+        const sob = /Sobrantes \(0\)[\s\S]*?\+\$0\.00/.test(b);
+        return eq(b.indexOf('solo faltantes') > -1 && b.indexOf('Resultado neto de lo impreso') > -1 && sob,
+                  true, 'avisada · sobrantes-en-cero=' + sob);
+    });
+    test('sin filtro, la hoja no se anuncia como filtrada', () =>
+        eq(H.indexOf('Hoja filtrada'), -1, 'limpia'));
+
+    /* La pantalla y la hoja tienen que medir la diferencia IGUAL, reparto del
+       prebatch incluido. Si la pantalla lo ignorara, un insumo que recibe la
+       variancia de un batch saldría en una lista y no en la otra. */
+    test('la diferencia de pantalla lleva el reparto del prebatch, como la hoja', () => {
+        const f = getVar(F, 'filasCaptura').filter(x => x.insumoId === 'f1')[0];
+        const antes = F._difS5(f);
+        setVar(F, '_repCache', { porInsumo: { f1: { fis:3, teo:1, ea:0, ent:0, vco:0, cm:0, can:0 } } });
+        const con = F._difS5(f);
+        setVar(F, '_repCache', null);
+        return eq(Math.round((con - antes) * 100) / 100, 2, 'antes=' + antes + ' con=' + con);
+    });
+
+    /* La galería es la MISMA lista con otra cara: si el filtro solo viviera en
+       la vista de tabla, cambiar de vista desharía el filtro sin decirlo. */
+    const enGaleria = fn => {
+        setVar(F, '_step5Modo', 'galeria');
+        try { return fn(); } finally { setVar(F, '_step5Modo', 'lista'); }
+    };
+    test('la galería obedece el mismo filtro que la lista', () => {
+        const h = conFiltro('sobra', () => enGaleria(() => F._step5TablasHTML()));
+        return eq(h.indexOf('Cerveza') > -1 && h.indexOf('Tequila caro') === -1, true, 'filtrada');
+    });
+
+    /* Un COMPUESTO no tiene existencia propia: la suya es la de sus miembros.
+       Se cuela por otra rama del dibujado, así que si el filtro solo mirara
+       las filas sueltas, una caguama que sobra seguiría apareciendo en la
+       lista de faltantes. */
+    test('un compuesto también obedece el filtro', () => {
+        const comp = { id:'cz', nombre:'Caguamas', miembros:['m1','m2'] };
+        const prev = F._storage[F._compuestosKey()];
+        F._storage[F._compuestosKey()] = JSON.stringify([comp]);
+        setVar(F, 'filasCaptura', [
+            { insumoId:'m1', nombre:'XX Lager Cag', tipo:'pza', categoria:'Cervezas',
+              existenciaAnterior:10, cerradasBarra:14, ventasCopasDirectas:0, costoUnitario:45, precioCarta:99, entradas:[] },
+            { insumoId:'m2', nombre:'Carta Blanca Cag', tipo:'pza', categoria:'Cervezas',
+              existenciaAnterior:10, cerradasBarra:13, ventasCopasDirectas:0, costoUnitario:45, precioCarta:99, entradas:[] },
+        ]);
+        setVar(F, 'invActual', { id:'i1', nombre:'Barra', fecha:'2026-11-02', entradasLog:[],
+            prebatchProducidos:{}, cocktailsVendidos:{}, ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], compuestos:[comp] });
+        const vistas = m => conFiltro(m, () => [F._step5TablasHTML(), enGaleria(() => F._step5TablasHTML())].join(''));
+        const falta = vistas('falta'), sobra = vistas('sobra');
+        if (prev === undefined) delete F._storage[F._compuestosKey()];
+        else F._storage[F._compuestosKey()] = prev;
+        setVar(F, 'filasCaptura', FILAS);
+        return eq((falta.indexOf('Caguamas') === -1) + '|' + (sobra.indexOf('Caguamas') > -1),
+                  'true|true', 'falta=' + (falta.indexOf('Caguamas') > -1) + ' sobra=' + (sobra.indexOf('Caguamas') > -1));
+    });
+
+    /* ── Los grupos que se eligen antes de imprimir ── */
+    test('los grupos que ofrece el modal son los que están en pantalla', () =>
+        eq(F._gruposVisiblesS5().join(','), 'Cervezas,Destilados,Refrescos / Sodas', 'visibles'));
+    test('…y con «solo sobrantes» solo quedan los suyos', () =>
+        eq(conFiltro('sobra', () => F._gruposVisiblesS5()).join(','), 'Cervezas', 'visibles'));
+    test('un grupo despalomeado no sale en la hoja', () => {
+        setVar(F, '_gruposImprS5', { 'Destilados': false });
+        const h = reporte('faltsobr');
+        setVar(F, '_gruposImprS5', null);
+        const b = bloqueFS(h);
+        return eq(b.indexOf('>Destilados<') === -1 && b.indexOf('>Refrescos') > -1, true, 'sin destilados');
+    });
+    test('…y sus importes tampoco: el total baja con él', () => {
+        const todo = /TOTAL FALTANTE[\s\S]*?\$([\d,]+\.\d\d)/.exec(bloqueFS(H))[1];
+        setVar(F, '_gruposImprS5', { 'Destilados': false });
+        const h = reporte('faltsobr');
+        setVar(F, '_gruposImprS5', null);
+        const menos = /TOTAL FALTANTE[\s\S]*?\$([\d,]+\.\d\d)/.exec(bloqueFS(h))[1];
+        const n = x => parseFloat(x.replace(/,/g, ''));
+        return eq(n(menos) < n(todo), true, 'con=' + todo + ' sin=' + menos);
+    });
+
+    /* La categoría elegida en pantalla también manda en la hoja. */
+    test('la hoja respeta la categoría elegida arriba', () => {
+        setVar(F, '_subcatStep5', 'Cervezas');
+        const b = bloqueFS(reporte('faltsobr'));
+        setVar(F, '_subcatStep5', '');
+        return eq(b.indexOf('>Cerveza<') > -1 && b.indexOf('>Tequila caro<') === -1, true, 'solo cervezas');
+    });
+
+    /* EL RENGLÓN DEL NETO ES DE LO IMPRESO. Una hoja filtrada que al pie
+       presume el total del inventario completo miente con números correctos:
+       las listas suman una cosa y el resumen dice otra, en la misma página. */
+    test('filtrada, el resumen al pie cuadra con las listas que SÍ salieron', () => {
+        setVar(F, '_gruposImprS5', { 'Destilados': false });
+        const b = bloqueFS(reporte('faltsobr'));
+        setVar(F, '_gruposImprS5', null);
+        const lista = /TOTAL FALTANTE[\s\S]*?\$([\d,]+\.\d\d)/.exec(b);
+        const pie   = /Faltantes \(\d+\)[\s\S]*?−\$([\d,]+\.\d\d)/.exec(b);
+        if (!lista || !pie) throw new Error('lista=' + !!lista + ' pie=' + !!pie);
+        return eq(pie[1], lista[1], 'el mismo número');
+    });
+    test('…y el neto es la resta de esos dos, no la del inventario entero', () => {
+        setVar(F, '_gruposImprS5', { 'Destilados': false });
+        const b = bloqueFS(reporte('faltsobr'));
+        setVar(F, '_gruposImprS5', null);
+        const n = x => parseFloat(String(x).replace(/,/g, ''));
+        const f = n(/Faltantes \(\d+\)[\s\S]*?−\$([\d,]+\.\d\d)/.exec(b)[1]);
+        const o = n(/Sobrantes \(\d+\)[\s\S]*?\+\$([\d,]+\.\d\d)/.exec(b)[1]);
+        const fila = b.slice(b.indexOf('>Neto<'));
+        const m = /([+−])\$([\d,]+\.\d\d)/.exec(fila);
+        const neto = (m[1] === '−' ? -1 : 1) * n(m[2]);
+        return eq(Math.round(neto * 100) / 100, Math.round((o - f) * 100) / 100, 'resta de lo impreso');
     });
 
     /* ── La poda: cada reporte se lleva SOLO su parte ── */
