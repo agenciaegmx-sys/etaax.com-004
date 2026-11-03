@@ -84,7 +84,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         const r=c._fusionarRows([row('a'),row('b')]);eq(r.length,1);eq(r[0].stockMiembros.length,2);eq((c._stockReporteHTML(r[0],true).match(/Stock bajo/g)||[]).length,2);
     });
     // Impreso real: comprobar valores, variedad y dos renglones sin duplicar fórmulas.
-    cargar('recetas/insumos.js',['_costoPorMLp','_mezBotDatos','_costeoCopaDatos','_costeoPiezaDatos','_refrescoCostoPorPieza','calcCostoCopa','toML','_grupoIns','_agruparPDF','_filaGrupoPDF','_presTxtPDF','_imprimirCosteoPDF']);
+    cargar('recetas/insumos.js',['_costoPorMLp','_mezBotDatos','_costeoCopaDatos','_costeoPiezaDatos','_refrescoCostoPorPieza','calcCostoCopa','toML','_grupoIns','_agruparPDF','_filaGrupoPDF','_presTxtPDF','_costeoUtil','_costeoCeldas','_imprimirCosteoPDF']);
     c.OZ_ML=29.5735;c.COPA_ML=60;c._CSS_TABLA_PDF='';c._notaAlcance=()=>'';c._optsReporteIns=()=>({});c._abrirHorizontal=html=>{c.impreso=html;};c.etaaxReporteDoc=o=>o.cuerpo;c.fmtMXN=v=>'$'+Number(v).toFixed(2);c._subUnidadNombre=()=>'';
     const soda={id:'soda',nombre:'Soda',variedad:'Natural',tipoInsumo:'refresco',presentaciones:[{contNeto:600,umContenido:'ML',precio:10,costoPieza:10,costoUnitario:10/0.6,factorPieza:2,precioCarta:25}]};
     const ron={id:'ron',nombre:'Ron',variedad:'Añejo <script>',tipoInsumo:'destilado',subcategoria:'Ron',presentaciones:[{contNeto:750,umContenido:'ML',costoUnitario:400,umCosto:'LT',tamanoCopa:60,umTamanoCopa:'ML',factorCopa:3.3,precioCarta:150,factorBotella:2.5,precioCartaBot:1000,mezcladorId:'soda',mezcladores:2,mezcladoresBot:5}]};
@@ -94,7 +94,10 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
     });
     test('costeo impreso separa copa y botella y conserva el precio con servicio',()=>{
         eq((c.impreso.match(/class="costeo-par"/g)||[]).length,2);eq((c.impreso.match(/rowspan="2" class="w ind"/g)||[]).length,2);
-        ['Por copa','Por botella','$24.00','$300.00','$99.20','$800.00','Sin servicio: $750.00','$50.00'].forEach(t=>eq(c.impreso.includes(t),true,t));
+        /* Seis columnas y dos renglones: la copa con su medida, la botella con
+           la suya, el servicio sumado aparte y la cuenta escrita. */
+        ['copa de 60 ML','botella de 750 ML','$24.00','$300.00','$99.20','$800.00',
+         '+ $50.00 de servicio','×5 = $50.00','$24.00 × 3.3'].forEach(t=>eq(c.impreso.includes(t),true,t));
     });
 
 

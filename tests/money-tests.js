@@ -13925,15 +13925,15 @@ console.log('\n══ BG7 · La botella se vende con su servicio ══');
     test('el costo real de la botella incluye sus refrescos', () =>
         eq(decl('_costeoCopaDatos').indexOf('costoBotServ: costoBot + mezBot.costo') > -1,
            true, 'incluye'));
-    test('la utilidad en pantalla se mide contra ese costo real', () =>
-        eq(decl('_costeoTablaCopa').indexOf('_cUtil(cartaBot, D.costoBotServ)') > -1, true, 'real'));
+    /* Estas reglas se comprobaban buscando su texto en el código fuente.
+       Al rediseñar la hoja —seis columnas, dos renglones— se pusieron rojas
+       sin que ninguna se hubiera roto: medían la redacción, no el resultado.
+       Ahora van en BH59, corriendo los dos renderizadores de verdad. */
     test('…y la del editor también', () =>
         eq(decl('_utilidadHTML').indexOf('var costoBotReal = costoBot + mezBotU.costo;') > -1,
            true, 'real'));
     /* Si el papel dijera otro margen que la pantalla, no habría forma de saber
-       cuál de las dos miente. */
-    test('…y la del PDF impreso, la misma', () =>
-        eq(ins.indexOf('_ut(D.cartaBot, D.costoBotServ)') > -1, true, 'misma'));
+       cuál de las dos miente. (BH59 lo corre.) */
     /* El rótulo tiene que decirlo: «Botella» a secas, midiendo contra un costo
        que ya trae cinco refrescos, haría pensar que el margen es el de la
        botella sola. (La tarjeta se llamaba «Utilidad bot. + servicio» antes de
@@ -13955,14 +13955,10 @@ console.log('\n══ BG7 · La botella se vende con su servicio ══');
     test('…y solo cuando hay servicio que mostrar', () =>
         eq(decl('_costeoCardsHTML').indexOf('if (mezBot.costo > 0 && precioBotAuto)') > -1,
            true, 'solo si aplica'));
-    test('la tabla de costeo trae la columna', () =>
-        eq(decl('_costeoTablaCopa').indexOf('Bot. + servicio') > -1, true, 'con columna'));
-    test('…y el reporte impreso también', () =>
-        eq(ins.includes("D.sugBotServ > 0 ? D.sugBotServ : D.sugBot") && ins.includes("Sin servicio: "), true, 'botella con servicio y sin servicio'));
-    /* La tabla del PDF lleva una fila de grupo que abarca N columnas: si no se
-       actualiza el conteo, el encabezado de grupo queda corrido una celda. */
-    test('el PDF ajusta el grupo al formato de ocho columnas en dos renglones', () =>
-        eq(ins.indexOf("_filaGrupoPDF(G.nombre, G.items.length, '', 8)") > -1, true, '8 columnas'));
+    /* Estas reglas se comprobaban buscando su texto en el código fuente.
+       Al rediseñar la hoja —seis columnas, dos renglones— se pusieron rojas
+       sin que ninguna se hubiera roto: medían la redacción, no el resultado.
+       Ahora van en BH59, corriendo los dos renderizadores de verdad. */
 
     /* ── Nada cambia para lo que ya está guardado ── */
     /* El valor de arranque va solo en presentaciones NUEVAS: si se aplicara a
@@ -14011,27 +14007,10 @@ console.log('\n══ BG8 · La carátula de costeo y lo que se imprime ══')
 
     /* ── A) LA CARÁTULA ── */
     const tabla = decl('_costeoTablaCopa');
-    test('la columna de costo es la de la BOTELLA, no la del litro', () =>
-        eq(tabla.indexOf('>Costo botella<') > -1 && tabla.indexOf('>Costo unit.<') === -1,
-           true, 'por botella'));
-    /* El costo por litro no se pierde: baja a subtítulo de la misma celda,
-       junto al contenido. Los tres datos, una columna. */
-    test('…y el costo por litro sigue ahí, de subtítulo', () =>
-        eq(decl('_costoBotTxt').indexOf("(p.umCosto||'LT')") > -1, true, 'no se pierde'));
-    test('…con el contenido de la botella, para saber de qué tamaño habla', () =>
-        eq(decl('_costoBotTxt').indexOf("cont+' ML'") > -1, true, 'con tamaño'));
-    /* La vieja «Costo bot.» era EXACTAMENTE este número: dos columnas idénticas
-       se leen como si fueran cosas distintas. */
-    test('ya no hay dos columnas con el mismo costo de botella', () =>
-        eq(tabla.indexOf('>Costo bot.<'), -1, 'una sola'));
-    test('el costo de botella sale por lo que cuesta, no por un texto suelto', () =>
-        eq(tabla.indexOf('_costoBotTxt(D)') > -1, true, 'calculado'));
-
-    test('la copa sugerida se lee como la botella: markup y refrescos', () =>
-        eq(tabla.indexOf("' ×'+fCopa + (D.mezCopaCost>0 ? ' +'+D.mezCopaPz+' refr.' : '')") > -1,
-           true, 'mismo formato'));
-    test('…y su monto ya incluye el refresco cuando lo lleva', () =>
-        eq(tabla.indexOf('D.sugTrago > 0 ? D.sugTrago : sugCopa') > -1, true, 'incluido'));
+    /* Estas reglas se comprobaban buscando su texto en el código fuente.
+       Al rediseñar la hoja —seis columnas, dos renglones— se pusieron rojas
+       sin que ninguna se hubiera roto: medían la redacción, no el resultado.
+       Ahora van en BH59, corriendo los dos renderizadores de verdad. */
     /* Sin refresco, el precio sugerido es el de siempre: quien no usa
        mezcladores no puede ver cambiar sus números. */
     test('sin refresco, la copa sugerida no cambia', () =>
@@ -14039,26 +14018,11 @@ console.log('\n══ BG8 · La carátula de costeo y lo que se imprime ══')
            true, 'sin cambio'));
 
     test('el 🥤 se cambia por lo que cuesta el refresco', () =>
-        eq(tabla.indexOf('🥤'), -1, 'sin emoji'));
-    test('…en una columna que dice «Precio ref.»', () =>
-        eq(tabla.indexOf('>Precio ref.<') > -1, true, 'con nombre'));
-    test('…y va junto a la copa, no perdida entre las de botella', () =>
-        eq(tabla.indexOf('>Precio ref.<') < tabla.indexOf('>Sug. bot.<') &&
-           tabla.indexOf('>Sug. copa<') < tabla.indexOf('>Precio ref.<'), true, 'en su sitio'));
-    test('…diciendo cuántos refrescos son', () =>
-        eq(tabla.indexOf("_cMoney(D.mezCopaCost)") > -1 && tabla.indexOf("D.mezCopaPz") > -1,
-           true, 'con piezas'));
-    /* Sin mezclador va una raya, no un $0.00: un cero se lee como "el refresco
-       sale gratis". */
-    test('sin mezclador va una raya, no un cero', () =>
-        eq(tabla.indexOf("D.mezCopaCost>0") > -1, true, 'raya'));
-
-    /* El papel tiene que decir lo mismo que la pantalla, o no hay forma de
-       saber cuál de las dos miente. */
-    test('el PDF conserva costo de botella y refrescos en sus dos renglones', () =>
-        eq(ins.includes("_u(D.costoBot)") && ins.includes('<th>Refrescos a costo</th>') && ins.includes("factor(D.mezCopaCost"), true, 'mismos importes'));
-    test('…y el PDF tampoco repite el costo de botella', () =>
-        eq(ins.indexOf('<th>Costo bot.</th>'), -1, 'una sola'));
+        eq(decl('_costeoTablaCopa').indexOf('🥤'), -1, 'sin emoji'));
+    /* Estas reglas se comprobaban buscando su texto en el código fuente.
+       Al rediseñar la hoja —seis columnas, dos renglones— se pusieron rojas
+       sin que ninguna se hubiera roto: medían la redacción, no el resultado.
+       Ahora van en BH59, corriendo los dos renderizadores de verdad. */
 
     /* ── B) LO IMPRESO ── */
     /* El ámbar de la marca sobre papel blanco no se lee. No se atenúa: se
@@ -31332,6 +31296,201 @@ console.log('\n══ BH58 · El costeo impreso, solo con lo activo ══');
         I.imprimirInsumos();
         if (!doc) throw new Error('no se armó la hoja');
         return eq(doc.cuerpo.indexOf('Ron de baja'), -1, 'sin el de baja');
+    });
+})();
+
+
+/* ═══════════ SUITE BH59 · EL COSTEO: SEIS COLUMNAS, DOS RENGLONES ═══════════
+   Lo que Edwin vio: la hoja traía los datos correctos y no había manera de
+   leerlos. Trece columnas apretadas, el título de una arriba y su unidad de
+   medida abajo en otra, y la cuenta del precio sugerido en ningún lado.
+
+   Ahora son SEIS columnas y DOS renglones por producto —copa y botella—, cada
+   columna contando una sola cosa. Y, lo que de verdad se vigila aquí: la
+   pantalla y el papel sacan sus textos del MISMO sitio (`_costeoCeldas`).
+   Cuando cada uno armaba el suyo fue como se separaron.                     */
+console.log('\n══ BH59 · El costeo: seis columnas, dos renglones ══');
+(function () {
+    const REFR = { id:'r1', nombre:'Coca 355', tipoInsumo:'refresco', activo:'1', categoria:'Refrescos',
+        presentaciones:[{ contNeto:355, umContenido:'ML', costoPieza:16.24, costoUnitario:16.24, umCosto:'PZA' }] };
+    const WHIS = { id:'w1', nombre:'Chivas Regal', maduracion:'12 años', variedad:'Blended Scotch',
+        activo:'1', tipoInsumo:'destilado', categoria:'Whiskey',
+        presentaciones:[{ contNeto:750, umContenido:'ML', costoUnitario:1212, umCosto:'LT',
+            tamanoCopa:60, umTamanoCopa:'ML', factorCopa:3.3, factorBotella:2.5,
+            mezcladorId:'r1', mezcladores:2, mezcladoresBot:5,
+            precioCarta:'180', precioCartaBot:'2000' }] };
+    function pantalla(catalogo) {
+        const I = crearContexto();
+        cargarJS(I, 'insumo-label.js'); cargarJS(I, 'etaax-core.js');
+        cargarJS(I, 'security.js');     // el etx de verdad: aquí se escapa texto del usuario
+        cargarJS(I, 'reporte-marca.js');
+        cargarJS(I, 'recetas/insumos.js');
+        I._storage['etaax_negocio_activo'] = 'n1';
+        I._storage['etaax_n1_insumos'] = JSON.stringify(catalogo || [WHIS, REFR]);
+        I.filtrar();
+        return I;
+    }
+    /* El cuerpo del PAPEL, tal cual se arma. */
+    function papel(I) {
+        let doc = null;
+        I.etaaxReporteDoc = (o) => { doc = o; return '@page{size:letter portrait;margin:0.5cm 0}'; };
+        I.etaaxAbrirReporte = () => {};
+        setVar(I, 'vistaInsumos', 'costeo');
+        const w = I.console.warn, e = I.console.error, l = I.console.log;
+        I.console.warn = I.console.error = I.console.log = function(){};
+        try { I.imprimirInsumos(); } catch (x) {}
+        I.console.warn = w; I.console.error = e; I.console.log = l;
+        if (!doc) throw new Error('no se armó la hoja');
+        return doc.cuerpo;
+    }
+    /* La PANTALLA, el mismo bloque de destilados. */
+    function pant(I) {
+        setVar(I, 'vistaInsumos', 'costeo');
+        I.renderCosteoBebidas();
+        return I.document.getElementById('contenedorCosteo').innerHTML;
+    }
+    const soloDest = h => {
+        const i = h.indexOf('Destilados');
+        const j = h.indexOf('Cervezas', i);
+        return h.slice(i < 0 ? 0 : i, j < 0 ? h.length : j);
+    };
+    const cifras = h => (soloDest(h).match(/\$\s?[\d,]+\.\d\d/g) || []).map(x => x.replace(/\s/g, ''));
+
+    const I = pantalla();
+
+    /* ── LA CUENTA CUADRA ── */
+    test('la cuenta escrita en «Cómo sale» da el sugerido', () => {
+        const C = I._costeoCeldas(WHIS, [WHIS, REFR]);
+        const n = x => parseFloat(((String(x).match(/[\d,]+\.\d\d/) || ['0'])[0]).replace(/,/g, ''));
+        /* costo × factor = base; base + mezcladores = sugerido. Es la cuenta
+           que el papel enseña: si no diera, la hoja explicaría otra. */
+        return eq((n(C.copa.cuentaIgual) + n(C.copa.cuentaMas || '0')).toFixed(2),
+                  n(C.copa.sugerido).toFixed(2), 'copa');
+    });
+    test('…también la de la botella, con su servicio', () => {
+        const C = I._costeoCeldas(WHIS, [WHIS, REFR]);
+        const n = x => parseFloat(((String(x).match(/[\d,]+\.\d\d/) || ['0'])[0]).replace(/,/g, ''));
+        return eq((n(C.bot.cuentaIgual) + n(C.bot.cuentaMas || '0')).toFixed(2),
+                  n(C.bot.sugerido).toFixed(2), 'botella');
+    });
+    test('el mezclador dice cuánto cuesta uno y cuántos lleva', () => {
+        const C = I._costeoCeldas(WHIS, [WHIS, REFR]);
+        return eq(C.copa.mezUnit + ' | ' + C.copa.mezMult + ' | ' + C.bot.mezMult,
+                  '$ 16.24 c/u | ×2 = $ 32.48 | ×5 = $ 81.20', 'el refresco');
+    });
+
+    /* ── PANTALLA Y PAPEL, LOS MISMOS NÚMEROS ──
+       Es la prueba que importa: dicen lo mismo porque leen del mismo sitio.
+       Si alguien le arma su texto a uno de los dos, aquí se nota. */
+    test('la pantalla y el papel dicen exactamente las mismas cifras', () => {
+        const a = cifras(pant(I)), b = cifras(papel(I));
+        return eq(a.join(' ') , b.join(' '), 'iguales · pantalla=' + a.length + ' papel=' + b.length);
+    });
+
+    /* ══ LAS REGLAS QUE YA SE VIGILABAN, AHORA CORRIÉNDOLAS ══════════════
+       Estas conductas estaban cubiertas por pruebas que buscaban su texto en
+       el código fuente. Al rediseñar la hoja todas se pusieron rojas sin que
+       ninguna regla se hubiera roto: medían la redacción, no el resultado.
+       Aquí van contra el HTML que de verdad sale. */
+
+    /* La utilidad de la botella se mide contra lo que cuesta DESPACHARLA: con
+       sus cinco refrescos encima. Medirla contra la botella sola infla el
+       margen justo en el producto de ticket más alto, que es con el que se
+       decide el precio de la carta. */
+    test('la utilidad de la botella se mide contra la botella CON su servicio', () => {
+        const C = I._costeoCeldas(WHIS, [WHIS, REFR]);
+        const esperado = (C.D.cartaBot - C.D.costoBotServ) / C.D.costoBotServ * 100;
+        return eq(C.bot.util.pct.toFixed(2), esperado.toFixed(2),
+                  'con servicio · ' + C.bot.util.pct.toFixed(1) + '%');
+    });
+    test('…y pantalla y papel enseñan ese mismo porcentaje', () => {
+        const C = I._costeoCeldas(WHIS, [WHIS, REFR]);
+        const txt = '+' + C.bot.util.pct.toFixed(0) + '%';
+        return eq((pant(I).indexOf(txt) > -1) + '|' + (papel(I).indexOf(txt) > -1), 'true|true', txt);
+    });
+    /* El precio sugerido de la botella lleva el servicio sumado A COSTO, y la
+       hoja dice cuánto es: sin eso, el número parece salir de la nada. */
+    test('el sugerido de la botella incluye el servicio y la hoja dice cuánto', () => {
+        const C = I._costeoCeldas(WHIS, [WHIS, REFR]);
+        return eq(C.bot.cuentaMas, '+ $ 81.20 de servicio', 'dicho');
+    });
+    /* EL COSTO ES EL DE LA BOTELLA, no el de un litro: nadie compra litros, y
+       comparar contra un precio por litro obliga a hacer la regla de tres de
+       cabeza. El precio por litro no se pierde, va de subtítulo. */
+    test('el costo que se enseña es el de la botella, no el del litro', () => {
+        const C = I._costeoCeldas(WHIS, [WHIS, REFR]);
+        return eq(C.bot.costo + ' | ' + C.bebida.compraUm, '$ 909.00 | $ 1,212.00 por LT', 'la botella');
+    });
+    /* El mezclador va en el renglón de la COPA, que es donde se sirve, y dice
+       cuántas piezas son: un emoji decía que llevaba refresco pero no cuánto
+       cuesta, que es el dato con el que se pone el precio. */
+    test('el mezclador va con la copa y dice cuántas piezas son', () => {
+        const h = pant(I);
+        const fila = h.slice(h.indexOf('copa de 60 ML'));
+        return eq(fila.slice(0, 400).indexOf('×2 = $ 32.48') > -1, true, 'en su renglón');
+    });
+    /* Sin mezclador va una RAYA, no un cero: un cero se lee como «sale gratis». */
+    test('sin mezclador va una raya, no un cero', () => {
+        const solo = JSON.parse(JSON.stringify(WHIS));
+        delete solo.presentaciones[0].mezcladorId;
+        const J = pantalla([solo, REFR]);
+        const C = J._costeoCeldas(solo, [solo, REFR]);
+        return eq(C.copa.mezMult + '|' + C.copa.mezUnit + '|' + (papel(J).indexOf('>—<') > -1),
+                  '||true', 'raya');
+    });
+    /* La fila de grupo del PDF abarca TODAS las columnas: si el conteo no
+       cuadra, el encabezado del grupo queda corrido una celda. */
+    /* Contra el número de <th> de SU tabla, no contra un 6 escrito aquí: la
+       otra tabla de la hoja también lleva seis columnas, así que buscar un
+       colspan="6" suelto lo encontraba aunque esta quedara corrida. */
+    test('la fila de grupo del PDF abarca todas las columnas de su tabla', () => {
+        const h = soloDest(papel(I));
+        const ths = (h.slice(h.indexOf('<thead>'), h.indexOf('</thead>')).match(/<th\b/g) || []).length;
+        const cs = parseInt(((/colspan="(\d+)"/.exec(h)) || [])[1], 10);
+        return eq(cs, ths, 'columnas=' + ths + ' colspan=' + cs);
+    });
+
+    /* ── LA FORMA QUE PIDIÓ EDWIN ── */
+    const COLS = ['Bebida', 'Costo', 'Mezclador', 'Sugerido', 'Cómo sale', 'En carta'];
+    /* Los encabezados EN EL ORDEN EN QUE SALEN. Filtrar la lista canónica
+       buscando cada nombre devolvía siempre la lista canónica: la prueba
+       pasaba aunque las columnas salieran al revés. */
+    const orden = h => {
+        const th = h.slice(h.indexOf('<thead'), h.indexOf('</thead>'));
+        return [...th.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map(m => m[1].trim()).join(',');
+    };
+    test('las seis columnas, en ese orden, en la pantalla', () =>
+        eq(orden(pant(I)), COLS.join(','), 'las seis'));
+    test('…y las mismas seis en el papel', () =>
+        eq(orden(papel(I)), COLS.join(','), 'las seis'));
+    test('dos renglones por producto: copa y botella', () => {
+        const h = papel(I);
+        return eq((h.indexOf('copa de 60 ML') > -1) + '|' + (h.indexOf('botella de 750 ML') > -1),
+                  'true|true', 'los dos');
+    });
+    test('la primera columna trae presentación y precio de compra', () => {
+        const C = I._costeoCeldas(WHIS, [WHIS, REFR]);
+        return eq(C.bebida.present + ' · ' + C.bebida.compra + ' · ' + C.bebida.compraUm,
+                  '750 ML · $ 909.00 · $ 1,212.00 por LT', 'la identidad');
+    });
+    /* Sin precio capturado no se inventa una utilidad: un 0% se lee como
+       «no deja nada», y lo que pasa es que nadie le ha puesto precio. */
+    test('sin precio de carta no se inventa una utilidad', () => {
+        const sinP = JSON.parse(JSON.stringify(WHIS));
+        delete sinP.presentaciones[0].precioCartaBot;
+        const J = pantalla([sinP, REFR]);
+        const C = J._costeoCeldas(sinP, [sinP, REFR]);
+        return eq(C.bot.carta + '|' + (C.bot.util === null), '—|true', 'sin inventar');
+    });
+    /* El nombre y la variedad los teclea una persona y se interpolan en HTML. */
+    test('el nombre del producto sale escapado en las dos', () => {
+        const malo = JSON.parse(JSON.stringify(WHIS));
+        malo.nombre = 'Chivas <b>X</b>';
+        const J = pantalla([malo, REFR]);
+        const p1 = pant(J), p2 = papel(J);
+        return eq((p1.indexOf('Chivas <b>X</b>') === -1 && p1.indexOf('&lt;b&gt;X&lt;/b&gt;') > -1) + '|' +
+                  (p2.indexOf('Chivas <b>X</b>') === -1 && p2.indexOf('&lt;b&gt;X&lt;/b&gt;') > -1),
+                  'true|true', 'escapado en las dos');
     });
 })();
 

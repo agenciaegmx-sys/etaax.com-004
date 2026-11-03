@@ -1464,62 +1464,116 @@
        var cl = document.getElementById('countLabel'); if (cl) cl.textContent = (g1.length+g2.length)+' bebidas';
    }
 
+   /* ══ LO QUE DICE CADA CELDA DEL COSTEO ═══════════════════════════════════
+      La pantalla y el papel pintan distinto —una con variables de tema, el
+      otro con tinta negra— pero tienen que decir los MISMOS números con las
+      MISMAS palabras. Cuando cada una armaba su texto por su cuenta, el papel
+      acabó con la unidad de medida en un renglón y su título en otro: el dato
+      estaba bien y no había manera de leerlo.
+
+      Aquí NO se calcula nada: todo sale de _costeoCopaDatos. Esto solo decide
+      cómo se dice. Seis columnas y dos renglones por producto —copa y
+      botella—, cada columna contando UNA cosa:
+
+        1 Bebida      nombre, variedad, presentación y en cuánto se compra
+        2 Costo       lo que cuesta servir esa modalidad, con su medida
+        3 Mezclador   el refresco: cuánto cuesta uno y cuántos lleva
+        4 Sugerido    el precio que sale de la cuenta
+        5 Cómo sale   esa cuenta, escrita: costo × múltiplo + refrescos
+        6 En carta    lo que de verdad se cobra y cuánto deja              */
+   function _costeoUtil(precio, costo) {
+       if (!(precio > 0) || !(costo > 0)) return null;
+       return { pct: (precio - costo) / costo * 100, mult: precio / costo };
+   }
+   function _costeoCeldas(ins, todos) {
+       var D = _costeoCopaDatos(ins, todos), p = D.p;
+       var contML = toML(p.contNeto, p.umContenido || 'ML');
+       var copaML = toML(p.tamanoCopa, p.umTamanoCopa || 'ML');
+       var cuNum  = parseFloat(p.costoUnitario) || 0;
+       var n = function (v) { return v > 0 ? fmtMXN(v) : '—'; };
+       /* El desglose se escribe con los MISMOS factores que produjeron el
+          sugerido, no con una multiplicación aparte: si alguien cambia la
+          fórmula y no esta línea, el papel explicaría una cuenta que no es. */
+       var baseCopa = D.costoCopa * D.fCopa, baseBot = D.costoBot * D.fBot;
+       return {
+           D: D,
+           bebida: {
+               nombre:   ins.nombre || '',
+               variedad: [ins.maduracion, ins.variedad].filter(Boolean).join(' · '),
+               grupo:    _grupoIns(ins),
+               present:  contML > 0 ? contML + ' ML' : '',
+               compra:   n(D.costoBot),
+               compraUm: cuNum > 0 ? fmtMXN(cuNum) + ' por ' + (p.umCosto || 'LT') : ''
+           },
+           copa: {
+               titulo:   'Por copa',
+               medida:   copaML > 0 ? 'copa de ' + copaML + ' ML' : 'por copa',
+               costo:    n(D.costoCopa),
+               costoSub: D.costoOz > 0 ? n(D.costoOz) + ' la onza' : '',
+               mezUnit:  (D.mezCopaPz > 0 && D.mezCopaCost > 0) ? n(D.mezCopaCost / D.mezCopaPz) + ' c/u' : '',
+               mezMult:  (D.mezCopaPz > 0 && D.mezCopaCost > 0) ? '×' + D.mezCopaPz + ' = ' + n(D.mezCopaCost) : '',
+               sugerido: n(D.sugTrago > 0 ? D.sugTrago : D.sugCopa),
+               cuenta:   n(D.costoCopa) + ' × ' + D.fCopa,
+               cuentaIgual: '= ' + n(baseCopa),
+               cuentaMas: D.mezCopaCost > 0 ? '+ ' + n(D.mezCopaCost) + ' de refrescos' : '',
+               carta:    n(D.cartaCopa),
+               util:     _costeoUtil(D.cartaCopa, D.costoTrago)
+           },
+           bot: {
+               titulo:   'Por botella',
+               medida:   contML > 0 ? 'botella de ' + contML + ' ML' : 'por botella',
+               costo:    n(D.costoBot),
+               costoSub: '',
+               mezUnit:  '',
+               mezMult:  (D.mezBotPz > 0 && D.mezBotCost > 0) ? '×' + D.mezBotPz + ' = ' + n(D.mezBotCost) : '',
+               sugerido: n(D.sugBotServ > 0 ? D.sugBotServ : D.sugBot),
+               cuenta:   n(D.costoBot) + ' × ' + D.fBot,
+               cuentaIgual: '= ' + n(baseBot),
+               cuentaMas: D.mezBotCost > 0 ? '+ ' + n(D.mezBotCost) + ' de servicio' : '',
+               carta:    n(D.cartaBot),
+               util:     _costeoUtil(D.cartaBot, D.costoBotServ)
+           }
+       };
+   }
+   var _COSTEO_COLS = ['Bebida', 'Costo', 'Mezclador', 'Sugerido', 'Cómo sale', 'En carta'];
+
    function _costeoTablaCopa(lista, todos){
-       /* EL COSTO ES EL DE LA BOTELLA, no el de un litro. Nadie compra litros:
-          se compran botellas de 700 ó 750, y comparar contra un precio por
-          litro obliga a hacer la regla de tres de cabeza cada vez. El costo
-          por litro no se pierde: viaja como subtítulo de la misma celda.
-          La columna «Costo bot.» que iba más adelante desaparece: era
-          exactamente este mismo número, repetido. */
-       var head = '<tr>'+
-           '<th style="'+_CTHL+'">Bebida</th><th style="'+_CTHL+'">Grupo</th>'+
-           '<th style="'+_CTH+'">Costo botella</th><th style="'+_CTH+'">Costo/oz</th><th style="'+_CTH+'">Costo/copa</th>'+
-           '<th style="'+_CTH+'">Sug. copa</th>'+
-           '<th style="'+_CTH+'">Precio ref.</th>'+
-           '<th style="'+_CTH+'">Carta copa</th><th style="'+_CTH+'">Utilidad copa</th>'+
-           '<th style="'+_CTH+'">Sug. bot.</th>'+
-           '<th style="'+_CTH+'">Bot. + servicio</th>'+
-           '<th style="'+_CTH+'">Carta bot.</th><th style="'+_CTH+'">Utilidad bot.</th></tr>';
-       var rows = lista.map(function(ins){
-           var D = _costeoCopaDatos(ins, todos), p = D.p;
-           var costoOz = D.costoOz, costoCopa = D.costoCopa, fCopa = D.fCopa, sugCopa = D.sugCopa;
-           var cartaCopa = D.cartaCopa, costoTrago = D.costoTrago;
-           var costoBot = D.costoBot, fBot = D.fBot, sugBot = D.sugBot, cartaBot = D.cartaBot;
-           /* La copa sugerida se lee como la botella: el markup y, si lleva
-              refresco, lo que suma. Un «$167.94 ×3.3» a secas escondía que el
-              trago completo cuesta más. */
-           var sugCopaMostrar = D.sugTrago > 0 ? D.sugTrago : sugCopa;
-           var sufCopa = ' ×'+fCopa + (D.mezCopaCost>0 ? ' +'+D.mezCopaPz+' refr.' : '');
-           return '<tr>'+
-               '<td style="'+_CTDL+';font-weight:600">'+etx(ins.nombre)+'</td>'+
-               '<td style="'+_CTDL+';color:var(--text-muted)">'+etx(_grupoIns(ins))+'</td>'+
-               '<td style="'+_CTD+'">'+_costoBotTxt(D)+'</td>'+
-               '<td style="'+_CTD+'">'+_cMoney(costoOz)+'</td>'+
-               '<td style="'+_CTD+'">'+_cMoney(costoCopa)+'</td>'+
-               '<td style="'+_CTD+'">'+_cMoney(sugCopaMostrar)+'<span style="color:var(--text-dim);font-size:10px">'+sufCopa+'</span></td>'+
-               /* El refresco contemplado, en pesos. El emoji decía que llevaba
-                  mezclador pero no cuánto cuesta, que es el dato con el que se
-                  pone el precio. */
-               '<td style="'+_CTD+'">'+(D.mezCopaCost>0
-                   ? _cMoney(D.mezCopaCost)+'<span style="color:var(--text-dim);font-size:10px"> ×'+D.mezCopaPz+'</span>'
-                   : '<span style="color:var(--text-dim)">—</span>')+'</td>'+
-               '<td style="'+_CTD+';color:var(--accent)">'+_cMoney(cartaCopa)+'</td>'+
-               '<td style="'+_CTD+'">'+_cUtil(cartaCopa, costoTrago)+'</td>'+
-               '<td style="'+_CTD+'">'+_cMoney(sugBot)+'<span style="color:var(--text-dim);font-size:10px"> ×'+fBot+'</span></td>'+
-               /* La botella con su servicio de refrescos. Sin servicio capturado
-                  va una raya, no un cero: un cero se lee como "sale gratis". */
-               '<td style="'+_CTD+'">'+(D.sugBotServ>0
-                   ? _cMoney(D.sugBotServ)+'<span style="color:var(--text-dim);font-size:10px"> +'+D.mezBotPz+' refr.</span>'
-                   : '<span style="color:var(--text-dim)">—</span>')+'</td>'+
-               '<td style="'+_CTD+';color:var(--accent)">'+_cMoney(cartaBot)+'</td>'+
-               /* La utilidad se mide contra lo que cuesta DESPACHAR la botella:
-                  con sus refrescos si los lleva. Medirla contra la botella sola
-                  inflaba el margen justo en el producto de ticket más alto. */
-               '<td style="'+_CTD+'">'+_cUtil(cartaBot, D.costoBotServ)+'</td>'+
-               '</tr>';
+       var H = function (t, der) { return '<th style="' + (der ? _CTH : _CTHL) + '">' + t + '</th>'; };
+       var head = '<tr>' + H('Bebida') + H('Costo', 1) + H('Mezclador', 1) +
+                  H('Sugerido', 1) + H('Cómo sale') + H('En carta', 1) + '</tr>';
+       var sub = function (t) { return t ? '<div style="color:var(--text-dim);font-size:10.5px;font-weight:400;margin-top:2px">' + etx(t) + '</div>' : ''; };
+       var util = function (u) {
+           if (!u) return '<span style="color:var(--text-dim)">—</span>';
+           return '<span style="color:' + (u.pct >= 0 ? 'var(--green)' : 'var(--red)') + ';font-weight:700">' +
+                  (u.pct >= 0 ? '+' : '') + u.pct.toFixed(0) + '%</span>' +
+                  '<span style="color:var(--text-dim);font-size:10.5px"> · ' + u.mult.toFixed(1) + 'x</span>';
+       };
+       var rows = lista.map(function (ins) {
+           var C = _costeoCeldas(ins, todos);
+           var linea = function (m, primera) {
+               var bg = primera ? '' : 'background:rgba(255,255,255,.02);';
+               return '<tr style="' + bg + '">' +
+                   (primera
+                       ? '<td rowspan="2" style="' + _CTDL + ';vertical-align:top">' +
+                         '<div style="font-weight:600;color:var(--text)">' + etx(C.bebida.nombre) + '</div>' +
+                         sub(C.bebida.variedad) + sub(C.bebida.grupo) +
+                         '<div style="margin-top:5px;color:var(--text)">' + etx(C.bebida.present) + ' · ' + etx(C.bebida.compra) + '</div>' +
+                         sub(C.bebida.compraUm) + '</td>'
+                       : '') +
+                   '<td style="' + _CTD + '"><b>' + etx(m.costo) + '</b>' + sub(m.medida) + sub(m.costoSub) + '</td>' +
+                   '<td style="' + _CTD + '">' + (m.mezMult ? (m.mezUnit ? etx(m.mezUnit) + sub(m.mezMult) : etx(m.mezMult))
+                                                            : '<span style="color:var(--text-dim)">—</span>') + '</td>' +
+                   '<td style="' + _CTD + '"><b>' + etx(m.sugerido) + '</b></td>' +
+                   '<td style="' + _CTDL + ';color:var(--text-muted);font-size:11.5px;white-space:nowrap">' +
+                       etx(m.cuenta) + sub(m.cuentaIgual) + sub(m.cuentaMas) + '</td>' +
+                   '<td style="' + _CTD + '"><span style="color:var(--accent);font-weight:700">' + etx(m.carta) + '</span>' +
+                       (m.util ? '<div style="margin-top:2px">' + util(m.util) + '</div>' : '') + '</td>' +
+                   '</tr>';
+           };
+           return linea(C.copa, true) + linea(C.bot, false);
        }).join('');
-       return _costeoSecTitle('🥃 Destilados · Licores · Vinos', lista.length)+
-           '<div class="tabla-wrap"><table style="min-width:1260px"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
+       return _costeoSecTitle('🥃 Destilados · Licores · Vinos', lista.length) +
+           '<div class="tabla-wrap"><table style="min-width:980px"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div>';
    }
 
    function _costeoTablaPieza(lista){
@@ -1715,40 +1769,53 @@
        function factor(v, texto) { return _u(v) + '<small>' + texto + '</small>'; }
        cuerpo += '<style>.costeo-par{break-inside:avoid;page-break-inside:avoid}' +
            '.costeo-par td{vertical-align:top;line-height:1.45}' +
-           '.costeo-par small,.costeo-variedad{display:block;font-size:10px;color:#444;font-weight:400;white-space:normal}' +
+           '.costeo-par small,.costeo-variedad{display:block;font-size:10px;color:#555;font-weight:400;white-space:normal;margin-top:2px}' +
+           '.costeo-compra{margin-top:5px;font-size:11px;color:#1a1916;font-weight:600}' +
+           '.costeo-cuenta{font-size:10.5px;color:#444;white-space:nowrap;line-height:1.5}' +
            'table.rt .costeo-par td{padding:7px 8px;font-size:11px}' +
            'table.rt .costeo-par tr:nth-child(2) td{background:#f7f7f7}' +
            'table.rt .costeo-par:last-child td{border-bottom:1px solid #aaa}' +
            '.costeo-modalidad{font-weight:700;color:#333}</style>';
        if (g1.length) {
+           /* MISMAS seis columnas que la pantalla, y los mismos textos: ambas
+              salen de _costeoCeldas. Dos renglones por producto —copa y
+              botella— para que quepa texto legible en vez de apretar trece
+              columnas en una hoja. */
+           var _sub = function (t) { return t ? '<small>' + etx(t) + '</small>' : ''; };
+           var _utl = function (u) {
+               if (!u) return '—';
+               return '<span style="color:' + (u.pct >= 0 ? '#1a7a46' : '#c0392b') + ';font-weight:700">' +
+                      (u.pct >= 0 ? '+' : '') + u.pct.toFixed(0) + '%</span>' +
+                      '<span style="color:#888;font-size:9.5px"> · ' + u.mult.toFixed(1) + 'x</span>';
+           };
            cuerpo += '<div class="rsec">Destilados · Licores · Vinos · ' + g1.length + '</div>' +
                '<table class="rt tnum"><thead><tr>' +
-                   '<th class="w" style="width:21%">Bebida / variedad</th><th>Modalidad</th>' +
-                   '<th>Costo</th><th>Costo/oz</th><th>Precio sugerido</th><th>Refrescos a costo</th><th>Precio carta</th><th>Utilidad</th>' +
+                   '<th class="w" style="width:24%">Bebida</th>' +
+                   '<th>Costo</th><th>Mezclador</th><th>Sugerido</th>' +
+                   '<th class="w" style="width:19%">Cómo sale</th><th>En carta</th>' +
                '</tr></thead>' +
                _agruparPDF(g1, _grupoIns).map(function(G){
-                   return '<tbody>' + _filaGrupoPDF(G.nombre, G.items.length, '', 8) + '</tbody>' + G.items.map(function(ins){
-                       var D = _costeoCopaDatos(ins, todos), p = D.p;
-                       var contML = toML(p.contNeto, p.umContenido||'ML');
-                       var cu = parseFloat(p.costoUnitario) > 0 ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + etx(p.umCosto || 'LT') : '';
-                       var copaML = toML(p.tamanoCopa, p.umTamanoCopa || 'ML');
-                       var sugCopa = D.sugTrago > 0 ? D.sugTrago : D.sugCopa;
-                       var sugBot = D.sugBotServ > 0 ? D.sugBotServ : D.sugBot;
-                       return '<tbody class="costeo-par" data-insumo="' + etx(ins.id) + '"><tr>' +
-                           '<td rowspan="2" class="w ind">' + identidad(ins) + '</td>' +
-                           '<td class="costeo-modalidad">Por copa' + (copaML > 0 ? '<small>' + copaML + ' ML</small>' : '') + '</td>' +
-                           '<td>' + _u(D.costoCopa) + '</td><td rowspan="2">' + _u(D.costoOz) + '</td>' +
-                           '<td>' + factor(sugCopa, '×' + D.fCopa + (D.mezCopaCost > 0 ? ' + refrescos a costo' : '')) + '</td>' +
-                           '<td>' + (D.mezCopaCost > 0 ? factor(D.mezCopaCost, D.mezCopaPz + ' piezas') : '—') + '</td>' +
-                           '<td><b>' + _u(D.cartaCopa) + '</b></td><td>' + _ut(D.cartaCopa, D.costoTrago) + '</td>' +
-                       '</tr><tr>' +
-                           '<td class="costeo-modalidad">Por botella' + (contML > 0 ? '<small>' + contML + ' ML</small>' : '') + '</td>' +
-                           '<td>' + _u(D.costoBot) + (cu ? '<small>' + cu + '</small>' : '') + '</td>' +
-                           '<td>' + factor(sugBot, '×' + D.fBot + (D.mezBotCost > 0 ? ' + servicio' : '')) +
-                               (D.mezBotCost > 0 ? '<small>Sin servicio: ' + _u(D.sugBot) + '</small>' : '') + '</td>' +
-                           '<td>' + (D.mezBotCost > 0 ? factor(D.mezBotCost, D.mezBotPz + ' piezas') : '—') + '</td>' +
-                           '<td><b>' + _u(D.cartaBot) + '</b></td><td>' + _ut(D.cartaBot, D.costoBotServ) + '</td>' +
-                       '</tr></tbody>';
+                   return '<tbody>' + _filaGrupoPDF(G.nombre, G.items.length, '', 6) + '</tbody>' + G.items.map(function(ins){
+                       var C = _costeoCeldas(ins, todos);
+                       var fila = function (m, primera) {
+                           return '<tr>' +
+                               (primera
+                                   ? '<td rowspan="2" class="w ind">' +
+                                     '<strong>' + etx(C.bebida.nombre) + '</strong>' +
+                                     (C.bebida.variedad ? '<div class="costeo-variedad">' + etx(C.bebida.variedad) + '</div>' : '') +
+                                     '<div class="costeo-compra">' + etx(C.bebida.present) + ' · ' + etx(C.bebida.compra) + '</div>' +
+                                     (C.bebida.compraUm ? '<div class="costeo-variedad">' + etx(C.bebida.compraUm) + '</div>' : '') +
+                                     '</td>'
+                                   : '') +
+                               '<td><b>' + etx(m.costo) + '</b>' + _sub(m.medida) + _sub(m.costoSub) + '</td>' +
+                               '<td>' + (m.mezMult ? (m.mezUnit ? etx(m.mezUnit) + _sub(m.mezMult) : etx(m.mezMult)) : '—') + '</td>' +
+                               '<td><b>' + etx(m.sugerido) + '</b></td>' +
+                               '<td class="w costeo-cuenta">' + etx(m.cuenta) + _sub(m.cuentaIgual) + _sub(m.cuentaMas) + '</td>' +
+                               '<td><b>' + etx(m.carta) + '</b>' + (m.util ? '<small>' + _utl(m.util) + '</small>' : '') + '</td>' +
+                               '</tr>';
+                       };
+                       return '<tbody class="costeo-par" data-insumo="' + etx(ins.id) + '">' +
+                              fila(C.copa, true) + fila(C.bot, false) + '</tbody>';
                    }).join('');
                }).join('') + '</table>';
        }
