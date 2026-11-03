@@ -31094,6 +31094,99 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
         return eq(Math.round(neto * 100) / 100, Math.round((o - f) * 100) / 100, 'resta de lo impreso');
     });
 
+    /* ══ HALLAZGOS DE LA AUDITORÍA DE CODEX (3-nov-2026) ═════════════════ */
+
+    /* H04 · PANTALLA E IMPRESO TIENEN QUE SELECCIONAR LO MISMO.
+       Con una presentación −5 y otra +5 el neto del compuesto es 0: el
+       renglón desaparecía de «solo faltantes» —y su grupo del modal, que se
+       quedaba vacío y no dejaba imprimir— mientras la hoja SÍ traía el
+       faltante de la primera. La pantalla escondía lo que el papel enseñaba. */
+    function conCompensado(fn) {
+        const comp = { id:'cg2', nombre:'Caguamas', miembros:['p1','p2'] };
+        const prev = F._storage[F._compuestosKey()];
+        F._storage[F._compuestosKey()] = JSON.stringify([comp]);
+        const filas = [
+            { insumoId:'p1', nombre:'Cerveza A 940', tipo:'pza', contNeto:940, categoria:'Cervezas',
+              existenciaAnterior:30, cerradasBarra:25, ventasCopasDirectas:0, costoUnitario:45, precioCarta:99, entradas:[] },
+            { insumoId:'p2', nombre:'Cerveza B 940', tipo:'pza', contNeto:940, categoria:'Cervezas',
+              existenciaAnterior:30, cerradasBarra:35, ventasCopasDirectas:0, costoUnitario:45, precioCarta:99, entradas:[] },
+        ];
+        setVar(F, 'filasCaptura', filas);
+        setVar(F, 'invActual', { id:'i1', nombre:'Barra', fecha:'2026-11-03', entradasLog:[],
+            prebatchProducidos:{}, cocktailsVendidos:{}, ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], compuestos:[comp] });
+        try { return fn(filas); }
+        finally {
+            if (prev === undefined) delete F._storage[F._compuestosKey()];
+            else F._storage[F._compuestosKey()] = prev;
+            setVar(F, 'filasCaptura', FILAS);
+        }
+    }
+    test('un compuesto con un envase que falta y otro que sobra NO desaparece del filtro', () =>
+        eq(conCompensado(() => conFiltro('falta', () => F._step5TablasHTML())).indexOf('Caguamas') > -1,
+           true, 'sigue en pantalla'));
+    test('…y su grupo se puede elegir para imprimir', () =>
+        eq(conCompensado(() => conFiltro('falta', () => F._gruposVisiblesS5())).join(','),
+           'Cervezas', 'elegible'));
+    test('…y lo que la hoja trae es lo que la pantalla deja ver', () => {
+        const hoja = conCompensado(filas => conFiltro('falta', () => bloqueFS(reporte('faltsobr', filas))));
+        const pant = conCompensado(() => conFiltro('falta', () => F._step5TablasHTML()));
+        return eq((hoja.indexOf('Cerveza A 940') > -1) + '|' + (pant.indexOf('Caguamas') > -1),
+                  'true|true', 'de acuerdo');
+    });
+    /* Y la otra mitad: el buscador casa el nombre del COMPUESTO; el impreso
+       lista presentaciones, que se llaman de otra forma. */
+    test('buscar el nombre del compuesto alcanza a sus presentaciones en la hoja', () => {
+        setVar(F, '_busqStep5', 'caguamas');
+        const hoja = conCompensado(filas => bloqueFS(reporte('faltsobr', filas)));
+        setVar(F, '_busqStep5', '');
+        return eq(hoja.indexOf('Cerveza A 940') > -1, true, 'con sus miembros');
+    });
+
+    /* H10 · UN PRODUCTO POR PESO NO SE MIDE EN COPAS. La harina salía como
+       «−500.0 cop»: el dinero estaba bien y la unidad describía otra cosa. */
+    test('un faltante por peso se rotula en su unidad, no en copas', () => {
+        const b = bloqueFS(reporte('faltsobr', [
+            { insumoId:'h1', nombre:'Harina', tipo:'peso', baseUnit:'G', categoria:'Abarrotes',
+              existenciaAnterior:2000, existenciaPeso:1500, costoUnitario:0.05, precioCarta:0.2, entradas:[] },
+        ]));
+        const fila = b.slice(b.indexOf('>Harina<'), b.indexOf('>Harina<') + 900);
+        return eq(/-[\d.]+ g</.test(fila) && fila.indexOf(' cop') === -1, true,
+                  'en gramos · ' + (fila.match(/-[\d.]+ \w+/) || [])[0]);
+    });
+
+    /* H12 · EL NOMBRE ES TEXTO DEL USUARIO y se interpola en HTML.
+       El `etx` del arnés es un paso-a-través: con él no se puede ver si algo
+       se escapó o no. Se carga el DE VERDAD (security.js) solo para estas dos
+       pruebas — comprobar el escapado contra un escapador de mentira sería
+       comprobar nada. */
+    cargarJS(F, 'security.js');
+    test('el escapador que se está usando aquí es el de producción', () =>
+        eq(F.etx('<b>X</b>'), '&lt;b&gt;X&lt;/b&gt;', 'el de verdad'));
+    test('el nombre de un compuesto sale escapado en su línea combinada', () => {
+        const comp = { id:'cx', nombre:'Caguamas <b>X</b>', miembros:['q1','q2'] };
+        const prev = F._storage[F._compuestosKey()];
+        F._storage[F._compuestosKey()] = JSON.stringify([comp]);
+        const b = bloqueFS(reporte('faltsobr', [
+            { insumoId:'q1', nombre:'Cerveza Q1', tipo:'pza', categoria:'Cervezas',
+              existenciaAnterior:30, cerradasBarra:25, ventasCopasDirectas:0, costoUnitario:45, precioCarta:99, entradas:[] },
+            { insumoId:'q2', nombre:'Cerveza Q2', tipo:'pza', categoria:'Cervezas',
+              existenciaAnterior:30, cerradasBarra:26, ventasCopasDirectas:0, costoUnitario:45, precioCarta:99, entradas:[] },
+        ]));
+        if (prev === undefined) delete F._storage[F._compuestosKey()];
+        else F._storage[F._compuestosKey()] = prev;
+        return eq(b.indexOf('Caguamas <b>X</b> ·') === -1 && b.indexOf('&lt;b&gt;X&lt;/b&gt;') > -1,
+                  true, 'escapado');
+    });
+    test('…y el de una categoría tecleada a mano, en su subtotal', () => {
+        const b = bloqueFS(reporte('faltsobr', [
+            { insumoId:'z1', nombre:'Cosa rara', tipo:'pza', categoria:'<i>Mi grupo</i>',
+              existenciaAnterior:30, cerradasBarra:25, ventasCopasDirectas:0, costoUnitario:45, precioCarta:99, entradas:[] },
+        ]));
+        return eq(b.indexOf('Subtotal <i>Mi grupo</i>') === -1 && b.indexOf('&lt;i&gt;Mi grupo&lt;/i&gt;') > -1,
+                  true, 'escapado');
+    });
+
     /* ── La poda: cada reporte se lleva SOLO su parte ── */
     /* Un contenedor de mentira con lo mínimo que la regla toca. Correrla de
        verdad es la única forma de saber que las piezas nuevas no se cuelan en

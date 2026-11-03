@@ -8821,8 +8821,19 @@ function _difS5(f) {
    traería renglones que la pantalla no enseña. */
 function _pasaDifS5(f) {
     if (!_difStep5) return true;
-    var d = _difS5(f);
-    return _difStep5 === 'falta' ? d < -0.001 : d > 0.001;
+    var cumple = function (d) { return _difStep5 === 'falta' ? d < -0.001 : d > 0.001; };
+    /* UN COMPUESTO ENTRA SI ALGUNA DE SUS PRESENTACIONES CUMPLE, no por su
+       neto. Con una presentación −5 y otra +5 el neto es 0, así que el
+       renglón desaparecía de «solo faltantes» —y con él su grupo del modal de
+       impresión, que se quedaba vacío— mientras el impreso SÍ traía el
+       faltante de la primera. La pantalla escondía lo que el papel enseñaba.
+       (Lo encontró Codex.) */
+    if (f && f.esCompuesto) {
+        var comp = getCompuestos().find(function (c) { return c.id === f.compId; }) || {};
+        return (comp.miembros || []).map(_filaDeMiembro).filter(Boolean)
+            .some(function (m) { var a = _repartoDe(m.insumoId); return cumple(calcDiferencia(m) + a.fis - a.teo); });
+    }
+    return cumple(_difS5(f));
 }
 function setDifStep5(v) {
     _difStep5 = v || '';
@@ -10640,7 +10651,15 @@ function verReporteDirectivo(gerencial, modo) {
     const _grupoApagadoFS = g => !!(_gruposImprS5 && _gruposImprS5[g] === false);
     const _pasaFiltroFS = (a) => {
         const f = a.f;
-        if (_qFS && !(f.nombre || '').toLowerCase().includes(_qFS)) return false;
+        /* El buscador de la pantalla casa el nombre del COMPUESTO; el impreso
+           lista PRESENTACIONES, que se llaman de otra forma. Buscar «Caguamas»
+           enseñaba el renglón en pantalla y dejaba la hoja sin sus miembros.
+           Una presentación entra si coincide ella o su compuesto. */
+        if (_qFS) {
+            const c = _compDeMiembro[f.insumoId];
+            if (!(f.nombre || '').toLowerCase().includes(_qFS) &&
+                !(c && (c.nombre || '').toLowerCase().includes(_qFS))) return false;
+        }
         if (_subcatStep5 && (f.subcategoria || f.categoria) !== _subcatStep5) return false;
         return !_grupoApagadoFS(_grupoCategoria(f));
     };
@@ -10663,15 +10682,24 @@ function verReporteDirectivo(gerencial, modo) {
     /* El dinero de un renglón, definido UNA vez: lo usan la fila, el subtotal
        del compuesto, el del grupo y el total del lado. Cuatro sumas sobre dos
        definiciones distintas es como una hoja acaba sin cuadrar consigo misma. */
+    /* LA UNIDAD DE UN RENGLÓN. Un producto por peso no se mide en copas: la
+       harina salía como «−500.0 cop». La expresión ya existía bien dos veces
+       más abajo en este mismo reporte; ahora es una sola. */
+    const _uRd = f => f && f.tipo === 'peso' ? String(f.baseUnit || 'G').toLowerCase()
+                    : (f && f.tipo === 'pza' ? 'pza' : 'cop');
     const _costoFS = a => Math.abs(a.dif) * a.cc;      // lo que costó reponerlo
     const _cartaFS = a => Math.abs(a.difCosto);        // lo que se hubiera cobrado
+    /* `etiqueta` lleva TEXTO DEL USUARIO —el nombre de un compuesto, el de una
+       categoría que alguien tecleó— y se interpola en HTML. Se escapa aquí, en
+       el único sitio donde entra, y no en cada llamada: de las tres que hay,
+       olvidarlo en una basta. (Lo encontró Codex.) */
     function _lineaTotalFS(etiqueta, n, costo, carta, col, nivel, sust){
         const est = nivel === 'total' ? { borde:'2px solid #1a1916', peso:900, bg:'#f0efe9' }
                   : nivel === 'comp'  ? { borde:'1px dashed #ccc',   peso:600, bg:'#fbfbf8' }
                   :                     { borde:'1px solid #ddd',    peso:700, bg:'#f8f8f4' };
         sust = sust || ['producto', 'productos'];
         return `<tr style="background:${est.bg}">
-            <td colspan="5" style="font-weight:${est.peso};border-top:${est.borde}">${etiqueta} · ${n} ${n === 1 ? sust[0] : sust[1]}</td>
+            <td colspan="5" style="font-weight:${est.peso};border-top:${est.borde}">${etx(etiqueta)} · ${n} ${n === 1 ? sust[0] : sust[1]}</td>
             <td class="tr" style="font-weight:${est.peso};color:${col};border-top:${est.borde}">${$g('$'+_m2(costo))}</td>
             <td class="tr" style="font-weight:${est.peso};color:${col};border-top:${est.borde}">${$g('$'+_m2(carta))}</td></tr>`;
     }
@@ -10700,7 +10728,7 @@ function verReporteDirectivo(gerencial, modo) {
         return partes.join(' · ');
     }
     function _rdFilaFS(a, col){
-        const u     = a.f.tipo === 'pza' ? 'pza' : 'cop';
+        const u     = _uRd(a.f);
         const costo = _costoFS(a);
         const carta = _cartaFS(a);
         const meta  = _metaFS(a.f);
@@ -10950,7 +10978,7 @@ function verReporteDirectivo(gerencial, modo) {
             gDif += a.difCosto;
             gNet += a.dif;
             gVend += a.f.tipo === 'pza' ? (a.ventaPzaTot || 0) : ((a.ventaCopa || 0) + (a.ventaBot || 0) * (a.copasBot || 0));
-            const u = a.f.tipo === 'peso' ? String(a.f.baseUnit || 'G').toLowerCase() : a.f.tipo === 'pza' ? 'pza' : 'cop';
+            const u = _uRd(a.f);
             const entStr = a.entBot > 0 ? '+' + _fmtEquivalenteBatch(a.entBot, a.f.tipo === 'copa' ? 'b' : u) : '—';
             const vtaCopaStr = a.f.tipo !== 'copa' ? '—' : (a.ventaCopaDir>0?a.ventaCopaDir.toFixed(1)+' c':'—');
             const vtaBotStr = a.f.tipo === 'peso' ? '—' : a.f.tipo === 'pza' ?
@@ -10978,7 +11006,7 @@ function verReporteDirectivo(gerencial, modo) {
             </tr>`;
         }).join('');
         const gc = gDif >= 0 ? cOk : cCrit;
-        const _us = [...new Set(items.map(a => a.f.tipo === 'peso' ? String(a.f.baseUnit || 'G').toLowerCase() : a.f.tipo === 'pza' ? 'pza' : 'cop'))];
+        const _us = [...new Set(items.map(a => _uRd(a.f)))];
         const _gU = _us[0] || 'u', _mixtas = _us.length > 1;
         const _netCol = gNet < -0.05 ? cCrit : (gNet > 0.05 ? cOk : '#999');
         const _faltTxt = _mixtas ? 'Diferencias por insumo' : gNet < -0.05 ? `faltan ${_ncRd(Math.abs(gNet))} ${_gU}` : (gNet > 0.05 ? `sobran ${_ncRd(gNet)} ${_gU}` : 'cuadra');
