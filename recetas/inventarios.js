@@ -2632,8 +2632,21 @@ function _reconciliarEntradaEnInv(e) {
     var vLocal = parseInt(copia.ver, 10) || 1;        // sin `ver` = la primera
     var vNube  = parseInt(e.ver,    10) || 1;
     if (vNube <= vLocal) return false;
-    ['cantidad', 'unidad', 'concepto', 'nota', 'motivo', 'evidencia',
-     'foto_url', 'foto_urls', 'ver', 'editadoPor', 'editadoEn'].forEach(function (campo) {
+    /* LO EDITABLE se copia… y lo que el servidor QUITÓ se quita. Al borrar un
+       comentario, SQL elimina la llave; copiar solo las presentes dejaba el
+       comentario viejo vivo en la copia de adentro, y el inventario seguía
+       enseñando algo que ya no existe en ningún lado.
+
+       `notas` es donde vive el comentario de una entrada; `nota` es el rezago
+       de los días en que el editor de la v82 escribía en la llave equivocada,
+       y se limpia igual para no dejar dos. */
+    ['cantidad', 'notas', 'nota', 'evidencia'].forEach(function (campo) {
+        if (campo in e) copia[campo] = e[campo]; else delete copia[campo];
+    });
+    /* Lo demás ACOMPAÑA: no se edita por el QR, así que su ausencia en el log
+       no significa que se haya borrado. */
+    ['unidad', 'concepto', 'motivo', 'foto_url', 'foto_urls',
+     'ver', 'editadoPor', 'editadoEn'].forEach(function (campo) {
         if (campo in e) copia[campo] = e[campo];
     });
     return true;

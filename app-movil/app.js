@@ -1349,6 +1349,12 @@ async function guardarCorreccion() {
     if (!_COR) return;
     var btn = $('corOk'), msg = $('corMsg');
     var campos = _COR.tipo === 'conteo' ? ['cerradasBodega', 'cerradasBarra', 'nota'] : ['cantidad', 'nota'];
+        /* EL COMENTARIO VIAJA CON EL NOMBRE QUE USA SU TIPO: una entrada lo
+           guarda en `notas` —ahí lo escribe la captura y ahí lo lee el
+           inventario— y un conteo en `nota`. Mandarlo con el nombre
+           equivocado dejaba DOS comentarios: el QR leía uno y el ERP seguía
+           leyendo el otro, y nadie podía saber cuál era el bueno. */
+    var kNota = _COR.tipo === 'conteo' ? 'nota' : 'notas';
     var cambios = {};
     campos.forEach(function (k) {
         var el = $('cor_' + k); if (!el) return;
@@ -1356,14 +1362,24 @@ async function guardarCorreccion() {
         /* Un número vacío NO es cero —mandarlo borraría lo contado—; un texto
            vacío SÍ viaja, porque es como se borra un comentario. Y lo que no
            cambió no se manda: subiría la versión por nada. */
-        if (k === 'nota') { if (el.value !== antes) cambios[k] = el.value; }
+        if (k === 'nota') { if (el.value !== antes) cambios[kNota] = el.value; }
         else if (String(el.value).trim() !== '' && String(el.value) !== antes) cambios[k] = parseFloat(el.value);
     });
     if (!Object.keys(cambios).length) {
         msg.className = 'cormsg err'; msg.style.display = ''; msg.textContent = 'No cambiaste nada.';
         return;
     }
-    if (!_COR.op) _COR.op = 'cor_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    /* LA OPERACIÓN VA ATADA A SU CONTENIDO. `p_op` evita que un reintento por
+       mala conexión cuente como otra corrección. Pero si entre un intento y
+       otro la persona corrige el número, reenviar la MISMA operación le hace
+       contestar al servidor «ya estaba» por un cambio que nunca guardó — y la
+       pantalla enseña un valor que no se escribió. Se reintenta exactamente el
+       mismo envío; en cuanto cambia, es otra operación. */
+    var _huella = _COR.tipo + '|' + _COR.id + '|' + _COR.ver + '|' + JSON.stringify(cambios);
+    if (_COR.opHuella !== _huella) {
+        _COR.op = 'cor_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        _COR.opHuella = _huella;
+    }
     btn.disabled = true; msg.className = 'cormsg'; msg.style.display = ''; msg.textContent = 'Guardando…';
     var r;
     try {

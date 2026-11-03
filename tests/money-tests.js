@@ -29514,6 +29514,68 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
         return eq(c.llamadas[0].args.p_cambios.cantidad, 36, 'multiplicó otra vez');
     });
 
+    /* ══ LO QUE ENCONTRÓ CODEX (auditoría del 3-nov-2026) ═══════════════ */
+
+    /* H06 · EL COMENTARIO VIAJA CON EL NOMBRE QUE USA SU TIPO. Una entrada lo
+       guarda en `notas` —ahí lo escribe la captura y ahí lo lee el
+       inventario— y un conteo en `nota`. Mandarlo con el nombre equivocado
+       dejaba DOS comentarios: el QR leía uno y el ERP el otro, y no había
+       forma de saber cuál era el bueno. */
+    await testA('el comentario de una ENTRADA se manda como `notas`', async () => {
+        const c = mundo([{ data: { ok: true, ver: 2 } }]);
+        c._COR = null;
+        c._corregir('entrada', 'e1', 1, 'Ron', { cantidad: '48', nota: 'vieja' });
+        escribir(c, 'nota', 'Factura corregida');
+        await c._guardarCorreccion();
+        const ca = c.llamadas[0].args.p_cambios;
+        return eq(ca.notas + ' · ' + (ca.nota === undefined), 'Factura corregida · true',
+                  'con el nombre que lee el inventario');
+    });
+    await testA('…y el de un CONTEO sigue siendo `nota`', async () => {
+        const c = mundo([{ data: { ok: true, ver: 2 } }]);
+        c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+        abrir(c, { cerradasBodega: '10', cerradasBarra: '', nota: '' });
+        escribir(c, 'nota', 'se contó de noche');
+        await c._guardarCorreccion();
+        const ca = c.llamadas[0].args.p_cambios;
+        return eq(ca.nota + ' · ' + (ca.notas === undefined), 'se contó de noche · true', 'sin cambiar');
+    });
+    /* Vaciar el campo SÍ viaja: es como se borra un comentario. */
+    await testA('borrar el comentario de una entrada manda `notas` vacío', async () => {
+        const c = mundo([{ data: { ok: true, ver: 2 } }]);
+        c._COR = null;
+        c._corregir('entrada', 'e1', 1, 'Ron', { cantidad: '48', nota: 'algo escrito' });
+        escribir(c, 'nota', '');
+        await c._guardarCorreccion();
+        return eq(c.llamadas[0].args.p_cambios.notas, '', 'así se borra');
+    });
+
+    /* H07 · LA OPERACIÓN VA ATADA A SU CONTENIDO. Si se pierde la respuesta y
+       la persona corrige el número antes de reintentar, reenviar la MISMA
+       operación le hace contestar al servidor «ya estaba» por un cambio que
+       nunca guardó: queda el valor anterior y la pantalla enseña el nuevo. */
+    await testA('reintentar el MISMO envío conserva su identificador', async () => {
+        const c = mundo([{ error: { message: 'red' } }, { data: { ok: true, ver: 2 } }]);
+        c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+        abrir(c);
+        escribir(c, 'cerradasBodega', '8');
+        await c._guardarCorreccion();          // se cae la red
+        await c._guardarCorreccion();          // mismo envío, se reintenta
+        return eq(c.llamadas[0].args.p_op, c.llamadas[1].args.p_op, 'contaría como otra corrección');
+    });
+    await testA('…pero cambiar el número antes de reintentar estrena operación', async () => {
+        const c = mundo([{ error: { message: 'red' } }, { data: { ok: true, ver: 2 } }]);
+        c.CNT_HECHOS = [{ id: 'c1', cerradasBodega: 10, ver: 1 }];
+        abrir(c);
+        escribir(c, 'cerradasBodega', '8');
+        await c._guardarCorreccion();          // se cae la red
+        escribir(c, 'cerradasBodega', '6');    // se corrige antes de reintentar
+        await c._guardarCorreccion();
+        const uno = c.llamadas[0].args, dos = c.llamadas[1].args;
+        return eq((uno.p_op !== dos.p_op) + ' · ' + dos.p_cambios.cerradasBodega,
+                  'true · 6', 'reenviaría la operación vieja con datos nuevos');
+    });
+
     /* ── CANCELAR NO ESCRIBE NADA ───────────────────────────────────────── */
     await testA('cancelar no llama al servidor ni toca la lista', async () => {
         const c = mundo([]);
@@ -29778,6 +29840,36 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
         eq(a.args.p_ver, 1, 'no manda la versión');
         eq(a.args.p_cambios.cerradasBodega, 8, 'no manda el cambio');
         return eq((c.hist || 0) > 0, true, 'no recarga el historial: quedaría con lo viejo');
+    });
+    /* La app instalada tiene su propio editor, y por eso su propia prueba: el
+       arreglo de `notas` en entrada.html no la alcanza. (Codex, H06.) */
+    await testA('la app instalada también manda el comentario como `notas`', async () => {
+        const c = movil([{ data: { ok: true, ver: 2 } }]);
+        c.corregir('entrada', 'e1', 1, 'Ron', { cantidad: '48', nota: 'vieja' });
+        c.document.getElementById('cor_nota').value = 'Factura corregida';
+        await c.guardarCorreccion();
+        const ca = c.llamadas[0].args.p_cambios;
+        return eq(ca.notas + ' · ' + (ca.nota === undefined), 'Factura corregida · true',
+                  'con el nombre que lee el inventario');
+    });
+    await testA('…y en un conteo sigue siendo `nota`', async () => {
+        const c = movil([{ data: { ok: true, ver: 2 } }]);
+        c.corregir('conteo', 'c1', 1, 'Ron', { cerradasBodega: '10', cerradasBarra: '', nota: '' });
+        c.document.getElementById('cor_nota').value = 'se contó de noche';
+        await c.guardarCorreccion();
+        const ca = c.llamadas[0].args.p_cambios;
+        return eq(ca.nota + ' · ' + (ca.notas === undefined), 'se contó de noche · true', 'sin cambiar');
+    });
+    /* Y la operación atada a su contenido, también aquí. (Codex, H07.) */
+    await testA('…y cambiar el número antes de reintentar estrena operación', async () => {
+        const c = movil([{ error: { message: 'Failed to fetch' } }, { data: { ok: true, ver: 2 } }]);
+        c.corregir('conteo', 'c1', 1, 'Ron', { cerradasBodega: '10', cerradasBarra: '', nota: '' });
+        c.document.getElementById('cor_cerradasBodega').value = '8';
+        await c.guardarCorreccion();
+        c.document.getElementById('cor_cerradasBodega').value = '6';
+        await c.guardarCorreccion();
+        return eq(c.llamadas[0].args.p_op !== c.llamadas[1].args.p_op, true,
+                  'reenviaría la operación vieja con datos nuevos');
     });
     await testA('…y si falla la red tampoco finge que guardó', async () => {
         const c = movil([{ error: { message: 'Failed to fetch' } }, { data: { ok: true, ver: 2 } }]);

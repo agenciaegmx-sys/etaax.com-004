@@ -255,6 +255,39 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         eq(le.importadoEnInv,'inv1','se llevó la marca de importación');
         return eq(Number(le._qrBase),3,'se llevó el rastro del ERP');
     });
+    /* H06 (Codex, 3-nov) · EL COMENTARIO DE UNA ENTRADA VIVE EN `notas`, y al
+       borrarlo SQL quita la llave. Copiar solo las llaves PRESENTES dejaba el
+       comentario viejo vivo en la copia de adentro: el inventario seguía
+       enseñando algo que ya no existe en ningún lado. */
+    test('un comentario corregido llega a la copia del inventario',()=>{
+        c.invActual={entradasLog:[Object.assign(entrada(1,10),{notas:'Factura original'})]};
+        c._reconciliarEntradaEnInv(Object.assign(entrada(2,10),{notas:'Factura corregida'}));
+        return eq(c.invActual.entradasLog[0].notas,'Factura corregida','se quedó con el viejo');
+    });
+    test('…y un comentario BORRADO se borra también aquí',()=>{
+        c.invActual={entradasLog:[Object.assign(entrada(1,10),{notas:'Factura original'})]};
+        c._reconciliarEntradaEnInv(entrada(2,10));       // la nube ya no trae la llave
+        return eq(c.invActual.entradasLog[0].notas,undefined,'sobrevivió un comentario borrado');
+    });
+    /* El rezago de los días en que el editor escribía en `nota`: se limpia
+       igual, para no dejar dos comentarios para lo mismo. */
+    test('…y el `nota` que dejó la v82 no se queda colgando',()=>{
+        c.invActual={entradasLog:[Object.assign(entrada(1,10),{nota:'escrito por la v82'})]};
+        c._reconciliarEntradaEnInv(Object.assign(entrada(2,10),{notas:'el bueno'}));
+        const le=c.invActual.entradasLog[0];
+        eq(le.nota,undefined,'quedaron dos comentarios');
+        return eq(le.notas,'el bueno','no llegó el bueno');
+    });
+    /* Lo que NO se edita por el QR acompaña: su ausencia en el log no es un
+       borrado, y borrarlo aquí sería perder lo que el ERP sabe. */
+    test('lo que el QR no edita no se borra por venir ausente',()=>{
+        c.invActual={entradasLog:[Object.assign(entrada(1,10),{unidad:'pza',motivo:'surtido'})]};
+        c._reconciliarEntradaEnInv({id:'e1',cantidad:8,ver:2});
+        const le=c.invActual.entradasLog[0];
+        eq(le.unidad,'pza','se llevó la unidad');
+        return eq(le.motivo,'surtido','se llevó el motivo');
+    });
+
     /* Y al contrario: una recarga normal no puede deshacer lo que ya está. */
     test('la misma versión no toca nada',()=>{
         c.invActual={entradasLog:[entrada(2,8)]};

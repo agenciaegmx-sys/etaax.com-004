@@ -1307,6 +1307,12 @@ async function _guardarCorreccion(){
     var btn = document.getElementById('corOk');
     var msg = document.getElementById('corMsg');
     var campos = _COR.tipo === 'conteo' ? ['cerradasBodega','cerradasBarra','nota'] : ['cantidad','nota'];
+        /* EL COMENTARIO VIAJA CON EL NOMBRE QUE USA SU TIPO: una entrada lo
+           guarda en `notas` —ahí lo escribe la captura y ahí lo lee el
+           inventario— y un conteo en `nota`. Mandarlo con el nombre
+           equivocado dejaba DOS comentarios: el QR leía uno y el ERP seguía
+           leyendo el otro, y nadie podía saber cuál era el bueno. */
+    var kNota = _COR.tipo === 'conteo' ? 'nota' : 'notas';
     var cambios = {};
     campos.forEach(function(k){
         var el = document.getElementById('cor_' + k);
@@ -1315,7 +1321,7 @@ async function _guardarCorreccion(){
            manda, porque es como se borra un comentario. */
         var antes = (_COR.orig && _COR.orig[k] != null) ? String(_COR.orig[k]) : '';
         if (k === 'nota') {
-            if (el.value !== antes) cambios[k] = el.value;     // vacío SÍ viaja: así se borra
+            if (el.value !== antes) cambios[kNota] = el.value; // vacío SÍ viaja: así se borra
         } else if (String(el.value).trim() !== '' && String(el.value) !== antes) {
             cambios[k] = parseFloat(el.value);                 // vacío NO es cero
         }
@@ -1325,7 +1331,14 @@ async function _guardarCorreccion(){
         msg.textContent = 'No cambiaste nada.';
         return;
     }
-    if (!_COR.op) _COR.op = _corOpId();      // el mismo id si hay que reintentar
+    /* LA OPERACIÓN VA ATADA A SU CONTENIDO. `p_op` evita que un reintento por
+       mala conexión cuente como otra corrección. Pero si entre un intento y
+       otro la persona corrige el número, reenviar la MISMA operación le hace
+       contestar al servidor «ya estaba» por un cambio que nunca guardó — y la
+       pantalla enseña un valor que no se escribió. Se reintenta exactamente el
+       mismo envío; en cuanto cambia, es otra operación. */
+    var _huella = _COR.tipo + '|' + _COR.id + '|' + _COR.ver + '|' + JSON.stringify(cambios);
+    if (_COR.opHuella !== _huella) { _COR.op = _corOpId(); _COR.opHuella = _huella; }
     btn.disabled = true;
     msg.className = 'cap-msg'; msg.style.display = '';
     msg.textContent = 'Guardando…';
