@@ -10136,6 +10136,36 @@ function _step5DesgloseCard(fila, refMap) {
 //    discretas (#rd-pages), cada una con encabezado y pie. Si una tabla cruza de hoja, repite
 //    su cabecera de columnas. Garantiza: hojas visibles en digital, encabezado en cada hoja,
 //    y que NINGUNA fila se corte. ──────────────────────────────────────────────────────────
+/* ══ TRES REPORTES, UN SOLO DOCUMENTO FUENTE ════════════════════════════════
+   El contenido se arma entero una vez y después se PODA según cuál se pidió:
+
+     ''         resumen general   — todo hasta «Inventario completo»
+     'desglose' por insumo        — de «Inventario completo» en adelante
+     'faltsobr' faltantes/sobrantes — solo su bloque
+
+   Van por separado porque juntos el paginado dejaba huecos feos entre
+   secciones. Vive aquí afuera, y no dentro del reporte, para poder correrla
+   sola: es una regla de "qué se queda y qué se va", y esas se prueban mal
+   cuando hay que levantar media pantalla para llegar a ellas.             */
+function _rdPodarPorModo(src, modo) {
+    if (!src) return;
+    const fs = src.querySelector('#rd-faltsobr');
+    if (modo === 'faltsobr') {
+        // Este reporte es solo él: se va todo lo demás, incluido el resumen.
+        Array.from(src.children).forEach(n => { if (n !== fs) n.remove(); });
+    } else {
+        if (fs) fs.remove();        // en los otros dos no va: tiene su propio exporte
+        let enDesglose = false;
+        Array.from(src.children).forEach(n => {
+            if (n.classList && n.classList.contains('rd-sec') && /Inventario completo/i.test(n.textContent)) enDesglose = true;
+            if (modo === 'desglose' ? !enDesglose : enDesglose) n.remove();
+        });
+    }
+    // rd-breaks colgantes al inicio/fin (dejarían hojas vacías)
+    while (src.firstElementChild && src.firstElementChild.classList.contains('rd-break')) src.firstElementChild.remove();
+    while (src.lastElementChild && src.lastElementChild.classList.contains('rd-break')) src.lastElementChild.remove();
+}
+
 function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
     if (!src || !pagesC) return;
     const mkPage = () => {
@@ -10231,6 +10261,7 @@ function verReporteDirectivo(gerencial, modo) {
     if (!invActual) return;
     const ger = gerencial === true; // Reporte Gerencial: oculta los importes (solo % + neto + dif$ por insumo).
     const desglose = modo === 'desglose'; // Reporte en DOS exportes: resumen general vs desglose por insumo (más orgánico de imprimir).
+    const faltsobr = modo === 'faltsobr'; // Solo las dos caras de la diferencia: lo que faltó y lo que sobró, con sus totales.
 
     // ── Analytics ──────────────────────────────────────────────────
     let capitalCosto = 0, capitalCarta = 0, difTotal = 0;
@@ -10452,6 +10483,71 @@ function verReporteDirectivo(gerencial, modo) {
                 <td class="tc" style="color:${col};font-weight:700">${a.varPct>=0?'+':''}${a.varPct.toFixed(1)}%</td>
                 <td class="tr" style="font-weight:700;color:${a.difCosto>=0?cOk:cCrit}">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td></tr>`;
             }).join('')}</tbody></table>`;
+    }
+    /* ══ FALTANTES Y SOBRANTES ═══════════════════════════════════════════════
+       Las dos caras de la diferencia, cada una con su total, en la MISMA hoja.
+       Es el reporte que se lleva a la junta: aquí está lo que faltó, aquí lo
+       que sobró, y abajo lo que cuesta cada cosa.
+
+       Sale de `analisis`, el mismo arreglo del que salen faltCosto y sobrCosto
+       del resumen ejecutivo. Filtrar por su cuenta —aunque pareciera más
+       directo— es cómo un reporte acaba sin cuadrar con el resumen del mismo
+       inventario, y entonces no sirve ninguno de los dos.
+
+       NO SE SUMAN LAS UNIDADES. Un total de «12 cop + 3 pza + 500 g» no
+       significa nada, y puesto en negritas al pie de una columna parece que
+       sí. Lo que se suma es el dinero —a costo, que es lo que se perdió; a
+       carta, que es lo que se hubiera cobrado— y cuántos productos son.
+
+       El orden es por IMPACTO en dinero, no alfabético: la junta empieza por
+       arriba y lo que más duele tiene que estar ahí. */
+    const _ordImpactoFS = (x, y) => Math.abs(y.dif * y.cc) - Math.abs(x.dif * x.cc);
+    const faltantesFS = analisis.filter(a => a.dif < -0.001).sort(_ordImpactoFS);
+    const sobrantesFS = analisis.filter(a => a.dif >  0.001).sort(_ordImpactoFS);
+    function _rdTablaFS(items, esFalta){
+        const col = esFalta ? cCrit : cOk;
+        if (!items.length)
+            return `<div style="font-size:10.5px;color:#aaa;padding:6px 0 14px">Sin ${esFalta?'faltantes':'sobrantes'} en este inventario. ✅</div>`;
+        let tCosto = 0, tCarta = 0;
+        /* «¿Cuántas botellas me faltan?» es LA pregunta de esta hoja, y «−26
+           cop» no la contesta: debajo de la diferencia van las equivalencias
+           de barra, con el signo puesto. Salen del mismo sitio que en el
+           resultado y en el desglose impreso (_equivBarraHTML) — una sola
+           verdad. En piezas devuelve vacío, que es lo correcto: una cerveza no
+           se mide en botellas de licor.
+
+           OJO: cualquier comentario aquí dentro va en el CÓDIGO, no en la
+           plantilla de abajo. Metido en el template literal viaja al HTML y se
+           repite una vez por renglón. */
+        const filas = items.map(a => {
+            const u     = a.f.tipo === 'pza' ? 'pza' : 'cop';
+            const costo = Math.abs(a.dif) * a.cc;       // lo que costó comprarlo
+            const carta = Math.abs(a.difCosto);         // lo que se hubiera cobrado
+            tCosto += costo; tCarta += carta;
+            return `<tr>
+                <td style="font-weight:600">${etx(a.f.nombre)}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
+                <td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td>
+                <td class="tc">${_exFmt(a, a.fisico)}</td>
+                <td class="tc">${_exFmt(a, a.teorico)}</td>
+                <td class="tc" style="font-weight:700;color:${col}">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}${_equivBarraHTML(a.dif, a.f, { signo:true, impreso:true })}</td>
+                <td class="tc" style="color:${vc(a.varPct)};font-weight:700">${a.varPct>=0?'+':''}${a.varPct.toFixed(1)}%</td>
+                <td class="tr" style="font-weight:700;color:${col}">${$g('$'+_m2(costo))}</td>
+                <td class="tr" style="color:${col}">${$g('$'+_m2(carta))}</td></tr>`;
+        }).join('');
+        return `<table class="rd-t" style="margin-bottom:14px">
+            <thead><tr><th>Producto</th><th class="tc">Grupo</th><th class="tc">Físico</th><th class="tc">Teórico</th>
+              <th class="tc">Diferencia</th><th class="tc">Varianza %</th><th class="tr">A costo</th><th class="tr">A carta</th></tr></thead>
+            <tbody>${filas}
+              <!-- Los totales van DENTRO del tbody, como una fila más. En un
+                   <tfoot> se perderían: cuando el paginador parte una tabla
+                   larga en varias hojas clona la cabecera, no el pie — y un
+                   reporte de totales sin totales no se ve roto, se ve corto,
+                   que es peor. Como fila, cae sola en la última hoja. -->
+              <tr style="background:#f5f5f0">
+                <td colspan="6" style="font-weight:700;border-top:2px solid #ddd">Total ${esFalta?'faltante':'sobrante'} · ${items.length} producto${items.length!==1?'s':''}</td>
+                <td class="tr" style="font-weight:900;color:${col};border-top:2px solid #ddd">${$g('$'+_m2(tCosto))}</td>
+                <td class="tr" style="font-weight:900;color:${col};border-top:2px solid #ddd">${$g('$'+_m2(tCarta))}</td>
+              </tr></tbody></table>`;
     }
     const inv      = invActual;
     const fecha    = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
@@ -10709,7 +10805,7 @@ function verReporteDirectivo(gerencial, modo) {
       <div class="rd-sec">Inventario completo por grupo de categoría</div>
       ${_gruposInvOrden.map(_grupoInvHTML).join('')}`;
     // Encabezado grande y pie que un PAGINADOR (mide alturas) replica en cada hoja A4 discreta.
-    const _headHtml = rdHeader(`Inventario ${_tipoTxt} · ${periodoTxt} · ${_estadoInv}${desglose ? ' · Desglose por insumo' : ''}`);
+    const _headHtml = rdHeader(`Inventario ${_tipoTxt} · ${periodoTxt} · ${_estadoInv}${desglose ? ' · Desglose por insumo' : faltsobr ? ' · Faltantes y sobrantes' : ''}`);
     const _footHtml = rdFoot;
 
     // Digest de texto para COMPARTIR por WhatsApp/Correo (el PDF no se puede
@@ -10797,9 +10893,11 @@ function verReporteDirectivo(gerencial, modo) {
 </style>
 
 <div id="rd-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1916;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.5)">
-  <span style="color:#f5f0e8;font-size:14px;font-weight:700">${ger?'🔐 Reporte Gerencial':'📊 Reporte Directivo'}${desglose?' · Desglose por insumo':''} — ${etx(inv.nombre || 'Inventario')}</span>
+  <span style="color:#f5f0e8;font-size:14px;font-weight:700">${ger?'🔐 Reporte Gerencial':'📊 Reporte Directivo'}${desglose?' · Desglose por insumo':faltsobr?' · Faltantes y sobrantes':''} — ${etx(inv.nombre || 'Inventario')}</span>
   <div style="display:flex;gap:8px">
-    <button onclick="verReporteDirectivo(${ger?'true':'false'}, '${desglose ? '' : 'desglose'}')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">${desglose ? '📊 Ver resumen' : '📑 Ver desglose por insumo'}</button>
+    ${(desglose || faltsobr) ? `<button onclick="verReporteDirectivo(${ger?'true':'false'}, '')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">📊 Ver resumen</button>` : ''}
+    ${desglose ? '' : `<button onclick="verReporteDirectivo(${ger?'true':'false'}, 'desglose')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">📑 Ver desglose por insumo</button>`}
+    ${faltsobr ? '' : `<button onclick="verReporteDirectivo(${ger?'true':'false'}, 'faltsobr')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">📉 Faltantes y sobrantes</button>`}
     <div style="position:relative">
       <button onclick="_toggleRdShare(event)" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">📤 Compartir ▾</button>
       <div id="rdShareMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#1a1916;border:1px solid rgba(255,255,255,.22);border-radius:10px;overflow:hidden;min-width:230px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
@@ -11017,23 +11115,33 @@ function verReporteDirectivo(gerencial, modo) {
   <div class="rd-break"></div>
   ${inventarioHTML}
 
+  <!-- Exporte aparte: las dos caras de la diferencia. Hijo DIRECTO de #rd-src
+       y con id propio, que es como la poda de abajo lo aísla de los otros
+       dos reportes sin tener que adivinar dónde empieza y dónde acaba. -->
+  <div id="rd-faltsobr">
+    <div class="rd-sec">Faltantes — lo que no apareció</div>
+    <div style="font-size:10px;color:#888;margin:-4px 0 8px">Físico por debajo del teórico. «A costo» es lo que costó reponerlo; «a carta», lo que se hubiera cobrado.</div>
+    ${_rdTablaFS(faltantesFS, true)}
+    <div class="rd-sec">Sobrantes — lo que apareció de más</div>
+    <div style="font-size:10px;color:#888;margin:-4px 0 8px">Físico por encima del teórico. Casi siempre es una entrada capturada dos veces, una salida sin registrar o una existencia anterior equivocada.</div>
+    ${_rdTablaFS(sobrantesFS, false)}
+    <table class="rd-t">
+      <thead><tr><th>Resultado neto del período</th><th class="tr">A costo</th><th class="tr">A carta</th></tr></thead>
+      <tbody>
+        <tr><td style="color:${cCrit}">Faltantes (${faltantesFS.length})</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(faltCosto))}</td><td class="tr" style="color:${cCrit}">−${$g('$'+_m2(faltCarta))}</td></tr>
+        <tr><td style="color:${cOk}">Sobrantes (${sobrantesFS.length})</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(sobrCosto))}</td><td class="tr" style="color:${cOk}">+${$g('$'+_m2(sobrCarta))}</td></tr>
+        <tr style="background:#f5f5f0"><td style="font-weight:900;border-top:2px solid #ddd">Neto</td>
+          <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${netCosto>=0?cOk:cCrit}">${netCosto>=0?'+':'−'}${$g('$'+_m2(Math.abs(netCosto)))}</td>
+          <td class="tr" style="font-weight:900;border-top:2px solid #ddd;color:${netCarta>=0?cOk:cCrit}">${netCarta>=0?'+':'−'}${$g('$'+_m2(Math.abs(netCarta)))}</td></tr>
+      </tbody></table>
+    <div style="font-size:9px;color:#aaa;margin-top:6px">Las unidades no se suman entre sí a propósito: copas, piezas y gramos no son la misma cosa. Lo que se totaliza es el dinero.</div>
+  </div>
+
 </div>`;
 
     document.body.appendChild(overlay);
-    // DOS exportes: el RESUMEN (todo lo general) y el DESGLOSE POR INSUMO (las
-    // tablas grandes) se imprimen por separado — juntos, el paginado forzaba
-    // huecos feos entre secciones. Se poda el contenido según el modo.
-    try {
-        const _srcPoda = overlay.querySelector('#rd-src');
-        let _enDesglose = false;
-        Array.from(_srcPoda.children).forEach(n => {
-            if (n.classList && n.classList.contains('rd-sec') && /Inventario completo/i.test(n.textContent)) _enDesglose = true;
-            if (desglose ? !_enDesglose : _enDesglose) n.remove();
-        });
-        // rd-breaks colgantes al inicio/fin (dejarían hojas vacías)
-        while (_srcPoda.firstElementChild && _srcPoda.firstElementChild.classList.contains('rd-break')) _srcPoda.firstElementChild.remove();
-        while (_srcPoda.lastElementChild && _srcPoda.lastElementChild.classList.contains('rd-break')) _srcPoda.lastElementChild.remove();
-    } catch(e) { console.warn('[reporte] poda por modo falló:', e); }
+    try { _rdPodarPorModo(overlay.querySelector('#rd-src'), modo || ''); }
+    catch(e) { console.warn('[reporte] poda por modo falló:', e); }
     // Paginar: medir alturas reales y repartir el contenido en hojas A4 discretas, cada una con
     // su encabezado y pie, sin cortar filas (cuando una tabla cruza de hoja, repite su cabecera).
     try {

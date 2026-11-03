@@ -45,7 +45,7 @@ function _aplicarPermisosInv(){
     if(!_puedeInv('capturar')) ['btnNuevoInv','btnPrimerLev','btnIniciarInv'].forEach(_invOcultar);
     if(!_puedeInv('entradas')) _invOcultar('btnAgregarEntrada');
     if(!_puedeInv('qr'))       _invOcultar('btnQrEntradas');
-    if(!_puedeInv('reporte'))  ['btnReporteExistencias','btnRepGerencial','btnRepDirectivo','btnRepDesglose']
+    if(!_puedeInv('reporte'))  ['btnReporteExistencias','btnRepGerencial','btnRepDirectivo','btnRepDesglose','btnRepFaltSobr']
                                   .forEach(_invOcultar);
     if(!_puedeInv('cerrar'))   ['btnFinalizarInv','btnFinalizarLev'].forEach(_invOcultar);
     /* El dinero del reporte se quita por CSS: las tablas se repintan con cada
@@ -282,6 +282,7 @@ document.addEventListener('DOMContentLoaded', function(){
                         <button class="btn-vista" id="btnRepGerencial" style="color:#3dbe7a;border-color:#3dbe7a" onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
                         <button class="btn-vista" id="btnRepDirectivo" style="color:var(--accent);border-color:var(--accent)" onclick="verReporteDirectivo()">📄 Reporte directivo</button>
                         <button class="btn-vista" id="btnRepDesglose" onclick="verReporteDirectivo(false,'desglose')" title="Solo las tablas por insumo — se exporta aparte del resumen">📑 Desglose por insumo</button>
+                        <button class="btn-vista" id="btnRepFaltSobr" style="color:#c0392b;border-color:#c0392b" onclick="verReporteDirectivo(false,'faltsobr')" title="Lo que faltó y lo que sobró, cada lista con su total, en la misma hoja">📉 Faltantes y sobrantes</button>
                     </span>
                     <button class="btn-vista" onclick="pasoAnterior()" id="btnPasoAnt" style="display:none">← Anterior</button>
                     <button class="btn-vista" onclick="pasoSiguiente()" id="btnPasoSig">Siguiente →</button>
@@ -348,7 +349,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=697b2fc5"></script>
-<script src="/recetas/inventarios.js?v=01132e5b"></script>
+<script src="/recetas/inventarios.js?v=06eb032e"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -1054,7 +1055,7 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
-<script src="/novedades.js?v=43d06a67"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=abad0591"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>

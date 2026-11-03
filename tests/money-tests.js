@@ -30497,6 +30497,238 @@ async function suiteCfgEnLaNube() {
         eq(C.subidas.indexOf('horcfg_n1') > -1, true, 'subida: ' + C.subidas.join(',')));
 }
 
+
+/* ═══════════ SUITE BH57 · FALTANTES Y SOBRANTES: DOS LISTAS, UNA HOJA ═══════════
+   El reporte que se lleva a la junta: aquí está lo que faltó, aquí lo que
+   sobró, y abajo lo que cuesta cada cosa. Lo que se vigila:
+
+     · las dos listas salen de `analisis`, el MISMO arreglo del que salen los
+       totales del resumen ejecutivo. Un reporte que no cuadra con el resumen
+       del mismo inventario no sirve, y no sirven los dos.
+     · NO se suman las unidades. «12 cop + 3 pza + 500 g» no significa nada, y
+       en negritas al pie de una columna parece que sí.
+     · nadie sale en las dos listas, y quien cuadró no sale en ninguna.
+     · el orden es por dinero, no alfabético: la junta empieza por arriba.
+     · y cada reporte se lleva SOLO su parte del documento fuente.          */
+console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══');
+(function () {
+    const F = crearContexto();
+    cargarJS(F, 'etaax-core.js');
+    cargarJS(F, 'insumo-label.js');
+    cargarJS(F, 'recetas/inventarios.js');
+    F._storage['etaax_negocio_activo'] = 'negT';
+
+    /* Cuatro productos a propósito: uno que falta mucho, uno que falta poco,
+       uno que sobra y uno que cuadra clavado. */
+    /* El orden de CAPTURA es, a propósito, el contrario al del dinero: al ron
+       le faltan más copas y se capturó primero, pero el tequila duele cuatro
+       veces más. Con los dos faltando lo mismo —o capturados al revés— la
+       prueba del orden pasaría por casualidad, que es como un candado deja
+       entrar justo lo que venía a detener. */
+    const FILAS = [
+        { insumoId:'f2', nombre:'Ron barato', tipo:'copa', contNeto:750, copaML:75, categoria:'Destilados',
+          existenciaAnterior:30, cerradasBarra:0, pesos:[], ventasCopasDirectas:2,
+          costoUnitario:200, precioCarta:60, entradas:[] },     // faltan 28 cop × $20 = $560
+        { insumoId:'f1', nombre:'Tequila caro', tipo:'copa', contNeto:750, copaML:75, categoria:'Destilados',
+          existenciaAnterior:10, cerradasBarra:0, pesos:[], ventasCopasDirectas:2,
+          costoUnitario:2000, precioCarta:400, entradas:[] },   // faltan  8 cop × $200 = $1,600
+        { insumoId:'s1', nombre:'Cerveza', tipo:'pza', categoria:'Cervezas',
+          existenciaAnterior:10, cerradasBarra:12, ventasCopasDirectas:0,
+          costoUnitario:20, precioCarta:50, entradas:[] },
+        { insumoId:'ok', nombre:'Refresco', tipo:'pza', categoria:'Refrescos',
+          existenciaAnterior:10, cerradasBarra:8, ventasCopasDirectas:2,
+          costoUnitario:10, precioCarta:30, entradas:[] },
+    ];
+    function reporte(modo, filas) {
+        setVar(F, 'filasCaptura', filas || FILAS);
+        setVar(F, 'invActual', { id:'i1', nombre:'Barra', fecha:'2026-11-02', entradasLog:[],
+            prebatchProducidos:{}, cocktailsVendidos:{}, ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], compuestos:[] });
+        let cap = '';
+        const _ap = F.document.body.appendChild;
+        F.document.body.appendChild = function (nodo) { cap = (nodo && nodo.innerHTML) || ''; };
+        const w = F.console.warn, e2 = F.console.error, l = F.console.log;
+        F.console.warn = F.console.error = F.console.log = function(){};   // la poda toca DOM real
+        try { F.verReporteDirectivo(false, modo); } catch (e) {}
+        F.console.warn = w; F.console.error = e2; F.console.log = l;
+        F.document.body.appendChild = _ap;
+        return cap;
+    }
+    /* OJO: lo que se captura es el documento fuente ENTERO. La poda por modo
+       toca el DOM de verdad y aquí no corre —se prueba aparte, más abajo—, así
+       que buscar un nombre a secas lo encontraría en las tablas del inventario
+       completo. Todo lo de este reporte se busca DENTRO de su bloque. */
+    function bloqueFS(html) {
+        const i = html.indexOf('Faltantes — lo que no apareció');
+        const j = html.indexOf('Las unidades no se suman entre sí a propósito', i);
+        return i < 0 ? '' : html.slice(i, j < 0 ? html.length : j);
+    }
+    /* Lo que de verdad quedó en cada lista: se recorta el bloque de cada
+       sección del HTML que salió y se leen los nombres de sus renglones. */
+    function lista(html, cual) {
+        const ini = html.indexOf(cual === 'falta' ? 'Faltantes — lo que no apareció' : 'Sobrantes — lo que apareció de más');
+        if (ini < 0) return '(sin sección)';
+        const fin = html.indexOf('Total ' + (cual === 'falta' ? 'faltante' : 'sobrante'), ini);
+        const trozo = html.slice(ini, fin < 0 ? html.length : fin);
+        return FILAS.map(f => f.nombre).filter(n => trozo.indexOf('>' + n + '<') > -1).join(',');
+    }
+
+    const H = reporte('faltsobr');
+
+    test('el reporte de faltantes y sobrantes sale con sus dos listas', () =>
+        eq(H.indexOf('Faltantes — lo que no apareció') > -1 && H.indexOf('Sobrantes — lo que apareció de más') > -1,
+           true, 'las dos'));
+    test('en faltantes van los que no aparecieron', () =>
+        eq(lista(H, 'falta'), 'Ron barato,Tequila caro', 'faltantes'));
+    test('…y en sobrantes los que aparecieron de más', () =>
+        eq(lista(H, 'sobra'), 'Cerveza', 'sobrantes'));
+    test('el que cuadró clavado no sale en ninguna lista', () =>
+        eq(bloqueFS(H).indexOf('>Refresco<'), -1, 'fuera'));
+    /* El orden es por DINERO: el tequila falta lo mismo que el ron en copas,
+       pero cuesta diez veces más. Alfabéticamente iría al revés. */
+    /* DENTRO del bloque: en el documento entero los nombres aparecen antes en
+       las tablas del inventario completo, que llevan su propio orden — y ahí
+       la comparación mide el orden de otra tabla, no el de esta lista. */
+    test('la lista empieza por lo que más duele, no por la A', () => {
+        const b = bloqueFS(H);
+        return eq(b.indexOf('>Tequila caro<') < b.indexOf('>Ron barato<'), true,
+                  'por impacto · tequila=' + b.indexOf('>Tequila caro<') + ' ron=' + b.indexOf('>Ron barato<'));
+    });
+
+    /* Que el reporte CUADRE con el resumen ejecutivo del mismo inventario:
+       los dos totales se calculan por caminos distintos y tienen que dar lo
+       mismo. Se comparan contra el resumen de verdad, no contra un número
+       escrito a mano aquí. */
+    function totalDe(html, cual) {
+        const i = html.indexOf('Total ' + cual);
+        if (i < 0) return null;
+        const m = /\$([\d,]+\.\d\d)/.exec(html.slice(i, i + 400));
+        return m ? parseFloat(m[1].replace(/,/g, '')) : null;
+    }
+    const RES = reporte('');
+    const _num = (signo, txt) => (signo === '−' ? -1 : 1) * parseFloat(String(txt).replace(/,/g, ''));
+    /* EL REPORTE TIENE QUE CUADRAR CON EL RESUMEN DEL MISMO INVENTARIO. El
+       resumen publica el NETO a carta en su tarjeta; este reporte lo vuelve a
+       decir al pie. Son dos caminos distintos hasta el mismo número: si se
+       separan, el dueño tiene dos hojas del mismo día que no coinciden y
+       ninguna de las dos sirve para nada. */
+    test('el neto del reporte cuadra con el del resumen ejecutivo', () => {
+        const k = /(?:Sobrante|Faltante) neto a carta<\/div>[\s\S]{0,160}?([+−])\$([\d,]+)/.exec(RES);
+        const b = bloqueFS(H);
+        const fila = b.slice(b.indexOf('>Neto<'));
+        const cel = [...fila.matchAll(/([+−])\$([\d,]+\.\d\d)/g)];
+        if (!k || cel.length < 2) throw new Error('no se encontró el neto · kpi=' + !!k + ' celdas=' + cel.length);
+        return eq(Math.round(_num(cel[1][1], cel[1][2])), Math.round(_num(k[1], k[2])), 'mismo neto');
+    });
+    /* Y la hoja tiene que cuadrar CONSIGO MISMA: el total de la lista se suma
+       renglón por renglón al pintarla, y el del resumen del pie viene del
+       mismo recorrido que alimenta al resumen ejecutivo. Son dos cuentas. */
+    test('el total de cada lista cuadra con su renglón del resumen al pie', () => {
+        const b = bloqueFS(H);
+        const tot = /Total faltante[\s\S]*?\$([\d,]+\.\d\d)/.exec(b);
+        const lin = /Faltantes \(\d+\)[\s\S]*?−\$([\d,]+\.\d\d)/.exec(b);
+        if (!tot || !lin) throw new Error('faltó un total · tot=' + !!tot + ' lin=' + !!lin);
+        return eq(tot[1], lin[1], 'el mismo número');
+    });
+    test('hay un total por cada lista y un neto al final', () =>
+        eq((H.indexOf('Total faltante') > -1) + '|' + (H.indexOf('Total sobrante') > -1) + '|' +
+           (H.indexOf('Resultado neto del período') > -1), 'true|true|true', 'los tres'));
+    /* Sumar copas con piezas con gramos no significa nada. La fila de totales
+       solo lleva dinero: la columna de Diferencia se queda dentro del colspan. */
+    test('las unidades NO se suman entre sí', () =>
+        eq(/Total faltante[^<]*<\/td>/.test(H.replace(/\s+/g, ' ')) ||
+           H.indexOf('colspan="6"') > -1, true, 'sin total de unidades'));
+    test('…y la hoja lo dice, para que nadie lo busque', () =>
+        eq(H.indexOf('Las unidades no se suman entre sí a propósito') > -1, true, 'explicado'));
+
+    /* Sin diferencias de un lado, se dice; no se deja la sección en blanco. */
+    test('sin sobrantes, la sección lo dice en vez de quedarse vacía', () => {
+        const h = reporte('faltsobr', [FILAS[0]]);
+        return eq(h.indexOf('Sin sobrantes en este inventario') > -1, true, 'dicho');
+    });
+
+    /* «¿Cuántas botellas me faltan?» es LA pregunta de esta hoja, y «−26 cop»
+       no la contesta. Las equivalencias son las mismas de la barra, con signo. */
+    test('la diferencia dice también cuántas botellas y onzas son', () => {
+        const b = bloqueFS(H);
+        const fila = b.slice(b.indexOf('>Tequila caro<'), b.indexOf('>Tequila caro<') + 900);
+        return eq(/≈ -[\d.]+ bot · -[\d.]+ oz · -[\d.]+ cp/.test(fila), true, 'equivalencias');
+    });
+    test('…y en piezas no se inventa ninguna botella', () => {
+        const b = bloqueFS(H);
+        const fila = b.slice(b.indexOf('>Cerveza<'), b.indexOf('>Cerveza<') + 900);
+        return eq(fila.indexOf(' bot'), -1, 'sin botellas');
+    });
+
+    /* ── Cómo se rotula y cómo se salta de un reporte a otro ── */
+    test('la ventana dice que es el de faltantes y sobrantes', () =>
+        eq(H.indexOf('· Faltantes y sobrantes —') > -1, true, 'rotulada'));
+    test('…y desde ahí se llega a los otros dos, pero no a sí misma', () =>
+        eq((H.indexOf('📊 Ver resumen') > -1) + '|' + (H.indexOf('📑 Ver desglose por insumo') > -1) +
+           '|' + (H.indexOf('>📉 Faltantes y sobrantes<') > -1), 'true|true|false', 'navegable'));
+    test('…y desde el resumen se puede saltar a él', () =>
+        eq(RES.indexOf('>📉 Faltantes y sobrantes<') > -1, true, 'ofrecido'));
+
+    /* ── El botón, bajo el mismo permiso que los otros reportes ──
+       No basta con que exista el id en la lista: se corre el código real de
+       permisos de la página y se mira si el botón quedó escondido. */
+    function permisos(puede) {
+        const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+        const blo = [...inv.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+            .map(m => m[1]).find(b => b.indexOf('function _aplicarPermisosInv') > -1);
+        const nodos = {};
+        const c = { console,
+            document: { getElementById: id => (nodos[id] = nodos[id] || { style:{} }),
+                        body: { classList: { toggle(){} } }, addEventListener(){} },
+            etaaxPuedeSub: () => puede, etaaxExigeSub: () => puede };
+        c.window = c;
+        vm.createContext(c);
+        vm.runInContext(blo, c, { filename:'inventarios.html' });
+        c._aplicarPermisosInv();
+        return nodos;
+    }
+    test('sin permiso de reportes, el botón nuevo se esconde como los demás', () =>
+        eq((permisos(false)['btnRepFaltSobr'] || {}).style.display, 'none', 'escondido'));
+    test('…y con permiso se queda donde está', () =>
+        eq((permisos(true)['btnRepFaltSobr'] || { style:{} }).style.display, undefined, 'visible'));
+
+    /* ── La poda: cada reporte se lleva SOLO su parte ── */
+    /* Un contenedor de mentira con lo mínimo que la regla toca. Correrla de
+       verdad es la única forma de saber que el bloque nuevo no se cuela en el
+       resumen ni se queda fuera del suyo. */
+    function fuente() {
+        const hijo = (cls, txt, id) => ({
+            id: id || '', textContent: txt || '',
+            classList: { _c:(cls||'').split(' ').filter(Boolean), contains(x){ return this._c.indexOf(x) > -1; } },
+            remove() { cont.children = cont.children.filter(n => n !== this); },
+        });
+        const cont = {
+            children: [hijo('rd-sec','Resumen ejecutivo'), hijo('','tabla-kpis'),
+                       hijo('rd-break'), hijo('rd-sec','Inventario completo por grupo'),
+                       hijo('','tablas-por-insumo'), hijo('', '', 'rd-faltsobr')],
+            querySelector(sel) { const id = String(sel).replace('#', ''); return this.children.filter(n => n.id === id)[0] || null; },
+            get firstElementChild(){ return this.children[0] || null; },
+            get lastElementChild(){ return this.children[this.children.length-1] || null; },
+        };
+        return cont;
+    }
+    const texto = c => c.children.map(n => n.id || n.textContent).join('|');
+
+    const cRes = fuente(); F._rdPodarPorModo(cRes, '');
+    test('el resumen se queda con lo general y suelta el resto', () =>
+        eq(texto(cRes), 'Resumen ejecutivo|tabla-kpis', 'podado'));
+
+    const cDes = fuente(); F._rdPodarPorModo(cDes, 'desglose');
+    test('el desglose se queda con las tablas por insumo', () =>
+        eq(texto(cDes), 'Inventario completo por grupo|tablas-por-insumo', 'podado'));
+
+    const cFS = fuente(); F._rdPodarPorModo(cFS, 'faltsobr');
+    test('faltantes y sobrantes se lleva SOLO su bloque', () =>
+        eq(texto(cFS), 'rd-faltsobr', 'podado'));
+    test('…y su bloque no se cuela en los otros dos', () =>
+        eq(texto(cRes).indexOf('rd-faltsobr') + texto(cDes).indexOf('rd-faltsobr'), -2, 'fuera'));
+})();
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
