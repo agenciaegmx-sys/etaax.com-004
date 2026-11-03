@@ -1646,6 +1646,40 @@
         };
     }
 
+    /* EL COSTEO APLICADO: lo que de verdad deja el precio que YA está en la
+       carta, contra lo que cuesta el platillo.
+
+       Vivía repartido y escrito a mano en tres sitios: la pantalla dividía
+       entre 1.16 y multiplicaba por 1.56, la ficha impresa repetía el 1.16 y
+       la carátula de costos lo repetía otra vez. Cambiar el recargo de
+       delivery —o el IVA— en el núcleo dejaba a los tres diciendo lo de
+       antes, y nadie lo notaría hasta cotejar una hoja con la pantalla.
+
+       La base de TODO es el precio sin IVA: el gasto operativo, la utilidad y
+       el delivery se miden sobre lo que el negocio de verdad cobra, no sobre
+       el precio con impuesto. */
+    function costeoAplicado(precioCarta, costo) {
+        var p = n(precioCarta), c = n(costo);
+        var sinIva   = p > 0 ? p / (1 + COSTEO_IVA_PCT / 100) : 0;
+        var brutoPct = sinIva > 0 ? (c / sinIva) * 100 : 0;
+        /* Puede salir negativa, y así tiene que salir: es el aviso de que el
+           precio de la carta no alcanza a pagar el costo y el gasto. */
+        var utilPct  = sinIva > 0 ? 100 - brutoPct - COSTEO_GASTO_OP_PCT : 0;
+        return {
+            precio:   p,
+            sinIva:   sinIva,
+            costoBruto: c,
+            brutoPct: brutoPct,
+            gastoOpPct: COSTEO_GASTO_OP_PCT,
+            utilidadPct: utilPct,
+            gastoOp:  sinIva * (COSTEO_GASTO_OP_PCT / 100),
+            utilidad: sinIva * (utilPct / 100),
+            iva:      p - sinIva,
+            comedor:  p,
+            delivery: sinIva * (1 + (COSTEO_IVA_PCT + COSTEO_DELIVERY_PCT) / 100),
+        };
+    }
+
     /* ── IMPORTE CON LETRA (recibos) ───────────────────────────────────────────────
        Todo recibo lleva el monto escrito: es lo que impide que alguien le agregue un
        dígito al número. Formato mexicano: "MIL DOSCIENTOS PESOS 50/100 M.N.".        */
@@ -2116,8 +2150,9 @@
         previsionPeriodos: previsionPeriodos, previsionPlan: previsionPlan,
         previsionApartadoRango: previsionApartadoRango, previsionUsadoRango: previsionUsadoRango,
         importeLetra: importeLetra,
-        multiploReceta: multiploReceta, costeoReceta: costeoReceta,
+        multiploReceta: multiploReceta, costeoReceta: costeoReceta, costeoAplicado: costeoAplicado,
         COSTEO_MULT_DEFAULT: COSTEO_MULT_DEFAULT, COSTEO_GASTO_OP_PCT: COSTEO_GASTO_OP_PCT,
+        COSTEO_IVA_PCT: COSTEO_IVA_PCT, COSTEO_DELIVERY_PCT: COSTEO_DELIVERY_PCT,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,
         TOLERANCIA_DEFAULT: TOLERANCIA_DEFAULT, fechaLocal: fechaLocal, fechaStr: fechaStr, diasEntre: diasEntre,
         proximoCobro: proximoCobro, estadoCobro: estadoCobro,

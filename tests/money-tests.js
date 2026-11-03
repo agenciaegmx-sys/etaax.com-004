@@ -31552,6 +31552,139 @@ console.log('\n══ BH59 · El costeo: seis columnas, dos renglones ══');
     });
 })();
 
+
+/* ═══════════ SUITE BH60 · EL DELIVERY, EN LAS TRES HOJAS ═══════════
+   Lo preguntó Edwin: «revisa que en el costeo impreso de las recetas sí
+   aparezca el sugerido de delivery». No aparecía. Y lo que lo escondía era
+   peor que un olvido: la ficha SÍ armaba un bloque con el delivery… en dos
+   variables que nadie leía (`bloquesSugerido` / `bloquesAplicado`). El
+   bloque que de verdad se imprime se arma más abajo y no lo decía. Código
+   muerto que se lee como código que funciona.
+
+   De paso, la cuenta del COSTEO APLICADO vivía escrita a mano en tres
+   sitios: la pantalla dividía entre 1.16 y multiplicaba por 1.56, la ficha
+   repetía el 1.16 y la carátula otra vez. Cambiar el recargo de delivery en
+   el núcleo dejaba a los tres diciendo lo de antes. Ahora es
+   EtaaxCore.costeoAplicado.                                                */
+console.log('\n══ BH60 · El delivery, en las tres hojas ══');
+(function () {
+    const C = Core.costeoAplicado;
+
+    /* ── La fórmula, contra los números que Edwin tiene en pantalla ── */
+    const a = C(180, 52.92);
+    test('precio sin IVA = carta ÷ 1.16', () => eq(a.sinIva, 180 / 1.16, 'sin IVA'));
+    test('el costo bruto % se mide sobre el precio SIN IVA', () => eq(a.brutoPct, 52.92 / (180 / 1.16) * 100, '%'));
+    test('…y da 34.1% con los números de la pantalla', () => eq(a.brutoPct.toFixed(1), '34.1', '%'));
+    test('el gasto operativo también sale del precio sin IVA', () => eq(a.gastoOp.toFixed(2), '62.07', 'gasto'));
+    test('la utilidad neta es lo que queda después del costo y del gasto', () =>
+        eq(a.utilidadPct.toFixed(1) + ' · ' + a.utilidad.toFixed(2), '25.9 · 40.18', 'utilidad'));
+    test('el IVA incluido es la diferencia contra el precio de carta', () => eq(a.iva.toFixed(2), '24.83', 'IVA'));
+    test('el precio de comedor aplicado ES el de la carta', () => eq(a.comedor, 180, 'comedor'));
+    test('el delivery suma su recargo sobre el precio sin IVA', () =>
+        eq(a.delivery.toFixed(2), '242.07', 'delivery'));
+    /* Una utilidad NEGATIVA tiene que salir negativa: es el aviso de que el
+       precio de la carta no paga el costo más el gasto. */
+    test('un precio que no alcanza da utilidad negativa, no cero', () =>
+        eq(C(100, 80).utilidadPct < 0, true, 'avisa'));
+    test('sin precio en carta no se inventan números', () => {
+        const z = C(0, 52.92);
+        return eq([z.sinIva, z.brutoPct, z.utilidadPct, z.delivery].join(','), '0,0,0,0', 'en cero');
+    });
+    /* Y que el recargo NO esté escrito a mano en ningún lado: si se mueve en
+       el núcleo, los tres consumidores tienen que moverse con él. */
+    test('el recargo de delivery sale del núcleo, no de un 1.56 suelto', () => {
+        const esperado = (180 / 1.16) * (1 + (Core.COSTEO_IVA_PCT + Core.COSTEO_DELIVERY_PCT) / 100);
+        return eq(a.delivery, esperado, 'del núcleo');
+    });
+
+    /* EL RECARGO ES UNA PERILLA, no un 1.56. Hoy 16+40 da justo 1.56, así que
+       escribirlo a mano da el mismo número y no hay prueba que lo note… hasta
+       que alguien mueva el porcentaje en el núcleo y los consumidores se
+       queden diciendo lo de antes. Se corre una copia del núcleo con OTRO
+       recargo y se exige que la fórmula lo siga. */
+    test('mover el recargo en el núcleo mueve el precio de delivery', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'etaax-core.js'), 'utf8')
+            .replace('var COSTEO_DELIVERY_PCT = 40;', 'var COSTEO_DELIVERY_PCT = 50;');
+        if (src.indexOf('COSTEO_DELIVERY_PCT = 50') < 0) throw new Error('no se pudo mover el recargo');
+        const ctx = crearContexto();
+        vm.runInContext(src, ctx, { filename:'etaax-core.js(50%)' });
+        const otro = ctx.EtaaxCore.costeoAplicado(180, 52.92);
+        return eq(otro.delivery.toFixed(2), ((180 / 1.16) * 1.66).toFixed(2),
+                  'siguió al núcleo · ' + otro.delivery.toFixed(2));
+    });
+    test('…y también el sugerido', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'etaax-core.js'), 'utf8')
+            .replace('var COSTEO_DELIVERY_PCT = 40;', 'var COSTEO_DELIVERY_PCT = 50;');
+        const ctx = crearContexto();
+        vm.runInContext(src, ctx, { filename:'etaax-core.js(50%)' });
+        const plat = Core.costeoReceta(52.92, 3.33).platillo;
+        return eq(ctx.EtaaxCore.costeoReceta(52.92, 3.33).delivery.toFixed(2),
+                  (plat * 1.66).toFixed(2), 'siguió al núcleo');
+    });
+
+    /* ── LAS TRES HOJAS ──
+       Se corren los constructores de verdad y se lee lo que sale. */
+    const A = crearContexto();
+    cargarJS(A, 'etaax-core.js');
+    cargarJS(A, 'insumo-label.js');
+    cargarJS(A, 'app.js');
+    A._storage['etaax_negocio_activo'] = 'n1';
+    const RECETA = [{ id:'r1', nombre:'Negroni', tipo:'bebidas', grupo:'Cocteles', categoria:'Clásicos',
+        precioEnCarta:180, multiploCosteo:3.33,
+        ingredientes:[{ nombre:'Campari', desc:'', cantidad:100, unidad:'ML', costoPorKgLt:529.2 }] }];
+    const ficha = () => A.buildPlantillaAdministrativa(RECETA);
+    const caratula = () => A.buildPlantillaCaratula(RECETA,
+        { key:'bebidas', label:'Bebidas', tipo:'normal', rendDefault:'BEBIDA', emoji:'🥃',
+          subtitulo:'Carátula de Costos' });
+
+    /* LA PANTALLA, corriendo su pintor de verdad. Sin esto, que la pantalla se
+       calcule el aplicado por su cuenta no lo notaba nadie: todas las pruebas
+       miraban el papel. */
+    test('la pantalla pinta el delivery que dice el núcleo', () => {
+        setVar(A, 'ingredientes', [{ nombre:'Campari', cantidad:100, unidad:'ML', costoPorKgLt:529.2 }]);
+        A.document.getElementById('precioEnCarta').value = '180';
+        A._multiploDelEditor = () => 3.33;
+        try { A.calcularCosteos(); } catch (e) { throw new Error('no pintó: ' + e.message); }
+        const esperado = '$' + Core.costeoAplicado(180, 52.92).delivery.toFixed(2);
+        return eq(A.document.getElementById('a-delivery').textContent, esperado, esperado);
+    });
+    test('…y el sugerido, también del núcleo', () => {
+        const esperado = '$' + Core.costeoReceta(52.92, 3.33).delivery.toFixed(2);
+        return eq(A.document.getElementById('s-delivery').textContent, esperado, esperado);
+    });
+
+    test('la ficha impresa dice el precio sugerido de delivery', () =>
+        eq(/Precio Delivery 156%/.test(ficha()), true, 'sugerido'));
+    test('…y también el aplicado, que la pantalla sí enseñaba', () =>
+        eq(/Precio Delivery \+40%/.test(ficha()), true, 'aplicado'));
+    test('la carátula de costos trae su columna de delivery', () =>
+        eq(caratula().indexOf('SUGERIDO DELIVERY') > -1, true, 'con columna'));
+    /* El pie abarca todas las columnas menos la del porcentaje: con una más,
+       el rótulo quedaba corrido una celda. */
+    test('…y su pie sigue cuadrando con las columnas', () => {
+        const h = caratula();
+        const ths = (h.slice(h.indexOf('<thead'), h.indexOf('</thead>')).match(/<th\b/g) || []).length;
+        const cs = parseInt(((/colspan="(\d+)"/.exec(h)) || [])[1], 10);
+        return eq(cs + 1, ths, 'columnas=' + ths + ' colspan=' + cs);
+    });
+    /* El número tiene que ser el MISMO que da el núcleo: una hoja que lo
+       calcule por su cuenta se separa el día que cambie el recargo. */
+    test('el delivery de la carátula es el del núcleo', () => {
+        const esperado = '$' + Core.costeoReceta(52.92, RECETA[0]).delivery.toFixed(2);
+        return eq(caratula().indexOf(esperado) > -1, true, esperado);
+    });
+    test('el aplicado de la ficha es el del núcleo', () => {
+        const esperado = '$' + Core.costeoAplicado(180, 52.92).delivery.toFixed(2);
+        return eq(ficha().indexOf(esperado) > -1, true, esperado);
+    });
+    /* Y que no queden variables muertas armando bloques que nadie imprime:
+       fue lo que hizo creer que el delivery ya estaba. */
+    test('la ficha no deja bloques armados que nadie imprime', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
+        return eq(/var bloques(Sugerido|Aplicado)\s*=/.test(src), false, 'sin código muerto');
+    });
+})();
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
