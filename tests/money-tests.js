@@ -3479,6 +3479,155 @@ console.log('\n══ SUITE AA · Bonos automáticos y sanciones (diario.html) �
         eq(dRec.percepciones[1].detalle, '$15.00 × 2 días', 'recibo'));
     test('…y no lo deja con una raya', () => eq(dRec.percepciones[1].detalle !== '—', true, 'sin raya'));
 
+    /* ══ EL RECIBO, GUARDADO ════════════════════════════════════════════════
+       Hasta ahora el recibo se armaba al vuelo con lo que estuviera abierto en
+       el modal y se perdía al cerrarlo: del pago solo quedaba un texto corrido
+       en las notas. No se podía reimprimir, ni editar, ni listar por
+       colaborador — por eso la herramienta se sentía incompleta.
+
+       Ahora viaja DENTRO del gasto que lo pagó. Pegado y no en una tabla
+       aparte, para que el recibo y el egreso no puedan decir cosas distintas:
+       corregir el recibo es corregir el pago, que es lo que de verdad pasa. */
+    A.etaaxReporteDoc = (o) => o.cuerpo;      // el armador del papel, aquí solo el cuerpo
+    test('lo que se guarda alcanza para reimprimir el recibo entero', () => {
+        const guardado = A._reciboNominaGuardable(dRec);
+        return eq(A._reciboNominaHTML(guardado), A._reciboNominaHTML(dRec),
+                  'el recibo reimpreso no sale igual que el del momento');
+    });
+    /* Del colaborador van los tres datos que el papel imprime, no su ficha: un
+       comprobante dice lo que era CUANDO SE FIRMÓ. Si mañana le cambian el
+       puesto, el recibo de septiembre no puede cambiar con él. */
+    test('el recibo guardado no arrastra la ficha entera del colaborador', () => {
+        const g = A._reciboNominaGuardable(dRec);
+        return eq(Object.keys(g.staff).sort().join(','), 'id,nombre,puesto', 'solo lo del papel');
+    });
+    /* Y de verdad: se guarda el recibo, DESPUÉS le cambian el puesto en el
+       catálogo, y el papel reimpreso sigue diciendo el de aquel día. */
+    test('…y el reimpreso sigue diciendo el puesto que tenía ese día', () => {
+        A._pagoNomStaff = { id:'s1', nombre:'Ana', puesto:'Barista' };
+        const guardado = A._reciboNominaGuardable(A._reciboNominaDatos());
+        A._pagoNomStaff.puesto = 'Gerente';           // la ascienden después
+        const papel = A._reciboNominaHTML(guardado);
+        return eq(papel.indexOf('Barista') > -1 && papel.indexOf('Gerente') === -1, true,
+                  'el recibo viejo cambió con la ficha');
+    });
+    test('un recibo sin datos no inventa uno vacío', () =>
+        eq(A._reciboNominaGuardable(null), null, 'sin inventar'));
+    /* Una SANCIÓN se lee aparte en el recibo, con su motivo. Si al guardar se
+       perdieran las deducciones, el papel diría que cobró más de lo que cobró
+       —y el que firma lo firmaría—. */
+    test('las deducciones también sobreviven al guardado', () => {
+        A._pagoNomStaff = { id:'s1', nombre:'Ana', puesto:'Barista' };
+        A._pagoNomConceptos = [{ concepto:'Sanción', detalle:'Llegó tarde 3 veces', monto:-90, pago:'mismo' }];
+        A.document.getElementById('pnTotal').value = 540;
+        const d = A._reciboNominaDatos();
+        const g = A._reciboNominaGuardable(d);
+        return eq(g.deducciones.length + ' · ' + g.deducciones[0].concepto + ' · ' + g.deducciones[0].monto +
+                  ' · ' + g.totalDed, '1 · Sanción · 90 · 90', 'se perdió el descuento');
+    });
+    test('…y el papel reimpreso las sigue enseñando con su motivo', () => {
+        const papel = A._reciboNominaHTML(A._reciboNominaGuardable(A._reciboNominaDatos()));
+        return eq(papel.indexOf('Sanción') > -1 && papel.indexOf('Llegó tarde 3 veces') > -1,
+                  true, 'un descuento sin motivo es una discusión dentro de un mes');
+    });
+
+    /* ── EL VIAJE COMPLETO: del modal de nómina al gasto, y de vuelta ──
+       El recibo se guarda DENTRO del gasto. Lo que importa no es que la
+       función lo arme, sino que sobreviva al modal de gasto —que reconstruye
+       el registro campo por campo— y a cualquier edición posterior. */
+    /* El modal de gasto pinta el borde del encabezado con `querySelector`, y el
+       DOM de mentira solo sabe de ids. Se le presta uno MIENTRAS dura la
+       prueba: el hueco es del arnés, no del código, y parchear producción para
+       que una prueba corra es arreglar el termómetro. */
+    const conQuerySelector = (fn) => {
+        const antes = A.document.querySelector;
+        A.document.querySelector = () => ({ style:{}, classList:{ add(){}, remove(){}, toggle(){} } });
+        /* El repintado de la pantalla y la sincronía con los cortes se silencian:
+           lo que se mide aquí es el REGISTRO que queda, no cómo se dibuja — y
+           eso ya tiene sus pruebas en otro lado. */
+        const g0 = A.gRenderAll, s0 = A._syncGastosCortes, c0 = A.gCerrarModal, u0 = A._sbUp;
+        A.gRenderAll = () => {}; A._syncGastosCortes = () => {};
+        A.gCerrarModal = () => {}; A._sbUp = () => {};
+        try { return fn(); }
+        finally {
+            A.document.querySelector = antes;
+            A.gRenderAll = g0; A._syncGastosCortes = s0; A.gCerrarModal = c0; A._sbUp = u0;
+        }
+    };
+    const abrirYGuardar = (g) => conQuerySelector(() => {
+        A._cacheGastos = [];
+        A._abrirModalGasto(g, 'menor');
+        A.document.getElementById('gFecha').value = '2026-09-07';
+        A.document.getElementById('gMonto').value = String(g.monto);
+        A.document.getElementById('gConcepto').value = g.concepto;
+        A.guardarGasto();
+        return (A._cacheGastos || [])[0];
+    });
+    const gastoConRecibo = (recibo) => abrirYGuardar({
+        concepto:'Nómina semanal — Ana', categoria:'Nómina y personal',
+        monto:540, staffId:'s1', categoriaNomina:'operativa', nomina:recibo });
+    test('el recibo llega hasta el gasto guardado', () => {
+        const rec = A._reciboNominaGuardable(A._reciboNominaDatos());
+        const g = gastoConRecibo(rec);
+        return eq(!!(g && g.nomina) && g.nomina.folio === rec.folio, true,
+                  'el pago quedó sin comprobante');
+    });
+    /* Y editar el gasto —cambiar el método, la fecha, lo que sea— no puede
+       llevarse el comprobante: es la evidencia de que esa persona cobró. */
+    test('…y editar ese gasto no se lleva el recibo', () => {
+        const rec = A._reciboNominaGuardable(A._reciboNominaDatos());
+        const g = gastoConRecibo(rec);
+        const g2 = conQuerySelector(() => {
+            A._exG = g;                            // se reabre el MISMO gasto
+            A._abrirModalGasto(g, 'menor');
+            A._gastoNomina = null;                 // y el modal no sabe de recibos
+            A.document.getElementById('gConcepto').value = 'Nómina semanal — Ana (corregido)';
+            A.guardarGasto();
+            return (A._cacheGastos || [])[0];
+        });
+        A._exG = null;
+        return eq(!!(g2 && g2.nomina) && g2.nomina.folio === rec.folio, true,
+                  'editar el gasto borró el comprobante');
+    });
+    /* Y de punta a punta: darle a «Continuar a registrar pago» tiene que
+       mandar el recibo con el gasto. Es el único camino por el que un pago de
+       nómina llega al registro, y armar el comprobante después es imposible —
+       el desglose solo vive mientras el modal está abierto. */
+    test('confirmar el pago manda el recibo junto con el gasto', () => {
+        A._pagoNomStaff = { id:'s1', nombre:'Ana', puesto:'Barista' };
+        A._pagoNomConceptos = [];
+        A._pnTotalManual = null; A._pnPrimaInclude = false;
+        A.document.getElementById('pnTipo').value   = 'semana';
+        A.document.getElementById('pnDesde').value  = '2026-09-01';
+        A.document.getElementById('pnHasta').value  = '2026-09-07';
+        A.document.getElementById('pnDiario').value = 315;
+        A.document.getElementById('pnDias').value   = 6;
+        let entregado = null;
+        const abrir0 = A._abrirModalGasto, cerrar0 = A._cerrarPagoNom, cat0 = A._asegurarCategoria;
+        A._abrirModalGasto = (g) => { entregado = g; };
+        A._cerrarPagoNom = () => {}; A._asegurarCategoria = () => {};
+        try { A._confirmarPagoNom(); }
+        finally { A._abrirModalGasto = abrir0; A._cerrarPagoNom = cerrar0; A._asegurarCategoria = cat0; }
+        if (!entregado) throw new Error('no se entregó ningún gasto al modal');
+        return eq(!!entregado.nomina + ' · ' + (entregado.nomina && entregado.nomina.dias) +
+                  ' · ' + (entregado.nomina && entregado.nomina.staff.nombre),
+                  'true · 6 · Ana', 'el pago llegó al registro sin comprobante');
+    });
+    test('…con el mismo folio que el recibo que se ve en pantalla', () => {
+        const enPantalla = A._reciboNominaDatos();
+        let entregado = null;
+        const abrir0 = A._abrirModalGasto, cerrar0 = A._cerrarPagoNom, cat0 = A._asegurarCategoria;
+        A._abrirModalGasto = (g) => { entregado = g; };
+        A._cerrarPagoNom = () => {}; A._asegurarCategoria = () => {};
+        try { A._confirmarPagoNom(); }
+        finally { A._abrirModalGasto = abrir0; A._cerrarPagoNom = cerrar0; A._asegurarCategoria = cat0; }
+        return eq(entregado.nomina.folio, enPantalla.folio, 'dos folios para el mismo pago');
+    });
+    test('un gasto cualquiera no carga la llave del recibo', () => {
+        const g = abrirYGuardar({ concepto:'Servilletas', categoria:'Varios', monto:120 });
+        return eq('nomina' in (g || {}), false, 'carga una llave vacía');
+    });
+
     /* Sin motivo no se aplica: un descuento anónimo en un recibo es una discusión
        con una persona dentro de un mes. */
     let regaños = 0;

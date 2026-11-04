@@ -6714,11 +6714,21 @@ function editarGasto(id){
 var _gastoFijoId=''; // si el gasto se generó pagando un gasto fijo, guarda su id (link al catálogo de fijos)
 var _gastoNomCat=''; // categoría de nómina (op/adm/socios) del colaborador, para split en KPIs
 var _gastoStaffId=''; // id del colaborador si el gasto es de nómina
+/* EL RECIBO DE NÓMINA VIVE DENTRO DE SU GASTO. Antes se armaba al vuelo con lo
+   que estuviera abierto en el modal y se perdía al cerrarlo: del pago solo
+   quedaba un texto corrido en las notas, que se lee pero no se reimprime, ni
+   se edita, ni se lista por colaborador.
+
+   Va pegado al gasto —y no en una tabla aparte— a propósito: así el recibo y
+   el egreso no pueden decir cosas distintas. Un renglón, una verdad. Corregir
+   el recibo es corregir el pago, que es lo que de verdad pasa. */
+var _gastoNomina=null;
 function _abrirModalGasto(g,tipo){
     var d=g||{};
     _gastoFijoId=(d.fijoId)||''; // pagar fijo → link; editar → conserva el del gasto; nuevo → vacío
     _gastoNomCat=(d.categoriaNomina)||'';
     _gastoStaffId=(d.staffId)||'';
+    _gastoNomina=(d.nomina)||null;
     document.getElementById('gModalTitulo').textContent=g?'Editar gasto':'Nuevo gasto';
     document.getElementById('gId').value=d.id||'';
     document.getElementById('gFecha').value=d.fecha||todayStr();
@@ -7515,6 +7525,33 @@ function _reciboNominaDatos(){
         total:n(document.getElementById('pnTotal').value)
     };
 }
+/* Lo que se GUARDA del recibo. Del colaborador van solo los tres datos que el
+   papel imprime: guardar su ficha entera engordaría cada gasto y, peor, el
+   recibo quedaría contando su puesto de hoy aunque mañana lo cambien —un
+   comprobante dice lo que era cuando se firmó. */
+function _reciboNominaGuardable(d){
+    if(!d) return null;
+    return {
+        folio:d.folio, periodicidad:d.periodicidad,
+        staff:{ id:(d.staff&&d.staff.id)||'', nombre:(d.staff&&d.staff.nombre)||'',
+                puesto:(d.staff&&d.staff.puesto)||'' },
+        desde:d.desde, hasta:d.hasta, dias:d.dias, diario:d.diario,
+        percepciones:(d.percepciones||[]).map(function(x){ return { concepto:x.concepto, detalle:x.detalle, monto:n(x.monto) }; }),
+        deducciones:(d.deducciones||[]).map(function(x){ return { concepto:x.concepto, detalle:x.detalle, monto:n(x.monto) }; }),
+        totalPerc:n(d.totalPerc), totalDed:n(d.totalDed), total:n(d.total),
+        emitido:new Date().toISOString()
+    };
+}
+/* Reimprimir el recibo de un pago ya registrado. Sale del gasto, no del modal:
+   por eso ahora se puede ver meses después. */
+function verReciboNomina(gastoId){
+    var g=gLoad().find(function(x){ return x.id===gastoId; });
+    if(!g || !g.nomina){
+        alert('Este pago no tiene recibo guardado. Los pagos registrados antes de esta versión solo conservan su desglose en las notas.');
+        return;
+    }
+    etaaxAbrirReporte(_reciboNominaHTML(g.nomina));
+}
 function _reciboNominaHTML(d){
     var _e=(typeof etx==='function')?etx:function(x){ return String(x==null?'':x); };
     var _filas=function(arr,signo){
@@ -7659,7 +7696,13 @@ function _confirmarPagoNom(){
     if(montoPrincipal<=0 && aparte.length){
         return;
     }
-    var g={ concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal', monto:montoPrincipal, proveedor:'', notas:desg, categoriaNomina:_ggStaffCat(s), staffId:s.id };
+    /* El recibo se arma AQUÍ, con el modal todavía abierto, y viaja pegado al
+       gasto. Armarlo después es imposible: el desglose solo vive en pantalla. */
+    var _rec=_reciboNominaGuardable(_reciboNominaDatos());
+    /* Si parte se pagó aparte, el recibo acompaña al gasto PRINCIPAL y su total
+       sigue siendo el del periodo completo: el comprobante que firma la persona
+       es por todo lo que recibió, aunque el dinero saliera por dos cajas. */
+    var g={ concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal', monto:montoPrincipal, proveedor:'', notas:desg, categoriaNomina:_ggStaffCat(s), staffId:s.id, nomina:_rec };
     _asegurarCategoria(g.categoria);
     _abrirModalGasto(g,'menor');
 }
@@ -7921,8 +7964,12 @@ function guardarGasto(){
         })(),
         fijoId:_gastoFijoId||((_exG&&_exG.fijoId)||''), // link al gasto fijo si se pagó desde el catálogo
         categoriaNomina:_gastoNomCat||((_exG&&_exG.categoriaNomina)||''), // op/adm de nómina (split KPIs)
-        staffId:_gastoStaffId||((_exG&&_exG.staffId)||'')
+        staffId:_gastoStaffId||((_exG&&_exG.staffId)||''),
+        // El recibo de nómina, si este gasto lo trae. Se conserva al editar:
+        // tocar cualquier otro campo no puede borrar el comprobante.
+        nomina:_gastoNomina||((_exG&&_exG.nomina)||null)
     };
+    if(!gasto.nomina) delete gasto.nomina;   // un gasto cualquiera no carga la llave
     _cacheGastos = (_cacheGastos||[]).filter(function(g){return g.id!==id;});
     _cacheGastos.push(gasto);
     _sbUp('gastos', gasto);
@@ -7975,6 +8022,8 @@ function _filaPagoPanel(g){
         '<td>'+estatusBadge(g)+'</td>'+
         '<td class="ar" style="font-weight:600;color:var(--red)">'+fmtM(g.monto)+'</td>'+
         '<td style="text-align:right;white-space:nowrap">'+
+            (g.nomina ? '<button class="btn-row" title="Ver el recibo de este pago" onclick="verReciboNomina(\''+g.id+'\')" '+
+                'style="padding:4px 9px;font-size:13px;line-height:1">🧾</button> ' : '')+
             '<button class="btn-row" title="Opciones" onclick="_menuGasto(event,\''+g.id+'\')" '+
                 'style="padding:4px 10px;font-size:15px;line-height:1">⋯</button>'+
         '</td>'+
@@ -8079,7 +8128,7 @@ function renderFijosPanel(){
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
-<script src="/novedades.js?v=d6f76c35"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=7ce53188"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
