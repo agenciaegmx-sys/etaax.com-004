@@ -31926,6 +31926,438 @@ console.log('\n══ BH60 · El delivery, en las tres hojas ══');
     });
 })();
 
+
+/* ═══════════ BH61 · «PAGADA», «PARCIAL» O «POR PAGAR» ═══════════
+   La pregunta no es sí o no. La pantalla puede estar mirando NOVIEMBRE y la
+   persona cobrar por semana: con tres recibos de cuatro, decir PAGADA es
+   mentir y decir POR PAGAR también. Se cuenta por días sobre la UNIÓN de los
+   periodos cubiertos.                                                       */
+console.log('\n══ BH61 · Pagada, parcial o por pagar ══');
+{
+    const C = Core.coberturaPeriodo;
+    const p = (a, b) => ({ desde:a, hasta:b });
+    const MES = ['2026-11-01', '2026-11-30'];
+
+    test('sin un solo recibo, no hay nada cubierto', () =>
+        eq(C(MES[0], MES[1], []).estado, 'ninguno', 'por pagar'));
+    test('cuatro semanas cubren el mes completo', () =>
+        eq(C(MES[0], MES[1], [p('2026-11-01','2026-11-08'), p('2026-11-09','2026-11-16'),
+                              p('2026-11-17','2026-11-24'), p('2026-11-25','2026-11-30')]).estado,
+           'completo', 'pagada'));
+    test('…y con dos de cuatro, dice PARCIAL en vez de mentir', () => {
+        const r = C(MES[0], MES[1], [p('2026-11-01','2026-11-08'), p('2026-11-09','2026-11-16')]);
+        return eq(r.estado + ' ' + r.cubiertos + '/' + r.total, 'parcial 16/30', 'a medias');
+    });
+    /* DOS RECIBOS QUE SE TRASLAPAN —una quincena recapturada— no pueden sumar
+       más días de los que tiene el mes: así un periodo saldría «pagado» con
+       la mitad sin cubrir. */
+    test('dos recibos traslapados no inflan los días cubiertos', () => {
+        const r = C(MES[0], MES[1], [p('2026-11-01','2026-11-20'), p('2026-11-10','2026-11-20')]);
+        return eq(r.cubiertos, 20, 'infló el traslape');
+    });
+    test('…y uno contenido dentro de otro tampoco', () => {
+        const r = C(MES[0], MES[1], [p('2026-11-01','2026-11-20'), p('2026-11-05','2026-11-10')]);
+        return eq(r.cubiertos, 20, 'contó dos veces los mismos días');
+    });
+    /* El orden en que llegan los recibos no puede cambiar la respuesta: salen
+       de una lista de gastos ordenada por fecha de PAGO, no de periodo. */
+    test('el orden en que llegan los recibos no cambia nada', () =>
+        eq(C('2026-11-01','2026-11-10', [p('2026-11-06','2026-11-10'), p('2026-11-01','2026-11-05')]).estado,
+           'completo', 'por el orden'));
+    /* Lo de otro mes no cuenta, y lo que asoma cuenta SOLO la parte de adentro. */
+    test('un recibo de otro mes no cuenta', () =>
+        eq(C(MES[0], MES[1], [p('2026-10-01','2026-10-31')]).estado, 'ninguno', 'ajeno'));
+    test('…y uno que asoma solo aporta los días de adentro', () => {
+        const r = C(MES[0], MES[1], [p('2026-10-25','2026-11-05')]);
+        return eq(r.cubiertos, 5, 'contó días de octubre');
+    });
+    test('un rango al revés no truena ni inventa cobertura', () =>
+        eq(C('2026-11-30', '2026-11-01', [p('2026-11-01','2026-11-30')]).estado, 'ninguno', 'sin inventar'));
+    test('un recibo sin fechas se ignora en vez de tumbar la lista', () =>
+        eq(C(MES[0], MES[1], [p('', ''), p('2026-11-01','2026-11-30')]).estado, 'completo', 'aguanta'));
+    /* Un solo día es un periodo válido: el pago de un día trabajado. */
+    test('un solo día cuenta como un día', () =>
+        eq(C('2026-11-05','2026-11-05', [p('2026-11-05','2026-11-05')]).cubiertos, 1, 'un día'));
+}
+
+/* ═══════════ BH62 · CORREGIR UN PAGO DE NÓMINA ═══════════
+   Un pago mal capturado solo se podía borrar y rehacer: el recibo nuevo salía
+   con otro folio y en los reportes quedaban dos pagos donde hubo uno. Corregir
+   reabre LA MISMA nómina, actualiza SU gasto y apunta en el recibo qué decía
+   antes.
+
+   Lo que se vigila aquí no es que la cuenta salga —eso es BH61 y las de
+   retardos— sino las tres formas de perder dinero en el camino:
+     · que la corrección cree un segundo gasto (se paga dos veces),
+     · que al reabrir el modal se recalcule con los números de HOY en vez de
+       los del pago (la nómina de octubre cobrando el sueldo de noviembre),
+     · que los conceptos pagados aparte se vuelvan a registrar.           */
+console.log('\n══ BH62 · Corregir un pago de nómina ══');
+{
+    const X = crearContexto();
+    cargarJS(X, 'etaax-core.js');
+    cargarJS(X, 'reporte-marca.js');          // el recibo se imprime de verdad
+    cargarInline(X, 'administrativo/diario.html');
+    X._storage.etaax_negocio_activo = 'n1';
+    X._storage.etaax_sucursal_activa = 'suc_principal';
+    X._storage.etaax_ctx = JSON.stringify({ userName:'Edwin' });
+    X.NominaParams = { get(){ return { jornadaHoras:8, primaVacacionalPct:25, salarioDiarioDefault:300 }; } };
+    const ana = { id:'s1', nombre:'Ana', puesto:'Barista', sucursalId:'suc_principal',
+                  multaRetardo:25, bonos:[], esquemaSueldo:'diario', sueldoDiario:300 };
+    X._cacheStaff = [ana]; X._cacheGastos = []; X._cacheHorarios = {};
+    const avisos = []; X.alert = (m) => { avisos.push(String(m)); };
+    const el = (id) => X.document.getElementById(id);
+
+    /* El repintado y la sincronía con los cortes se silencian: lo que se mide
+       es el REGISTRO que queda. El querySelector prestado es el hueco del
+       arnés de siempre (el DOM de mentira solo sabe de ids). */
+    const silencio = (fn) => {
+        const d0 = X.document.querySelector, g0 = X.gRenderAll, s0 = X._syncGastosCortes,
+              c0 = X.gCerrarModal, u0 = X._sbUp, a0 = X._asegurarCategoria;
+        X.document.querySelector = () => ({ style:{}, classList:{ add(){}, remove(){}, toggle(){} } });
+        X.gRenderAll = () => {}; X._syncGastosCortes = () => {};
+        X.gCerrarModal = () => {}; X._sbUp = () => {}; X._asegurarCategoria = () => {};
+        try { return fn(); }
+        finally { X.document.querySelector = d0; X.gRenderAll = g0; X._syncGastosCortes = s0;
+                  X.gCerrarModal = c0; X._sbUp = u0; X._asegurarCategoria = a0; }
+    };
+    /* Captura de una semana de Ana, con un bono a mano y el total automático. */
+    const capturar = () => {
+        X._pagoNomStaff = ana; X._pagoNomConceptos = []; X._pnTotalManual = null;
+        X._pnPrimaInclude = false; X._pnBonosQuitados = []; X._pnEditandoGasto = null;
+        el('pnTipo').value = 'semana';
+        el('pnDesde').value = '2026-11-02'; el('pnHasta').value = '2026-11-08';
+        el('pnDiario').value = 300; el('pnDias').value = 7;
+        el('pnMultaRetardo').value = 25; el('pnRetardos').value = 0;
+        X._pnCalc();
+    };
+    /* El camino real: confirmar manda el gasto al modal y ahí se guarda. */
+    const registrar = (fecha) => silencio(() => {
+        X._confirmarPagoNom();
+        if (fecha) el('gFecha').value = fecha;
+        /* El gasto nuevo no trae id hasta que guardarGasto se lo pone, así que
+           se reconoce por diferencia. Buscarlo por `gId` devolvía el PAGADO
+           APARTE (el primero de la lista) y la prueba medía otro gasto. */
+        const previos = (X._cacheGastos || []).map(g => g.id);
+        X.guardarGasto();
+        return (X._cacheGastos || []).find(g => previos.indexOf(g.id) === -1);
+    });
+    const abrirCorreccion = (gid) => {
+        X._pedirClaveAdmin = (t, cb) => cb();
+        X.editarReciboNomina(gid);
+    };
+    const confirmarCorreccion = (motivo, gid) => {
+        X.prompt = () => motivo;
+        return silencio(() => { X._confirmarPagoNom(); X.guardarGasto();
+                                return (X._cacheGastos || []).find(g => g.id === gid); });
+    };
+
+    /* ── 1 · la captura vuelve igual ────────────────────────────────────── */
+    capturar();
+    X._pagoNomConceptos = [{ concepto:'Horas extras', detalle:'6 h', monto:400, pago:'mismo' }];
+    X._pnPrimaInclude = true;
+    el('pnRetardos').value = 2; X._pnActualizarRetardos();
+    el('pnTotal').value = 2500; X._pnTotalEdit();        // total fijado a mano
+    const recOrig = X._reciboNominaGuardable(X._reciboNominaDatos());
+
+    test('el recibo guarda la captura, no solo el resultado', () =>
+        eq(!!(recOrig.origen && recOrig.origen.conceptos), true, 'sin origen no hay corrección posible'));
+    test('…con el total fijado a mano marcado como tal', () =>
+        eq(recOrig.origen.totalManual, 2500, 'se perdió el ajuste a mano'));
+
+    /* Ahora se ensucia TODO el estado del modal —como si se hubiera pagado a
+       otra persona— y se restaura. Si _pnRestaurarCaptura leyera la pantalla en
+       vez del recibo, esto saldría con los números de la otra. */
+    X._pagoNomStaff = ana;
+    X._pagoNomConceptos = [{ concepto:'Basura', monto:9999, pago:'mismo' }];
+    X._pnPrimaInclude = false; X._pnTotalManual = null;
+    el('pnDesde').value = '2020-01-01'; el('pnHasta').value = '2020-01-02';
+    el('pnDiario').value = 1; el('pnDias').value = 1; el('pnRetardos').value = 0;
+    X._pnRestaurarCaptura(recOrig);
+    test('restaurar devuelve el periodo y el sueldo del pago, no los de la pantalla', () =>
+        eq(el('pnDesde').value + '·' + el('pnHasta').value + '·' + el('pnDiario').value + '·' + el('pnDias').value,
+           '2026-11-02·2026-11-08·300·7', 'volvió con otros números'));
+    test('…los conceptos capturados a mano', () =>
+        eq(X._pagoNomConceptos.some(c => c.concepto === 'Horas extras' && c.monto === 400) &&
+           !X._pagoNomConceptos.some(c => c.concepto === 'Basura'), true, 'conceptos'));
+    test('…el descuento por retardos, sin duplicarlo', () =>
+        eq(X._pagoNomConceptos.filter(c => c._retardos).length + '·' + el('pnRetardos').value,
+           '1·2', 'retardos'));
+    test('…la prima dominical marcada', () => eq(X._pnPrimaInclude, true, 'prima'));
+    test('…y el total a mano, que el recálculo no puede pisar', () =>
+        eq(X._pnTotalManual + '·' + el('pnTotal').value, '2500·2500', 'lo recalculó'));
+    /* EL CASO QUE IMPORTA: si entre el pago y la corrección le cambian el
+       sueldo o le ponen un bono nuevo en la ficha, el pago viejo se corrige con
+       SUS números. Reabrir pasando por _pnRangoChange traería los de hoy. */
+    test('restaurar NO trae los bonos ni el sueldo que la ficha tiene HOY', () => {
+        const antes = X._pagoNomConceptos.length;
+        ana.bonos = [{ concepto:'Bono nuevo', monto:777, periodicidad:'semanal' }];
+        ana.sueldoDiario = 999;
+        X._pnRestaurarCaptura(recOrig);
+        ana.bonos = []; ana.sueldoDiario = 300;
+        return eq(X._pagoNomConceptos.length + '·' + el('pnDiario').value, antes + '·300',
+                  'el pago viejo cobró el sueldo de hoy');
+    });
+
+    /* ── 2 · corregir actualiza el mismo gasto ──────────────────────────── */
+    capturar();
+    const g1 = registrar('2026-11-09');
+    test('el pago queda registrado con su recibo', () =>
+        eq((X._cacheGastos || []).length + '·' + !!(g1 && g1.nomina), '1·true', 'se registró'));
+
+    /* Sello viejo a propósito: así se ve si la corrección lo reescribe. Con dos
+       `new Date()` del mismo milisegundo, la comparación no probaría nada. */
+    g1.nomina.emitido = '2020-01-01T00:00:00.000Z';
+    let permisos = [];
+    X._exigeVG = (k) => { permisos.push(k); return true; };
+    X._puedeEditarGasto = () => true;
+    abrirCorreccion(g1.id);
+    test('corregir pide el permiso de nóminas', () =>
+        eq(permisos.indexOf('gastos.nominas') > -1, true, 'sin permiso de por medio'));
+    test('…y el modal queda en modo corrección, no en pago nuevo', () =>
+        eq(X._pnEditandoGasto, g1.id, 'abrió como pago nuevo'));
+    test('…avisándolo en pantalla con el folio', () =>
+        eq(el('pnCorrBanner').innerHTML.indexOf(g1.nomina.folio) > -1 &&
+           el('pnCorrBanner').style.display === '', true, 'sin aviso se paga dos veces'));
+
+    /* La corrección mueve el periodo Y los días: el folio se calcula con las
+       fechas, así que sin moverlas la prueba del folio quedaría vacía. */
+    el('pnHasta').value = '2026-11-06';
+    el('pnDias').value = 5; X._pnCalc();                 // eran 7 días, fueron 5
+    const g1b = confirmarCorreccion('Se contaron dos días de más', g1.id);
+    test('corregir NO crea un segundo gasto', () =>
+        eq((X._cacheGastos || []).length, 1, 'se pagó dos veces'));
+    test('…actualiza el importe del que ya existía', () =>
+        eq(g1b.monto, 1500, 'importe'));
+    test('…y conserva la fecha real del pago', () =>
+        eq(g1b.fecha, '2026-11-09', 'le reescribió la fecha'));
+
+    /* ── 3 · el rastro ──────────────────────────────────────────────────── */
+    test('el recibo guarda qué decía antes', () => {
+        const c = (g1b.nomina.correcciones || [])[0] || {};
+        return eq((c.antes || {}).total + '·' + (c.antes || {}).dias, '2100·7', 'sin rastro');
+    });
+    test('…con el motivo y quién lo hizo', () => {
+        const c = (g1b.nomina.correcciones || [])[0] || {};
+        return eq(c.motivo + '·' + c.por, 'Se contaron dos días de más·Edwin', 'rastro mudo');
+    });
+    test('el folio NO cambia: es el mismo recibo', () => {
+        /* Guardia contra una prueba hueca: si el folio recalculado fuera el
+           mismo, esto pasaría aunque nadie lo conservara. */
+        if (X._pnFolio('s1', g1b.nomina.desde, g1b.nomina.hasta) === g1.nomina.folio)
+            throw new Error('la prueba quedó vacía: el periodo no cambió');
+        return eq(g1b.nomina.folio, g1.nomina.folio, 'renumerado parece un segundo pago');
+    });
+    test('…ni la fecha de emisión: el recibo nació una sola vez', () =>
+        eq(g1b.nomina.emitido, '2020-01-01T00:00:00.000Z', 'reescribió la emisión'));
+    test('…y el papel impreso dice que fue corregido, con lo de antes', () => {
+        const papel = X._reciboNominaHTML(g1b.nomina, g1b.fecha);
+        return eq(papel.indexOf('Recibo corregido') > -1 &&
+                  papel.indexOf('Se contaron dos días de más') > -1, true,
+                  'un comprobante que cambia en silencio no es comprobante');
+    });
+    /* Un recibo sin correcciones no debe inventar el bloque. */
+    test('un recibo sin corregir no trae ese bloque', () =>
+        eq(X._reciboNominaHTML(g1.nomina, '2026-11-09').indexOf('Recibo corregido'), -1, 'inventó'));
+    /* Corregir dos veces apila el rastro, no lo reemplaza. */
+    abrirCorreccion(g1b.id);
+    el('pnDias').value = 6; X._pnCalc();
+    const g1c = confirmarCorreccion('Faltaba un día', g1b.id);
+    test('dos correcciones dejan dos renglones de rastro', () =>
+        eq((g1c.nomina.correcciones || []).length, 2, 'se pisó el rastro'));
+    test('…y la segunda recuerda lo que decía la primera', () =>
+        eq(((g1c.nomina.correcciones || [])[1].antes || {}).total, 1500, 'rastro roto'));
+
+    /* ── 4 · sin motivo no se corrige ───────────────────────────────────── */
+    abrirCorreccion(g1c.id);
+    el('pnDias').value = 1; X._pnCalc();
+    avisos.length = 0;
+    const g1d = confirmarCorreccion('   ', g1c.id);
+    test('sin motivo no se guarda nada', () =>
+        eq(g1d.monto + '·' + avisos.length, '1800·1', 'guardó sin motivo'));
+    /* Y cancelar el aviso tampoco toca el pago. */
+    X._pnEditandoGasto = g1c.id; X.prompt = () => null;
+    silencio(() => X._confirmarPagoNom());
+    test('cancelar el motivo deja el pago intacto', () =>
+        eq(((X._cacheGastos || []).find(g => g.id === g1c.id) || {}).monto, 1800, 'lo tocó'));
+
+    /* Un pago que se registró como MAYOR (rebasó el límite diario) guarda ahí
+       su autorización: corregirlo no puede degradarlo a menor. */
+    test('corregir un pago mayor no lo degrada a menor', () => {
+        X.mayorDesbloqueado = true;
+        const gm = (X._cacheGastos || []).find(g => g.id === g1c.id);
+        gm.tipo = 'mayor';
+        abrirCorreccion(gm.id);
+        el('pnDias').value = 4; X._pnCalc();
+        const r = confirmarCorreccion('Ajuste de días', gm.id);
+        return eq(r.tipo, 'mayor', 'perdió su clasificación');
+    });
+
+    /* ── 5 · los pagados aparte no se vuelven a registrar ───────────────── */
+    X._cacheGastos = [];
+    capturar();
+    X._pagoNomConceptos = [{ concepto:'Bono en efectivo', detalle:'', monto:500,
+                             pago:'efectivo', fecha:'2026-11-09' }];
+    X._pnCalc();
+    const g2 = registrar('2026-11-09');
+    test('un concepto pagado aparte nace como su propio gasto', () =>
+        eq((X._cacheGastos || []).length, 2, 'dos gastos'));
+    const antesCorreccion = (X._cacheGastos || []).length;
+    X.confirm = () => true;
+    abrirCorreccion(g2.id);
+    el('pnDiario').value = 310; X._pnCalc();
+    const g2b = confirmarCorreccion('Sueldo diario mal capturado', g2.id);
+    test('corregir NO vuelve a registrar el pagado aparte', () =>
+        eq((X._cacheGastos || []).length, antesCorreccion, 'el bono se pagó dos veces'));
+    /* El principal es el SUELDO: los 500 del bono salieron por otra caja y su
+       gasto no se toca. Si la corrección se los sumara aquí, el bono quedaría
+       pagado dos veces con el total del recibo intacto. */
+    test('…y el principal sigue siendo solo lo que salió por esta caja', () =>
+        eq(g2b.monto, 310 * 7, 'importe'));
+    /* Y se AVISA antes: si el usuario dice no, no se corrige nada. */
+    X.confirm = () => false;
+    abrirCorreccion(g2b.id);
+    el('pnDiario').value = 1; X._pnCalc();
+    silencio(() => X._confirmarPagoNom());
+    test('si el usuario no acepta el aviso, no se corrige', () =>
+        eq(((X._cacheGastos || []).find(g => g.id === g2b.id) || {}).monto, g2b.monto, 'corrigió igual'));
+    X.confirm = () => true;
+
+    /* ── 6 · el permiso y el renglón ────────────────────────────────────── */
+    X._pnEditandoGasto = null;
+    X._exigeVG = () => false;
+    abrirCorreccion(g2b.id);
+    test('sin permiso, la corrección no abre', () => eq(X._pnEditandoGasto, null, 'abrió sin permiso'));
+    X._exigeVG = () => true;
+    /* Un pago viejo (sin captura guardada) no puede fingir que se reabre. */
+    avisos.length = 0;
+    const viejo = { id:'gv', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-10-01',
+                    monto:1000, concepto:'Nómina semanal — Ana', staffId:'s1',
+                    nomina:{ folio:'N-00001', desde:'2026-09-28', hasta:'2026-10-04', dias:7, total:1000 } };
+    X._cacheGastos.push(viejo);
+    X.editarReciboNomina('gv');
+    test('un pago sin captura guardada lo dice en vez de reabrir a medias', () =>
+        eq(X._pnEditandoGasto === null && avisos.length === 1, true, 'reabrió a medias'));
+    test('…y su renglón no ofrece el botón de corregir', () =>
+        eq(X._filaPagoPanel(viejo).indexOf('editarReciboNomina') === -1 &&
+           X._filaPagoPanel(g2b).indexOf('editarReciboNomina') > -1, true, 'botón mentiroso'));
+
+    /* ── 7 · la fecha del recibo es la del pago, no la de hoy ───────────── */
+    /* Se mira SOLO el campo «Fecha de pago»: el documento también lleva la
+       fecha en que se imprimió, y eso sí es de hoy. Y la fecha de prueba es de
+       otro año, para que el día en que corra el candado no vuelva vacía la
+       comparación. */
+    test('reimprimir un recibo no lo fecha hoy', () => {
+        const papel = X._reciboNominaHTML(g2b.nomina, '2025-03-17');
+        const i = papel.indexOf('Fecha de pago');
+        const campo = i < 0 ? '' : papel.slice(i, i + 220);
+        return eq(campo.indexOf(X._pnFechaLarga('2025-03-17')) > -1 &&
+                  campo.indexOf(X._pnFechaLarga(X.todayStr())) === -1,
+                  true, 'el recibo decía que se pagó hoy');
+    });
+    /* Y que esté CONECTADO: ver el recibo desde el renglón tiene que pasarle la
+       fecha del gasto. Una función perfecta a la que nadie le pasa el dato
+       sigue imprimiendo "hoy". */
+    test('ver el recibo desde su renglón le pasa la fecha del gasto', () => {
+        let visto = null;
+        const h0 = X._reciboNominaHTML, a0 = X.etaaxAbrirReporte;
+        X._reciboNominaHTML = (d, f) => { visto = f; return ''; };
+        X.etaaxAbrirReporte = () => {};
+        try { X.verReciboNomina(g2b.id); }
+        finally { X._reciboNominaHTML = h0; X.etaaxAbrirReporte = a0; }
+        return eq(visto, '2026-11-09', 'imprime con la fecha de hoy');
+    });
+
+    /* ── 8 · cerrar el modal suelta el modo corrección ──────────────────── */
+    X._pnEditandoGasto = g2b.id;
+    X._cerrarPagoNom();
+    test('cerrar el modal suelta el modo corrección', () =>
+        eq(X._pnEditandoGasto, null, 'el siguiente pago sobrescribiría este'));
+
+    /* ── 9 · las dos listas del selector ────────────────────────────────── */
+    test('el estado sale de los periodos de los recibos, no de la fecha de pago', () => {
+        X._cacheGastos = [{ id:'a', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-02',
+                            monto:1, staffId:'s1',
+                            nomina:{ desde:'2026-10-01', hasta:'2026-10-31', total:1 } }];
+        /* El gasto se pagó en NOVIEMBRE pero el periodo es de OCTUBRE: mirando
+           octubre tiene que decir PAGADA, y mirando noviembre POR PAGAR. */
+        return eq(X._nomEstadoDe('s1', { from:'2026-10-01', to:'2026-10-31' }).txt + '·' +
+                  X._nomEstadoDe('s1', { from:'2026-11-01', to:'2026-11-30' }).txt,
+                  'PAGADA·POR PAGAR', 'se fijó en la fecha de pago');
+    });
+    test('media quincena cubierta dice PARCIAL y cuánto falta', () => {
+        X._cacheGastos = [{ id:'a', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-08',
+                            monto:1, staffId:'s1',
+                            nomina:{ desde:'2026-11-01', hasta:'2026-11-08', total:1 } }];
+        const e = X._nomEstadoDe('s1', { from:'2026-11-01', to:'2026-11-15' });
+        return eq(e.txt + '·' + e.detalle, 'PARCIAL·8 de 15 días', 'a medias');
+    });
+    /* Un gasto de nómina SIN recibo no puede contar como pagado: no se sabe qué
+       periodo cubrió. */
+    test('un pago sin recibo no cuenta como periodo cubierto', () => {
+        X._cacheGastos = [{ id:'a', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-08',
+                            monto:1, staffId:'s1' }];
+        return eq(X._nomEstadoDe('s1', { from:'2026-11-01', to:'2026-11-15' }).txt, 'POR PAGAR', 'contó');
+    });
+    /* Y el recibo de OTRA persona no puede pagar la nómina de esta. */
+    test('el recibo de otro colaborador no cubre el periodo de este', () => {
+        X._cacheGastos = [{ id:'a', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-08',
+                            monto:1, staffId:'s2',
+                            nomina:{ desde:'2026-11-01', hasta:'2026-11-15', total:1 } }];
+        return eq(X._nomEstadoDe('s1', { from:'2026-11-01', to:'2026-11-15' }).txt, 'POR PAGAR', 'cruzó personas');
+    });
+
+    /* ── 10 · las dos listas, como se pintan ────────────────────────────── */
+    /* La decisión que se vigila: PARCIAL va con los PENDIENTES. A esa persona
+       todavía le deben algo, y esconderla entre las pagadas es exactamente
+       como se olvida un pago. */
+    {
+        const bea = { id:'s2', nombre:'Bea', puesto:'Cocina', sucursalId:'suc_principal',
+                      esquemaSueldo:'diario', sueldoDiario:300 };
+        const caro = { id:'s3', nombre:'Caro', puesto:'Piso', sucursalId:'suc_principal',
+                       esquemaSueldo:'diario', sueldoDiario:300 };
+        X._cacheStaff = [ana, bea, caro];
+        const rec = (id, sid, desde, hasta) => ({ id:id, negocioId:'n1', sucursalId:'suc_principal',
+            fecha:hasta, monto:1, staffId:sid, nomina:{ desde:desde, hasta:hasta, total:1 } });
+        X._cacheGastos = [
+            rec('g1','s1','2026-11-01','2026-11-30'),   // Ana: mes completo
+            rec('g2','s2','2026-11-01','2026-11-15'),   // Bea: media quincena → PARCIAL
+        ];                                               // Caro: nada → POR PAGAR
+        X._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
+        const pintar = (filtro) => { X._nomFiltro = filtro;
+            X._abrirSelectorPagoReal('nomina');
+            return X.document.getElementById('selPagoBody').innerHTML; };
+        const h = pintar('todos');
+        test('el selector pinta las dos listas con su cuenta', () =>
+            eq(/Por pagar · 2/.test(h) && /Pagadas · 1/.test(h), true, 'secciones'));
+        test('…y quien va a medias aparece entre los pendientes, no entre los pagados', () => {
+            const pend = h.slice(h.indexOf('Por pagar · 2'), h.indexOf('Pagadas · 1'));
+            return eq(pend.indexOf('Bea') > -1 && pend.indexOf('Caro') > -1 && pend.indexOf('Ana') === -1,
+                      true, 'PARCIAL escondida entre las pagadas');
+        });
+        test('…con su etiqueta y cuánto le falta', () =>
+            eq(/PARCIAL/.test(h) && /15 de 30 días/.test(h), true, 'etiqueta'));
+        test('el filtro «Por pagar» esconde la lista de pagadas', () => {
+            const p = pintar('pendientes');
+            return eq(p.indexOf('Pagadas · 1') === -1 && p.indexOf('Bea') > -1, true, 'filtro');
+        });
+        test('…y el de «Pagadas» esconde la de pendientes', () => {
+            const p = pintar('pagadas');
+            return eq(p.indexOf('Por pagar · 2') === -1 && p.indexOf('Ana') > -1, true, 'filtro');
+        });
+        /* El periodo que se está mirando se dice en pantalla: las dos listas no
+           significan nada sin saber de qué periodo hablan. */
+        test('el selector dice qué periodo está mirando', () =>
+            eq(h.indexOf('Periodo en pantalla') > -1 && h.indexOf('1 nov') > -1, true, 'periodo'));
+        /* El estado es de la pantalla, no del colaborador: una llave de adorno
+           colgada del catálogo en memoria acaba viajando a la nube. */
+        test('pintar las listas no le cuelga nada al catálogo de staff', () =>
+            eq(X._cacheStaff.some(s => '_nomEst' in s), false, 'ensució el catálogo'));
+        X._cacheStaff = [ana]; X._nomFiltro = 'todos';
+    }
+    X._cacheGastos = [];
+}
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }

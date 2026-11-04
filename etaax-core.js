@@ -1680,6 +1680,45 @@
         };
     }
 
+    /* ¿QUÉ TANTO DE UN PERIODO ESTÁ CUBIERTO POR OTROS?
+       Sirve para decir si a alguien ya se le pagó lo que la pantalla está
+       mirando. Y existe porque la respuesta no es sí o no: la pantalla puede
+       estar en «noviembre» y la persona cobrar por semana. Con tres recibos
+       de cuatro semanas, decir PAGADA es mentir y decir PENDIENTE también.
+
+       Se cuenta por DÍAS y sobre la UNIÓN de los periodos: dos recibos que se
+       traslapan —una quincena recapturada, por ejemplo— no pueden sumar más
+       días de los que tiene el mes. Lo de fuera del rango no cuenta.         */
+    function coberturaPeriodo(desde, hasta, periodos) {
+        var d0 = fechaLocal(desde), d1 = fechaLocal(hasta);
+        if (!d0 || !d1 || d1 < d0) return { total: 0, cubiertos: 0, estado: 'ninguno' };
+        var total = Math.round((d1 - d0) / 86400000) + 1;
+        /* Se recortan al rango y se ORDENAN: sin ordenar, la fusión de abajo
+           deja huecos que no existen y un mes pagado completo se vería parcial. */
+        var tramos = (periodos || []).map(function (p) {
+            var a = fechaLocal(p && p.desde), b = fechaLocal(p && p.hasta);
+            if (!a || !b || b < a) return null;
+            if (b < d0 || a > d1) return null;             // fuera del rango
+            return { a: a < d0 ? d0 : a, b: b > d1 ? d1 : b };
+        }).filter(Boolean).sort(function (x, y) { return x.a - y.a; });
+
+        var cubiertos = 0, finAnterior = null;
+        tramos.forEach(function (t) {
+            var ini = t.a;
+            if (finAnterior !== null && ini <= finAnterior) {
+                // Se traslapa con lo ya contado: solo cuenta lo que asoma.
+                ini = new Date(finAnterior.getTime() + 86400000);
+                if (ini > t.b) return;
+            }
+            cubiertos += Math.round((t.b - ini) / 86400000) + 1;
+            if (finAnterior === null || t.b > finAnterior) finAnterior = t.b;
+        });
+        return {
+            total: total, cubiertos: cubiertos,
+            estado: cubiertos <= 0 ? 'ninguno' : (cubiertos >= total ? 'completo' : 'parcial')
+        };
+    }
+
     /* ── IMPORTE CON LETRA (recibos) ───────────────────────────────────────────────
        Todo recibo lleva el monto escrito: es lo que impide que alguien le agregue un
        dígito al número. Formato mexicano: "MIL DOSCIENTOS PESOS 50/100 M.N.".        */
@@ -2151,6 +2190,7 @@
         previsionApartadoRango: previsionApartadoRango, previsionUsadoRango: previsionUsadoRango,
         importeLetra: importeLetra,
         multiploReceta: multiploReceta, costeoReceta: costeoReceta, costeoAplicado: costeoAplicado,
+        coberturaPeriodo: coberturaPeriodo,
         COSTEO_MULT_DEFAULT: COSTEO_MULT_DEFAULT, COSTEO_GASTO_OP_PCT: COSTEO_GASTO_OP_PCT,
         COSTEO_IVA_PCT: COSTEO_IVA_PCT, COSTEO_DELIVERY_PCT: COSTEO_DELIVERY_PCT,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,
