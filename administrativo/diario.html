@@ -1535,6 +1535,19 @@
     </div>
 </div>
 
+<!-- ══ MODAL 📜 RECIBOS DE NÓMINA DE UN COLABORADOR ══
+     Va por ENCIMA del selector de pago (z-index mayor): se abre desde ahí sin
+     cerrarlo, para volver a la lista donde se quedó. -->
+<div class="cj-overlay" id="nomHistOverlay" style="z-index:9500" onclick="if(event.target===this)cerrarHistNomina()">
+    <div class="cj-panel" style="max-width:760px">
+        <div class="cj-header">
+            <span class="cj-title" id="nomHistTitle">📜 Recibos de nómina</span>
+            <button class="modal-close" onclick="cerrarHistNomina()">✕</button>
+        </div>
+        <div class="cj-body" id="nomHistBody" style="padding:14px 18px 18px"></div>
+    </div>
+</div>
+
 <!-- ══ MODAL ⚖️ CONCILIACIÓN BANCARIA (por cuenta) ══ -->
 <div class="cj-overlay" id="concOverlay" style="z-index:9400" onclick="if(event.target===this)cerrarConciliar()">
     <div class="cj-panel" style="max-width:460px">
@@ -6862,6 +6875,20 @@ function _nomPeriodosPagados(staffId){
         return g.staffId===staffId && g.nomina && g.nomina.desde && g.nomina.hasta;
     }).map(function(g){ return { desde:g.nomina.desde, hasta:g.nomina.hasta }; });
 }
+/* ══ LOS RECIBOS DE UNA PERSONA ════════════════════════════════════════════
+   Ordenados por el PERIODO que cubren, no por la fecha en que salió el dinero:
+   una quincena de octubre pagada en noviembre va en octubre, y de otro modo el
+   historial se lee saltado.
+
+   Sin acotar a lo que el buscador del panel esté mirando: la pregunta que se le
+   hace a un historial es «¿qué le hemos pagado?», no «¿qué le pagamos esta
+   semana?» —para eso está el panel.                                          */
+function _nomRecibosDe(staffId){
+    return gLoad().filter(function(g){ return g.staffId===staffId && g.nomina; })
+        .sort(function(a,b){
+            return String(b.nomina.desde||b.fecha||'').localeCompare(String(a.nomina.desde||a.fecha||''));
+        });
+}
 var _NOM_ESTADOS={
     completo:{ txt:'PAGADA',    color:'#3dbe7a', bg:'rgba(61,190,122,.12)', bd:'rgba(61,190,122,.35)' },
     parcial: { txt:'PARCIAL',   color:'#f5c842', bg:'rgba(245,200,66,.12)', bd:'rgba(245,200,66,.35)' },
@@ -6881,14 +6908,90 @@ function _nomBadge(e){
         (e.detalle?'<span style="font-size:10px;color:var(--text-dim);margin-left:6px">'+e.detalle+'</span>':'');
 }
 /* Qué listas se enseñan. Vive fuera del render para que el filtro no pierda
-   la elección al repintar. */
+   la elección al repintar. El filtro es un MODO de trabajo (si está pagando
+   pendientes, sigue en pendientes al volver); la búsqueda es un momento, y se
+   limpia al abrir el selector —una búsqueda vieja escondiendo a todos parece
+   una lista vacía. */
 var _nomFiltro='todos';   // 'todos' | 'pendientes' | 'pagadas'
-function setFiltroNomina(v){ _nomFiltro=v; _abrirSelectorPagoReal('nomina'); }
-function _selRow(onclick,izq,sub,der,derSub){
+var _nomBusca='';
+/* Lo que se está listando. Se calcula al abrir y el repintado lo reusa: así
+   filtrar y escribir no vuelven a leer el catálogo ni los gastos. */
+var _nomSel=null;
+function setFiltroNomina(v){ _nomFiltro=v; _nomPintarListas(); }
+function _nomBuscar(v){ _nomBusca=String(v||''); _nomPintarListas(); }
+function _nomBtnHTML(k,t){
+    return '<button id="nomBtn-'+k+'" onclick="setFiltroNomina(\''+k+'\')" style="padding:6px 13px;border-radius:8px;cursor:pointer;'+
+        'font-family:inherit;font-size:12px;font-weight:600;border:1.5px solid var(--border);background:transparent;color:var(--text-muted)">'+
+        t+' <span id="nomCnt-'+k+'" style="opacity:.7"></span></button>';
+}
+/* ══ LAS DOS LISTAS, REPINTADAS SIN TOCAR EL ENCABEZADO ══════════════════
+   El buscador y los botones se pintan UNA vez al abrir; aquí solo se rehace
+   la lista y se refrescan las cuentas. Rearmar todo en cada tecla le quita el
+   foco al campo a media palabra —y entonces el buscador no se puede usar. */
+function _nomPintarListas(){
+    var cont=document.getElementById('selPagoLista');
+    if(!cont || !_nomSel) return;
+    var catLbl={operativa:'Operativa',administrativa:'Administrativa',socios:'Socios'};
+    var q=_normProv(_nomBusca);   // mismo normalizador que proveedores: sin acentos ni mayúsculas
+    /* El estado va en una lista aparte, NO colgado del registro del
+       colaborador: el catálogo en memoria es el mismo que lee medio módulo, y
+       una llave de adorno acaba viajando a la nube. */
+    var conEstado=_nomSel.staff.map(function(s){ return { s:s, est:_nomEstadoDe(s.id,_nomSel.rg) }; })
+        .filter(function(x){
+            if(!q) return true;
+            return _normProv(x.s.nombre).indexOf(q)>-1 || _normProv(x.s.puesto).indexOf(q)>-1;
+        });
+    /* PARCIAL va con los pendientes: a esa persona todavía le deben algo, y
+       esconderla entre las pagadas es como se olvida un pago. */
+    var pend=conEstado.filter(function(x){ return x.est.estado!=='completo'; });
+    var pag =conEstado.filter(function(x){ return x.est.estado==='completo'; });
+    [['todos',conEstado.length],['pendientes',pend.length],['pagadas',pag.length]].forEach(function(par){
+        var c=document.getElementById('nomCnt-'+par[0]); if(c) c.textContent=par[1];
+        var b=document.getElementById('nomBtn-'+par[0]);
+        if(b){
+            var on=_nomFiltro===par[0];
+            b.style.borderColor=on?'var(--green)':'var(--border)';
+            b.style.background=on?'rgba(61,190,122,.12)':'transparent';
+            b.style.color=on?'var(--green)':'var(--text-muted)';
+        }
+    });
+    var _fila=function(x){
+        var s=x.s;
+        var sub=(s.puesto?_esc(s.puesto)+' · ':'')+(catLbl[_ggStaffCat(s)]||'');
+        if(!_nomSel.sucAct) sub+=' · <span style="color:#7ab8f5">'+_esc(_sucNombreDx(s.sucursalId))+'</span>';
+        sub+='<br>'+_nomBadge(x.est);
+        /* Se dice cuándo el sueldo sale del mínimo de la sucursal y no de su
+           ficha: pagarle el mínimo a propósito y pagárselo porque nadie le
+           configuró el sueldo se ven idénticos en la lista, y el segundo es
+           un error que conviene notar ANTES de pagar. */
+        var _lbl = _sueldoEsDelMinimo(s) ? '≈ mínimo de la sucursal' : '≈ sueldo diario';
+        /* El renglón entero paga; el 📜 solo mira. Sin stopPropagation, abrir
+           su historial abriría también el modal de pago encima. */
+        var _n=_nomRecibosDe(s.id).length;
+        var _acc='<button onclick="event.stopPropagation();abrirHistNomina(\''+s.id+'\')" '+
+            'title="Ver sus recibos de nómina" style="margin-left:4px;background:var(--surface);border:1px solid var(--border);'+
+            'color:var(--text-muted);border-radius:7px;padding:5px 9px;font-size:13px;cursor:pointer;font-family:inherit;line-height:1">📜'+
+            (_n?'<span style="font-size:10px;margin-left:3px;opacity:.8">'+_n+'</span>':'')+'</button>';
+        return _selRow('abrirPagoNomina(\''+s.id+'\')', _esc(s.nombre), sub, fmtM(_sueldoDiarioEfectivo(s)), _lbl, _acc);
+    };
+    var _sec=function(t,color,arr){
+        if(!arr.length) return '';
+        return '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:'+color+';margin:14px 0 8px">'+
+            t+' · '+arr.length+'</div>'+arr.map(_fila).join('');
+    };
+    cont.innerHTML=
+        ((_nomFiltro==='pagadas') ? '' : _sec('Por pagar','#e05a3a',pend))+
+        ((_nomFiltro==='pendientes') ? '' : _sec('Pagadas','#3dbe7a',pag))+
+        ((!conEstado.length && q) ? '<div style="padding:26px;text-align:center;color:var(--text-dim)">Nadie con «'+_esc(_nomBusca)+'» en este periodo.</div>' : '')+
+        ((_nomFiltro==='pendientes'&&!pend.length&&conEstado.length) ? '<div style="padding:26px;text-align:center;color:var(--text-dim)">Nadie pendiente en este periodo. ✅</div>' : '')+
+        ((_nomFiltro==='pagadas'&&!pag.length&&conEstado.length) ? '<div style="padding:26px;text-align:center;color:var(--text-dim)">Todavía no hay nóminas pagadas en este periodo.</div>' : '');
+}
+function _selRow(onclick,izq,sub,der,derSub,acciones){
     return '<div onclick="'+onclick+'" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--surface2);transition:border-color .15s" '
       +'onmouseover="this.style.borderColor=\'var(--green)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
       +'<div><div style="font-weight:600">'+izq+'</div><div style="font-size:11px;color:var(--text-dim)">'+sub+'</div></div>'
       +'<div style="text-align:right"><div style="font-weight:700;color:var(--red)">'+der+'</div>'+(derSub?'<div style="font-size:10px;color:var(--text-dim)">'+derSub+'</div>':'')+'</div>'
+      +(acciones||'')
       +'</div>';
 }
 function abrirSelectorPago(tipo){
@@ -6909,6 +7012,7 @@ function abrirSelectorPago(tipo){
     if (!_exigeVG(_clave, tipo === 'nomina'
         ? 'No puedes pagar nóminas.' : 'No puedes pagar gastos fijos.')) return;
     _pedirClaveAdmin('Pagar '+(tipo==='nomina'?'nómina':'gasto fijo')+' — Autorización requerida', function(){
+        _nomBusca='';   // la búsqueda es de un momento; el filtro sí se queda
         _abrirSelectorPagoReal(tipo);
     }, '🔓 Autorizar');
 }
@@ -6935,50 +7039,20 @@ function _abrirSelectorPagoReal(tipo){
                 '</div>';
         }
         else {
-            var catLbl={operativa:'Operativa',administrativa:'Administrativa',socios:'Socios'};
             var _rg=dxpRango('nom');
-            var _fila=function(x){
-                var s=x.s;
-                var sub=(s.puesto?_esc(s.puesto)+' · ':'')+(catLbl[_ggStaffCat(s)]||'');
-                if(!_sucAct) sub+=' · <span style="color:#7ab8f5">'+_esc(_sucNombreDx(s.sucursalId))+'</span>';
-                sub+='<br>'+_nomBadge(x.est);
-                /* Se dice cuándo el sueldo sale del mínimo de la sucursal y no de su
-                   ficha: pagarle el mínimo a propósito y pagárselo porque nadie le
-                   configuró el sueldo se ven idénticos en la lista, y el segundo es
-                   un error que conviene notar ANTES de pagar. */
-                var _lbl = _sueldoEsDelMinimo(s) ? '≈ mínimo de la sucursal' : '≈ sueldo diario';
-                return _selRow('abrirPagoNomina(\''+s.id+'\')', _esc(s.nombre), sub, fmtM(_sueldoDiarioEfectivo(s)), _lbl);
-            };
-            /* El estado va en una lista aparte, NO colgado del registro del
-               colaborador: el catálogo en memoria es el mismo que lee medio
-               módulo, y una llave de adorno acaba viajando a la nube. */
-            var conEstado=staff.map(function(s){ return { s:s, est:_nomEstadoDe(s.id,_rg) }; });
-            /* PARCIAL va con los pendientes: a esa persona todavía le deben
-               algo, y esconderla entre las pagadas es como se olvida un pago. */
-            var pend=conEstado.filter(function(x){ return x.est.estado!=='completo'; });
-            var pag =conEstado.filter(function(x){ return x.est.estado==='completo'; });
-            var _btn=function(k,t,n2){
-                var on=_nomFiltro===k;
-                return '<button onclick="setFiltroNomina(\''+k+'\')" style="padding:6px 13px;border-radius:8px;cursor:pointer;'+
-                    'font-family:inherit;font-size:12px;font-weight:600;border:1.5px solid '+(on?'var(--green)':'var(--border)')+';'+
-                    'background:'+(on?'rgba(61,190,122,.12)':'transparent')+';color:'+(on?'var(--green)':'var(--text-muted)')+'">'+
-                    t+' <span style="opacity:.7">'+n2+'</span></button>';
-            };
-            var _sec=function(t,color,arr){
-                if(!arr.length) return '';
-                return '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:'+color+';margin:14px 0 8px">'+
-                    t+' · '+arr.length+'</div>'+arr.map(_fila).join('');
-            };
+            _nomSel={ staff:staff, rg:_rg, sucAct:_sucAct };
             var _rgTxt=_fmtFechaCortaDx(_rg.from)+' – '+_fmtFechaCortaDx(_rg.to);
             body.innerHTML=
-                '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px">'+
-                    _btn('todos','Todos',staff.length)+_btn('pendientes','Por pagar',pend.length)+_btn('pagadas','Pagadas',pag.length)+
+                '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
+                    _nomBtnHTML('todos','Todos')+_nomBtnHTML('pendientes','Por pagar')+_nomBtnHTML('pagadas','Pagadas')+
                     '<span style="margin-left:auto;font-size:11px;color:var(--text-dim)">Periodo en pantalla · '+_rgTxt+'</span>'+
                 '</div>'+
-                ((_nomFiltro==='pagadas') ? '' : _sec('Por pagar','#e05a3a',pend))+
-                ((_nomFiltro==='pendientes') ? '' : _sec('Pagadas','#3dbe7a',pag))+
-                ((_nomFiltro==='pendientes'&&!pend.length) ? '<div style="padding:26px;text-align:center;color:var(--text-dim)">Nadie pendiente en este periodo. ✅</div>' : '')+
-                ((_nomFiltro==='pagadas'&&!pag.length) ? '<div style="padding:26px;text-align:center;color:var(--text-dim)">Todavía no hay nóminas pagadas en este periodo.</div>' : '');
+                '<input type="text" id="nomBuscaInp" placeholder="🔍 Buscar por nombre o puesto…" oninput="_nomBuscar(this.value)" '+
+                    'style="width:100%;box-sizing:border-box;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);'+
+                    'border-radius:8px;color:var(--text);font-family:inherit;font-size:13px">'+
+                '<div id="selPagoLista"></div>';
+            var _bi=document.getElementById('nomBuscaInp'); if(_bi) _bi.value=_nomBusca;
+            _nomPintarListas();
         }
     } else {
         title.textContent='🏢 Pagar gasto fijo — elige uno';
@@ -7718,6 +7792,104 @@ function verReciboNomina(gastoId){
     }
     etaaxAbrirReporte(_reciboNominaHTML(g.nomina, g.pagadoEl||g.fecha));
 }
+/* ══ HISTORIAL DE RECIBOS DE UN COLABORADOR ════════════════════════════════
+   Los pagos ya estaban en el panel de Nóminas, pero mezclados y acotados al
+   periodo en pantalla: para saber qué se le ha pagado a una persona había que
+   ir mes por mes. Aquí están los suyos, con su recibo a un clic.             */
+function cerrarHistNomina(){ var m=document.getElementById('nomHistOverlay'); if(m) m.classList.remove('open'); }
+function abrirHistNomina(staffId){
+    var s=(_cacheStaff||[]).find(function(x){ return x.id===staffId; })||{};
+    var lista=_nomRecibosDe(staffId);
+    var ti=document.getElementById('nomHistTitle');
+    if(ti) ti.textContent='📜 Recibos de nómina — '+(s.nombre||'');
+    var body=document.getElementById('nomHistBody');
+    if(!lista.length){
+        body.innerHTML='<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:34px 0">'+
+            'Todavía no hay recibos de <b style="color:var(--text)">'+_esc(s.nombre||'')+'</b>.<br>'+
+            '<span style="font-size:11px">Los pagos registrados antes de esta versión no guardaron recibo: '+
+            'siguen en el panel de Nóminas con su desglose en las notas.</span></div>';
+    } else {
+        var tot=lista.reduce(function(a,g){ return a+n(g.monto); },0);
+        var rows=lista.map(function(g){
+            var d=g.nomina||{}, ncor=(d.correcciones||[]).length;
+            return '<tr style="border-top:1px solid var(--border)">'+
+                '<td style="padding:8px 10px;white-space:nowrap">'+_esc(_fmtFechaCortaDx(d.desde))+' – '+_esc(_fmtFechaCortaDx(d.hasta))+
+                    '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+_esc(d.periodicidad||'')+
+                    (d.dias?' · '+n(d.dias)+' día'+(n(d.dias)!==1?'s':''):'')+'</div></td>'+
+                '<td style="padding:8px 10px;white-space:nowrap;font-size:12px;color:var(--text-muted)">'+_esc(_fmtFechaCortaDx(g.pagadoEl||g.fecha))+'</td>'+
+                '<td style="padding:8px 10px;font-size:11px;color:var(--text-dim);white-space:nowrap">'+_esc(d.folio||'—')+
+                    (ncor?'<div style="font-size:9px;color:var(--accent);margin-top:2px">✏️ corregido '+ncor+'×</div>':'')+'</td>'+
+                '<td style="padding:8px 10px;text-align:right;font-weight:700;color:var(--red);white-space:nowrap">'+fmtM(g.monto)+'</td>'+
+                '<td style="padding:8px 10px;text-align:right;white-space:nowrap">'+
+                    '<button class="btn-row" title="Ver el recibo" onclick="verReciboNomina(\''+g.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">🧾</button> '+
+                    (d.origen?'<button class="btn-row" title="Corregir este pago" onclick="cerrarHistNomina();editarReciboNomina(\''+g.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">✏️</button>':'')+
+                '</td></tr>';
+        }).join('');
+        body.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">'+
+                '<div style="font-size:12px;color:var(--text-muted)">'+lista.length+' recibo'+(lista.length!==1?'s':'')+
+                    ' · <b style="color:var(--text)">'+fmtM(tot)+'</b> pagados en total</div>'+
+                '<button onclick="imprimirHistNomina(\''+staffId+'\')" style="background:var(--surface2);border:1px solid var(--border);'+
+                    'color:var(--text-dim);border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit">🖨️ Imprimir el historial</button>'+
+            '</div>'+
+            '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
+            '<thead><tr style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);text-align:left">'+
+                '<th style="padding:6px 10px">Periodo</th><th style="padding:6px 10px">Se pagó</th>'+
+                '<th style="padding:6px 10px">Folio</th><th style="padding:6px 10px;text-align:right">Importe</th>'+
+                '<th style="padding:6px 10px"></th></tr></thead>'+
+            '<tbody>'+rows+'</tbody></table>'+
+            '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">El importe es lo que salió por esta caja. '+
+            'Si parte del pago se hizo aparte (un bono en efectivo), su gasto va por separado y el recibo lo nombra.</div>';
+    }
+    document.getElementById('nomHistOverlay').classList.add('open');
+}
+/* El historial en papel: lo que una persona pide cuando necesita comprobar
+   ingresos. No es un CFDI y lo dice, igual que el recibo. */
+function imprimirHistNomina(staffId){
+    var s=(_cacheStaff||[]).find(function(x){ return x.id===staffId; })||{};
+    var lista=_nomRecibosDe(staffId);
+    if(!lista.length){ alert('No hay recibos que imprimir.'); return; }
+    var _e=(typeof etx==='function')?etx:function(x){ return String(x==null?'':x); };
+    var tot=lista.reduce(function(a,g){ return a+n(g.monto); },0);
+    var rows=lista.map(function(g){
+        var d=g.nomina||{};
+        return '<tr><td style="text-align:left">'+_e(_pnFechaLarga(d.desde))+' — '+_e(_pnFechaLarga(d.hasta))+'</td>'+
+               '<td style="text-align:left">'+_e(d.periodicidad||'')+'</td>'+
+               '<td>'+n(d.dias)+'</td>'+
+               '<td style="text-align:left">'+_e(_pnFechaLarga(g.pagadoEl||g.fecha))+'</td>'+
+               '<td style="text-align:left">'+_e(d.folio||'')+'</td>'+
+               '<td>'+fmtM(g.monto)+'</td></tr>';
+    }).join('');
+    var cuerpo=
+        '<div class="rsec">Colaborador</div>'+
+        '<div class="rgrid" style="grid-template-columns:repeat(3,1fr)">'+
+            '<div class="rcard" style="padding:10px 13px"><div class="l">Nombre</div>'+
+                '<div style="font-size:13px;font-weight:600;color:#1a1916">'+_e(s.nombre||'—')+'</div></div>'+
+            '<div class="rcard" style="padding:10px 13px"><div class="l">Puesto</div>'+
+                '<div style="font-size:13px;font-weight:600;color:#1a1916">'+_e(s.puesto||'—')+'</div></div>'+
+            '<div class="rcard" style="padding:10px 13px"><div class="l">Recibos</div>'+
+                '<div style="font-size:13px;font-weight:600;color:#1a1916">'+lista.length+'</div></div>'+
+        '</div>'+
+        '<div class="rsec">Pagos registrados</div>'+
+        '<table class="rt"><thead><tr>'+
+            '<th style="text-align:left">Periodo</th><th style="text-align:left">Periodicidad</th>'+
+            '<th>Días</th><th style="text-align:left">Se pagó</th><th style="text-align:left">Folio</th>'+
+            '<th>Importe</th></tr></thead>'+
+        '<tbody>'+rows+'</tbody>'+
+        '<tfoot><tr><td colspan="5">Total pagado</td><td>'+fmtM(tot)+'</td></tr></tfoot></table>'+
+        '<div style="margin-top:24px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">'+
+            '<div style="font-size:9.5px;color:#8a7a4a;line-height:1.5">'+
+            '<b>Comprobante interno.</b> Relación de pagos registrados en el sistema. '+
+            '<b>No es un CFDI</b> ni sustituye a los recibos de nómina timbrados ante el SAT.</div>'+
+        '</div>';
+    etaaxAbrirReporte(etaaxReporteDoc({
+        titulo:'Historial de nómina — '+(s.nombre||''),
+        subtitulo:'Relación de pagos · '+lista.length+' recibo'+(lista.length!==1?'s':''),
+        derecha:'<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">'+_pnFechaLarga(todayStr())+'</div>',
+        pie:'Historial de nómina · comprobante interno',
+        cuerpo:cuerpo
+    }));
+}
+
 /* ══ CORREGIR UN PAGO YA REGISTRADO ════════════════════════════════════════
    Hasta aquí un pago mal capturado solo se podía borrar y volver a hacer: el
    recibo nuevo salía con otro folio y en los reportes quedaban dos. Corregir
@@ -8409,7 +8581,7 @@ function renderFijosPanel(){
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
-<script src="/novedades.js?v=7ce53188"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=fd6b8e16"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>

@@ -32314,9 +32314,15 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
             rec('g2','s2','2026-11-01','2026-11-15'),   // Bea: media quincena → PARCIAL
         ];                                               // Caro: nada → POR PAGAR
         X._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
-        const pintar = (filtro) => { X._nomFiltro = filtro;
-            X._abrirSelectorPagoReal('nomina');
-            return X.document.getElementById('selPagoBody').innerHTML; };
+        /* El encabezado (botones y buscador) se pinta al abrir; la lista vive en
+           su propio div y se repinta sola. Por eso se leen por separado. */
+        const abrir = () => { X._abrirSelectorPagoReal('nomina');
+                              return X.document.getElementById('selPagoBody').innerHTML; };
+        const lista = () => X.document.getElementById('selPagoLista').innerHTML;
+        const pintar = (filtro) => { X._nomFiltro = filtro; abrir(); return lista(); };
+        const buscar = (q) => { X._nomBuscar(q); return lista(); };
+        const cuenta = (k) => X.document.getElementById('nomCnt-' + k).textContent;
+        const cab = abrir();
         const h = pintar('todos');
         test('el selector pinta las dos listas con su cuenta', () =>
             eq(/Por pagar · 2/.test(h) && /Pagadas · 1/.test(h), true, 'secciones'));
@@ -32338,9 +32344,139 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
         /* El periodo que se está mirando se dice en pantalla: las dos listas no
            significan nada sin saber de qué periodo hablan. */
         test('el selector dice qué periodo está mirando', () =>
-            eq(h.indexOf('Periodo en pantalla') > -1 && h.indexOf('1 nov') > -1, true, 'periodo'));
+            eq(cab.indexOf('Periodo en pantalla') > -1 && cab.indexOf('1 nov') > -1, true, 'periodo'));
+
+        /* ── el buscador ──────────────────────────────────────────────────
+           Treinta nombres en una lista son un trabajo de memoria. */
+        test('el buscador está en la página, no solo en la cabeza', () => {
+            const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+            return eq(src.indexOf('id="nomBuscaInp"') > -1 || src.indexOf("id='nomBuscaInp'") > -1 ||
+                      src.indexOf('nomBuscaInp') > -1, true, 'markup');
+        });
+        X._nomFiltro = 'todos'; abrir();
+        test('buscar por nombre deja solo a quien se busca', () => {
+            const l = buscar('bea');
+            return eq(l.indexOf('Bea') > -1 && l.indexOf('Caro') === -1 && l.indexOf('Ana') === -1,
+                      true, 'no filtró');
+        });
+        test('…y las cuentas de los botones siguen a la búsqueda', () =>
+            eq(cuenta('todos') + '·' + cuenta('pendientes') + '·' + cuenta('pagadas'), '1·1·0',
+               'las cuentas mienten respecto a la lista'));
+        test('buscar por puesto también encuentra', () => {
+            const l = buscar('cocina');
+            return eq(l.indexOf('Bea') > -1 && l.indexOf('Ana') === -1, true, 'puesto');
+        });
+        /* Nadie escribe los acentos al buscar. */
+        test('la búsqueda ignora acentos y mayúsculas', () => {
+            const jose = { id:'s4', nombre:'José Luis', puesto:'Barra', sucursalId:'suc_principal',
+                           esquemaSueldo:'diario', sueldoDiario:300 };
+            X._cacheStaff = [ana, bea, caro, jose]; abrir();
+            const l = buscar('JOSE');
+            X._cacheStaff = [ana, bea, caro];
+            return eq(l.indexOf('José Luis') > -1, true, 'se perdió con el acento');
+        });
+        abrir();
+        test('una búsqueda sin resultados lo dice con la palabra buscada', () => {
+            const l = buscar('zzz');
+            return eq(l.indexOf('zzz') > -1 && l.indexOf('Ana') === -1, true, 'lista muda');
+        });
+        /* EL DETALLE QUE HACE USABLE EL BUSCADOR: repintar la lista NO rearma el
+           campo. Si se rehiciera, el foco se perdería a media palabra y habría
+           que volver a tocarlo por cada letra. */
+        /* Comparar el HTML del encabezado NO sirve: rearmarlo da la misma
+           cadena y la prueba pasaría igual. Lo que importa es que NO se vuelva
+           a armar —en el navegador eso destruye el <input> y el foco se va a
+           media palabra—. Así que se cuenta si el repintado llama al armador. */
+        test('escribir en el buscador no rearma el selector', () => {
+            abrir();
+            let rearmes = 0;
+            const a0 = X._abrirSelectorPagoReal;
+            X._abrirSelectorPagoReal = function () { rearmes++; return a0.apply(this, arguments); };
+            try { X._nomBuscar('an'); X.setFiltroNomina('pendientes'); }
+            finally { X._abrirSelectorPagoReal = a0; }
+            X._nomFiltro = 'todos';
+            return eq(rearmes, 0, 'rearmó el selector: el campo pierde el foco por cada letra');
+        });
+        /* Y al volver a abrir el selector, la búsqueda vieja no puede quedarse
+           escondiendo a todos: eso se lee como una lista vacía. */
+        test('abrir el selector limpia la búsqueda', () => {
+            X._nomBusca = 'zzz';
+            X._pedirClaveAdmin = (t, cb) => cb();
+            X._exigeVG = () => true;
+            X.abrirSelectorPago('nomina');
+            return eq(X._nomBusca + '·' + (lista().indexOf('Ana') > -1), '·true', 'quedó filtrado');
+        });
         /* El estado es de la pantalla, no del colaborador: una llave de adorno
            colgada del catálogo en memoria acaba viajando a la nube. */
+        /* ── el historial de recibos de una persona ───────────────────────
+           La pregunta de un historial es «¿qué le hemos pagado?», no «¿qué le
+           pagamos esta semana?»: por eso NO se acota al periodo en pantalla. */
+        {
+            const rec2 = (id, desde, hasta, monto, extra) => Object.assign(
+                { id:id, negocioId:'n1', sucursalId:'suc_principal', fecha:hasta, monto:monto, staffId:'s1',
+                  nomina:Object.assign({ desde:desde, hasta:hasta, dias:7, total:monto,
+                                         folio:'N-'+id, periodicidad:'Semanal' }, extra||{}) }, {});
+            X._cacheGastos = [
+                rec2('r1','2026-09-01','2026-09-07', 2100),
+                rec2('r2','2026-11-01','2026-11-07', 2200, { origen:{ conceptos:[] } }),
+                rec2('r3','2026-10-01','2026-10-07', 2300),
+                { id:'otra', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-07',
+                  monto:999, staffId:'s2', nomina:{ desde:'2026-11-01', hasta:'2026-11-07', total:999 } },
+                { id:'sinrec', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-07',
+                  monto:50, staffId:'s1' },
+            ];
+            test('el historial trae solo los recibos de esa persona', () =>
+                eq(X._nomRecibosDe('s1').map(g => g.id).join(','), 'r2,r3,r1',
+                   'cruzó personas, contó un pago sin recibo, o salió desordenado'));
+            /* Ordenado por el PERIODO que cubre, no por la fecha en que salió el
+               dinero: una quincena de octubre pagada en noviembre va en octubre. */
+            test('…ordenados por el periodo que cubren, no por cuándo se pagaron', () => {
+                X._cacheGastos.push(rec2('r4','2026-08-01','2026-08-07', 2000));
+                X._cacheGastos[X._cacheGastos.length - 1].fecha = '2026-12-31';   // se pagó tardísimo
+                const orden = X._nomRecibosDe('s1').map(g => g.id).join(',');
+                X._cacheGastos.pop();
+                return eq(orden, 'r2,r3,r1,r4', 'se ordenó por la fecha de pago');
+            });
+            X.abrirHistNomina('s1');
+            const hb = () => X.document.getElementById('nomHistBody').innerHTML;
+            test('el historial se pinta con su total y su cuenta', () =>
+                eq(hb().indexOf('3 recibos') > -1 && hb().indexOf(X.fmtM(6600)) > -1, true, 'resumen'));
+            test('…y cada renglón con su folio', () =>
+                eq(hb().indexOf('N-r1') > -1 && hb().indexOf('N-r3') > -1, true, 'folios'));
+            test('…pero no el recibo de la otra persona', () =>
+                eq(hb().indexOf('999'), -1, 'se colaron pagos ajenos'));
+            /* Corregir solo se ofrece donde se puede: el pago viejo sin captura
+               guardada no la tiene. */
+            test('corregir se ofrece solo en los pagos que guardaron su captura', () => {
+                const h2 = hb();
+                const i2 = h2.indexOf("editarReciboNomina('r2')"), i1 = h2.indexOf("editarReciboNomina('r1')");
+                return eq(i2 > -1 && i1 === -1, true, 'botón mentiroso');
+            });
+            test('…y el título dice de quién son', () =>
+                eq(X.document.getElementById('nomHistTitle').textContent.indexOf('Ana') > -1, true, 'título'));
+            /* Quien no tiene recibos no ve una tabla vacía. */
+            test('sin recibos, el historial lo explica en vez de quedar en blanco', () => {
+                X.abrirHistNomina('s3');
+                return eq(hb().indexOf('Todavía no hay recibos') > -1, true, 'tabla vacía');
+            });
+            test('el historial en papel lleva los pagos y su total', () => {
+                let papel = '';
+                const a0 = X.etaaxAbrirReporte;
+                X.etaaxAbrirReporte = (h) => { papel = h; };
+                try { X.imprimirHistNomina('s1'); } finally { X.etaaxAbrirReporte = a0; }
+                return eq(papel.indexOf('N-r1') > -1 && papel.indexOf(X.fmtM(6600)) > -1 &&
+                          papel.indexOf('No es un CFDI') > -1, true, 'papel incompleto');
+            });
+            /* El botón del renglón del selector tiene que llamarlo de verdad, y
+               sin abrir el pago encima: el renglón entero paga. */
+            test('el 📜 del renglón abre el historial sin disparar el pago', () => {
+                X._cacheGastos = [rec2('r2','2026-11-01','2026-11-07', 2200)];
+                X._nomBusca = ''; abrir();
+                const l = lista();
+                return eq(l.indexOf("abrirHistNomina('s1')") > -1 &&
+                          l.indexOf('event.stopPropagation()') > -1, true, 'el 📜 pagaría de paso');
+            });
+        }
         test('pintar las listas no le cuelga nada al catálogo de staff', () =>
             eq(X._cacheStaff.some(s => '_nomEst' in s), false, 'ensució el catálogo'));
         X._cacheStaff = [ana]; X._nomFiltro = 'todos';
