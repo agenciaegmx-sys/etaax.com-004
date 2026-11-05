@@ -377,9 +377,9 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
-<script src="/etaax-core.js?v=888bc7ce"></script>
+<script src="/etaax-core.js?v=2b875f63"></script>
 <script src="/etaax-store.js?v=51ca2ddd"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
-<script src="/etaax-db.js?v=599f78b4"></script>
+<script src="/etaax-db.js?v=1f1bc8b5"></script>
 <script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única -->
 <script src="/reporte-marca.js?v=90a9c06c"></script>
 <script src="../security.js?v=c188734e"></script>
@@ -440,7 +440,17 @@ var _horCache = {};   // recordId -> datos
 var _staff = [];
 var _edit  = null;    // { staffId, dayIdx }
 
-function recordId(sucId, weekStr){ return 'hor_' + _effSuc(sucId) + '_' + weekStr; }
+function recordId(sucId, weekStr){ return EtaaxCore.horarioId(getNegocioActivo(), _effSuc(sucId), weekStr); }
+function _normalizarHorarios(m){
+    var out = {};
+    Object.keys(m || {}).forEach(function(k){
+        var r = m[k]; if (!r) return;
+        var id = r.semana ? recordId(r.sucursalId, r.semana) : k;
+        var copia = Object.assign({}, r, {id:id});
+        if (!out[id] || (copia.updated||0) > (out[id].updated||0)) out[id] = copia;
+    });
+    return out;
+}
 function curRecId(){ return recordId(_sucSel, _weekStr); }
 function curRecord(){
     var id = curRecId();
@@ -518,6 +528,8 @@ function _guardarLocal(){
     try {
         var previo = {};
         try { previo = JSON.parse(localStorage.getItem(_sk('horarios')) || '{}') || {}; } catch(e){}
+        previo = _normalizarHorarios(previo);
+        _horCache = _normalizarHorarios(_horCache);
         var antes = Object.keys(previo).length, ahora = Object.keys(_horCache || {}).length;
         if (antes > ahora) {
             /* Se está por perder alguna semana. En vez de aplastar, se FUSIONA:
@@ -537,7 +549,7 @@ function persist(rec){
     if (window.sbUpsert) sbUpsert('horarios', rec);
 }
 function _cargarLocal(){
-    try { var m = JSON.parse(localStorage.getItem(_sk('horarios'))||'{}'); if (m && typeof m==='object') _horCache = m; } catch(e){ _horCache = {}; }
+    try { var m = JSON.parse(localStorage.getItem(_sk('horarios'))||'{}'); if (m && typeof m==='object') _horCache = _normalizarHorarios(m); } catch(e){ _horCache = {}; }
 }
 async function _cargarStaff(){
     // Supabase primero (con sesión); fallback a localStorage.
@@ -575,7 +587,11 @@ async function _syncHorariosDB(){
                 else if ((_cfg.updated||0) > (d.updated||0) && window.sbUpsert) sbUpsert('horarios', _cfg);
                 return;
             }
-            _horCache[d.id] = d; enNube[d.id] = 1;
+            d.id = recordId(d.sucursalId, d.semana);
+            var local = _horCache[d.id];
+            if (local && (local.updated||0) > (d.updated||0)) { if (window.sbUpsert) sbUpsert('horarios', local, negId); }
+            else _horCache[d.id] = d;
+            enNube[d.id] = 1;
         });
         /* Config que solo existe aquí: se sube, igual que las semanas. */
         if (!vistoCfg && (_cfg.presets || _gruposActuales().length) && window.sbUpsert) {
@@ -695,7 +711,7 @@ function _invitacionesSemana(){
     var mapa = {}, suf = '_' + _weekStr;
     Object.keys(_horCache).forEach(function(k){
         if (k.indexOf('hor_') !== 0 || k.slice(-suf.length) !== suf) return;
-        var sucId = k.slice(4, k.length - suf.length);
+        var sucId = _effSuc((_horCache[k]||{}).sucursalId);
         ((_horCache[k]||{}).invitados || []).forEach(function(sid){ mapa[sid] = sucId; });
     });
     return mapa;

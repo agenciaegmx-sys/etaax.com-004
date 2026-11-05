@@ -8848,6 +8848,22 @@ function _pasaDifS5(f) {
     }
     return cumple(_difS5(f));
 }
+// Una sola selección para pantalla, grupos y papel. Buscar un miembro de un
+// compuesto debe mostrar el compuesto que lo contiene, también en galería.
+function _pasaSeleccionS5(f, comp) {
+    if (f.esCompuesto) {
+        comp = getCompuestos().find(function(c){ return c.id === f.compId; });
+        return _miembrosFila(comp).some(function(m){ return _pasaSeleccionS5(m, comp); });
+    }
+    var q = (_busqStep5 || '').toLowerCase();
+    if (q && !(f.nombre || '').toLowerCase().includes(q) &&
+        !(comp && (comp.nombre || '').toLowerCase().includes(q))) return false;
+    if (_subcatStep5 && (f.subcategoria || f.categoria) !== _subcatStep5) return false;
+    return _pasaDifS5(f);
+}
+function _grupoSeleccionS5(f, comp) {
+    return _grupoCategoria((comp && _miembrosFila(comp)[0]) || f);
+}
 function setDifStep5(v) {
     _difStep5 = v || '';
     const cont = document.getElementById('step5Tablas');
@@ -8896,11 +8912,9 @@ function _gruposVisiblesS5() {
         mete(_grupoCategoria(f));
     });
     _compuestosActivos().map(_virtualFilaCompuesto).forEach(vf => {
-        if (q && !(vf.nombre || '').toLowerCase().includes(q)) return;
-        if (!_pasaDifS5(vf)) return;
+        if (!_pasaSeleccionS5(vf)) return;
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
         const m0 = (comp.miembros || []).map(_filaDeMiembro).find(Boolean);
-        if (_subcatStep5 && m0 && (m0.subcategoria || m0.categoria) !== _subcatStep5) return;
         mete(m0 ? _grupoCategoria(m0) : '🧩 Compuestos');
     });
     return out.sort((a, b) => String(a).localeCompare(String(b), 'es'));
@@ -8973,6 +8987,8 @@ function setStep5Modo(m) {
 var _conteosQR = [];
 async function cargarConteosQR() {
     if (typeof _supabase === 'undefined' || !invActual) return;
+    var pendiente = _qrPendiente();
+    if (pendiente) { await _qrEnviar(pendiente); return; }
     var negId = getNegocioActivo(); if (!negId) return;
     try {
         var r = await _supabase.from('inventario_conteos').select('datos').eq('negocio_id', negId);
@@ -8983,7 +8999,7 @@ async function cargarConteosQR() {
         _conteosQR = (r.data || []).map(function (x) { return x.datos; }).filter(function (c) {
             if (!c || c.aplicado) return false;
             if (_hechos[c.id]) return false;           // ya resuelto aquí (aunque el sello no haya subido)
-            if ((c.sucursalId || '') !== suc) return false;
+            if ((c.sucursalId || 'suc_principal') !== (suc || 'suc_principal')) return false;
             if (area && area !== 'general' && (c.area || '').toLowerCase() !== area) return false;
             // Solo conteos frescos: uno de hace dos semanas no es de este inventario.
             var t = Date.parse((c.fecha || '') + 'T12:00:00');
@@ -9194,109 +9210,129 @@ function _marcarResueltoLocal(id) {
     Object.keys(m).forEach(function (k) { if (m[k] < corte) delete m[k]; });
     try { localStorage.setItem(_conteosResueltosKey(), JSON.stringify(m)); } catch (e) {}
 }
-/* El sello viaja a la nube SIN await: con internet malo, esa llamada tardaba
-   minutos y dejaba el guardado local y el re-pintado esperando detrás — el número
-   aplicado no se guardaba y la existencia se quedaba en ceros. Ahora primero se
-   escribe en el inventario y luego se avisa a la nube; si el aviso falla, el
-   registro local ya evita que el conteo se vuelva a ofrecer. */
-function _marcarConteoAplicado(c, descartado) {
-    c.aplicado = true;
-    if (descartado) c.descartado = true;
-    c.aplicadoPor = (function () { try { return (JSON.parse(localStorage.getItem('etaax_ctx') || '{}').userName) || ''; } catch (e) { return ''; } })();
-    c.aplicadoTs = new Date().toISOString();
-    _marcarResueltoLocal(c.id);
-    try {
-        Promise.resolve(_supabase.from('inventario_conteos').update({ datos: c }).eq('id', c.id))
-            .catch(function () {});
-    } catch (e) {}
+/* La propuesta queda guardada antes de enviarse. Si la respuesta se pierde,
+   se reenvía exactamente la misma operación; el servidor no vuelve a sumarla. */
+var _qrEnviando = false;
+function _qrClaveOperacion(neg, id) { return 'etaax_' + neg + '_qr_operacion_' + id; }
+function _qrPendiente() {
+    if (!invActual) return null;
+    try { return JSON.parse(localStorage.getItem(_qrClaveOperacion(getNegocioActivo(), invActual.id)) || 'null'); }
+    catch(e) { return null; }
 }
-// Saca el conteo de la bandeja y deja el inventario guardado y re-pintado.
-function _cerrarConteo(c) {
-    _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
-    _autoGuardar();
-    renderStepContent();
+function _qrEstado(texto, reintentar) {
+    var el = document.getElementById('qrConfirmacion');
+    if (!el) { el = document.createElement('div'); el.id = 'qrConfirmacion'; document.body.appendChild(el); }
+    el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:24px';
+    el.innerHTML = '<div role="dialog" aria-modal="true" aria-label="Confirmación de conteos" style="max-width:440px;background:var(--surface);color:var(--text);padding:24px;border:1px solid var(--border);border-radius:16px">'
+        + '<b>Conteos del QR</b><p>' + etx(texto) + '</p>'
+        + (reintentar ? '<button class="btn-vista" onclick="reintentarConteosQR()">Reintentar confirmación</button> ' : '')
+        + '<button class="btn-vista" onclick="salirConfirmacionQR()">Volver a inventarios</button></div>';
+}
+function _qrQuitarEstado() { var el = document.getElementById('qrConfirmacion'); if (el) el.remove(); }
+function salirConfirmacionQR() { _qrQuitarEstado(); mostrarVista('vistaLista'); }
+window.salirConfirmacionQR = salirConfirmacionQR;
+async function reintentarConteosQR() { var op = _qrPendiente(); if (op) return _qrEnviar(op); }
+window.reintentarConteosQR = reintentarConteosQR;
+async function _qrEnviar(op) {
+    if (_qrEnviando) return false;
+    _qrEnviando = true;
+    _qrEstado('Confirmando las cantidades y guardando el inventario…', false);
+    var timer, r;
+    try {
+        r = await Promise.race([
+            _supabase.rpc('inventario_conteos_aplicar', op.args),
+            new Promise(function(_, reject){ timer = setTimeout(function(){ reject(new Error('timeout')); }, 15000); })
+        ]);
+        if (!r || r.error || !r.data) throw (r && r.error) || new Error('network');
+    } catch(e) {
+        if (invActual && invActual.id === op.args.p_inventario.id && getNegocioActivo() === op.args.p_neg)
+            _qrEstado('Falta confirmar el resultado. La operación está guardada en este equipo. Reintenta cuando tengas conexión; el mismo conteo no se sumará dos veces.', true);
+        return false;
+    } finally { clearTimeout(timer); _qrEnviando = false; }
+    var d = r.data, id = op.args.p_inventario.id;
+    if (!d.ok) {
+        // Una respuesta explícita de conflicto acredita que ESTA operación no
+        // se aplicó. Una falla de red, en cambio, conserva el intento anterior.
+        localStorage.removeItem(_qrClaveOperacion(op.args.p_neg, id));
+        if (invActual && invActual.id === id && getNegocioActivo() === op.args.p_neg) {
+            _qrQuitarEstado();
+            await cargarConteosQR(); renderStepContent();
+            alert(d.motivo === 'conflicto-inventario' ? 'Otro equipo actualizó el inventario. Vuelve a abrirlo antes de aplicar los conteos.' :
+                  d.motivo === 'cerrado' ? 'El inventario ya está cerrado.' :
+                  'El conteo cambió o ya fue resuelto. Revisa las cantidades actualizadas antes de aplicarlo.');
+        }
+        return false;
+    }
+    // El resultado viene del servidor. Se guarda incluso si se salió del
+    // asistente mientras viajaba la petición; nunca se modifica otro negocio.
+    if (getNegocioActivo() === op.args.p_neg) {
+        var actual = d.inventario;
+        if (window.sbConfirmarInventarioQR) sbConfirmarInventarioQR(op.args.p_neg, id, actual.qrRevision);
+        var lista = getInventarios().slice(), idx = lista.findIndex(function(x){ return x.id === id; });
+        if (idx >= 0) lista[idx] = actual; else lista.push(actual);
+        _cacheInv = lista; _guardarDraftsLocal();
+        if (invActual && invActual.id === id) {
+            invActual = JSON.parse(JSON.stringify(actual));
+            cargarProductosCaptura();
+            _conteosQR = _conteosQR.filter(function(c){ return !op.args.p_conteos.some(function(x){ return x.id === c.id; }); });
+            _invalidarStep5(); renderStepContent(); _qrQuitarEstado();
+        }
+    }
+    localStorage.removeItem(_qrClaveOperacion(op.args.p_neg, id));
+    return true;
+}
+async function _resolverConteosQR(lista, descartar) {
+    if (!invActual || !lista.length || window._soloVistaInv || _qrEnviando) return false;
+    if (typeof _exigeInv === 'function' && !_exigeInv('capturar', 'No puedes aplicar conteos.')) return false;
+    var pendiente = _qrPendiente(); if (pendiente) return _qrEnviar(pendiente);
+    clearTimeout(_autoGuardarTimer); clearTimeout(_persistLocalTimer);
+    _autoGuardarTimer = null; _persistLocalTimer = null;
+    _persistirBorradorLocal();
+    var propuesta = JSON.parse(JSON.stringify(invActual));
+    propuesta.filas = JSON.parse(JSON.stringify(filasCaptura));
+    var aceptados = [];
+    lista.forEach(function(c){
+        var fila = propuesta.filas.find(function(f){ return (_canonInsumoId(f.insumoId)||f.insumoId) === (_canonInsumoId(c.insumoId)||c.insumoId); });
+        if (!descartar && !fila) return;
+        if (!descartar) {
+            var sumar = (parseFloat(fila.cerradasBodega)||0) + (parseFloat(fila.cerradasBarra)||0) > 0;
+            _aplicarConteoAFila(fila, c, sumar);
+            fila.existenciaFisica = calcExistencia(fila);
+        }
+        aceptados.push({id:c.id, ver:parseInt(c.ver,10)||1});
+    });
+    if (!aceptados.length) return false;
+    delete propuesta._eraCerrado;
+    var op = {args:{p_neg:getNegocioActivo(), p_inventario:propuesta, p_conteos:aceptados,
+        p_op:'qr_' + Date.now() + '_' + Math.random().toString(36).slice(2), p_descartar:!!descartar}};
+    try { localStorage.setItem(_qrClaveOperacion(op.args.p_neg, propuesta.id), JSON.stringify(op)); }
+    catch(e) { alert('No hay espacio para respaldar esta operación. No se enviaron los conteos. Libera espacio y vuelve a intentar.'); return false; }
+    return _qrEnviar(op);
 }
 function aplicarConteoQR(idx) {
-    var fila = filasCaptura[idx]; if (!fila) return;
-    var lista = _conteosDeFila(fila); if (!lista.length) return;
-    /* Si la casilla ya trae algo capturado a mano, el QR se SUMA: el encargado
-       contó la barra y la barra contó la bodega, y las dos cuentan. Si está en
-       cero, el primero escribe y los demás se le suman. */
-    var sumar = ((parseFloat(fila.cerradasBodega) || 0) + (parseFloat(fila.cerradasBarra) || 0)) > 0;
-    lista.forEach(function (c) {
-        _aplicarConteoAFila(fila, c, sumar);
-        sumar = true;                  // del segundo en adelante, SIEMPRE se suma
-        _marcarConteoAplicado(c);      // el sello, por su cuenta: la red no bloquea
-        _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
-    });
-    _autoGuardar();
-    renderStepContent();
+    return _resolverConteosQR(_conteosDeFila(filasCaptura[idx]), false);
 }
-/* Tirar UN conteo suelto sin perder los demás: es lo que hace falta cuando
-   alguien manda dos veces el mismo refrigerador. */
 function descartarUnConteoQR(id) {
-    var c = _conteosQR.find(function (x) { return x.id === id; }); if (!c) return;
-    var msg = 'Se quita el conteo de ' + (c.contadoPor || 'el colaborador') + ' (' + _conteoResumen(c) + ') '
-            + 'y no se vuelve a ofrecer. Los demás conteos de este producto NO se tocan.';
-    var _hacer = function () { _marcarConteoAplicado(c, true); _cerrarConteo(c); };
-    if (window.etaaxConfirm) etaaxConfirm('¿Quitar este conteo?', msg, _hacer, null, { yesLabel: 'Quitar', danger: true });
-    else if (confirm(msg)) _hacer();
+    var c = _conteosQR.find(function(x){ return x.id === id; }); if (!c) return;
+    var hacer = function(){ return _resolverConteosQR([c], true); };
+    if (window.etaaxConfirm) etaaxConfirm('¿Quitar este conteo?', _conteoResumen(c), hacer, null, {yesLabel:'Quitar',danger:true});
+    else if (confirm('¿Quitar este conteo?')) hacer();
 }
 window.descartarUnConteoQR = descartarUnConteoQR;
-/* Rechazar el conteo: el encargado contó y no está de acuerdo. No toca la
-   existencia y el conteo no vuelve a ofrecerse. */
 function descartarConteoQR(idx) {
-    var fila = filasCaptura[idx]; if (!fila) return;
-    var lista = _conteosDeFila(fila); if (!lista.length) return;
-    var _hacer = function () {
-        lista.forEach(function (c) { _marcarConteoAplicado(c, true); });
-        _conteosQR = _conteosQR.filter(function (x) { return lista.indexOf(x) === -1; });
-        _autoGuardar(); renderStepContent();
-    };
-    var msg = lista.length > 1
-        ? 'Se descartan los ' + lista.length + ' conteos de este producto (' + _fmtNum(_conteosTotal(lista)) + ' pzas en total) '
-          + 'y no se vuelven a ofrecer. La existencia que ya capturaste no se toca.'
-        : 'El conteo de ' + (lista[0].contadoPor || 'el colaborador') + ' (' + _conteoResumen(lista[0]) + ') se descarta '
-          + 'y no se vuelve a ofrecer. La existencia que ya capturaste no se toca.';
-    if (window.etaaxConfirm) etaaxConfirm('¿Descartar este conteo?', msg, _hacer, null, { yesLabel: 'Descartar', danger: true });
-    else if (confirm(msg)) _hacer();
+    var lista = _conteosDeFila(filasCaptura[idx]); if (!lista.length) return;
+    var hacer = function(){ return _resolverConteosQR(lista, true); };
+    if (window.etaaxConfirm) etaaxConfirm('¿Descartar los conteos de este producto?', 'La existencia capturada no se modifica.', hacer, null, {yesLabel:'Descartar',danger:true});
+    else if (confirm('¿Descartar los conteos de este producto?')) hacer();
 }
 window.descartarConteoQR = descartarConteoQR;
 async function aplicarConteosQR() {
     if (!_conteosQR.length) return;
-    var n = _conteosQR.length;
-    var _hacer = function () {
-        var pend = _conteosQR.slice();
-        /* Se lleva la cuenta de qué fila ya recibió algo EN ESTA PASADA: el
-           primer conteo de cada producto decide si escribe o suma, y del
-           segundo en adelante siempre suma. Sin esto, el último conteo
-           sobreescribía a los anteriores y el total salía corto. */
-        var tocadas = {};
-        for (var i = 0; i < pend.length; i++) {
-            var c = pend[i];
-            var fila = filasCaptura.find(function (f) {
-                return (_canonInsumoId(f.insumoId) || f.insumoId) === (_canonInsumoId(c.insumoId) || c.insumoId);
-            });
-            if (!fila) continue;                       // contaron algo que no está en este inventario
-            var yaTiene = ((parseFloat(fila.cerradasBodega) || 0) + (parseFloat(fila.cerradasBarra) || 0)) > 0;
-            _aplicarConteoAFila(fila, c, tocadas[fila.insumoId] || yaTiene);
-            tocadas[fila.insumoId] = true;
-            _marcarConteoAplicado(c);                  // sello sin await: la red no bloquea la captura
-            _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
-        }
-        _autoGuardar(); renderStepContent();
-    };
-    /* Se cuentan PRODUCTOS, no registros: decir "12 conteos" cuando son 4
-       productos contados 3 veces cada uno no le dice nada a nadie. */
-    var prods = {};
-    _conteosQR.forEach(function (c) { prods[_canonInsumoId(c.insumoId) || c.insumoId] = 1; });
-    var np = Object.keys(prods).length;
-    var msg = 'Se tomarán ' + n + ' conteo' + (n !== 1 ? 's' : '') + ' de ' + np + ' producto' + (np !== 1 ? 's' : '')
-            + ' y se escribirán en las existencias de este inventario.\n\n'
-            + 'Los conteos de un mismo producto se SUMAN entre sí. Donde ya tengas algo capturado a mano, se suma encima.';
-    if (window.etaaxConfirm) etaaxConfirm('Aplicar conteos del QR', msg, _hacer, null, { yesLabel: 'Aplicar', danger: false });
-    else if (confirm(msg)) _hacer();
+    var hacer = function(){ return _resolverConteosQR(_conteosQR.slice(), false); };
+    if (window.etaaxConfirm) etaaxConfirm('Aplicar conteos del QR', 'Los conteos se suman entre sí y a las existencias ya capturadas.', hacer, null, {yesLabel:'Aplicar'});
+    else if (confirm('¿Aplicar los conteos del QR?')) hacer();
 }
+
 window.aplicarConteoQR = aplicarConteoQR;
 window.aplicarConteosQR = aplicarConteosQR;
 
@@ -9656,7 +9692,7 @@ function _step5TablasHTML() {
     const mapaC5 = _compDeInsumo();
     _repCache    = _repartoPrebatch(); // reparto prebatch→insumos (fresco por render)
     const vcomps = _compuestosActivos().map(_virtualFilaCompuesto)
-        .filter(vf => !q || (vf.nombre||'').toLowerCase().includes(q));
+        .filter(vf => _pasaSeleccionS5(vf));
     if (_step5Modo === 'galeria') return _step5GaleriaHTML(q, mapaC5, vcomps);
 
     // 5.5 · 2.4 · 3 — un decimal cuando hace falta, entero cuando no. El módulo
@@ -9681,8 +9717,7 @@ function _step5TablasHTML() {
     vcomps.forEach(vf => {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
         const m0   = (comp.miembros||[]).map(_filaDeMiembro).find(Boolean);
-        if (_subcatStep5 && m0 && (m0.subcategoria||m0.categoria) !== _subcatStep5) return;
-        if (!_pasaDifS5(vf)) return;
+        if (!_pasaSeleccionS5(vf)) return;
         _ens(m0 ? _grupoCategoria(m0) : '🧩 Compuestos').comp.push(vf);
     });
 
@@ -10353,7 +10388,42 @@ function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
                 newPage();
                 s = shell(table); tb = s.querySelector('tbody');
                 body.appendChild(s);
-                tb.appendChild(r); // una fila siempre cabe en una hoja vacía
+                tb.appendChild(r);
+                if (!fits()) {
+                    // Una fila puede contener una nota de varias páginas. Dividir
+                    // su texto en continuaciones medidas, sin repetir los importes.
+                    tb.removeChild(r);
+                    const cells = Array.from(r.cells);
+                    let rest = cells.map(c => Array.from(c.textContent || ''));
+                    let continuation = false;
+                    while (rest.some(t => t.length)) {
+                        const fragment = count => {
+                            const row = r.cloneNode(false);
+                            if (continuation) row.setAttribute('data-rd-continuacion', 'true');
+                            cells.forEach((c, i) => {
+                                const td = c.cloneNode(false);
+                                td.style.whiteSpace = 'pre-wrap'; td.style.overflowWrap = 'anywhere';
+                                td.textContent = (continuation && i === 0 ? '(continuación) ' : '') + rest[i].slice(0, count).join('');
+                                row.appendChild(td);
+                            });
+                            return row;
+                        };
+                        let lo = 1, hi = Math.max(...rest.map(t => t.length)), best = 0;
+                        while (lo <= hi) {
+                            const n = Math.floor((lo + hi) / 2), probe = fragment(n);
+                            tb.appendChild(probe);
+                            const ok = fits(); tb.removeChild(probe);
+                            if (ok) { best = n; lo = n + 1; } else hi = n - 1;
+                        }
+                        if (!best) throw new Error('La cabecera no deja espacio para imprimir esta fila. Reduce el tamaño del encabezado.');
+                        tb.appendChild(fragment(best));
+                        rest = rest.map(t => t.slice(best));
+                        continuation = true;
+                        if (rest.some(t => t.length)) {
+                            newPage(); s = shell(table); tb = s.querySelector('tbody'); body.appendChild(s);
+                        }
+                    }
+                }
             }
         });
     };
@@ -10663,18 +10733,8 @@ function verReporteDirectivo(gerencial, modo) {
     const _qFS = (typeof _busqStep5 === 'string' ? _busqStep5 : '').toLowerCase();
     const _grupoApagadoFS = g => !!(_gruposImprS5 && _gruposImprS5[g] === false);
     const _pasaFiltroFS = (a) => {
-        const f = a.f;
-        /* El buscador de la pantalla casa el nombre del COMPUESTO; el impreso
-           lista PRESENTACIONES, que se llaman de otra forma. Buscar «Caguamas»
-           enseñaba el renglón en pantalla y dejaba la hoja sin sus miembros.
-           Una presentación entra si coincide ella o su compuesto. */
-        if (_qFS) {
-            const c = _compDeMiembro[f.insumoId];
-            if (!(f.nombre || '').toLowerCase().includes(_qFS) &&
-                !(c && (c.nombre || '').toLowerCase().includes(_qFS))) return false;
-        }
-        if (_subcatStep5 && (f.subcategoria || f.categoria) !== _subcatStep5) return false;
-        return !_grupoApagadoFS(_grupoCategoria(f));
+        const comp = _compDeMiembro[a.f.insumoId];
+        return _pasaSeleccionS5(a.f, comp) && !_grupoApagadoFS(_grupoSeleccionS5(a.f, comp));
     };
     const faltantesFS = (_difStep5 === 'sobra' ? [] : analisis.filter(a => a.dif < -0.001 && _pasaFiltroFS(a))).sort(_ordImpactoFS);
     const sobrantesFS = (_difStep5 === 'falta' ? [] : analisis.filter(a => a.dif >  0.001 && _pasaFiltroFS(a))).sort(_ordImpactoFS);
@@ -10783,7 +10843,7 @@ function verReporteDirectivo(gerencial, modo) {
         // Agrupar conservando el orden por impacto de adentro de cada grupo…
         const porGrupo = {}, orden = [];
         items.forEach(a => {
-            const g = _grupoCategoria(a.f) || 'Sin grupo';
+            const g = _grupoSeleccionS5(a.f, _compDeMiembro[a.f.insumoId]) || 'Sin grupo';
             if (!porGrupo[g]) { porGrupo[g] = []; orden.push(g); }
             porGrupo[g].push(a);
         });

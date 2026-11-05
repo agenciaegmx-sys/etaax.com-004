@@ -17,6 +17,11 @@
     function n(v) { return parseFloat(v) || 0; }
     function fmtM(v) { return '$' + n(v).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function fmtN(v) { return n(v).toLocaleString('es-MX'); }
+    function horarioId(neg, suc, semana) {
+        neg = String(neg || '');
+        if (!neg) throw new Error('Horario sin negocio');
+        return 'hor_' + Array.from(neg).length + '_' + neg + '_' + (suc || 'suc_principal') + '_' + semana;
+    }
     function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
     function todayStr() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
     function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
@@ -2163,7 +2168,7 @@
         escaleraPL: escaleraPL, CATS_FINANCIERO: CATS_FINANCIERO, costoFinanciero: costoFinanciero,
         PL_PESOS: PL_PESOS,
         planFijoPago: planFijoPago,
-        getNegocioActivo: getNegocioActivo, sucActiva: sucActiva, scopeSuc: scopeSuc, esDeSuc: esDeSuc,
+        horarioId: horarioId, getNegocioActivo: getNegocioActivo, sucActiva: sucActiva, scopeSuc: scopeSuc, esDeSuc: esDeSuc,
         getWeekStr: getWeekStr, semanaISO: semanaISO, getRange: getRange, prevRange: prevRange, inRange: inRange,
         efNeto: efNeto, taBanco: taBanco, ventasBruta: ventasBruta, flujoNeto: flujoNeto,
         propinas: propinas, cheque: cheque, resultado: resultado, resguardo: resguardo,

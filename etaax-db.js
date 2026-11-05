@@ -622,6 +622,17 @@
         }
     }
     window._sbFlush = _obFlush;
+    // El servidor confirmó una operación QR que ya contiene todas las ediciones
+    // locales anteriores. Quitar SOLO snapshots anteriores del mismo inventario.
+    window.sbConfirmarInventarioQR = function(neg, id, revision) {
+        _obSave(_obLoad().filter(function(it){
+            return !(it.op === 'upsert' && it.tabla === 'inventarios' && it.payload &&
+                it.payload.negocio_id === neg && it.payload.id === id &&
+                (parseInt((it.payload.datos||{}).qrRevision,10)||0) < revision);
+        }));
+        _obIndicador();
+    };
+
     /* ══ LO QUE NO SE PUDO GUARDAR ═════════════════════════════════════════
        Un cambio que el servidor rechaza ocho veces se saca de la cola para que
        no la atore para siempre. Pero sacarlo y callarse es perder un dato del

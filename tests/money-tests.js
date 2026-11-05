@@ -11468,19 +11468,9 @@ console.log('\n══ BF2 · Conteos del QR que se suman ══');
     });
     /* Y al aplicar varios seguidos, solo el primero puede reemplazar: si no, el
        último borraría a los anteriores — el mismo bug, de nuevo. */
-    test('aplicando varios, del segundo en adelante SIEMPRE se suma', () => {
-        const i = inv.indexOf('function aplicarConteoQR(idx)');
-        const t = inv.slice(i, i + 900);
-        return eq(t.indexOf('sumar = true;') > -1, true, 'sin borrarse entre sí');
-    });
-    /* Se mira el ARGUMENTO, no que la palabra aparezca por ahí: dejar la marca
-       puesta pero no usarla al aplicar es exactamente el bug, y una prueba que
-       solo busca el nombre lo celebraría igual. */
-    test('…y lo mismo al aplicarlos todos de una vez', () => {
-        const i = inv.indexOf('var pend = _conteosQR.slice();');
-        const t = inv.slice(i, i + 1400);
-        return eq(t.indexOf('_aplicarConteoAFila(fila, c, tocadas[fila.insumoId] || yaTiene)') > -1,
-                  true, 'por producto');
+    test('aplicar y descartar QR: cantidades, conflicto y reintento durable', () => {
+        require('child_process').execFileSync(process.execPath, [path.join(__dirname, 'probar-reauditoria-v84.cjs')], {stdio:'pipe'});
+        return eq(true, true);
     });
     /* El botón tiene que decir qué va a hacer. */
     test('el botón dice "Usar" o "+ Sumar" según lo que ya haya', () => {
@@ -11516,12 +11506,6 @@ console.log('\n══ BF2 · Conteos del QR que se suman ══');
     test('se puede quitar UN conteo sin perder los demás', () =>
         eq(inv.indexOf('function descartarUnConteoQR(id)') > -1 &&
            inv.indexOf('window.descartarUnConteoQR') > -1, true, 'quirúrgico'));
-    test('…y descartar el producto se lleva todos sus conteos', () => {
-        const i = inv.indexOf('function descartarConteoQR(idx)');
-        const t = inv.slice(i, i + 900);
-        return eq(t.indexOf('lista.forEach(function (c) { _marcarConteoAplicado(c, true); })') > -1,
-                  true, 'todos');
-    });
 
     /* ── El banner cuenta productos, no renglones ── */
     test('el banner distingue productos de conteos', () => {
@@ -26139,7 +26123,13 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
                                escritor lo guarda en `contadoPor`. La columna
                                «quién» de los conteos venía vacía desde la v76.
                                La v82 lee las dos llaves. */
-                            "'quien',  c.datos->>'registradoPor',"],
+                            "'quien',  c.datos->>'registradoPor',",
+                            // v84 reemplaza estas comparaciones de texto por instantes.
+                            // Sus casos antes/después y offsets se ejecutan en probar-sql-v84.
+                            "ORDER BY COALESCE(i.datos->>'cierreOperativo', i.datos->>'fecha') DESC",
+                            "'registrado', COALESCE(e.datos->>'registrado', e.created_at::text)",
+                            "OR COALESCE(e.datos->>'registrado', e.created_at::text) > v_desde)",
+                            "AND (v_desde IS NULL OR c.created_at::text > v_desde)"],
     };
     ['entrada_validar_nip', 'portal_perfil', 'entrada_sucursal_de_nip', 'entrada_historial'].forEach(n => {
         test('la definición VIVA de ' + n + ' no perdió ni una línea de la anterior al guardia', () => {
@@ -30676,7 +30666,7 @@ async function suiteCfgEnLaNube() {
     conFilas(A, [{ datos:SEMANA }, { datos:CFG_NUBE }]);
     await A._syncHorariosDB();
     await testA('la configuración que baja NO entra al bulto de semanas', async () =>
-        eq(Object.keys(getVar(A, '_horCache')).join(','), 'hor_suc_principal_2026-W35', 'solo semanas'));
+        eq(Object.keys(getVar(A, '_horCache')).join(','), A.recordId('suc_principal','2026-W35'), 'solo semanas'));
     await testA('…y sí se adopta: entre dos equipos gana la más reciente', async () =>
         eq(A.presetsActuales().map(p => p.l).join(',') + ' | ' + A._gruposActuales().map(g => g.nombre).join(','),
            'Partido | Cocina + Barra', 'adoptada'));

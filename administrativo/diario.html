@@ -31,9 +31,9 @@
     <link rel="stylesheet" href="../styles.css?v=d87bdb06">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="../supabase-config.js"></script>
-<script src="/etaax-core.js?v=888bc7ce"></script>
+<script src="/etaax-core.js?v=2b875f63"></script>
 <script src="/etaax-store.js?v=51ca2ddd"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
-<script src="/etaax-db.js?v=599f78b4"></script>
+<script src="/etaax-db.js?v=1f1bc8b5"></script>
 <script src="/qr-pairing.js"></script>
     <style>
         /* ══════════ MENÚ DE CARDS (mismo lenguaje visual que el panel del módulo) ══════════ */
@@ -7070,7 +7070,7 @@ function _horLocal(){
     if (_cacheHorarios && Object.keys(_cacheHorarios).length) return Object.assign({}, loc, _cacheHorarios);
     return loc;
 }
-function _horRecId(sucId, weekStr){ return 'hor_' + (sucId || 'suc_principal') + '_' + weekStr; }
+function _horRecId(sucId, weekStr){ return EtaaxCore.horarioId(getNegocioActivo(), sucId, weekStr); }
 function _durTurno(t){
     if (!t || !t.in || !t.out) return 0;
     var a = t.in.split(':'), b = t.out.split(':');
@@ -7090,7 +7090,8 @@ function _asistenciaRango(staffId, desde, hasta){
     var d = new Date(desde+'T12:00:00'), fin = new Date(hasta+'T12:00:00'), guard = 0;
     while (d <= fin && guard++ < 400){
         var wk = getWeekStr(d);
-        var rec = recs[_horRecId(suc, wk)] || recs[_horRecId('suc_principal', wk)];
+        var rec = recs[_horRecId(suc, wk)] || recs['hor_' + suc + '_' + wk] ||
+                  recs[_horRecId('suc_principal', wk)] || recs['hor_suc_principal_' + wk];
         if (rec && rec.turnos && rec.turnos[staffId]){
             var idx = (d.getDay() + 6) % 7;      // lunes = 0
             var t = rec.turnos[staffId]['d'+idx];
