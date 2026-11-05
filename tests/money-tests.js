@@ -32425,9 +32425,15 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
                 { id:'sinrec', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-07',
                   monto:50, staffId:'s1' },
             ];
-            test('el historial trae solo los recibos de esa persona', () =>
-                eq(X._nomRecibosDe('s1').map(g => g.id).join(','), 'r2,r3,r1',
-                   'cruzó personas, contó un pago sin recibo, o salió desordenado'));
+            test('el historial trae solo los pagos de esa persona', () =>
+                eq(X._nomRecibosDe('s1').map(g => g.id).join(','), 'sinrec,r2,r3,r1',
+                   'cruzó personas o salió desordenado'));
+            /* El pago viejo —el que no guardó recibo— ENTRA: su recibo se
+               reconstruye del desglose. Decir «todavía no hay recibos» cuando
+               los pagos están ahí es mentirle a quien pregunta qué le han
+               pagado. */
+            test('…incluidos los viejos, sin recibo guardado', () =>
+                eq(X._nomRecibosDe('s1').some(g => g.id === 'sinrec'), true, 'se quedó fuera'));
             /* Ordenado por el PERIODO que cubre, no por la fecha en que salió el
                dinero: una quincena de octubre pagada en noviembre va en octubre. */
             test('…ordenados por el periodo que cubren, no por cuándo se pagaron', () => {
@@ -32435,12 +32441,17 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
                 X._cacheGastos[X._cacheGastos.length - 1].fecha = '2026-12-31';   // se pagó tardísimo
                 const orden = X._nomRecibosDe('s1').map(g => g.id).join(',');
                 X._cacheGastos.pop();
-                return eq(orden, 'r2,r3,r1,r4', 'se ordenó por la fecha de pago');
+                return eq(orden, 'sinrec,r2,r3,r1,r4', 'se ordenó por la fecha de pago');
             });
             X.abrirHistNomina('s1');
             const hb = () => X.document.getElementById('nomHistBody').innerHTML;
             test('el historial se pinta con su total y su cuenta', () =>
-                eq(hb().indexOf('3 recibos') > -1 && hb().indexOf(X.fmtM(6600)) > -1, true, 'resumen'));
+                eq(hb().indexOf('4 recibos') > -1 && hb().indexOf(X.fmtM(6650)) > -1, true, 'resumen'));
+            /* El reconstruido se enseña marcado: quien lo ve tiene que saber
+               que ese papel se armó hoy y no el día del pago. */
+            test('…y el reconstruido va marcado como tal, sin periodo', () =>
+                eq(hb().indexOf('reconstruido') > -1 && hb().indexOf('Periodo no registrado') > -1,
+                   true, 'pasa por original'));
             test('…y cada renglón con su folio', () =>
                 eq(hb().indexOf('N-r1') > -1 && hb().indexOf('N-r3') > -1, true, 'folios'));
             test('…pero no el recibo de la otra persona', () =>
@@ -32455,16 +32466,16 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
             test('…y el título dice de quién son', () =>
                 eq(X.document.getElementById('nomHistTitle').textContent.indexOf('Ana') > -1, true, 'título'));
             /* Quien no tiene recibos no ve una tabla vacía. */
-            test('sin recibos, el historial lo explica en vez de quedar en blanco', () => {
+            test('sin pagos, el historial lo explica en vez de quedar en blanco', () => {
                 X.abrirHistNomina('s3');
-                return eq(hb().indexOf('Todavía no hay recibos') > -1, true, 'tabla vacía');
+                return eq(hb().indexOf('Todavía no hay pagos') > -1, true, 'tabla vacía');
             });
             test('el historial en papel lleva los pagos y su total', () => {
                 let papel = '';
                 const a0 = X.etaaxAbrirReporte;
                 X.etaaxAbrirReporte = (h) => { papel = h; };
                 try { X.imprimirHistNomina('s1'); } finally { X.etaaxAbrirReporte = a0; }
-                return eq(papel.indexOf('N-r1') > -1 && papel.indexOf(X.fmtM(6600)) > -1 &&
+                return eq(papel.indexOf('N-r1') > -1 && papel.indexOf(X.fmtM(6650)) > -1 &&
                           papel.indexOf('No es un CFDI') > -1, true, 'papel incompleto');
             });
             /* El botón del renglón del selector tiene que llamarlo de verdad, y
@@ -32726,6 +32737,247 @@ console.log('\n══ BH63 · El costeo en crudo, para Excel ══');
         return eq(veces, 1, 'la regla está escrita ' + veces + ' veces: se van a separar');
     });
 })();
+
+/* ═══════════ BH64 · EL RECIBO DE LAS NÓMINAS VIEJAS ═══════════
+   Lo que dijo Edwin: «entiendo que es una función nueva, pero están los datos
+   de cada pago; el recibo de las nóminas viejas debería existir, el dato
+   existe». Tiene razón: el desglose quedó guardado en las notas del gasto,
+   renglón por renglón, desde que el módulo nació.
+
+   Así que el recibo se reconstruye de ahí. Lo que se vigila:
+     · que lea los renglones que el propio registro escribió —no otros—;
+     · que el total sea el IMPORTE REGISTRADO y no la suma de lo que se pudo
+       leer: el gasto es el dinero que salió y eso no se discute;
+     · que el papel DIGA que es una reconstrucción, y por qué le falta el
+       periodo —un comprobante que finge ser el original de aquel día es una
+       mentira pequeña y cara—;
+     · y que corregir siga sin ofrecerse ahí: no hay captura que reabrir.   */
+console.log('\n══ BH64 · El recibo de las nóminas viejas ══');
+{
+    const X = crearContexto();
+    cargarJS(X, 'etaax-core.js');
+    cargarJS(X, 'reporte-marca.js');
+    cargarInline(X, 'administrativo/diario.html');
+    X._storage.etaax_negocio_activo = 'n1';
+    X._storage.etaax_sucursal_activa = 'suc_principal';
+    const ana = { id:'s1', nombre:'Ana Pérez', puesto:'Barista', sucursalId:'suc_principal' };
+    X._cacheStaff = [ana];
+
+    /* El desglose TAL CUAL lo escribe _confirmarPagoNom. Si el formato del
+       registro cambiara, esta prueba cae —y debe caer: el lector tiene que
+       seguir al escritor. */
+    const NOTAS = [
+        'Sueldo: $315.00 × 6 días = $1,890.00',
+        '(Horarios: 5 laborados + 1 descanso = 6 días pagados · 0 faltas, 2 retardos, 40:00 efectivas)',
+        '+ Prima dominical (1 domingo): $78.75',
+        '+ Bono de puntualidad: $100.00',
+        '− Descuento por retardos (2 retardos × $25.00): $50.00'
+    ].join('\n');
+    const viejo = { id:'gv', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-10-05',
+                    monto:2018.75, concepto:'Nómina semanal — ANA PÉREZ',
+                    categoria:'Nómina y personal', staffId:'s1', notas:NOTAS };
+    X._cacheGastos = [viejo];
+    const R = X._reciboNominaReconstruido(viejo);
+
+    test('del desglose sale un recibo, no un «no hay recibo»', () =>
+        eq(!!R, true, 'el dato estaba y no se usó'));
+    test('el sueldo del periodo, con su cuenta', () => {
+        const p = R.percepciones[0] || {};
+        return eq(p.concepto + ' | ' + p.detalle + ' | ' + p.monto,
+                  'Sueldo del periodo | $315.00 × 6 días | 1890', 'sueldo');
+    });
+    test('…los días y el diario que dice la nota', () =>
+        eq(R.dias + '·' + R.diario, '6·315', 'días y diario'));
+    /* El «+» es percepción y el «−» deducción: lo puso el registro al escribir
+       el desglose, así que el lector no tiene que adivinar. */
+    test('lo que suma va a percepciones', () =>
+        eq(R.percepciones.map(x => x.concepto).join(','),
+           'Sueldo del periodo,Prima dominical,Bono de puntualidad', 'percepciones'));
+    test('…y lo que resta a deducciones, en positivo', () => {
+        const d = R.deducciones[0] || {};
+        return eq(d.concepto + ' | ' + d.monto, 'Descuento por retardos | 50', 'deducción');
+    });
+    /* UNA SANCIÓN SE ESCRIBE CON «+» Y MONTO NEGATIVO —el «+» es del formato,
+       el menos es del dinero—. Leída a la ligera se vuelve un BONO de 200 donde
+       hubo una multa de 200, y el recibo diría que cobró 400 de más. */
+    test('una sanción se lee como descuento, no como bono', () => {
+        const g = JSON.parse(JSON.stringify(viejo));
+        g.notas = NOTAS + '\n+ Sanción por material roto: $-200.00';
+        const r = X._reciboNominaReconstruido(g);
+        const enPerc = r.percepciones.some(x => /Sanción/.test(x.concepto));
+        const d = r.deducciones.find(x => /Sanción/.test(x.concepto)) || {};
+        return eq(enPerc + '·' + d.monto, 'false·200', 'la multa salió como percepción o en cero');
+    });
+    test('…y resta del total leído en vez de sumarle', () => {
+        const g = JSON.parse(JSON.stringify(viejo));
+        g.notas = NOTAS + '\n+ Sanción por material roto: $-200.00';
+        g.monto = 1818.75;
+        return eq(X._reciboNominaReconstruido(g).reconstruido.cuadra, true,
+                  '1890 + 78.75 + 100 − 50 − 200 = 1818.75');
+    });
+
+    /* El paréntesis dice POR QUÉ: sin él, «Prima dominical $78.75» no explica
+       nada y el que firma pregunta. */
+    test('el paréntesis del renglón queda como su detalle', () =>
+        eq(R.percepciones[1].detalle + ' / ' + R.deducciones[0].detalle,
+           '1 domingo / 2 retardos × $25.00', 'detalles'));
+    test('el renglón de Horarios no se cuela como concepto', () =>
+        eq(R.percepciones.concat(R.deducciones).some(x => /Horarios/.test(x.concepto)), false, 'se coló'));
+    /* El total es el IMPORTE del gasto: el dinero que salió no se discute. */
+    test('el total es el importe registrado', () => eq(R.total, 2018.75, 'total'));
+    test('…y la cuenta cuadra con los renglones leídos', () =>
+        eq(R.reconstruido.cuadra, true, '1890 + 78.75 + 100 − 50 = 2018.75'));
+    test('la periodicidad sale del concepto del gasto', () =>
+        eq(R.periodicidad, 'Semanal', 'periodicidad'));
+    test('el nombre sale del catálogo de staff', () =>
+        eq(R.staff.nombre + ' · ' + R.staff.puesto, 'Ana Pérez · Barista', 'staff'));
+    /* Si a la persona la dieron de baja y ya no está en el catálogo, el nombre
+       se lee del concepto —que es donde el propio pago lo escribió—, en vez de
+       entregar un recibo sin nombre. */
+    test('…y si ya no está en el catálogo, del concepto del pago', () => {
+        X._cacheStaff = [];
+        const r2 = X._reciboNominaReconstruido(viejo);
+        X._cacheStaff = [ana];
+        return eq(r2.staff.nombre, 'ANA PÉREZ', 'recibo sin nombre');
+    });
+    /* El periodo NUNCA estuvo en las notas: se deja vacío en vez de inventarlo
+       con la fecha de pago, que es otra cosa. */
+    test('el periodo se deja vacío, no se inventa con la fecha de pago', () =>
+        eq(R.desde + R.hasta, '', 'inventó el periodo'));
+    /* Folio estable: reimprimir dos veces no puede dar dos números distintos,
+       que se leerían como dos pagos. */
+    test('el folio es estable entre reimpresiones', () =>
+        eq(X._reciboNominaReconstruido(viejo).folio, R.folio, 'folio distinto cada vez'));
+
+    /* ── El papel ── */
+    const papel = X._reciboNominaHTML(R, viejo.fecha);
+    test('el papel dice que es una reconstrucción', () =>
+        eq(papel.indexOf('Recibo reconstruido') > -1, true, 'pasa por original'));
+    test('…y explica por qué no trae periodo', () =>
+        eq(papel.indexOf('No registrado') > -1 && /periodo<\/b> no se guardaba/.test(papel),
+           true, 'periodo mudo'));
+    test('…con sus percepciones y su deducción', () =>
+        eq(papel.indexOf('Bono de puntualidad') > -1 && papel.indexOf('Descuento por retardos') > -1,
+           true, 'renglones'));
+    /* Un recibo GUARDADO no puede salir marcado como reconstruido. */
+    test('un recibo guardado no se marca como reconstruido', () => {
+        const bueno = { folio:'N-1', staff:{nombre:'Ana'}, periodicidad:'Semanal', desde:'2026-10-01',
+                        hasta:'2026-10-07', dias:7, diario:300, percepciones:[{concepto:'Sueldo',detalle:'',monto:2100}],
+                        deducciones:[], totalPerc:2100, totalDed:0, total:2100 };
+        return eq(X._reciboNominaHTML(bueno, '2026-10-08').indexOf('Recibo reconstruido'), -1, 'se marcó');
+    });
+
+    /* ── Cuando el desglose NO cuadra con el importe ──
+       Pasa de verdad: parte del pago salió por otra caja, o el total se ajustó
+       a mano. El papel lo explica en vez de maquillarlo cambiando el total. */
+    test('si parte se pagó aparte, el papel lo explica', () => {
+        const g2 = JSON.parse(JSON.stringify(viejo));
+        g2.notas = NOTAS + '\nPagado aparte: Bono $500.00 (Efectivo)';
+        g2.monto = 1518.75;
+        const r = X._reciboNominaReconstruido(g2);
+        const h = X._reciboNominaHTML(r, g2.fecha);
+        return eq(r.reconstruido.cuadra === false && r.total === 1518.75 &&
+                  h.indexOf('otra caja') > -1, true, 'maquilló el descuadre');
+    });
+    test('…y si el total se ajustó a mano, también', () => {
+        const g3 = JSON.parse(JSON.stringify(viejo));
+        g3.notas = NOTAS + '\n(Total ajustado manualmente)';
+        g3.monto = 2000;
+        const h = X._reciboNominaHTML(X._reciboNominaReconstruido(g3), g3.fecha);
+        return eq(h.indexOf('ajustó a mano') > -1, true, 'sin explicación');
+    });
+    /* Un gasto de nómina sin notas legibles sigue dando recibo: con su importe
+       y su nombre. Es menos que nada, y nada es lo que había. */
+    test('un pago sin desglose legible sigue dando recibo con su importe', () => {
+        const g4 = { id:'g4', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-09-01',
+                     monto:1200, concepto:'Nómina mensual — ANA PÉREZ',
+                     categoria:'Nómina y personal', staffId:'s1', notas:'' };
+        const r = X._reciboNominaReconstruido(g4);
+        return eq(r.total + '·' + r.percepciones.length + '·' + r.periodicidad, '1200·0·Mensual', 'sin recibo');
+    });
+    /* Y un gasto que no es nómina no inventa uno. */
+    test('un gasto cualquiera no produce un recibo de nómina', () =>
+        eq(X._reciboNominaReconstruido({ id:'x', concepto:'Servilletas', categoria:'Varios', monto:120 }),
+           null, 'inventó un recibo'));
+
+    /* ── Dónde se toca ── */
+    test('el renglón del panel ofrece el recibo también en los viejos', () =>
+        eq(X._filaPagoPanel(viejo).indexOf("verReciboNomina('gv')") > -1, true, 'sin botón'));
+    test('…pero NO ofrece corregir: no hay captura que reabrir', () =>
+        eq(X._filaPagoPanel(viejo).indexOf('editarReciboNomina') === -1, true, 'botón mentiroso'));
+    /* Desde la LISTA DE GASTOS, que es donde Edwin lo buscó. */
+    test('el menú del gasto ofrece ver el recibo', () => {
+        /* El menú lee el caché del lado de cortes (`_cacheGastosExt`), que
+           _syncGastosCortes mantiene apuntando al mismo arreglo. */
+        X._cacheGastosExt = [viejo];
+        let puesto = '';
+        const ce = X.document.createElement;
+        X.document.createElement = () => ({ className:'', style:{ cssText:'' },
+            set innerHTML(v){ puesto = v; }, get innerHTML(){ return puesto; },
+            appendChild(){}, addEventListener(){} });
+        const ap = X.document.body.appendChild; X.document.body.appendChild = () => {};
+        try {
+            X._menuGasto({ stopPropagation(){}, currentTarget:{ getBoundingClientRect:() => ({ bottom:0, right:0 }) } }, 'gv');
+        } finally { X.document.createElement = ce; X.document.body.appendChild = ap; }
+        return eq(puesto.indexOf("verReciboNomina('gv')") > -1, true, 'el menú no lo ofrece');
+    });
+    test('…y un gasto que no es nómina no lo ofrece', () => {
+        X._cacheGastos = X._cacheGastosExt = [{ id:'gx', negocioId:'n1', sucursalId:'suc_principal',
+                            fecha:'2026-10-05', monto:120, concepto:'Servilletas', categoria:'Varios' }];
+        let puesto = '';
+        const ce = X.document.createElement;
+        X.document.createElement = () => ({ className:'', style:{ cssText:'' },
+            set innerHTML(v){ puesto = v; }, get innerHTML(){ return puesto; },
+            appendChild(){}, addEventListener(){} });
+        const ap = X.document.body.appendChild; X.document.body.appendChild = () => {};
+        try {
+            X._menuGasto({ stopPropagation(){}, currentTarget:{ getBoundingClientRect:() => ({ bottom:0, right:0 }) } }, 'gx');
+        } finally { X.document.createElement = ce; X.document.body.appendChild = ap;
+                    X._cacheGastos = X._cacheGastosExt = [viejo]; }
+        return eq(puesto.indexOf('verReciboNomina'), -1, 'lo ofrece en un gasto cualquiera');
+    });
+
+    /* ══ LA CONTRASEÑA, EN LA PUERTA ══════════════════════════════════════
+       Nóminas es la pantalla donde se ve cuánto gana cada quien. Pedir la
+       clave al PAGAR —y no al entrar— dejaba los sueldos a la vista de quien
+       pasara por la tablet. */
+    {
+        let pedidas = [], abierto = false;
+        X._nomAutorizado = false;
+        X._dxPuedeCard = () => true;
+        X._pedirClaveAdmin = (accion, cb) => { pedidas.push(accion); };
+        X.document.getElementById('dxOv_nom').classList.add = () => { abierto = true; };
+        X.dxAbrir('nom');
+        test('entrar al panel de nóminas pide la contraseña', () =>
+            eq(pedidas.length + '·' + abierto, '1·false', 'entró sin clave'));
+        test('…y no abre nada hasta que se dé', () =>
+            eq(abierto, false, 'se abrió de todos modos'));
+        /* Dada la clave, entra y ya no la vuelve a pedir en cada pago: una
+           contraseña que se teclea doce veces se acaba tecleando sin mirar. */
+        pedidas = [];
+        X._pedirClaveAdmin = (accion, cb) => { pedidas.push(accion); cb(); };
+        X.dxAbrir('nom');
+        test('con la clave, el panel abre', () => eq(abierto, true, 'no abrió'));
+        pedidas = [];
+        X._exigeVG = () => true;
+        X._cacheStaff = [ana];
+        X._ensureSelModal = () => {};
+        X.abrirSelectorPago('nomina');
+        test('ya dentro, pagar no la vuelve a pedir', () =>
+            eq(pedidas.length, 0, 'la pide doce veces en una tarde de pagos'));
+        /* Pero cerrar el panel la suelta: si se quedara puesta, abrirlo mañana
+           no pediría nada y la clave de la puerta no serviría de nada. */
+        X.dxCerrar('nom');
+        test('cerrar el panel suelta la autorización', () =>
+            eq(X._nomAutorizado, false, 'la clave de la puerta no sirve de nada'));
+        /* Y los gastos fijos, que no tienen puerta propia, la siguen pidiendo. */
+        pedidas = [];
+        X._fijosScope = () => [];
+        X.abrirSelectorPago('fijo');
+        test('los gastos fijos la siguen pidiendo: no tienen puerta', () =>
+            eq(pedidas.length, 1, 'se quedó sin candado'));
+    }
+}
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */

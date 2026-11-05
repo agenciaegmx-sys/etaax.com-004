@@ -2248,6 +2248,23 @@ function dxAbrir(cual) {
     }
     // Caja fuerte no tiene panel propio: reusa el overlay existente del módulo (fase 2)
     if (cual === 'caja' && typeof abrirCajaFuerte === 'function') { abrirCajaFuerte(); return; }
+    /* ══ LA CONTRASEÑA VA EN LA PUERTA, NO EN CADA BOTÓN ══════════════════
+       Nóminas es la pantalla donde se ve cuánto gana cada quien y de donde
+       sale el dinero. Pedir la clave al PAGAR —y no al entrar— dejaba los
+       sueldos del negocio entero a la vista de quien pasara por la tablet.
+
+       Se pide una vez al abrir y vale MIENTRAS el panel esté abierto: al
+       cerrarlo se suelta. Así quien paga doce nóminas seguidas no teclea la
+       contraseña doce veces —y una contraseña que se teclea doce veces se
+       acaba tecleando sin mirar—, y el panel cerrado no hereda el permiso. */
+    if (cual === 'nom' && !_nomAutorizado) {
+        if (typeof _pedirClaveAdmin !== 'function') return;
+        _pedirClaveAdmin('Pagar nóminas — Autorización requerida', function(){
+            _nomAutorizado = true;
+            dxAbrir('nom');
+        }, '🔓 Entrar');
+        return;
+    }
     var ov = document.getElementById('dxOv_' + cual);
     if (!ov) return;
     ov.classList.add('open');
@@ -2260,8 +2277,14 @@ function dxCerrar(cual) {
     var ov = document.getElementById('dxOv_' + cual);
     if (ov) ov.classList.remove('open');
     if (_dxAbierto === cual) _dxAbierto = null;
+    /* Cerrar el panel suelta la autorización: si se quedara puesta, volver a
+       abrirlo mañana no pediría nada y la clave de la puerta no serviría. */
+    if (cual === 'nom') _nomAutorizado = false;
     document.body.style.overflow = '';
 }
+/* Vale mientras el panel de nóminas esté abierto. No se guarda en ningún lado
+   a propósito: recargar la página vuelve a pedirla. */
+var _nomAutorizado = false;
 document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && _dxAbierto) dxCerrar(_dxAbierto);
 });
@@ -4750,8 +4773,13 @@ function _menuGasto(ev, id){
         'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);'+
         'top:'+Math.min(r.bottom+6, window.innerHeight-180)+'px;left:'+Math.max(10, r.right-200)+'px';
     var q=String(id).replace(/'/g,"\\'");
+    /* El recibo también se ve DESDE LA LISTA DE GASTOS: ahí es donde se
+       encuentra uno con el pago cuando lo busca por fecha o por importe, y
+       mandarlo al panel de Nóminas a buscarlo otra vez es hacerlo trabajar. */
     m.innerHTML =
         _miCorte('👁','Ver gasto',"verGasto('"+q+"')") +
+        (_nomEsGastoDeNomina(g) ? _miCorte('🧾','Ver recibo',"verReciboNomina('"+q+"')") : '') +
+        ((g.nomina && g.nomina.origen) ? _miCorte('🧮','Corregir el pago',"editarReciboNomina('"+q+"')") : '') +
         (_puedeEditarGasto(g)
             ? _miCorte('✏️','Editar',"editarGasto('"+q+"')") +
               '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
@@ -6884,9 +6912,13 @@ function _nomPeriodosPagados(staffId){
    hace a un historial es «¿qué le hemos pagado?», no «¿qué le pagamos esta
    semana?» —para eso está el panel.                                          */
 function _nomRecibosDe(staffId){
-    return gLoad().filter(function(g){ return g.staffId===staffId && g.nomina; })
+    /* Entran también los pagos viejos, sin recibo guardado: su recibo se
+       reconstruye del desglose. Decir «todavía no hay recibos» cuando los
+       pagos están ahí es mentirle a quien pregunta qué le han pagado. */
+    return gLoad().filter(function(g){ return g.staffId===staffId && _nomEsGastoDeNomina(g); })
         .sort(function(a,b){
-            return String(b.nomina.desde||b.fecha||'').localeCompare(String(a.nomina.desde||a.fecha||''));
+            var da=(a.nomina&&a.nomina.desde)||a.fecha||'', db=(b.nomina&&b.nomina.desde)||b.fecha||'';
+            return String(db).localeCompare(String(da));
         });
 }
 var _NOM_ESTADOS={
@@ -7011,7 +7043,15 @@ function abrirSelectorPago(tipo){
     var _clave = (tipo === 'nomina') ? 'gastos.nominas' : 'gastos.fijos';
     if (!_exigeVG(_clave, tipo === 'nomina'
         ? 'No puedes pagar nóminas.' : 'No puedes pagar gastos fijos.')) return;
+    /* En nóminas la contraseña ya se dio en la PUERTA del panel (ver dxAbrir).
+       Los gastos fijos no tienen puerta propia, así que ahí sigue pidiéndose. */
+    if (tipo === 'nomina' && _nomAutorizado) {
+        _nomBusca='';
+        _abrirSelectorPagoReal(tipo);
+        return;
+    }
     _pedirClaveAdmin('Pagar '+(tipo==='nomina'?'nómina':'gasto fijo')+' — Autorización requerida', function(){
+        if (tipo === 'nomina') _nomAutorizado = true;
         _nomBusca='';   // la búsqueda es de un momento; el filtro sí se queda
         _abrirSelectorPagoReal(tipo);
     }, '🔓 Autorizar');
@@ -7782,15 +7822,123 @@ function _pnQuienCorrige(){
         return String(c.userName||'');
     } catch(e){ return ''; }
 }
+/* ══ EL RECIBO DE LAS NÓMINAS VIEJAS ══════════════════════════════════════
+   Los pagos anteriores a los recibos digitales no guardaron el recibo… pero
+   SÍ guardaron el desglose, en las notas del gasto, renglón por renglón:
+
+       Sueldo: $315.00 × 6 días = $1,890.00
+       (Horarios: 5 laborados + 1 descanso = 6 días pagados · …)
+       + Prima dominical (1 domingo): $78.75
+       + Bono de puntualidad: $100.00
+       − Descuento por retardos (2 retardos × $25.00): $50.00
+
+   El dato existe, así que el recibo puede existir. Se reconstruye de ahí y se
+   dice EN EL PAPEL que es una reconstrucción: un comprobante que finge ser el
+   original de aquel día sería una mentira pequeña y cara.
+
+   Lo que NO se reconstruye es el periodo —nunca estuvo en las notas— ni la
+   captura: por eso estos pagos se pueden VER pero no corregir. */
+function _nomEsGastoDeNomina(g){
+    return !!(g && (g.staffId || g.categoria === 'Nómina y personal'));
+}
+var _NOM_PER_LBL = { semanal:'Semanal', quincenal:'Quincenal', mensual:'Mensual', periodo:'Periodo' };
+/* El importe de un renglón, CON su signo. Una sanción se escribe «+ Sanción:
+   $-200.00» —el «+» es del formato, el menos es del dinero—, así que sin leer
+   el signo saldría cero (el patrón no casaba) o, peor, un bono de 200 donde
+   hubo una multa de 200. */
+function _nomMonto(txt){
+    var m = String(txt||'').match(/\$\s?(-|−)?\s?([\d,]+(?:\.\d+)?)/);
+    if(!m) return 0;
+    return (m[1] ? -1 : 1) * n(m[2].replace(/,/g,''));
+}
+function _reciboNominaReconstruido(g){
+    if(!_nomEsGastoDeNomina(g)) return null;
+    var s=(_cacheStaff||[]).find(function(x){ return x.id===g.staffId; }) || {};
+    var conc=String(g.concepto||'');
+    /* El nombre sale del catálogo; si a la persona la dieron de baja y ya no
+       está, se lee del concepto («Nómina semanal — ANA»), que es donde el
+       propio pago lo escribió. */
+    var nombre = s.nombre || (conc.indexOf('—')>=0 ? conc.split('—').pop().trim() : '');
+    var per = (conc.match(/N[óo]mina\s+(semanal|quincenal|mensual|periodo)/i)||[])[1];
+    var notas=String(g.notas||'');
+    var percepciones=[], deducciones=[], dias=0, diario=0;
+    notas.split('\n').forEach(function(ln){
+        var t=ln.trim();
+        if(!t) return;
+        var ms=t.match(/^Sueldo:\s*\$\s?([\d,]+(?:\.\d+)?)\s*×\s*([\d.]+)\s*d[ií]as?\s*=\s*(.+)$/i);
+        if(ms){
+            diario=n(ms[1].replace(/,/g,'')); dias=n(ms[2]);
+            percepciones.push({ concepto:'Sueldo del periodo',
+                detalle:fmtM(diario)+' × '+dias+' día'+(dias!==1?'s':''), monto:_nomMonto(ms[3]) });
+            return;
+        }
+        /* El signo lo puso el registro: «+» percepción, «−» deducción (es el
+           menos de verdad, U+2212, no un guion). */
+        var mp=t.match(/^[+]\s*(.+?):\s*(\$.+)$/);
+        if(mp){
+            var r=_nomRenglon(mp[1], mp[2]);
+            /* Lo que resta se LEE aparte aunque venga con «+»: en un recibo la
+               sanción va en su bloque, con su motivo, para que quien firma vea
+               cuánto ganó y cuánto se le descontó. Es la misma regla que sigue
+               el recibo en vivo (_reciboNominaDatos). */
+            if(r.monto<0) _nomDed(deducciones, r); else percepciones.push(r);
+            return;
+        }
+        var md=t.match(/^[−-]\s*(.+?):\s*(\$.+)$/);
+        if(md){ _nomDed(deducciones, _nomRenglon(md[1], md[2])); return; }
+    });
+    var tp=percepciones.reduce(function(a,x){ return a+n(x.monto); },0);
+    var td=deducciones.reduce(function(a,x){ return a+n(x.monto); },0);
+    return {
+        folio:_pnFolio(g.staffId||g.id, g.fecha||'', g.fecha||''),
+        periodicidad:_NOM_PER_LBL[String(per||'').toLowerCase()] || 'Periodo',
+        staff:{ id:g.staffId||'', nombre:nombre, puesto:s.puesto||'' },
+        desde:'', hasta:'', dias:dias, diario:diario,
+        percepciones:percepciones, deducciones:deducciones,
+        totalPerc:tp, totalDed:td,
+        /* El total es el IMPORTE REGISTRADO, no la suma de lo que se pudo leer:
+           el gasto es el dinero que salió y eso no se discute. Si no cuadran,
+           el papel lo dice en vez de maquillarlo. */
+        total:n(g.monto),
+        reconstruido:{
+            cuadra:Math.abs((tp - td) - n(g.monto)) < 0.01,
+            aparte:/Pagado aparte:/i.test(notas),
+            manual:/Total ajustado manualmente/i.test(notas),
+            notas:notas
+        }
+    };
+}
+/* Una deducción se guarda SIEMPRE en positivo: el signo lo pone el bloque al
+   imprimirla. Si entrara en negativo, el «Total de deducciones» restaría al
+   revés y el recibo diría que cobró de más. Los dos caminos —el renglón con
+   «−» y la sanción que viene con «+» y monto negativo— pasan por aquí, que es
+   lo que mantiene esta línea viva y comprobable. */
+function _nomDed(arr, r){ r.monto = Math.abs(n(r.monto)); arr.push(r); }
+/* Un renglón del desglose: «Prima dominical (1 domingo): $78.75» deja el
+   paréntesis como detalle, que es donde dice POR QUÉ. */
+function _nomRenglon(etiqueta, monto){
+    var e=String(etiqueta||'').trim(), det='';
+    var m=e.match(/^(.*?)\s*\((.+)\)\s*$/);
+    if(m){ e=m[1].trim(); det=m[2].trim(); }
+    return { concepto:e, detalle:det||'—', monto:_nomMonto(monto) };
+}
+/* El recibo de un gasto: el guardado si lo trae, y si no el reconstruido. */
+function _reciboDeGasto(g){
+    if(!g) return null;
+    if(g.nomina) return g.nomina;
+    return _reciboNominaReconstruido(g);
+}
 /* Reimprimir el recibo de un pago ya registrado. Sale del gasto, no del modal:
    por eso ahora se puede ver meses después. */
 function verReciboNomina(gastoId){
     var g=gLoad().find(function(x){ return x.id===gastoId; });
-    if(!g || !g.nomina){
-        alert('Este pago no tiene recibo guardado. Los pagos registrados antes de esta versión solo conservan su desglose en las notas.');
+    if(!g){ return; }
+    var rec=_reciboDeGasto(g);
+    if(!rec){
+        alert('Este gasto no es un pago de nómina, así que no tiene recibo.');
         return;
     }
-    etaaxAbrirReporte(_reciboNominaHTML(g.nomina, g.pagadoEl||g.fecha));
+    etaaxAbrirReporte(_reciboNominaHTML(rec, g.pagadoEl||g.fecha));
 }
 /* ══ HISTORIAL DE RECIBOS DE UN COLABORADOR ════════════════════════════════
    Los pagos ya estaban en el panel de Nóminas, pero mezclados y acotados al
@@ -7805,20 +7953,22 @@ function abrirHistNomina(staffId){
     var body=document.getElementById('nomHistBody');
     if(!lista.length){
         body.innerHTML='<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:34px 0">'+
-            'Todavía no hay recibos de <b style="color:var(--text)">'+_esc(s.nombre||'')+'</b>.<br>'+
-            '<span style="font-size:11px">Los pagos registrados antes de esta versión no guardaron recibo: '+
-            'siguen en el panel de Nóminas con su desglose en las notas.</span></div>';
+            'Todavía no hay pagos de nómina de <b style="color:var(--text)">'+_esc(s.nombre||'')+'</b>.</div>';
     } else {
         var tot=lista.reduce(function(a,g){ return a+n(g.monto); },0);
         var rows=lista.map(function(g){
-            var d=g.nomina||{}, ncor=(d.correcciones||[]).length;
+            var d=_reciboDeGasto(g)||{}, ncor=(d.correcciones||[]).length;
+            var per=(d.desde||d.hasta)
+                ? _esc(_fmtFechaCortaDx(d.desde))+' – '+_esc(_fmtFechaCortaDx(d.hasta))
+                : '<span style="color:var(--text-dim)">Periodo no registrado</span>';
             return '<tr style="border-top:1px solid var(--border)">'+
-                '<td style="padding:8px 10px;white-space:nowrap">'+_esc(_fmtFechaCortaDx(d.desde))+' – '+_esc(_fmtFechaCortaDx(d.hasta))+
+                '<td style="padding:8px 10px;white-space:nowrap">'+per+
                     '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+_esc(d.periodicidad||'')+
                     (d.dias?' · '+n(d.dias)+' día'+(n(d.dias)!==1?'s':''):'')+'</div></td>'+
                 '<td style="padding:8px 10px;white-space:nowrap;font-size:12px;color:var(--text-muted)">'+_esc(_fmtFechaCortaDx(g.pagadoEl||g.fecha))+'</td>'+
                 '<td style="padding:8px 10px;font-size:11px;color:var(--text-dim);white-space:nowrap">'+_esc(d.folio||'—')+
-                    (ncor?'<div style="font-size:9px;color:var(--accent);margin-top:2px">✏️ corregido '+ncor+'×</div>':'')+'</td>'+
+                    (ncor?'<div style="font-size:9px;color:var(--accent);margin-top:2px">✏️ corregido '+ncor+'×</div>':'')+
+                    (d.reconstruido?'<div style="font-size:9px;color:var(--text-dim);margin-top:2px">reconstruido</div>':'')+'</td>'+
                 '<td style="padding:8px 10px;text-align:right;font-weight:700;color:var(--red);white-space:nowrap">'+fmtM(g.monto)+'</td>'+
                 '<td style="padding:8px 10px;text-align:right;white-space:nowrap">'+
                     '<button class="btn-row" title="Ver el recibo" onclick="verReciboNomina(\''+g.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">🧾</button> '+
@@ -7907,6 +8057,9 @@ function editarReciboNomina(gastoId){
     if(!s){ alert('El colaborador de este pago ya no está en el catálogo de staff, así que su nómina no se puede recalcular.'); return; }
     if(!_exigeVG('gastos.nominas','No puedes corregir pagos de nómina.')) return;
     if(!_puedeEditarGasto(g)){ alert('Tu rol no puede editar gastos de días anteriores.'); return; }
+    /* Misma puerta que pagar: quien entró al panel ya se identificó. Fuera del
+       panel —desde la lista de gastos— sí se pide. */
+    if(_nomAutorizado){ _pnAbrirCorreccion(g,s); return; }
     _pedirClaveAdmin('Corregir el pago de nómina de '+s.nombre+' — Autorización requerida', function(){
         _pnAbrirCorreccion(g,s);
     }, '🔓 Autorizar');
@@ -7957,7 +8110,7 @@ function _reciboNominaHTML(d, fechaPago){
             dato('Días pagados', d.dias)+
         '</div>'+
         '<div class="rgrid" style="grid-template-columns:repeat(3,1fr);margin-top:10px">'+
-            dato('Periodo', _pnFechaLarga(d.desde)+'  —  '+_pnFechaLarga(d.hasta))+
+            dato('Periodo', (d.desde||d.hasta) ? (_pnFechaLarga(d.desde)+'  —  '+_pnFechaLarga(d.hasta)) : 'No registrado')+
             dato('Fecha de pago', _pnFechaLarga(_fp))+
             dato('Folio interno', d.folio)+
         '</div>'+
@@ -8005,7 +8158,8 @@ function _reciboNominaHTML(d, fechaPago){
             'colaboradora. <b>No es un CFDI</b> ni sustituye al recibo de nómina timbrado ante el SAT, '+
             'y no tiene validez fiscal.</div>'+
         '</div>'+
-        _reciboCorreccionesHTML(d, _e);
+        _reciboCorreccionesHTML(d, _e) +
+        _reciboReconstruidoHTML(d);
 
     return etaaxReporteDoc({
         titulo:'Recibo de nómina — '+(d.staff.nombre||''),
@@ -8015,6 +8169,27 @@ function _reciboNominaHTML(d, fechaPago){
         pie:'Recibo de nómina · comprobante interno',
         cuerpo:cuerpo
     });
+}
+/* Un recibo armado hoy a partir de un pago viejo NO puede presentarse como el
+   comprobante que se firmó aquel día. Se dice, y se dice qué falta. */
+function _reciboReconstruidoHTML(d){
+    var r=d&&d.reconstruido;
+    if(!r) return '';
+    var avisos=[];
+    if(!r.cuadra){
+        avisos.push(r.aparte
+            ? 'El desglose suma distinto al importe porque parte del pago salió por otra caja (el desglose dice «Pagado aparte»): ese gasto va por separado.'
+            : (r.manual
+                ? 'El total se ajustó a mano cuando se registró el pago, así que no es la suma exacta de los renglones.'
+                : 'El desglose leído no suma exactamente el importe registrado. Manda el importe, que es el dinero que salió.'));
+    }
+    return '<div style="margin-top:9px;padding:9px 12px;border:1px solid #d8d8d8;background:#f6f6f6;border-radius:7px">'+
+        '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px">Recibo reconstruido</div>'+
+        '<div style="font-size:9.5px;color:#6a6a6a;line-height:1.5">'+
+        'Este pago es anterior a los recibos digitales. Los renglones se leyeron del desglose que quedó guardado en el gasto y el total es el importe registrado. '+
+        'El <b>periodo</b> no se guardaba entonces, por eso aparece sin fecha.'+
+        (avisos.length ? ' '+avisos.join(' ') : '')+
+        '</div></div>';
 }
 /* Si el recibo fue corregido, el papel lo dice —con qué decía antes. Un
    comprobante que cambia en silencio deja de ser comprobante. */
@@ -8473,8 +8648,8 @@ function _filaPagoPanel(g){
         '<td>'+estatusBadge(g)+'</td>'+
         '<td class="ar" style="font-weight:600;color:var(--red)">'+fmtM(g.monto)+'</td>'+
         '<td style="text-align:right;white-space:nowrap">'+
-            (g.nomina ? '<button class="btn-row" title="Ver el recibo de este pago" onclick="verReciboNomina(\''+g.id+'\')" '+
-                'style="padding:4px 9px;font-size:13px;line-height:1">🧾</button> ' : '')+
+            (_nomEsGastoDeNomina(g) ? '<button class="btn-row" title="'+(g.nomina?'Ver el recibo de este pago':'Ver el recibo (reconstruido del desglose del gasto)')+'" onclick="verReciboNomina(\''+g.id+'\')" '+
+                'style="padding:4px 9px;font-size:13px;line-height:1'+(g.nomina?'':';opacity:.72')+'">🧾</button> ' : '')+
             ((g.nomina&&g.nomina.origen) ? '<button class="btn-row" title="Corregir este pago (reabre la nómina y deja rastro en el recibo)" onclick="editarReciboNomina(\''+g.id+'\')" '+
                 'style="padding:4px 9px;font-size:13px;line-height:1">✏️</button> ' : '')+
             '<button class="btn-row" title="Opciones" onclick="_menuGasto(event,\''+g.id+'\')" '+
