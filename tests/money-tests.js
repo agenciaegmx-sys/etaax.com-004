@@ -32484,6 +32484,249 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
     X._cacheGastos = [];
 }
 
+/* ═══════════ BH63 · EL COSTEO EN CRUDO, PARA EXCEL ═══════════
+   El papel está hecho para leerse: «$120.00 la onza» en una celda. En una hoja
+   de cálculo eso no se suma ni se ordena. El Excel lleva la misma información
+   con un dato por celda y los números desnudos.
+
+   Lo que se vigila:
+     · que diga los MISMOS números que el papel (si cada uno saca los suyos,
+       se separan: ya pasó con los textos del costeo, suite BH59);
+     · que los números sean NÚMEROS para Excel —no «$1,212.00», que llega como
+       texto y hay que convertir columna por columna—;
+     · que un nombre que empiece con «=» no se vuelva una fórmula ejecutable en
+       la máquina de quien abre el archivo;
+     · y que exporte LO QUE SE VE: los mismos filtros y la misma selección que
+       la pantalla y el papel.                                               */
+console.log('\n══ BH63 · El costeo en crudo, para Excel ══');
+(function () {
+    const REFR = { id:'r1', nombre:'Coca 355', tipoInsumo:'refresco', activo:'1', categoria:'Refrescos',
+        presentaciones:[{ contNeto:355, umContenido:'ML', costoPieza:16.24, costoUnitario:16.24, umCosto:'PZA',
+            factorPieza:2.5, precioCarta:'45' }] };
+    const WHIS = { id:'w1', nombre:'Chivas Regal', maduracion:'12 años', variedad:'Blended Scotch',
+        activo:'1', tipoInsumo:'destilado', categoria:'Whiskey',
+        presentaciones:[{ contNeto:750, umContenido:'ML', costoUnitario:1212, umCosto:'LT',
+            tamanoCopa:60, umTamanoCopa:'ML', factorCopa:3.3, factorBotella:2.5,
+            mezcladorId:'r1', mezcladores:2, mezcladoresBot:5,
+            precioCarta:'180', precioCartaBot:'2000' }] };
+    const pantalla = (catalogo) => {
+        const I = crearContexto();
+        cargarJS(I, 'insumo-label.js'); cargarJS(I, 'etaax-core.js');
+        cargarJS(I, 'security.js'); cargarJS(I, 'reporte-marca.js');
+        cargarJS(I, 'recetas/insumos.js');
+        I._storage['etaax_negocio_activo'] = 'n1';
+        I._storage['etaax_n1_insumos'] = JSON.stringify(catalogo || [WHIS, REFR]);
+        I.filtrar();
+        return I;
+    };
+    const I = pantalla();
+    const COLS = I._COSTEO_XLS_COLS;
+    const col = (n) => { const i = COLS.indexOf(n); if (i < 0) throw new Error('no hay columna ' + n); return i; };
+    const filas = I._costeoFilasXLS([WHIS, REFR], [WHIS, REFR]);
+    const porMod = (m) => filas.slice(1).find(f => f[col('Modalidad')] === m);
+    const copa = porMod('Copa'), bot = porMod('Botella'), pza = porMod('Pieza');
+
+    /* ── Las filas del papel, una por modalidad ── */
+    test('una fila por producto y modalidad, con su encabezado', () =>
+        eq(filas.length + '·' + filas[0].length, '4·22', 'filas=' + filas.length));
+    test('las tres modalidades del costeo salen nombradas', () =>
+        eq(!!copa + '·' + !!bot + '·' + !!pza, 'true·true·true', 'modalidades'));
+    /* El nombre y la variedad salen de la etiqueta canónica, igual que el
+       papel: concatenarlos aquí repetiría «Añejo 7 años · Añejo 7 años». */
+    test('el nombre y la variedad no se repiten', () =>
+        eq(copa[col('Nombre')] + ' | ' + copa[col('Variedad')], 'Chivas Regal | Blended Scotch', 'etiqueta'));
+
+    /* UNA HOJA ANCHA ESCONDE UN CORRIMIENTO DE COLUMNAS: con 22 columnas y
+       celdas vacías de por medio, un dato en la casilla de al lado se lee como
+       si fuera de otra cosa —y nadie lo nota hasta que alguien pone precio con
+       él—. Así que se fijan las posiciones del bloque de identidad, en las dos
+       clases de fila. */
+    const ident = (f) => [f[col('Grupo')], f[col('Nombre')], f[col('Variedad')],
+                          f[col('Tipo')], f[col('Presentación ML')]].join('|');
+    test('la fila de copa no corre las columnas', () =>
+        eq(ident(copa), 'Whiskey|Chivas Regal|Blended Scotch|destilado|750', ident(copa)));
+    test('…ni la de pieza, que lleva menos datos', () =>
+        eq(ident(pza), 'Refrescos|Coca 355||refresco|355', ident(pza)));
+    /* La pieza tiene su propio múltiplo y su propio sugerido: si se le aplicara
+       el de la copa, el Excel sugeriría otro precio que la pantalla. */
+    test('el sugerido de la pieza es su costo por su múltiplo', () =>
+        eq(pza[col('Precio sugerido')],
+           Math.round(pza[col('Costo')] * pza[col('Múltiplo')] * 100) / 100, 'pieza'));
+
+    /* ── LOS MISMOS NÚMEROS QUE EL PAPEL ──
+       No se comparan contra constantes escritas a mano: se comparan contra lo
+       que _costeoCeldas pone en el papel. Así, si alguien cambia una fórmula,
+       las dos hojas se mueven juntas o la prueba cae. */
+    const C = I._costeoCeldas(WHIS, [WHIS, REFR]);
+    const dinero = (x) => parseFloat(((String(x).match(/[\d,]+\.\d\d/) || ['0'])[0]).replace(/,/g, ''));
+    test('el costo de la copa es el del papel', () =>
+        eq(copa[col('Costo')], dinero(C.copa.costo), 'papel=' + C.copa.costo));
+    test('el costo por onza es el del papel', () =>
+        eq(copa[col('Costo por onza')], dinero(C.copa.costoSub), 'papel=' + C.copa.costoSub));
+    test('el sugerido de la copa es el del papel', () =>
+        eq(copa[col('Precio sugerido')], dinero(C.copa.sugerido), 'papel=' + C.copa.sugerido));
+    test('el sugerido de la botella es el del papel', () =>
+        eq(bot[col('Precio sugerido')], dinero(C.bot.sugerido), 'papel=' + C.bot.sugerido));
+    test('el precio en carta es el del papel', () =>
+        eq(copa[col('Precio en carta')] + '·' + bot[col('Precio en carta')],
+           dinero(C.copa.carta) + '·' + dinero(C.bot.carta), 'carta'));
+    test('el mezclador: cuánto cuesta uno y cuántos lleva', () =>
+        eq(copa[col('Mezclador c/u')] + ' ×' + copa[col('Mezclador piezas')] + ' = ' + copa[col('Mezclador total')],
+           dinero(C.copa.mezUnit) + ' ×2 = ' + dinero(C.copa.mezMult), 'mezclador'));
+    /* La utilidad se mide contra el costo SERVIDO —copa más sus refrescos—,
+       igual que el papel: el refresco cuesta aunque salga de otro insumo. Si
+       aquí se midiera contra la copa sola, el Excel diría más margen del que
+       hay. */
+    test('la utilidad % es la del papel (medida contra el costo servido)', () =>
+        eq(copa[col('Utilidad %')].toFixed(0), C.copa.util.pct.toFixed(0), 'utilidad'));
+    test('…y el costo servido le suma los refrescos', () =>
+        eq(copa[col('Costo servido')],
+           Math.round((copa[col('Costo')] + copa[col('Mezclador total')]) * 100) / 100, 'servido'));
+    test('la utilidad en pesos es carta menos costo servido', () =>
+        eq(copa[col('Utilidad')],
+           Math.round((copa[col('Precio en carta')] - copa[col('Costo servido')]) * 100) / 100, 'pesos'));
+
+    /* ── Que Excel los lea como NÚMEROS ── */
+    test('los importes son números, no texto con signo de pesos', () =>
+        eq(['Costo', 'Precio sugerido', 'Precio en carta', 'Múltiplo', 'Utilidad %']
+            .every(c => typeof copa[col(c)] === 'number'), true,
+           'uno llegó como texto: Excel pide convertirlo columna por columna'));
+    test('donde el papel pone «—», la celda va vacía (no un cero fingido)', () =>
+        eq(bot[col('Costo por onza')], '', 'un cero inventado se promedia'));
+    /* EL CASO DE VERDAD, y es la mayoría del catálogo: un producto al que
+       todavía nadie le puso precio en la carta. Si esa celda llega como 0, el
+       promedio de precios de la hoja sale mal y nadie sospecha de un cero. */
+    test('sin precio en carta la celda va vacía, no en cero', () => {
+        const sinCarta = JSON.parse(JSON.stringify(WHIS));
+        delete sinCarta.presentaciones[0].precioCarta;
+        delete sinCarta.presentaciones[0].precioCartaBot;
+        const J = pantalla([sinCarta, REFR]);
+        const f = J._costeoFilasXLS([sinCarta], [sinCarta, REFR]);
+        return eq([f[1][col('Precio en carta')], f[1][col('Utilidad')],
+                   f[1][col('Utilidad %')], f[2][col('Precio en carta')]].join('|'), '|||',
+                  'ceros fingidos: ' + f[1][col('Precio en carta')]);
+    });
+
+    /* ── El archivo ── */
+    const bajar = (I2, fn) => {
+        let cap = null;
+        I2.Blob = function (partes, opts) { this.texto = partes.join(''); this.tipo = opts && opts.type; };
+        I2.URL = { createObjectURL: (b) => { cap = { texto:b.texto, tipo:b.tipo }; return 'blob:x'; },
+                   revokeObjectURL: () => {} };
+        const ce = I2.document.createElement;
+        I2.document.createElement = () => ({ click(){ cap.nombre = this.download; }, href:'', download:'' });
+        const st = I2.setTimeout; I2.setTimeout = () => {};
+        try { fn(); } finally { I2.document.createElement = ce; I2.setTimeout = st; }
+        if (!cap) throw new Error('no se bajó ningún archivo');
+        return cap;
+    };
+    const arch = bajar(I, () => I.exportarCosteoExcel());
+    /* Sin BOM, Excel abre el UTF-8 como latín y «Añejo» sale partido. */
+    test('el archivo lleva BOM: sin él Excel parte los acentos', () =>
+        eq(arch.texto.charCodeAt(0), 0xFEFF, 'sin BOM'));
+    test('…se baja como CSV y con la fecha en el nombre', () =>
+        eq(/^ETAAX-costeo-n1-\d{4}-\d\d-\d\d\.csv$/.test(arch.nombre) &&
+           arch.tipo.indexOf('text/csv') === 0, true, arch.nombre + ' · ' + arch.tipo));
+    test('…con un renglón por fila y CRLF', () =>
+        eq(arch.texto.replace('﻿', '').split('\r\n').length, filas.length, 'renglones'));
+    /* El número va desnudo en el archivo: entrecomillarlo lo vuelve texto. */
+    test('en el archivo los números van sin comillas y con punto decimal', () => {
+        const r = arch.texto.replace('﻿', '').split('\r\n')[1];
+        return eq(r.indexOf(',' + copa[col('Costo')] + ',') > -1, true, r.slice(0, 160));
+    });
+    test('…y el texto entrecomillado', () => {
+        const r = arch.texto.replace('﻿', '').split('\r\n')[1];
+        return eq(r.indexOf('"Chivas Regal"') > -1, true, r.slice(0, 160));
+    });
+
+    /* ── La celda que ejecuta ──
+       Excel trata como FÓRMULA la celda que empieza con = + @ o un guion. Un
+       insumo llamado «=cmd|…» se ejecutaría en la máquina de quien lo abre. */
+    test('un nombre que empieza con «=» no llega como fórmula', () => {
+        const malo = JSON.parse(JSON.stringify(WHIS));
+        malo.nombre = '=cmd|\' /c calc\'!A1';
+        const J = pantalla([malo, REFR]);
+        const f = J._costeoFilasXLS([malo], [malo, REFR]);
+        const celda = J._xlsCelda(f[1][J._COSTEO_XLS_COLS.indexOf('Nombre')]);
+        return eq(celda.charAt(0) === '"' && celda.charAt(1) === "'", true, celda.slice(0, 40));
+    });
+    /* Pero un número negativo NO puede volverse texto por el mismo guion: la
+       utilidad negativa es dato, y entre comillas deja de sumarse. */
+    test('…pero un número negativo sigue siendo número', () =>
+        eq(I._xlsCelda(-12.5), '-12.5', 'lo volvió texto'));
+
+    /* ── Exporta lo que se ve ── */
+    test('el Excel obedece el filtro de la pantalla, como el papel', () => {
+        const J = pantalla();
+        setVar(J, 'vistaInsumos', 'costeo');
+        J.document.getElementById('searchInput').value = 'chivas';
+        J.filtrar();
+        const a = bajar(J, () => J.exportarCosteoExcel());
+        const cuerpo = a.texto.replace('﻿', '');
+        return eq(cuerpo.indexOf('Chivas') > -1 && cuerpo.indexOf('Coca') === -1, true,
+                  'exportó lo que la pantalla no enseña');
+    });
+    /* Y la selección manual, que es el otro filtro. */
+    test('…y la selección palomeada', () => {
+        const J = pantalla();
+        setVar(J, 'vistaInsumos', 'costeo');
+        J.filtrar();
+        setVar(J, '_modoSeleccion', true);
+        getVar(J, '_seleccionados').add('r1');
+        const a = bajar(J, () => J.exportarCosteoExcel());
+        const cuerpo = a.texto.replace('﻿', '');
+        return eq(cuerpo.indexOf('Coca') > -1 && cuerpo.indexOf('Chivas') === -1, true, 'ignoró las palomitas');
+    });
+    /* Sin bebidas en pantalla no se baja un archivo con solo el encabezado:
+       eso parece un error del catálogo. Se dice. */
+    test('sin bebidas que exportar, lo dice en vez de bajar una hoja vacía', () => {
+        const J = pantalla([{ id:'x', nombre:'Servilletas', tipoInsumo:'desechable', activo:'1',
+                              presentaciones:[{ contNeto:1, umContenido:'PZA' }] }]);
+        J.filtrar();
+        let dijo = ''; J.alert = (m) => { dijo = String(m); };
+        /* La bajada se deja FUNCIONAR (con su <a> de mentira) para que, si el
+           aviso desaparece, esto falle diciendo que se bajó una hoja vacía y no
+           reventando en `a.click no es una función`: una prueba que caza por
+           accidente deja de cazar en cuanto alguien arregla el arnés. */
+        let bajado = null;
+        J.Blob = function (partes) { this.texto = partes.join(''); };
+        J.URL = { createObjectURL: (b) => { bajado = b.texto; return 'blob:x'; }, revokeObjectURL(){} };
+        const ce = J.document.createElement;
+        J.document.createElement = () => ({ click(){}, href:'', download:'' });
+        J.setTimeout = () => {};
+        try { J.exportarCosteoExcel(); } finally { J.document.createElement = ce; }
+        return eq((bajado === null) + '·' + (dijo.indexOf('No hay bebidas') > -1), 'true·true',
+                  dijo || 'bajó una hoja con solo el encabezado');
+    });
+
+    /* ── El botón ──
+       La hoja puede estar perfecta y no servir de nada si no hay de dónde
+       tocarla, o si aparece en el catálogo —donde no hay qué costear—. */
+    const html = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.html'), 'utf8');
+    test('el botón existe en la página y llama al exportador', () =>
+        eq(/id="btnExcelIns"[\s\S]{0,120}exportarCosteoExcel\(\)/.test(html), true, 'sin botón'));
+    test('el botón se enseña en la vista de costeo', () => {
+        const J = pantalla();
+        J.setVistaInsumos('costeo');
+        return eq(J.document.getElementById('btnExcelIns').style.display, '', 'escondido en costeo');
+    });
+    test('…y se esconde en el catálogo, donde no hay qué costear', () => {
+        const J = pantalla();
+        J.setVistaInsumos('costeo'); J.setVistaInsumos('lista');
+        return eq(J.document.getElementById('btnExcelIns').style.display, 'none', 'botón muerto en el catálogo');
+    });
+
+    /* ── Una sola verdad de quién entra ──
+       La pantalla, el papel y el Excel reparten en los mismos dos grupos. Si
+       cada uno tuviera su lista, el archivo traería productos que la pantalla
+       no enseña. */
+    test('pantalla, papel y Excel reparten con la misma regla', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+        const veces = (src.match(/\['destilado',\s*'licor',\s*'vino'\]\.indexOf\(x\.tipoInsumo\)/g) || []).length;
+        return eq(veces, 1, 'la regla está escrita ' + veces + ' veces: se van a separar');
+    });
+})();
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }

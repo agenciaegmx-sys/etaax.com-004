@@ -1100,13 +1100,17 @@
        _off(document.getElementById('btnVistaGrid'));
        _off(document.getElementById('btnVistaCosteo'));
 
+       /* El Excel es del costeo: en el catálogo el botón no tendría qué bajar. */
+       var btnX = document.getElementById('btnExcelIns');
        if (modo === 'costeo') {
            if (contCosteo) contCosteo.style.display = '';
            if (pgBar) pgBar.style.display = 'none';
+           if (btnX) btnX.style.display = '';
            _on(document.getElementById('btnVistaCosteo'));
            renderCosteoBebidas();
            return;
        }
+       if (btnX) btnX.style.display = 'none';
        if (pgBar) pgBar.style.display = '';
        if (modo === 'lista') { if (contLista) contLista.style.display = ''; _on(document.getElementById('btnVistaLista')); }
        else                  { if (contGrid)  contGrid.style.display  = ''; _on(document.getElementById('btnVistaGrid')); }
@@ -1452,9 +1456,7 @@
        // "mezcal", el costeo enseña mezcales — y eso es lo que se imprime.
        // `todos` sigue completo: de ahí sale el costo del refresco mezclador.
        var base = (_listaFiltrada && _listaFiltrada.length) ? _listaFiltrada : todos;
-       var byN = function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); };
-       var g1 = base.filter(function(x){ return ['destilado','licor','vino'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
-       var g2 = base.filter(function(x){ return ['cerveza','cerveza_barril','refresco'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
+       var G = _costeoGrupos(base), g1 = G.copa, g2 = G.pieza;
        var html = '';
        if (g1.length) html += _costeoTablaCopa(g1, todos);
        if (g2.length) html += _costeoTablaPieza(g2);
@@ -1462,6 +1464,17 @@
            html = '<div class="empty-state" style="padding:48px 20px"><div class="empty-icon">🍸</div><div class="empty-title">Sin bebidas</div><div class="empty-desc">Registra destilados, licores, vinos, cervezas o refrescos para ver su costeo.</div></div>';
        cont.innerHTML = html;
        var cl = document.getElementById('countLabel'); if (cl) cl.textContent = (g1.length+g2.length)+' bebidas';
+   }
+
+   /* Quién va en cada tabla del costeo. Lo deciden la pantalla, el papel y el
+      Excel, así que vive en un solo sitio: si se separaran, la hoja exportada
+      traería productos que la pantalla no enseña —y al revés—. */
+   function _costeoGrupos(base){
+       var byN = function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); };
+       return {
+           copa:  (base||[]).filter(function(x){ return ['destilado','licor','vino'].indexOf(x.tipoInsumo)!==-1; }).sort(byN),
+           pieza: (base||[]).filter(function(x){ return ['cerveza','cerveza_barril','refresco'].indexOf(x.tipoInsumo)!==-1; }).sort(byN)
+       };
    }
 
    /* ══ LO QUE DICE CADA CELDA DEL COSTEO ═══════════════════════════════════
@@ -1756,9 +1769,7 @@
       números (salen de _costeoCopaDatos / _costeoPiezaDatos, no de una copia). */
    function _imprimirCosteoPDF(lista){
        var todos = getInsumos() || [];
-       var byN = function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); };
-       var g1 = lista.filter(function(x){ return ['destilado','licor','vino'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
-       var g2 = lista.filter(function(x){ return ['cerveza','cerveza_barril','refresco'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
+       var G = _costeoGrupos(lista), g1 = G.copa, g2 = G.pieza;
        if (!g1.length && !g2.length){ alert('Con este filtro no hay bebidas que costear.'); return; }
 
        var _u = function(v, suf){ return v > 0 ? fmtMXN(v) + (suf||'') : '—'; };
@@ -1859,6 +1870,129 @@
            cuerpo: cuerpo,
            opts: _optsReporteIns()
        }));
+   }
+
+   /* ══ EL COSTEO EN CRUDO, PARA EXCEL ══════════════════════════════════════
+      El papel está hecho para LEERSE: dos renglones por producto y el número
+      acompañado de su medida en la misma celda («$120.00 la onza»). En una
+      hoja de cálculo eso no sirve —es texto y no se suma, ni se ordena, ni se
+      promedia—, así que aquí va la MISMA información con un dato por celda y
+      los números sin vestir: sin signo de pesos, sin comas de miles, con punto
+      decimal y vacío donde el papel pone «—».
+
+      Las filas son las del papel y en el mismo orden: una por producto y
+      MODALIDAD (copa, botella o pieza), con los filtros y la selección que
+      estén en pantalla. Si se exporta otra cosa que la que se ve, es un
+      archivo en el que nadie vuelve a confiar.
+
+      Dos columnas de costo, y la diferencia importa: `Costo` es lo que cuesta
+      la copa o la botella sola; `Costo servido` le suma los refrescos que van
+      con ella. La utilidad se mide contra el SERVIDO, igual que en el papel —
+      el refresco cuesta aunque salga de otro insumo. */
+   var _COSTEO_XLS_COLS = [
+       'Grupo', 'Nombre', 'Variedad', 'Tipo', 'Presentación ML',
+       'Costo de compra', 'Costo unitario', 'UM costo',
+       'Modalidad', 'Medida ML', 'Costo', 'Costo por onza',
+       'Mezclador c/u', 'Mezclador piezas', 'Mezclador total',
+       'Costo servido', 'Múltiplo', 'Precio sugerido', 'Precio en carta',
+       'Utilidad', 'Utilidad %', 'Múltiplo real'
+   ];
+   /* Número de hoja de cálculo: el valor redondeado a centavos, o vacío. Se
+      devuelve como NÚMERO y no como texto para que Excel lo sume sin que nadie
+      tenga que "convertir a número" columna por columna. Vacío cuando no hay
+      dato (lo que en el papel es «—»): un cero fingido se promedia. */
+   function _xn(v){
+       var x = parseFloat(v);
+       if (!isFinite(x) || x === 0) return '';
+       return Math.round(x * 100) / 100;
+   }
+   function _costeoFilasXLS(lista, todos){
+       var G = _costeoGrupos(lista);
+       var filas = [_COSTEO_XLS_COLS.slice()];
+       var comun = function(ins, p){
+           var pr = _partesIns(ins);
+           return [
+               _grupoIns(ins), (pr.nombre || ins.nombre || ''), (pr.variedad || ''),
+               (ins.tipoInsumo || ''), _xn(toML(p.contNeto, p.umContenido || 'ML'))
+           ];
+       };
+       G.copa.forEach(function(ins){
+           var D = _costeoCopaDatos(ins, todos), p = D.p;
+           var cab = comun(ins, p).concat([
+               _xn(D.costoBot), _xn(p.costoUnitario), (p.umCosto || '')
+           ]);
+           /* Copa y botella, los dos renglones del papel. */
+           filas.push(cab.concat([
+               'Copa', _xn(toML(p.tamanoCopa, p.umTamanoCopa || 'ML')),
+               _xn(D.costoCopa), _xn(D.costoOz),
+               _xn(D.mezCopaPz > 0 ? D.mezCopaCost / D.mezCopaPz : 0), _xn(D.mezCopaPz), _xn(D.mezCopaCost),
+               _xn(D.costoTrago), _xn(D.fCopa),
+               _xn(D.sugTrago > 0 ? D.sugTrago : D.sugCopa), _xn(D.cartaCopa)
+           ], _utilXLS(D.cartaCopa, D.costoTrago)));
+           filas.push(cab.concat([
+               'Botella', _xn(toML(p.contNeto, p.umContenido || 'ML')),
+               _xn(D.costoBot), '',
+               '', _xn(D.mezBotPz), _xn(D.mezBotCost),
+               _xn(D.costoBotServ), _xn(D.fBot),
+               _xn(D.sugBotServ > 0 ? D.sugBotServ : D.sugBot), _xn(D.cartaBot)
+           ], _utilXLS(D.cartaBot, D.costoBotServ)));
+       });
+       G.pieza.forEach(function(ins){
+           var D = _costeoPiezaDatos(ins), p = D.p;
+           filas.push(comun(ins, p).concat([
+               _xn(p.costoUnitario), _xn(p.costoUnitario), (p.umCosto || ''),
+               'Pieza', _xn(toML(p.contNeto, p.umContenido || 'ML')),
+               _xn(D.costoPieza), _xn(D.costoOz),
+               '', '', '',
+               _xn(D.costoPieza), _xn(D.fP),
+               _xn(D.sugPza), _xn(D.carta)
+           ], _utilXLS(D.carta, D.costoPieza)));
+       });
+       return filas;
+   }
+   /* Utilidad en pesos, en porcentaje y como múltiplo. El porcentaje y el
+      múltiplo salen de _costeoUtil —el mismo que pinta la pantalla y el
+      papel—, no de una cuenta aparte. */
+   function _utilXLS(carta, costo){
+       var u = _costeoUtil(carta, costo);
+       if (!u) return ['', '', ''];
+       return [_xn(carta - costo), Math.round(u.pct * 100) / 100, Math.round(u.mult * 100) / 100];
+   }
+   /* Una celda de CSV. Los números van desnudos para que Excel los sume; el
+      texto va entrecomillado.
+
+      Y el texto que empieza con = + @ o un guion lleva un apóstrofo delante:
+      Excel trata esa celda como FÓRMULA, así que un insumo llamado «=cmd|…»
+      se ejecutaría en la máquina de quien abre el archivo. El apóstrofo no se
+      ve en la celda. Los números no pasan por aquí, por eso un -12.5 sigue
+      siendo número y no se vuelve texto. */
+   function _xlsCelda(v){
+       if (typeof v === 'number') return isFinite(v) ? String(v) : '';
+       var t = (v === null || v === undefined) ? '' : String(v);
+       if (/^[=+@\t\r-]/.test(t)) t = "'" + t;
+       return '"' + t.replace(/"/g, '""') + '"';
+   }
+   /* El archivo. Lleva BOM porque sin él Excel abre el UTF-8 como latín y los
+      acentos salen partidos; y CRLF, que es lo que espera. */
+   function _xlsBajar(nombre, filas){
+       var txt = filas.map(function(f){ return f.map(_xlsCelda).join(','); }).join('\r\n');
+       var blob = new Blob(['\uFEFF' + txt], { type:'text/csv;charset=utf-8' });
+       var url = URL.createObjectURL(blob);
+       var a = document.createElement('a');
+       a.href = url; a.download = nombre;
+       a.click();
+       setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+   }
+   function exportarCosteoExcel(){
+       var lista = _insumosAImprimir();
+       var G = _costeoGrupos(lista);
+       if (!G.copa.length && !G.pieza.length){
+           alert('No hay bebidas que exportar con lo que está en pantalla. El costeo son destilados, licores, vinos, cervezas y refrescos.');
+           return;
+       }
+       var filas = _costeoFilasXLS(lista, getInsumos());
+       _xlsBajar('ETAAX-costeo-' + (getNegocioActivo() || 'negocio') + '-' +
+                 new Date().toISOString().slice(0, 10) + '.csv', filas);
    }
 
    function imprimirInsumos(){

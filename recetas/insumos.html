@@ -206,6 +206,13 @@ document.addEventListener('DOMContentLoaded', function(){
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
                             font-family:inherit;transition:all .2s"
                             title="Imprime lo que estás viendo: el catálogo en filas o la carátula de costeo, con los filtros y la selección actuales">🖨️ Imprimir</button>
+                        <!-- Solo en la vista de costeo: en el catálogo no habría qué costear.
+                             Lo esconde setVistaInsumos, no el CSS. -->
+                        <button id="btnExcelIns" onclick="exportarCosteoExcel()" style="display:none;
+                            background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
+                            font-family:inherit;transition:all .2s"
+                            title="Baja el costeo en filas y columnas para Excel: un dato por celda, con los filtros y la selección actuales">📊 Excel</button>
                     </div>
                 </div>
                 <div class="card-body" style="padding:0">
@@ -531,7 +538,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=2b875f63"></script>
-<script src="/recetas/insumos.js?v=8a469dab"></script>
+<script src="/recetas/insumos.js?v=b4db45b7"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
