@@ -2257,11 +2257,11 @@ function dxAbrir(cual) {
        cerrarlo se suelta. Así quien paga doce nóminas seguidas no teclea la
        contraseña doce veces —y una contraseña que se teclea doce veces se
        acaba tecleando sin mirar—, y el panel cerrado no hereda el permiso. */
-    if (cual === 'nom' && !_nomAutorizado) {
+    if (cual === DX_PANEL_NOMINAS && !_nomAutorizado) {
         if (typeof _pedirClaveAdmin !== 'function') return;
         _pedirClaveAdmin('Pagar nóminas — Autorización requerida', function(){
             _nomAutorizado = true;
-            dxAbrir('nom');
+            dxAbrir(DX_PANEL_NOMINAS);
         }, '🔓 Entrar');
         return;
     }
@@ -2279,12 +2279,18 @@ function dxCerrar(cual) {
     if (_dxAbierto === cual) _dxAbierto = null;
     /* Cerrar el panel suelta la autorización: si se quedara puesta, volver a
        abrirlo mañana no pediría nada y la clave de la puerta no serviría. */
-    if (cual === 'nom') _nomAutorizado = false;
+    if (cual === DX_PANEL_NOMINAS) _nomAutorizado = false;
     document.body.style.overflow = '';
 }
 /* Vale mientras el panel de nóminas esté abierto. No se guarda en ningún lado
    a propósito: recargar la página vuelve a pedirla. */
 var _nomAutorizado = false;
+/* El panel se llama «nominas» (es lo que lleva la tarjeta y su overlay). El
+   «nom» de al lado es OTRA cosa: el prefijo del buscador de periodo. Son
+   parecidos, y confundirlos dejó la puerta sin candado sin que nada se
+   quejara —la tarjeta abría, el botón seguía pidiendo la clave—, así que el
+   nombre se escribe UNA vez y de aquí lo toman los dos lados. */
+var DX_PANEL_NOMINAS = 'nominas';
 document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && _dxAbierto) dxCerrar(_dxAbierto);
 });
@@ -8756,7 +8762,7 @@ function renderFijosPanel(){
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
-<script src="/novedades.js?v=fd6b8e16"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=82e09f66"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>

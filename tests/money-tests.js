@@ -32942,12 +32942,28 @@ console.log('\n══ BH64 · El recibo de las nóminas viejas ══');
        clave al PAGAR —y no al entrar— dejaba los sueldos a la vista de quien
        pasara por la tablet. */
     {
+        /* ══ EL NOMBRE DEL PANEL SE LEE DE LA TARJETA ══════════════════════
+           La primera versión de esta prueba llamaba a `dxAbrir('nom')` y pasó
+           en VERDE mientras en producción la puerta seguía abierta: el panel
+           se llama «nominas»; «nom» es el prefijo del buscador de periodo, que
+           está al lado y se parece. Una prueba que repite la suposición del
+           código no comprueba nada —comprueba que me acuerdo de lo mismo dos
+           veces—. Así que el nombre sale del botón que de verdad toca Edwin. */
+        const htmlDx = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        const mCard = htmlDx.match(
+            /<button class="dx-card[^"]*"\s+data-fn="([a-z]+)"\s+onclick="dxAbrir\('([a-z]+)'\)"[\s\S]{0,400}?Pagar Nóminas/);
+        if (!mCard) throw new Error('no se encontró la tarjeta de Pagar Nóminas en la página');
+        const PANEL = mCard[2];
+        test('la tarjeta de Pagar Nóminas y su permiso hablan del mismo panel', () =>
+            eq(mCard[1] + '·' + PANEL + '·' + (htmlDx.indexOf('id="dxOv_' + PANEL + '"') > -1),
+               'nominas·nominas·true', 'la tarjeta abre otro panel'));
+
         let pedidas = [], abierto = false;
         X._nomAutorizado = false;
         X._dxPuedeCard = () => true;
         X._pedirClaveAdmin = (accion, cb) => { pedidas.push(accion); };
-        X.document.getElementById('dxOv_nom').classList.add = () => { abierto = true; };
-        X.dxAbrir('nom');
+        X.document.getElementById('dxOv_' + PANEL).classList.add = () => { abierto = true; };
+        X.dxAbrir(PANEL);
         test('entrar al panel de nóminas pide la contraseña', () =>
             eq(pedidas.length + '·' + abierto, '1·false', 'entró sin clave'));
         test('…y no abre nada hasta que se dé', () =>
@@ -32956,7 +32972,7 @@ console.log('\n══ BH64 · El recibo de las nóminas viejas ══');
            contraseña que se teclea doce veces se acaba tecleando sin mirar. */
         pedidas = [];
         X._pedirClaveAdmin = (accion, cb) => { pedidas.push(accion); cb(); };
-        X.dxAbrir('nom');
+        X.dxAbrir(PANEL);
         test('con la clave, el panel abre', () => eq(abierto, true, 'no abrió'));
         pedidas = [];
         X._exigeVG = () => true;
@@ -32967,9 +32983,15 @@ console.log('\n══ BH64 · El recibo de las nóminas viejas ══');
             eq(pedidas.length, 0, 'la pide doce veces en una tarde de pagos'));
         /* Pero cerrar el panel la suelta: si se quedara puesta, abrirlo mañana
            no pediría nada y la clave de la puerta no serviría de nada. */
-        X.dxCerrar('nom');
+        X.dxCerrar(PANEL);
         test('cerrar el panel suelta la autorización', () =>
             eq(X._nomAutorizado, false, 'la clave de la puerta no sirve de nada'));
+        /* El buscador de periodo sigue siendo «nom», y sigue funcionando: son
+           dos nombres distintos para dos cosas distintas. */
+        test('el buscador de periodo sigue respondiendo a su propio nombre', () => {
+            X._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
+            return eq(X.dxpRango('nom').from, '2026-11-01', 'se confundieron los dos nombres');
+        });
         /* Y los gastos fijos, que no tienen puerta propia, la siguen pidiendo. */
         pedidas = [];
         X._fijosScope = () => [];
