@@ -33149,7 +33149,7 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
 
     /* ── 3 · pagar ─────────────────────────────────────────────────────── */
     const pagar = (id, fecha) => silencio(() => {
-        X._exigeVG = () => true; X._cerrarSelPago = () => {};
+        X._exigeVG = () => true;
         X.generarGastoNomina(id);
         if (fecha) el('gFecha').value = fecha;
         const previos = (X._cacheGastos || []).map(g => g.id);
@@ -33281,6 +33281,162 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         const bloque = cab.slice(0, cab.indexOf('nomBuscaInp'));
         return eq(/background:var\(--surface\)/.test(bloque), true, 'se ve la lista por debajo');
     });
+
+
+    /* ── 7 · la vista previa, DENTRO de la misma página ────────────────── */
+    {
+        /* Abrir el recibo en otra pestaña perdía el catálogo, chocaba con el
+           bloqueo de ventanas emergentes y volver era un viaje. */
+        X._cacheRecibos = [{ id:'nrV', negocioId:'n1', sucursalId:'suc_principal', staffId:'s1',
+                             desde:'2026-11-01', hasta:'2026-11-30',
+                             recibo:{ folio:'N-9', periodicidad:'Semanal', dias:7, diario:300,
+                                      staff:{ id:'s1', nombre:'Ana', puesto:'Barista' },
+                                      desde:'2026-11-01', hasta:'2026-11-30',
+                                      percepciones:[{concepto:'Sueldo del periodo',detalle:'',monto:2100}],
+                                      deducciones:[], totalPerc:2100, totalDed:0, total:2100 },
+                             gastoId:'', pagadoEn:'' }];
+        const ver = (fn) => {
+            let abierto = false, pestanas = 0, impreso = null;
+            const ov = X.document.getElementById('nomVisorOverlay');
+            const add0 = ov.classList.add;
+            ov.classList.add = (c) => { if (c === 'open') abierto = true; };
+            const vr0 = X.etaaxVerReporte, ar0 = X.etaaxAbrirReporte, wo0 = X.window.open;
+            X.etaaxVerReporte = () => { pestanas++; return true; };
+            X.etaaxAbrirReporte = (h) => { impreso = h; return true; };
+            X.window.open = () => { pestanas++; return null; };
+            try { fn(); }
+            finally { ov.classList.add = add0; X.etaaxVerReporte = vr0;
+                      X.etaaxAbrirReporte = ar0; X.window.open = wo0; }
+            return { abierto, pestanas, impreso,
+                     srcdoc: X.document.getElementById('nomVisorFrame').srcdoc || '' };
+        };
+        const r = ver(() => X.verReciboGenerado('s1'));
+        test('«Ver recibo» se abre en la misma página, no en otra pestaña', () =>
+            eq(r.abierto + '·' + r.pestanas, 'true·0', 'se fue a otra pestaña'));
+        test('…con el papel pintado dentro del visor', () =>
+            eq(r.srcdoc.indexOf('N-9') > -1 && r.srcdoc.indexOf('Sueldo del periodo') > -1,
+               true, 'el visor salió vacío'));
+        /* VER es ver: el documento se auto-imprime al cargar y aquí hay que
+           quitarle esa orden, o mirar un recibo sacaría la ventana de
+           impresión a quien solo quería revisar un número. */
+        test('…y sin mandar nada a la impresora', () =>
+            eq(r.srcdoc.indexOf('window.print();'), -1, 'imprimió por mirar'));
+        test('el visor dice de quién es el recibo', () =>
+            eq(X.document.getElementById('nomVisorTitle').textContent.indexOf('Ana') > -1, true, 'título'));
+        /* Imprimir SÍ imprime, y manda el mismo papel que se está viendo. */
+        const i = ver(() => X.imprimirReciboGenerado('s1'));
+        test('«Imprimir recibo» sí manda el papel a la impresora', () =>
+            eq(!!i.impreso && i.impreso.indexOf('N-9') > -1, true, 'no imprimió'));
+        test('…y el botón del visor imprime lo mismo que se ve', () => {
+            const j = ver(() => X._visorImprimir());
+            return eq(!!j.impreso && j.impreso.indexOf('N-9') > -1, true, 'imprime otra cosa');
+        });
+        /* Al cerrar, el iframe se vacía: dieciséis documentos de media carta
+           vivos detrás de la pantalla se siguen maquetando. */
+        test('cerrar el visor suelta el documento', () => {
+            X.cerrarVisorRecibo();
+            return eq(X.document.getElementById('nomVisorFrame').srcdoc, '', 'se quedó cargado');
+        });
+    }
+
+    /* ── 8 · el catálogo se queda abierto detrás ───────────────────────── */
+    {
+        /* Generar, editar, ver y pagar son pasos de UNA faena: pagar las
+           dieciséis de la semana. Cerrar el catálogo en cada paso obligaba a
+           volver a abrirlo, buscar y encontrar el renglón —dieciséis veces—. */
+        const sinCerrar = (fn) => {
+            let cerrado = false;
+            const m = X.document.getElementById('modalSelPago');
+            const rm0 = m.classList.remove;
+            m.classList.remove = (c) => { if (c === 'open') cerrado = true; };
+            try { fn(); } finally { m.classList.remove = rm0; }
+            return cerrado;
+        };
+        test('generar un recibo no cierra el catálogo', () =>
+            eq(sinCerrar(() => X.abrirPagoNomina('s1')), false, 'te saca del catálogo'));
+        test('editar un recibo tampoco', () =>
+            eq(sinCerrar(() => X.editarReciboGenerado('s1')), false, 'te saca del catálogo'));
+        test('ver el recibo tampoco', () =>
+            eq(sinCerrar(() => X.verReciboGenerado('s1')), false, 'te saca del catálogo'));
+        test('y generar el gasto tampoco', () => {
+            X._exigeVG = () => true;
+            return eq(sinCerrar(() => silencio(() => X.generarGastoNomina('s1'))), false, 'te saca del catálogo');
+        });
+        /* Si no se le dice quién va encima, tapa el que se haya creado último:
+           el catálogo acabaría encima del modal que acabas de abrir. */
+        test('los modales de nómina se montan ENCIMA del catálogo', () => {
+            const z = (id) => parseInt(X.document.getElementById(id).style.zIndex, 10) || 0;
+            const borrar = (id) => { X.document.getElementById(id).style.zIndex = ''; };
+            /* Cada camino se mide por separado y con la pizarra limpia: si no,
+               basta que una apertura anterior lo haya dejado puesto para que
+               esto pase por nada. */
+            const caminos = [
+                ['generar',  () => X.abrirPagoNomina('s1'), 'modalPagoNom'],
+                ['editar',   () => X.editarReciboGenerado('s1'), 'modalPagoNom'],
+                ['corregir', () => X._pnAbrirCorreccion({ id:'g', fecha:'2026-11-09',
+                        nomina:{ folio:'N-1', desde:'2026-11-01', hasta:'2026-11-30',
+                                 dias:7, diario:300, origen:{ conceptos:[] } } }, ana), 'modalPagoNom'],
+            ];
+            const flojos = caminos.filter(c => { borrar(c[2]); c[1](); return !(z(c[2]) > 200); })
+                                  .map(c => c[0]);
+            borrar('modalGasto');
+            silencio(() => { X._exigeVG = () => true; X.generarGastoNomina('s1'); });
+            return eq(flojos.join(',') + '|' + (z('modalGasto') > z('modalPagoNom')),
+                      '|true', 'quedan por debajo: ' + flojos.join(',') +
+                      ' · gasto=' + z('modalGasto') + ' nom=' + z('modalPagoNom'));
+        });
+        /* Y al cerrar el de turno, la lista vuelve AL DÍA: ver a la persona
+           cambiar de lista es la señal de que el trabajo se hizo. */
+        test('cerrar el modal repinta el catálogo', () => {
+            let repintes = 0;
+            const p0 = X._nomPintarListas;
+            X._nomPintarListas = () => { repintes++; };
+            X.document.getElementById('modalSelPago').className = 'modal-overlay open';
+            try { X._cerrarPagoNom(); X.gCerrarModal(); } finally { X._nomPintarListas = p0; }
+            return eq(repintes, 2, 'la lista se queda vieja');
+        });
+        test('…pero no si el catálogo está cerrado', () => {
+            let repintes = 0;
+            const p0 = X._nomPintarListas;
+            X._nomPintarListas = () => { repintes++; };
+            X.document.getElementById('modalSelPago').className = 'modal-overlay';
+            try { X._cerrarPagoNom(); } finally { X._nomPintarListas = p0; }
+            return eq(repintes, 0, 'repinta una lista que nadie está viendo');
+        });
+    }
+
+    /* ── 9 · el catálogo no enseña sueldos ─────────────────────────────── */
+    {
+        /* Esta lista se abre con gente alrededor y en una tablet que se pasa de
+           mano en mano. Lo que cada quien gana no tiene por qué leerse de
+           reojo: el número vive dentro del recibo. */
+        X._nomBusca = ''; X._nomFiltro = 'todos';
+        X._abrirSelectorPagoReal('nomina');
+        const h = X.document.getElementById('selPagoLista').innerHTML;
+        test('el renglón no enseña el sueldo diario', () =>
+            eq(/sueldo diario|mínimo de la sucursal/.test(h), false, 'el sueldo a la vista de todos'));
+        test('…ni el importe en el renglón', () =>
+            eq(h.indexOf(X.fmtM(300)), -1, 'se ve el sueldo'));
+        /* Los dos botones van en una columna de ancho FIJO: al hilo del texto,
+           cada renglón los pondría en un sitio distinto —según lo largo que sea
+           el nombre— y la lista se lee como una escalera. */
+        test('los botones van en una columna de ancho fijo', () =>
+            eq(/min-width:92px/.test(h), true, 'los botones hacen escalera'));
+    }
+
+    /* ── 10 · el hueco del buscador fijo ───────────────────────────────── */
+    {
+        /* `sticky` se pega al borde del ÁREA DE RELLENO. Con padding arriba
+           quedaba una franja por la que se veían pasar los renglones. */
+        const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        test('el cuerpo del catálogo no deja relleno arriba del buscador', () =>
+            eq(/id="selPagoBody"[^>]*padding-top:0/.test(src), true,
+               'por el hueco se ven pasar los renglones'));
+        const cab = X.document.getElementById('selPagoBody').innerHTML;
+        const bloque = cab.slice(0, cab.indexOf('nomBuscaInp'));
+        test('…y el bloque pegado no se tira hacia arriba con margen negativo', () =>
+            eq(/margin:0 -22px/.test(bloque), true, 'se sale por arriba'));
+    }
 
     /* ── 6 · si la v85 no está corrida, el panel no se cae ─────────────── */
     /* Si la v85 todavía no se corre en Supabase, el caché llega vacío. El

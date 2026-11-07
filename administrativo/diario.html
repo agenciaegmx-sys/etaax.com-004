@@ -1535,6 +1535,27 @@
     </div>
 </div>
 
+<!-- ══ VISOR DE RECIBO (vista previa EN LA MISMA PÁGINA) ══
+     Ver un recibo abría otra pestaña: se perdía el catálogo, el navegador
+     preguntaba por las ventanas emergentes y volver era un viaje. El papel se
+     pinta aquí dentro, en un <iframe> para que sus estilos de impresión —fondo
+     blanco, tipografías, tinta negra— no se mezclen con los de la app. -->
+<div class="cj-overlay" id="nomVisorOverlay" style="z-index:9600" onclick="if(event.target===this)cerrarVisorRecibo()">
+    <div class="cj-panel" style="max-width:900px;width:100%">
+        <div class="cj-header">
+            <span class="cj-title" id="nomVisorTitle">Vista previa del recibo</span>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="_visorImprimir()">🖨️ Imprimir</button>
+                <button class="modal-close" onclick="cerrarVisorRecibo()">✕ Cerrar</button>
+            </div>
+        </div>
+        <div class="cj-body" style="padding:0;background:#555">
+            <iframe id="nomVisorFrame" title="Vista previa del recibo"
+                style="width:100%;height:70vh;border:0;display:block;background:#fff"></iframe>
+        </div>
+    </div>
+</div>
+
 <!-- ══ MODAL 📜 RECIBOS DE NÓMINA DE UN COLABORADOR ══
      Va por ENCIMA del selector de pago (z-index mayor): se abre desde ahí sin
      cerrarlo, para volver a la lista donde se quedó. -->
@@ -6847,7 +6868,9 @@ function _abrirModalGasto(g,tipo){
         _evidenciasGasto = [{url:d.evidenciaData, path:'', pdf:!!_isPdf, nombre:d.evidenciaNombre||''}];
     }
     renderEvidenciasGasto();
-    document.getElementById('modalGasto').classList.add('open');
+    /* El de gasto va ARRIBA de todo: puede abrirse desde el catálogo, desde el
+       modal de nómina o solo. */
+    _nomEncima('modalGasto', 340).classList.add('open');
     _cerrarPuenteGasto(); // QR apagado al abrir — el usuario lo activa con el botón (📱)
 }
 
@@ -6881,6 +6904,7 @@ function gCerrarModal(){
     document.getElementById('modalGasto').classList.remove('open');
     _cerrarPuenteGasto();
     if(typeof _corteRefrescarTrasCaptura==='function') _corteRefrescarTrasCaptura();
+    _volverAlCatalogo();
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -6909,11 +6933,36 @@ function _ensureSelModal(){
     el.onclick=function(e){ if(e.target===el) _cerrarSelPago(); };
     el.innerHTML='<div class="modal" style="max-width:560px">'
       +'<div class="modal-header"><h2 id="selPagoTitle">Pagar</h2><button class="modal-close" onclick="_cerrarSelPago()">✕</button></div>'
-      +'<div class="modal-body" id="selPagoBody" style="max-height:62vh;overflow-y:auto"></div>'
+      +'<div class="modal-body" id="selPagoBody" style="max-height:62vh;overflow-y:auto;padding-top:0"></div>'
       +'</div>';
     document.body.appendChild(el);
 }
 function _cerrarSelPago(){ var m=document.getElementById('modalSelPago'); if(m) m.classList.remove('open'); }
+/* ══ LOS MODALES DE NÓMINA SE APILAN SOBRE EL CATÁLOGO ════════════════════
+   Generar un recibo, editarlo, verlo o pagarlo son pasos DENTRO de una misma
+   faena: pagar las dieciséis nóminas de la semana. Cerrar el catálogo en cada
+   paso obligaba a volver a abrirlo, volver a buscar y volver a encontrar el
+   renglón —dieciséis veces—.
+
+   Así que el catálogo se queda abierto detrás y el modal de turno se le monta
+   encima. Los dos son `.modal-overlay` (z-index 200), y quién tapa a quién
+   dependería del orden en que se crearon: se dice a la mano. */
+function _nomEncima(id, z){
+    var m=document.getElementById(id);
+    if(m && m.style) m.style.zIndex=z;
+    return m;
+}
+function _selPagoAbierto(){
+    var m=document.getElementById('modalSelPago');
+    return !!(m && m.className && m.className.indexOf('open')>=0);
+}
+/* Al cerrar el modal de turno se vuelve al catálogo con la lista AL DÍA: el
+   que acaba de pagar tiene que ver a esa persona cambiar de lista, que es la
+   señal de que el trabajo se hizo. */
+function _volverAlCatalogo(){
+    if(!_selPagoAbierto()) return;
+    try { _nomPintarListas(); } catch(e) {}
+}
 /* ══ ¿YA SE LE PAGÓ EN ESTE PERIODO? ══════════════════════════════════════
    Pagar nóminas con treinta personas en una lista plana es un trabajo de
    memoria: hay que acordarse de a quién le tocó ya. Las dos listas lo dicen.
@@ -7125,11 +7174,10 @@ function _nomPintarListas(){
               ? '<span style="display:inline-block;margin-left:6px;font-size:9px;letter-spacing:.5px;text-transform:uppercase;'+
                 'color:#7ab8f5;background:rgba(120,184,245,.12);border:1px solid rgba(120,184,245,.35);'+
                 'border-radius:10px;padding:1px 8px;white-space:nowrap">Recibo listo</span>' : '');
-        /* Se dice cuándo el sueldo sale del mínimo de la sucursal y no de su
-           ficha: pagarle el mínimo a propósito y pagárselo porque nadie le
-           configuró el sueldo se ven idénticos en la lista, y el segundo es
-           un error que conviene notar ANTES de pagar. */
-        var _lbl = _sueldoEsDelMinimo(s) ? '≈ mínimo de la sucursal' : '≈ sueldo diario';
+        /* EL SUELDO NO SE ENSEÑA EN EL CATÁLOGO. Esta lista se abre con gente
+           alrededor y en una tablet que se pasa de mano en mano; lo que cada
+           quien gana no tiene por qué leerse de reojo. El número vive donde se
+           necesita: dentro del recibo. */
         /* Dos botones y el renglón. Sin stopPropagation, tocar cualquiera de
            los dos abriría ADEMÁS el modal de pago encima. */
         var _n=_nomRecibosDe(s.id).length;
@@ -7142,7 +7190,7 @@ function _nomPintarListas(){
                 (_n?'<span style="font-size:10px;opacity:.8">'+_n+'</span>':'')+'</button>'+
             '<button onclick="_menuNomina(event,\''+s.id+'\')" '+
                 'title="Generar, editar, ver, imprimir o pagar su recibo" style="'+_bt+';font-size:15px;padding:4px 9px">⋯</button>';
-        return _selRow('abrirPagoNomina(\''+s.id+'\')', _esc(s.nombre), sub, fmtM(_sueldoDiarioEfectivo(s)), _lbl, _acc);
+        return _selRow('abrirPagoNomina(\''+s.id+'\')', _esc(s.nombre), sub, '', '', _acc);
     };
     var _sec=function(t,color,arr){
         if(!arr.length) return '';
@@ -7160,8 +7208,11 @@ function _selRow(onclick,izq,sub,der,derSub,acciones){
     return '<div onclick="'+onclick+'" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--surface2);transition:border-color .15s" '
       +'onmouseover="this.style.borderColor=\'var(--green)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
       +'<div><div style="font-weight:600">'+izq+'</div><div style="font-size:11px;color:var(--text-dim)">'+sub+'</div></div>'
-      +'<div style="text-align:right"><div style="font-weight:700;color:var(--red)">'+der+'</div>'+(derSub?'<div style="font-size:10px;color:var(--text-dim)">'+derSub+'</div>':'')+'</div>'
-      +(acciones||'')
+      +(der?'<div style="text-align:right"><div style="font-weight:700;color:var(--red)">'+der+'</div>'+(derSub?'<div style="font-size:10px;color:var(--text-dim)">'+derSub+'</div>':'')+'</div>':'')
+      /* Los botones viven en una columna de ancho FIJO: si fueran al hilo del
+         texto, cada renglón los pondría en un sitio distinto —según lo largo
+         que sea el nombre— y la vista se lee como una escalera. */
+      +(acciones?'<div style="flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;min-width:92px">'+acciones+'</div>':'')
       +'</div>';
 }
 function abrirSelectorPago(tipo){
@@ -7227,8 +7278,13 @@ function _abrirSelectorPagoReal(tipo){
                ven por debajo— y el margen negativo para que se pegue al borde
                del modal y no deje una franja. */
             body.innerHTML=
+                /* El buscador y los filtros se quedan ARRIBA al bajar la lista.
+                   `top:0` pega el bloque al borde del área de relleno, así que
+                   el cuerpo va con `padding-top:0` y el relleno lo pone este
+                   bloque: con padding arriba quedaba una franja por la que se
+                   veían pasar los renglones. */
                 '<div style="position:sticky;top:0;z-index:5;background:var(--surface);'+
-                    'margin:-20px -22px 8px;padding:16px 22px 12px;border-bottom:1px solid var(--border)">'+
+                    'margin:0 -22px 8px;padding:16px 22px 12px;border-bottom:1px solid var(--border)">'+
                     '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
                         _nomBtnHTML('todos','Todos')+_nomBtnHTML('pendientes','Por pagar')+_nomBtnHTML('pagadas','Pagadas')+
                         '<span style="margin-left:auto;font-size:11px;color:var(--text-dim)">Periodo en pantalla · '+_rgTxt+'</span>'+
@@ -7470,12 +7526,16 @@ function _ensurePagoNomModal(){
       +'</div>';
     document.body.appendChild(el);
 }
-function _cerrarPagoNom(){ var m=document.getElementById('modalPagoNom'); if(m) m.classList.remove('open'); _pnEditandoGasto=null; }
+function _cerrarPagoNom(){
+    var m=document.getElementById('modalPagoNom'); if(m) m.classList.remove('open');
+    _pnEditandoGasto=null;
+    _volverAlCatalogo();
+}
 
 function abrirPagoNomina(staffId){
     var s=(_cacheStaff||[]).find(function(x){ return x.id===staffId; });
     if(!s)return;
-    _cerrarSelPago();
+    _cerrarMenusCorte();
     _ensurePagoNomModal();
     _pagoNomStaff=s; _pagoNomConceptos=[]; _pnTotalManual=null; _pnBonosQuitados=[];
     _pnEditandoGasto=null;
@@ -7497,7 +7557,7 @@ function abrirPagoNomina(staffId){
     _pnCptTipoChange();   // ajusta el captador de conceptos
     _pnReponerBonos();    // los bonos de su ficha entran solos, con su concepto
     _pnCalc();
-    document.getElementById('modalPagoNom').classList.add('open');
+    _nomEncima('modalPagoNom', 320).classList.add('open');
 }
 
 /* ══ LOS BONOS DEL EXPEDIENTE SE CARGAN SOLOS ══════════════════════════════
@@ -8086,7 +8146,8 @@ function verReciboNomina(gastoId){
         alert('Este gasto no es un pago de nómina, así que no tiene recibo.');
         return;
     }
-    etaaxAbrirReporte(_reciboNominaHTML(rec, g.pagadoEl||g.fecha));
+    verReciboEnPagina(_reciboNominaHTML(rec, g.pagadoEl||g.fecha),
+                      'Recibo — ' + ((rec.staff && rec.staff.nombre) || ''));
 }
 /* ══ HISTORIAL DE RECIBOS DE UN COLABORADOR ════════════════════════════════
    Los pagos ya estaban en el panel de Nóminas, pero mezclados y acotados al
@@ -8244,14 +8305,45 @@ function editarReciboGenerado(staffId){
     if (reg.gastoId){ alert('Esta nómina ya se pagó. Para cambiarla, corrige el pago desde su renglón en el panel.'); return; }
     _pnAbrirDesdeRecibo(reg, s);
 }
+/* ══ VER EL RECIBO SIN SALIR DE LA PÁGINA ═════════════════════════════════
+   VER es ver: no manda nada a la impresora —para eso está la otra opción del
+   menú—. Y se ve AQUÍ: abrirlo en otra pestaña perdía el catálogo, chocaba con
+   el bloqueo de ventanas emergentes y volver era un viaje.
+
+   El papel va dentro de un <iframe> con `srcdoc`: su hoja de estilos está
+   hecha para imprimir —fondo blanco, tinta negra, @page— y suelta dentro de la
+   app se comería la pantalla. El iframe la encierra.                         */
+var _visorHTML = '';
+function verReciboEnPagina(html, titulo){
+    _visorHTML = String(html || '');
+    var ti = document.getElementById('nomVisorTitle');
+    if (ti) ti.textContent = titulo || 'Vista previa del recibo';
+    var f = document.getElementById('nomVisorFrame');
+    /* Se le quita el auto-print del documento: aquí el punto es MIRAR. */
+    if (f) f.srcdoc = _visorHTML.replace('window.print();', '');
+    var ov = document.getElementById('nomVisorOverlay');
+    if (ov) ov.classList.add('open');
+}
+function cerrarVisorRecibo(){
+    var ov = document.getElementById('nomVisorOverlay');
+    if (ov) ov.classList.remove('open');
+    /* El iframe se vacía al cerrar: un documento de media carta vivo detrás de
+       la pantalla se sigue maquetando, y son dieciséis en una faena. */
+    var f = document.getElementById('nomVisorFrame');
+    if (f) f.srcdoc = '';
+    _volverAlCatalogo();
+}
+/* Imprimir desde el visor manda el MISMO papel que se está viendo. */
+function _visorImprimir(){
+    if (!_visorHTML) return;
+    etaaxAbrirReporte(_visorHTML);
+}
 function verReciboGenerado(staffId){
     var reg = _reciboGeneradoDe(staffId);
     if (!reg) return;
-    /* VER es ver: se abre sin mandar a la impresora. Imprimir es la otra
-       opción del menú, y mezclarlas saca la ventana de impresión a quien solo
-       quería revisar un número. */
-    if (typeof etaaxVerReporte === 'function') etaaxVerReporte(_reciboNominaHTML(reg.recibo, _reciboFechaPago(reg)));
-    else etaaxAbrirReporte(_reciboNominaHTML(reg.recibo, _reciboFechaPago(reg)));
+    var s = _staffDe(staffId) || {};
+    verReciboEnPagina(_reciboNominaHTML(reg.recibo, _reciboFechaPago(reg)),
+                      'Vista previa — ' + (s.nombre || ''));
 }
 function imprimirReciboGenerado(staffId){
     var reg = _reciboGeneradoDe(staffId);
@@ -8277,7 +8369,7 @@ function generarGastoNomina(staffId){
     if (reg.gastoId){ alert('Esta nómina ya tiene su gasto registrado.'); return; }
     if (!_exigeVG('gastos.nominas','No puedes pagar nóminas.')) return;
     if (!(n((reg.recibo||{}).total) > 0)){ alert('Este recibo quedó en cero: edítalo antes de pagarlo.'); return; }
-    _cerrarSelPago();
+    _cerrarMenusCorte();
     var rec = reg.recibo || {};
     var perLbl = String(rec.periodicidad||'Periodo').toLowerCase();
     /* Los conceptos con OTRO método (un bono en efectivo dentro de una nómina
@@ -8360,7 +8452,7 @@ function editarReciboNomina(gastoId){
    corrección —_pnRestaurarCaptura— pero sin rastro ni motivo: todavía no ha
    salido dinero, así que cambiar un número no es corregir un pago. */
 function _pnAbrirDesdeRecibo(reg, s){
-    _cerrarSelPago();
+    _cerrarMenusCorte();
     _ensurePagoNomModal();
     _pagoNomStaff=s; _pagoNomConceptos=[]; _pnTotalManual=null; _pnBonosQuitados=[]; _pnPrimaInclude=false;
     _pnEditandoGasto=null;
@@ -8376,7 +8468,7 @@ function _pnAbrirDesdeRecibo(reg, s){
             '. Todavía no se ha pagado: al guardar se reemplaza el recibo, sin rastro ni motivo. '+
             'Para pagarlo usa <b>Generar gasto</b>.';
     }
-    document.getElementById('modalPagoNom').classList.add('open');
+    _nomEncima('modalPagoNom', 320).classList.add('open');
 }
 function _pnAbrirCorreccion(g,s){
     _cerrarSelPago();
@@ -8396,7 +8488,7 @@ function _pnAbrirCorreccion(g,s){
             ' del '+_esc(_fmtFechaCortaDx(g.fecha))+'. Al confirmar se actualiza ese mismo gasto (no se crea otro) y el recibo guarda qué decía antes.'+
             (_ncor?'<br><span style="color:var(--text-dim)">Ya tiene '+_ncor+' corrección'+(_ncor!==1?'es':'')+' registrada'+(_ncor!==1?'s':'')+'.</span>':'');
     }
-    document.getElementById('modalPagoNom').classList.add('open');
+    _nomEncima('modalPagoNom', 320).classList.add('open');
 }
 function _reciboNominaHTML(d, fechaPago){
     var _e=(typeof etx==='function')?etx:function(x){ return String(x==null?'':x); };
@@ -8556,8 +8648,7 @@ function _confirmarPagoNom(){
         if(!_recNuevo){ alert('No se pudo armar el recibo.'); return; }
         var _antes=_nomReciboLibre(s.id, { from:_recNuevo.desde, to:_recNuevo.hasta });
         _guardarReciboGenerado(s, _recNuevo, _antes);
-        _cerrarPagoNom();
-        _nomPintarListas();
+        _cerrarPagoNom();          // y al volver, el catálogo se repinta solo
         renderNominasPanel();
         return;
     }
