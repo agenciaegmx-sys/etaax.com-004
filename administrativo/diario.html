@@ -1574,7 +1574,7 @@
         </div>
         <div class="modal-footer">
             <button class="btn-ghost" onclick="cerrarPropinas()">Cancelar</button>
-            <button class="btn-ghost" onclick="_propVerRecibo()" title="Mira cómo va a quedar el comprobante antes de guardarlo">🧾 Ver recibo</button>
+            <button class="btn-ghost" onclick="_propVerReporte()" title="La hoja de reparto por área, para repartir con ella en la mano">📄 Ver reporte</button>
             <button class="btn-primary" id="propBtnGuardar" onclick="guardarPropinas()">Guardar reparto</button>
         </div>
     </div>
@@ -8395,6 +8395,7 @@ function imprimirHistNomina(staffId){
    (propinasReparto / propinasAjuste) y aquí solo se pinta.
    ══════════════════════════════════════════════════════════════════════════ */
 var _propMontos = {};      // { staffId: monto }
+var _propPagados = {};     // { staffId: {pagado, pagadoEn} } — sobrevive a editar
 var _propModoAct = 'uniforme';
 var _propEditando = '';    // id del reparto que se está editando ('' = nuevo)
 function _propStaff(){
@@ -8425,7 +8426,7 @@ function abrirPropinas(){
     var st = _propStaff();
     if (!st.length){ alert('No hay colaboradores en esta sucursal para repartir la propina.'); return; }
     _propEditando = '';
-    _propMontos = {};
+    _propMontos = {}; _propPagados = {};
     _propModoAct = 'uniforme';
     var r = dxpRango('nom');
     document.getElementById('propTitle').textContent = '🫱 Repartir propinas';
@@ -8450,7 +8451,7 @@ function _propModo(modo){
     if (cajas) cajas.style.display = (modo === 'area') ? '' : 'none';
     var hint = document.getElementById('propModoHint');
     if (hint) hint.textContent = (modo === 'area')
-        ? 'Reparte lo de cada área entre quienes son de esa área. Lo que no asignes a ningún área se queda sin repartir.'
+        ? 'La cantidad de cada área es lo que cobra CADA persona de esa área, no una bolsa a dividir.'
         : 'El total se divide en partes iguales entre todos los de la sucursal.';
     if (modo === 'area') _propPintarAreas();
     _propCalcular();
@@ -8461,8 +8462,9 @@ function _propPintarAreas(){
     cont.innerHTML = '<div class="fg-row-3">' + areas.map(function(k){
         var n2 = st.filter(function(s){ return _propArea(s) === k; }).length;
         var v = (cont.dataset && cont.dataset['m_' + k]) || '';
-        return '<div class="fg"><label>' + _esc(_propAreaNom(k)) + ' · ' + n2 + '</label>' +
-            '<input type="number" min="0" step="0.01" id="propA_' + k + '" value="' + _esc(v) + '" oninput="_propCalcular()"></div>';
+        return '<div class="fg"><label>' + _esc(_propAreaNom(k)) + ' · por persona</label>' +
+            '<input type="number" min="0" step="0.01" id="propA_' + k + '" value="' + _esc(v) + '" oninput="_propCalcular()">' +
+            '<div class="form-hint" id="propAsub_' + k + '" style="margin-top:4px">' + n2 + (n2===1?' persona':' personas') + '</div></div>';
     }).join('') + '</div>';
 }
 function _propTotalChange(){ _propCalcular(); }
@@ -8474,15 +8476,35 @@ function _propCalcular(){
     var total = n((document.getElementById('propTotal')||{}).value);
     var grupos;
     if (_propModoAct === 'area'){
+        /* ══ LA CANTIDAD DE UN ÁREA ES LO QUE SE LLEVA CADA PERSONA ══════
+           No es una bolsa para el área que luego se divide entre los suyos:
+           es lo que cobra CADA UNO de esa área. Si en cocina se ponen $300 y
+           hay tres cocineros, salen $900 de cocina.
+
+           Se multiplica aquí y el reparto del núcleo hace el resto: como el
+           monto del grupo es múltiplo exacto del número de personas, a cada
+           quien le toca justo esa cantidad. */
         grupos = _propAreasPresentes().map(function(k){
-            return { monto:n((document.getElementById('propA_'+k)||{}).value),
-                     ids:st.filter(function(s){ return _propArea(s)===k; }).map(function(s){ return s.id; }) };
+            var ids = st.filter(function(s){ return _propArea(s)===k; }).map(function(s){ return s.id; });
+            return { monto:n((document.getElementById('propA_'+k)||{}).value) * ids.length, ids:ids };
         });
     } else {
         grupos = [{ monto:total, ids:st.map(function(s){ return s.id; }) }];
     }
     _propMontos = EtaaxCore.propinasReparto(grupos);
     st.forEach(function(s){ if (_propMontos[s.id] === undefined) _propMontos[s.id] = 0; });
+    if (_propModoAct === 'area'){
+        /* Debajo de cada campo, lo que suma el área: poner 300 por persona y
+           no ver los 900 que salen de cocina es la manera de llevarse una
+           sorpresa al final. */
+        _propAreasPresentes().forEach(function(k){
+            var cuantos = st.filter(function(s){ return _propArea(s)===k; }).length;
+            var por = n((document.getElementById('propA_'+k)||{}).value);
+            var el2 = document.getElementById('propAsub_'+k);
+            if (el2) el2.textContent = cuantos + (cuantos===1?' persona':' personas') +
+                (por>0 ? ' · ' + fmtM(por*cuantos) + ' en total' : '');
+        });
+    }
     _propPintarLista();
 }
 /* Mover a uno y que los demás se muevan parejo. El total que manda es el del
@@ -8490,28 +8512,49 @@ function _propCalcular(){
    si no, ajustar a alguien reclamaría un dinero que nadie puso. */
 function _propTotalVigente(){
     if (_propModoAct !== 'area') return n((document.getElementById('propTotal')||{}).value);
+    var st = _propStaff();
     return _propAreasPresentes().reduce(function(a,k){
-        return a + n((document.getElementById('propA_'+k)||{}).value); }, 0);
+        var cuantos = st.filter(function(s){ return _propArea(s)===k; }).length;
+        return a + n((document.getElementById('propA_'+k)||{}).value) * cuantos; }, 0);
 }
 function _propAjustar(staffId, valor){
     _propMontos = EtaaxCore.propinasAjuste(_propMontos, staffId, n(valor), _propTotalVigente());
     _propPintarLista();
 }
+/* La lista va AGRUPADA POR ÁREA, con su subtotal. Una lista plana de veinte
+   nombres obliga a sumar de cabeza para saber cuánto se llevó la barra, que es
+   justo la pregunta que se hace al repartir propinas. El orden de las áreas es
+   el de la operación (barra, cocina, piso, administración), no el alfabético. */
+function _propPorArea(){
+    var st = _propStaff(), out = [];
+    _propAreasPresentes().forEach(function(k){
+        var gente = st.filter(function(s){ return _propArea(s) === k; });
+        if (gente.length) out.push({ k:k, nom:_propAreaNom(k), gente:gente });
+    });
+    return out;
+}
 function _propPintarLista(){
     var cont = document.getElementById('propLista'); if (!cont) return;
     var st = _propStaff();
     if (!st.length){ cont.innerHTML = ''; return; }
-    cont.innerHTML = st.map(function(s){
-        var m = _propMontos[s.id] || 0;
-        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)">' +
-            '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">' + _esc(s.nombre) + '</div>' +
-            '<div style="font-size:10.5px;color:var(--text-dim)">' + _esc(_propAreaNom(_propArea(s))) +
-            (s.puesto ? ' · ' + _esc(s.puesto) : '') + '</div></div>' +
-            '<input type="number" min="0" step="0.01" value="' + m.toFixed(2) + '" ' +
-            'onchange="_propAjustar(\'' + s.id + '\', this.value)" ' +
-            'style="width:120px;text-align:right;padding:6px 9px;background:var(--surface2);border:1px solid var(--border);' +
-            'border-radius:7px;color:var(--text);font-family:inherit;font-size:13px">' +
-            '</div>';
+    cont.innerHTML = _propPorArea().map(function(g){
+        var sub = g.gente.reduce(function(a,s){ return a + n(_propMontos[s.id]); }, 0);
+        return '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;' +
+                'margin:14px 0 4px;padding-bottom:4px;border-bottom:1px solid var(--border)">' +
+                '<span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--green)">' +
+                _esc(g.nom) + ' · ' + g.gente.length + '</span>' +
+                '<span style="font-size:12px;font-weight:700">' + fmtM(sub) + '</span></div>' +
+            g.gente.map(function(s){
+                var m = _propMontos[s.id] || 0;
+                return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)">' +
+                    '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">' + _esc(s.nombre) + '</div>' +
+                    '<div style="font-size:10.5px;color:var(--text-dim)">' + (s.puesto ? _esc(s.puesto) : '—') + '</div></div>' +
+                    '<input type="number" min="0" step="0.01" value="' + m.toFixed(2) + '" ' +
+                    'onchange="_propAjustar(\'' + s.id + '\', this.value)" ' +
+                    'style="width:120px;text-align:right;padding:6px 9px;background:var(--surface2);border:1px solid var(--border);' +
+                    'border-radius:7px;color:var(--text);font-family:inherit;font-size:13px">' +
+                    '</div>';
+            }).join('');
     }).join('');
     var suma = st.reduce(function(a,s){ return a + n(_propMontos[s.id]); }, 0);
     var tot = _propTotalVigente();
@@ -8540,11 +8583,19 @@ function _propDatos(){
     var desde = (document.getElementById('propDesde')||{}).value || '';
     var hasta = (document.getElementById('propHasta')||{}).value || '';
     var lineas = st.map(function(s){
+        /* El estado de pago de cada quien SOBREVIVE a editar el reparto: si se
+           perdiera, corregir un importe pondría a todos en pendiente otra vez y
+           habría que volver a palomear a los que ya cobraron. */
+        var est = _propPagados[s.id] || {};
         return { staffId:s.id, nombre:s.nombre||'', puesto:s.puesto||'',
-                 area:_propAreaNom(_propArea(s)), monto:Math.round(n(_propMontos[s.id])*100)/100 };
+                 areaK:_propArea(s), area:_propAreaNom(_propArea(s)),
+                 monto:Math.round(n(_propMontos[s.id])*100)/100,
+                 pagado:!!est.pagado, pagadoEn:est.pagadoEn||'' };
     }).filter(function(l){ return l.monto > 0; });
     var areas = (_propModoAct === 'area') ? _propAreasPresentes().map(function(k){
-        return { area:_propAreaNom(k), monto:n((document.getElementById('propA_'+k)||{}).value) };
+        var cuantos = st.filter(function(x){ return _propArea(x)===k; }).length;
+        var por = n((document.getElementById('propA_'+k)||{}).value);
+        return { area:_propAreaNom(k), monto:por, personas:cuantos, total:por*cuantos };
     }).filter(function(a){ return a.monto > 0; }) : [];
     return {
         folio:_propFolio(_sucActiva(), desde, hasta),
@@ -8553,60 +8604,170 @@ function _propDatos(){
         emitido:new Date().toISOString()
     };
 }
-function _propReciboHTML(d, correcciones){
+/* ══ EL REPORTE DE LA PROPUESTA ═══════════════════════════════════════════
+   Esto NO es el recibo. El recibo es el papel que firma UNA persona cuando
+   recibe lo suyo; el reporte es la hoja que se lleva el encargado para repartir
+   —agrupada por área, con su subtotal y el total abajo—, y que se pega en la
+   pared o se manda por correo. Mezclarlos deja a alguien firmando una hoja
+   donde salen los importes de todos. */
+function _propReporteHTML(d){
     var _e = (typeof etx === 'function') ? etx : function(x){ return String(x==null?'':x); };
-    var filas = (d.lineas||[]).map(function(l){
-        return '<tr><td>' + _e(l.nombre) + '</td>' +
-               '<td style="text-align:left;color:#8a8a8a;font-weight:400">' + _e(l.area) + (l.puesto ? ' · ' + _e(l.puesto) : '') + '</td>' +
-               '<td>' + fmtM(l.monto) + '</td></tr>';
+    var porArea = {}, orden = [];
+    (d.lineas||[]).forEach(function(l){
+        if (!porArea[l.area]) { porArea[l.area] = []; orden.push(l.area); }
+        porArea[l.area].push(l);
+    });
+    var bloques = orden.map(function(a){
+        var ls = porArea[a];
+        var sub = ls.reduce(function(x,l){ return x + n(l.monto); }, 0);
+        /* En el reparto por área se dice CUÁNTO cobra cada uno: sin eso, el
+           que reparte tiene que dividir el subtotal entre la gente para saber
+           qué entregar de mano en mano. */
+        var def = (d.areas||[]).find(function(x){ return x.area === a; });
+        return '<div class="rsec">' + _e(a) + ' · ' + ls.length +
+               (ls.length === 1 ? ' persona' : ' personas') +
+               (def ? ' · ' + fmtM(def.monto) + ' cada una' : '') + '</div>' +
+            '<table class="rt"><thead><tr>' +
+                '<th style="width:52%">Colaborador</th>' +
+                '<th style="text-align:left;width:28%">Puesto</th>' +
+                '<th>Le toca</th></tr></thead><tbody>' +
+            ls.map(function(l){
+                return '<tr><td>' + _e(l.nombre) + '</td>' +
+                       '<td style="text-align:left;color:#8a8a8a;font-weight:400">' + _e(l.puesto || '—') + '</td>' +
+                       '<td>' + fmtM(l.monto) + '</td></tr>';
+            }).join('') + '</tbody>' +
+            '<tfoot><tr><td colspan="2">Subtotal ' + _e(a) + '</td><td>' + fmtM(sub) + '</td></tr></tfoot></table>';
     }).join('');
     var dato = function(l, v){
         return '<div class="rcard" style="padding:10px 13px"><div class="l">' + _e(l) + '</div>' +
                '<div style="font-size:13px;font-weight:600;color:#1a1916;line-height:1.35">' + _e(v) + '</div></div>';
     };
     var cuerpo =
-        '<div class="rsec">Datos del reparto</div>' +
+        '<div class="rsec">Propuesta de reparto</div>' +
         '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">' +
             dato('Periodo', _pnFechaLarga(d.desde) + '  —  ' + _pnFechaLarga(d.hasta)) +
             dato('Reparto', d.modo === 'area' ? 'Por área' : 'Parejo entre todos') +
             dato('Personas', (d.lineas||[]).length) +
             dato('Folio interno', d.folio) +
-        '</div>' +
-        ((d.areas||[]).length
-          ? '<div class="rsec">Lo que se asignó a cada área</div>' +
-            '<table class="rt"><thead><tr><th style="width:70%;text-align:left">Área</th><th>Importe</th></tr></thead><tbody>' +
-            d.areas.map(function(a){ return '<tr><td style="text-align:left">' + _e(a.area) + '</td><td>' + fmtM(a.monto) + '</td></tr>'; }).join('') +
-            '</tbody></table>'
-          : '') +
-        '<div class="rsec">Reparto por colaborador</div>' +
-        '<table class="rt"><thead><tr>' +
-            '<th style="width:42%">Colaborador</th>' +
-            '<th style="text-align:left;width:33%">Área</th>' +
-            '<th>Le toca</th></tr></thead>' +
-        '<tbody>' + filas + '</tbody>' +
-        '<tfoot><tr><td colspan="2">Total repartido</td><td>' + fmtM(d.total) + '</td></tr></tfoot></table>' +
+        '</div>' + bloques +
+        '<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;' +
+            'padding:11px 14px;background:#1a1916;color:#fff;border-radius:7px">' +
+            '<span style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700">Total a repartir</span>' +
+            '<span style="font-size:16px;font-weight:700">' + fmtM(d.total) + '</span></div>' +
         '<div style="margin-top:9px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">' +
             '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>' +
             '<div style="font-size:11.5px;font-weight:600;color:#1a1916;line-height:1.4">' + _e(EtaaxCore.importeLetra(d.total)) + '</div>' +
         '</div>' +
-        '<div style="margin-top:24px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">' +
+        '<div style="margin-top:18px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">' +
             '<div style="font-size:9.5px;color:#8a7a4a;line-height:1.5">' +
-            '<b>Comprobante interno.</b> Deja constancia de cómo se repartió la propina del periodo entre el equipo. ' +
-            '<b>No es un CFDI</b> y no tiene validez fiscal.</div>' +
-        '</div>' +
-        _reciboCorreccionesHTML({ correcciones:correcciones }, _e);
+            '<b>Hoja de reparto, no es un recibo.</b> Dice cómo queda repartida la propina del periodo. ' +
+            'El comprobante que firma cada persona se imprime por separado, uno por colaborador.</div>' +
+        '</div>';
     return etaaxReporteDoc({
-        titulo:'Reparto de propinas', subtitulo:'Reparto de propinas · ' + d.folio,
+        titulo:'Reparto de propinas por área', subtitulo:'Propuesta de reparto · ' + d.folio,
         derecha:'<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + _pnFechaLarga(d.hasta || todayStr()) + '</div>',
-        pie:'Reparto de propinas · comprobante interno',
+        pie:'Reparto de propinas · hoja de trabajo',
         cuerpo:cuerpo
     });
 }
-function _propVerRecibo(){
+function _propVerReporte(){
     var d = _propDatos();
-    if (!(d.total > 0)){ alert('Captura el total y reparte algo antes de ver el comprobante.'); return; }
-    verReciboEnPagina(_propReciboHTML(d), 'Vista previa — reparto de propinas');
+    if (!(d.total > 0)){ alert('Captura el total y reparte algo antes de ver el reporte.'); return; }
+    verReciboEnPagina(_propReporteHTML(d), 'Reparto por área — vista previa');
 }
+function verReporteProp(id){
+    var r = _propReg(id); if (!r) return;
+    verReciboEnPagina(_propReporteHTML(r.recibo), 'Reparto por área — ' + ((r.recibo||{}).folio||''));
+}
+function imprimirReporteProp(id){
+    var r = _propReg(id); if (!r) return;
+    etaaxAbrirReporte(_propReporteHTML(r.recibo));
+}
+
+/* ══ EL RECIBO DE UNA PERSONA ═════════════════════════════════════════════
+   Uno por colaborador: lo que ÉL recibe, con su folio propio derivado del
+   folio del reparto. Nadie tiene por qué firmar una hoja donde salen los
+   importes de los demás. */
+function _propFolioColab(folio, staffId){
+    var base = String(folio||'') + '·' + String(staffId||'');
+    var h = 0; for (var i = 0; i < base.length; i++) { h = ((h << 5) - h + base.charCodeAt(i)) | 0; }
+    return String(folio||'P') + '-' + String(Math.abs(h) % 1000).padStart(3, '0');
+}
+function _propReciboColabHTML(d, l){
+    var _e = (typeof etx === 'function') ? etx : function(x){ return String(x==null?'':x); };
+    var dato = function(k, v){
+        return '<div class="rcard" style="padding:10px 13px"><div class="l">' + _e(k) + '</div>' +
+               '<div style="font-size:13px;font-weight:600;color:#1a1916;line-height:1.35">' + _e(v) + '</div></div>';
+    };
+    var cuerpo =
+        '<div class="rsec">Datos del pago</div>' +
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">' +
+            dato('Colaborador', l.nombre || '—') +
+            dato('Área', l.area || '—') +
+            dato('Puesto', l.puesto || '—') +
+            dato('Folio interno', _propFolioColab(d.folio, l.staffId)) +
+        '</div>' +
+        '<div class="rgrid" style="grid-template-columns:repeat(3,1fr);margin-top:10px">' +
+            dato('Periodo', _pnFechaLarga(d.desde) + '  —  ' + _pnFechaLarga(d.hasta)) +
+            dato('Reparto', d.modo === 'area' ? 'Por área' : 'Parejo entre todos') +
+            dato('Reparto folio', d.folio) +
+        '</div>' +
+        '<div class="rsec">Propina del periodo</div>' +
+        '<table class="rt"><thead><tr>' +
+            '<th style="width:75%;text-align:left">Concepto</th><th>Importe</th></tr></thead>' +
+        '<tbody><tr><td style="text-align:left">Propina repartida del periodo</td><td>' + fmtM(l.monto) + '</td></tr></tbody>' +
+        '<tfoot><tr><td>Total recibido</td><td>' + fmtM(l.monto) + '</td></tr></tfoot></table>' +
+        '<div style="margin-top:9px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">' +
+            '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>' +
+            '<div style="font-size:11.5px;font-weight:600;color:#1a1916;line-height:1.4">' + _e(EtaaxCore.importeLetra(l.monto)) + '</div>' +
+        '</div>' +
+        '<div class="rsec">Firmas</div>' +
+        '<div class="rgrid" style="grid-template-columns:1fr 1fr;gap:26px;margin-top:26px">' +
+            '<div style="text-align:center"><div style="border-top:1px solid #1a1916;margin:0 10px 6px"></div>' +
+                '<div style="font-size:11px;font-weight:600">' + _e(l.nombre || '') + '</div>' +
+                '<div style="font-size:9px;color:#8a8a8a;margin-top:2px">Recibí de conformidad</div></div>' +
+            '<div style="text-align:center"><div style="border-top:1px solid #1a1916;margin:0 10px 6px"></div>' +
+                '<div style="font-size:11px;font-weight:600">Entregó</div>' +
+                '<div style="font-size:9px;color:#8a8a8a;margin-top:2px">Por el negocio</div></div>' +
+        '</div>' +
+        '<div style="margin-top:24px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">' +
+            '<div style="font-size:9.5px;color:#8a7a4a;line-height:1.5">' +
+            '<b>Comprobante interno.</b> Respalda la entrega de la propina del periodo. ' +
+            '<b>No es un CFDI</b> y no tiene validez fiscal.</div>' +
+        '</div>';
+    return etaaxReporteDoc({
+        titulo:'Recibo de propina — ' + (l.nombre || ''),
+        subtitulo:'Recibo de propina · ' + _propFolioColab(d.folio, l.staffId),
+        derecha:'<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + _pnFechaLarga(d.hasta || todayStr()) + '</div>',
+        pie:'Recibo de propina · comprobante interno',
+        cuerpo:cuerpo
+    });
+}
+function _propLinea(id, staffId){
+    var r = _propReg(id); if (!r) return null;
+    var l = ((r.recibo||{}).lineas||[]).find(function(x){ return x.staffId === staffId; });
+    return l ? { r:r, d:r.recibo, l:l } : null;
+}
+function verReciboColab(id, staffId){
+    var x = _propLinea(id, staffId); if (!x) return;
+    verReciboEnPagina(_propReciboColabHTML(x.d, x.l), 'Recibo de propina — ' + (x.l.nombre||''));
+}
+function imprimirReciboColab(id, staffId){
+    var x = _propLinea(id, staffId); if (!x) return;
+    etaaxAbrirReporte(_propReciboColabHTML(x.d, x.l));
+}
+/* Pagado o pendiente, uno por uno: la propina se entrega a mano y rara vez a
+   todos el mismo rato. */
+function togglePagoProp(id, staffId){
+    var x = _propLinea(id, staffId); if (!x) return;
+    if (!_exigeVG('gastos.nominas','No puedes repartir propinas.')) return;
+    x.l.pagado = !x.l.pagado;
+    x.l.pagadoEn = x.l.pagado ? new Date().toISOString() : '';
+    x.r.updated = Date.now();
+    _sbUp('nomina_recibos', x.r);
+    _propDetalle(id);
+}
+
 /* Se guarda en la MISMA tabla que los recibos de nómina (v85), marcado con
    `tipo:'propina'`: es otro comprobante del mismo módulo, con el mismo ciclo
    —se guarda, se reimprime, se edita, se borra—. Las consultas de nómina lo
@@ -8667,13 +8828,16 @@ function abrirHistPropinas(){
                 return '<tr style="border-top:1px solid var(--border)">' +
                     '<td style="padding:8px 10px;white-space:nowrap">' + _esc(_fmtFechaCortaDx(d.desde)) + ' – ' + _esc(_fmtFechaCortaDx(d.hasta)) +
                         '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">' + ((d.lineas||[]).length) + ' personas</div></td>' +
-                    '<td style="padding:8px 10px;font-size:12px;color:var(--text-muted)">' + (d.modo === 'area' ? 'Por área' : 'Parejo') + '</td>' +
+                    '<td style="padding:8px 10px;font-size:12px;color:var(--text-muted)">' + (d.modo === 'area' ? 'Por área' : 'Parejo') +
+                        '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">' +
+                        ((d.lineas||[]).filter(function(l){ return l.pagado; }).length) + ' de ' + ((d.lineas||[]).length) + ' pagados</div></td>' +
                     '<td style="padding:8px 10px;font-size:11px;color:var(--text-dim);white-space:nowrap">' + _esc(d.folio||'—') +
                         (((d.correcciones||[]).length) ? '<div style="font-size:9px;color:var(--accent);margin-top:2px">✏️ editado</div>' : '') + '</td>' +
                     '<td style="padding:8px 10px;text-align:right;font-weight:700;white-space:nowrap">' + fmtM(d.total) + '</td>' +
                     '<td style="padding:8px 10px;text-align:right;white-space:nowrap">' +
-                        '<button class="btn-row" title="Ver el comprobante" onclick="verPropina(\''+x.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">' + _ic('nom-recibo',15) + '</button> ' +
-                        '<button class="btn-row" title="Imprimir" onclick="imprimirPropina(\''+x.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">' + _ic('nom-imprimir',15) + '</button> ' +
+                        '<button class="btn-row" title="Ver quién recibe qué y marcar pagos" onclick="_propDetalle(\''+x.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">' + _ic('nom-colaborador',15) + '</button> ' +
+                        '<button class="btn-row" title="Reporte por área" onclick="verReporteProp(\''+x.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">' + _ic('nom-recibo',15) + '</button> ' +
+                        '<button class="btn-row" title="Imprimir" onclick="imprimirReporteProp(\''+x.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">' + _ic('nom-imprimir',15) + '</button> ' +
                         '<button class="btn-row" title="Editar este reparto" onclick="editarPropina(\''+x.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">' + _ic('mov-editar',15) + '</button> ' +
                         '<button class="btn-row" title="Eliminar" onclick="eliminarPropina(\''+x.id+'\')" style="padding:4px 9px;font-size:13px;line-height:1">' + _ic('mov-eliminar',15) + '</button>' +
                     '</td></tr>';
@@ -8681,15 +8845,63 @@ function abrirHistPropinas(){
     }
     _nomEncima('propHistOverlay', 9500).classList.add('open');
 }
+/* El detalle de un reparto: la lista de quién recibe qué, agrupada por área,
+   con su estado y su recibo propio. Vive dentro del mismo historial para no
+   abrir otra ventana encima de otra ventana. */
+function _propDetalle(id){
+    var r = _propReg(id); if (!r) return;
+    var d = r.recibo || {}, body = document.getElementById('propHistBody');
+    var porArea = {}, orden = [];
+    (d.lineas||[]).forEach(function(l){
+        if (!porArea[l.area]) { porArea[l.area] = []; orden.push(l.area); }
+        porArea[l.area].push(l);
+    });
+    var pagados = (d.lineas||[]).filter(function(l){ return l.pagado; }).length;
+    var chip = function(l){
+        var on = !!l.pagado;
+        return '<span style="display:inline-block;font-size:9px;letter-spacing:.5px;text-transform:uppercase;' +
+            'color:' + (on ? '#3dbe7a' : '#e0a93d') + ';background:' + (on ? 'rgba(61,190,122,.12)' : 'rgba(224,169,61,.12)') +
+            ';border:1px solid ' + (on ? 'rgba(61,190,122,.35)' : 'rgba(224,169,61,.35)') +
+            ';border-radius:10px;padding:1px 8px;white-space:nowrap">' + (on ? 'Pagado' : 'Pendiente') + '</span>';
+    };
+    body.innerHTML =
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">' +
+            '<button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="abrirHistPropinas()">← Volver</button>' +
+            '<span style="font-size:12px;color:var(--text-muted)">Folio <b style="color:var(--text)">' + _esc(d.folio||'—') + '</b> · ' +
+                _esc(_fmtFechaCortaDx(d.desde)) + ' – ' + _esc(_fmtFechaCortaDx(d.hasta)) + ' · ' +
+                '<b style="color:var(--text)">' + fmtM(d.total) + '</b> · ' + pagados + ' de ' + ((d.lineas||[]).length) + ' pagados</span>' +
+            '<span style="margin-left:auto;display:flex;gap:6px">' +
+                '<button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="verReporteProp(\''+id+'\')">📄 Reporte por área</button>' +
+                '<button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="imprimirReporteProp(\''+id+'\')">🖨️ Imprimir reporte</button>' +
+            '</span>' +
+        '</div>' +
+        orden.map(function(a){
+            var ls = porArea[a];
+            var sub = ls.reduce(function(x,l){ return x + n(l.monto); }, 0);
+            return '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;' +
+                    'margin:14px 0 4px;padding-bottom:4px;border-bottom:1px solid var(--border)">' +
+                    '<span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--green)">' +
+                    _esc(a) + ' · ' + ls.length + '</span>' +
+                    '<span style="font-size:12px;font-weight:700">' + fmtM(sub) + '</span></div>' +
+                ls.map(function(l){
+                    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)">' +
+                        '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">' + _esc(l.nombre) + '</div>' +
+                        '<div style="font-size:10.5px;color:var(--text-dim);margin-top:2px">' + (l.puesto ? _esc(l.puesto) + ' · ' : '') + chip(l) + '</div></div>' +
+                        '<div style="font-weight:700;white-space:nowrap">' + fmtM(l.monto) + '</div>' +
+                        '<div style="display:flex;gap:4px;flex:0 0 auto">' +
+                            '<button class="btn-row" title="Ver su recibo" onclick="verReciboColab(\''+id+'\',\''+l.staffId+'\')" style="padding:4px 9px;line-height:1">' + _ic('nom-recibo',15) + '</button>' +
+                            '<button class="btn-row" title="Imprimir su recibo" onclick="imprimirReciboColab(\''+id+'\',\''+l.staffId+'\')" style="padding:4px 9px;line-height:1">' + _ic('nom-imprimir',15) + '</button>' +
+                            '<button class="btn-row" title="' + (l.pagado ? 'Marcar como pendiente' : 'Marcar como pagado') + '" ' +
+                                'onclick="togglePagoProp(\''+id+'\',\''+l.staffId+'\')" style="padding:4px 9px;line-height:1">' +
+                                _ic(l.pagado ? 'nom-pagado' : 'nom-pendiente', 15) + '</button>' +
+                        '</div></div>';
+                }).join('');
+        }).join('');
+    _nomEncima('propHistOverlay', 9500).classList.add('open');
+}
 function _propReg(id){ return (_cacheRecibos||[]).find(function(x){ return x.id===id && x.tipo==='propina'; }); }
-function verPropina(id){
-    var r = _propReg(id); if (!r) return;
-    verReciboEnPagina(_propReciboHTML(r.recibo, (r.recibo||{}).correcciones), 'Reparto de propinas — ' + ((r.recibo||{}).folio||''));
-}
-function imprimirPropina(id){
-    var r = _propReg(id); if (!r) return;
-    etaaxAbrirReporte(_propReciboHTML(r.recibo, (r.recibo||{}).correcciones));
-}
+
+
 function editarPropina(id){
     var r = _propReg(id); if (!r) return;
     if (!_exigeVG('gastos.nominas','No puedes repartir propinas.')) return;
@@ -8710,14 +8922,17 @@ function editarPropina(id){
             var nom = _propAreaNom(k);
             var a = (d.areas||[]).find(function(x){ return x.area === nom; });
             var el = document.getElementById('propA_'+k);
-            if (el) el.value = a ? n(a.monto) : '';
+            if (el) el.value = a ? n(a.monto) : '';   // `monto` es por persona
         });
         _propCalcular();
     }
     /* Y encima del reparto calculado se reponen los montos TAL CUAL quedaron:
        si se recalculara, se perdería lo que se ajustó a mano. */
-    _propMontos = {};
-    (d.lineas||[]).forEach(function(l){ _propMontos[l.staffId] = n(l.monto); });
+    _propMontos = {}; _propPagados = {};
+    (d.lineas||[]).forEach(function(l){
+        _propMontos[l.staffId] = n(l.monto);
+        if (l.pagado) _propPagados[l.staffId] = { pagado:true, pagadoEn:l.pagadoEn||'' };
+    });
     _propStaff().forEach(function(s){ if (_propMontos[s.id] === undefined) _propMontos[s.id] = 0; });
     _propPintarLista();
     _nomEncima('modalPropinas', _Z_NOMINA).classList.add('open');
@@ -9906,7 +10121,7 @@ function renderFijosPanel(){
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=6c9cab35"></script>
-<script src="/novedades.js?v=82e09f66"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=fe34aab5"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única (reparto de propinas) -->
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>

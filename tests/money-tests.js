@@ -34254,16 +34254,29 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
     P._propModo('area');
     el('propA_piso').value = 600; el('propA_cocina').value = 300; el('propA_barra').value = 100;
     P._propCalcular();
-    test('por área: cada área reparte lo suyo entre los suyos', () =>
+    /* ══ LA CANTIDAD DE UN ÁREA ES LO QUE COBRA CADA PERSONA ═════════════
+       No es una bolsa para el área que luego se divide entre los suyos. Con
+       $600 en piso y dos meseros, cada mesero cobra $600 —y de piso salen
+       $1,200—. Leerlo al revés reparte la mitad de lo que se quiso. */
+    test('por área: la cantidad es lo que cobra CADA persona de esa área', () =>
         eq(P._propMontos.p1 + '·' + P._propMontos.p4 + '·' + P._propMontos.p2 + '·' + P._propMontos.p3,
-           '300·300·300·100', JSON.stringify(P._propMontos)));
-    /* En modo área el total que manda es la SUMA DE LAS ÁREAS: si mandara el
-       campo de arriba, ajustar a alguien reclamaría un dinero que nadie puso. */
-    test('el total vigente en modo área es la suma de las áreas', () =>
-        eq(P._propTotalVigente(), 1000, 'total'));
+           '600·600·300·100', JSON.stringify(P._propMontos)));
+    /* El total que manda es la suma de lo que de verdad sale: cantidad por
+       área × cuántos son. Si mandara el campo de arriba, ajustar a alguien
+       reclamaría un dinero que nadie puso. */
+    test('el total vigente es cantidad por área × cuántos son', () =>
+        eq(P._propTotalVigente(), 1600, '600×2 + 300×1 + 100×1'));
     test('…y ajustar a uno sigue cuadrando contra ese total', () => {
         P._propAjustar('p3', 400);
-        return eq(suma(), 1000, JSON.stringify(P._propMontos));
+        return eq(suma(), 1600, JSON.stringify(P._propMontos));
+    });
+    /* Y el papel guarda las dos cifras: lo de cada quien y lo que suma el
+       área. Solo con una de las dos hay que sacar la cuenta a mano. */
+    test('el comprobante guarda lo de cada persona y el total del área', () => {
+        el('propDesde').value = '2026-11-01'; el('propHasta').value = '2026-11-07';
+        const dd = P._propDatos();
+        const piso = (dd.areas || []).find(a => /Piso/.test(a.area)) || {};
+        return eq(piso.monto + '·' + piso.personas + '·' + piso.total, '600·2·1200', JSON.stringify(dd.areas));
     });
 
     /* ── El comprobante ─────────────────────────────────────────────── */
@@ -34278,13 +34291,48 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
        aleatorio, dos copias parecerían dos repartos. */
     test('el folio es estable entre reimpresiones', () =>
         eq(P._propDatos().folio, d.folio, 'folio distinto cada vez'));
-    const papel = P._propReciboHTML(d);
-    test('el papel dice a cada quien con su nombre y su importe', () =>
-        eq(papel.indexOf('Ana') > -1 && papel.indexOf(P.fmtM(250)) > -1, true, 'papel'));
-    test('…y dice que no es un CFDI', () =>
-        eq(papel.indexOf('No es un CFDI') > -1, true, 'sin la advertencia'));
-    test('…con el total repartido al pie', () =>
-        eq(/Total repartido/.test(papel) && papel.indexOf(P.fmtM(1000)) > -1, true, 'sin total'));
+    /* ══ DOS PAPELES DISTINTOS, Y NO SE PUEDEN CONFUNDIR ═════════════════
+       El REPORTE es la hoja con la que el encargado reparte: todos, agrupados
+       por área, con subtotales. El RECIBO es lo que firma UNA persona cuando
+       recibe lo suyo. Nadie tiene por qué firmar una hoja donde salen los
+       importes de los demás. */
+    const reporte = P._propReporteHTML(d);
+    test('el reporte agrupa por área, con su subtotal', () =>
+        eq(/Subtotal/.test(reporte) && reporte.indexOf('Piso') > -1 && reporte.indexOf('Cocina') > -1,
+           true, 'sin agrupar'));
+    test('…trae a todos y el total abajo', () =>
+        eq(['Ana','Bea','Caro','Dan'].every(x => reporte.indexOf(x) > -1) &&
+           /Total a repartir/.test(reporte) && reporte.indexOf(P.fmtM(1000)) > -1, true, 'incompleto'));
+    test('…y dice que NO es un recibo', () =>
+        eq(/no es un recibo/i.test(reporte), true, 'se puede confundir con el comprobante'));
+    /* En reparto por área, el papel dice cuánto cobra CADA UNO: sin eso, quien
+       reparte tiene que dividir el subtotal entre la gente para saber qué
+       entregar de mano en mano. */
+    test('el reporte por área dice cuánto cobra cada persona', () => {
+        P._propModo('area');
+        el('propA_piso').value = 600; el('propA_cocina').value = 300; el('propA_barra').value = 100;
+        P._propCalcular();
+        const rep2 = P._propReporteHTML(P._propDatos());
+        P._propModo('uniforme'); el('propTotal').value = 1000; P._propCalcular();
+        return eq(/cada una/.test(rep2) && rep2.indexOf(P.fmtM(600)) > -1, true, 'sin el por persona');
+    });
+    const recibo = P._propReciboColabHTML(d, d.lineas[0]);
+    test('el recibo de una persona trae solo lo suyo', () =>
+        eq(recibo.indexOf('Ana') > -1 && recibo.indexOf('Bea') === -1 &&
+           recibo.indexOf(P.fmtM(250)) > -1, true, 'enseña lo de los demás'));
+    test('…con su folio propio, derivado del folio del reparto', () => {
+        const f = P._propFolioColab(d.folio, 'p1');
+        return eq(f.indexOf(d.folio) === 0 && f !== d.folio && recibo.indexOf(f) > -1, true, f);
+    });
+    test('…su firma y la advertencia de que no es un CFDI', () =>
+        eq(/Recibí de conformidad/.test(recibo) && recibo.indexOf('No es un CFDI') > -1, true, 'sin firma'));
+    /* El folio de cada quien es estable y distinto del de al lado: si dos
+       recibos compartieran folio, no se podrían nombrar por separado. */
+    test('cada persona tiene su propio folio, y no cambia', () => {
+        const fs1 = d.lineas.map(l => P._propFolioColab(d.folio, l.staffId));
+        const fs2 = d.lineas.map(l => P._propFolioColab(d.folio, l.staffId));
+        return eq(new Set(fs1).size + '·' + (fs1.join() === fs2.join()), '4·true', fs1.join());
+    });
     /* Quien recibe 0 no sale en el papel: un renglón en cero en un recibo de
        propinas es una pregunta, no un dato. */
     test('quien no recibe nada no sale en el comprobante', () => {
@@ -34366,6 +34414,92 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
         P.confirm = () => true;
         return eq((P._cacheRecibos || []).length, 1, 'borró sin permiso');
     });
+
+
+    /* ── Agrupado por área, pagado uno por uno ─────────────────────────── */
+    {
+        /* LA LISTA DEL MODAL VA AGRUPADA. Veinte nombres en fila obligan a
+           sumar de cabeza para saber cuánto se llevó la barra, que es justo la
+           pregunta que se hace al repartir. */
+        P.abrirPropinas();
+        el('propDesde').value = '2026-11-01'; el('propHasta').value = '2026-11-07';
+        el('propTotal').value = 1000; P._propCalcular();
+        const lista = P.document.getElementById('propLista').innerHTML;
+        test('la lista del modal se agrupa por área', () =>
+            eq(['Barra','Cocina','Piso'].every(a => lista.indexOf(a) > -1), true, 'sin agrupar'));
+        test('…con el subtotal de cada área', () =>
+            eq(lista.indexOf(P.fmtM(500)) > -1, true, 'Piso son dos de 250: 500'));
+        /* El orden es el de la operación (barra, cocina, piso), no el
+           alfabético ni el del catálogo. */
+        test('…y en el orden de la operación', () => {
+            const o = ['Barra','Cocina','Piso'].map(a => lista.indexOf(a));
+            return eq(o[0] < o[1] && o[1] < o[2], true, 'orden ' + o.join(','));
+        });
+
+        /* ── El estado por persona ── */
+        P._cacheRecibos = [];
+        P.guardarPropinas();
+        const idP = P._cacheRecibos[0].id;
+        test('al guardar, todos nacen pendientes', () =>
+            eq(P._cacheRecibos[0].recibo.lineas.every(l => l.pagado === false), true, 'nacieron pagados'));
+        test('marcar a uno como pagado solo lo toca a él', () => {
+            P.togglePagoProp(idP, 'p1');
+            const ls = P._cacheRecibos[0].recibo.lineas;
+            const pagados = ls.filter(l => l.pagado).map(l => l.staffId);
+            return eq(pagados.join(','), 'p1', 'tocó a otros');
+        });
+        test('…y queda sellado con el instante', () =>
+            eq((P._cacheRecibos[0].recibo.lineas.find(l => l.staffId === 'p1').pagadoEn || '').length > 10,
+               true, 'sin sello'));
+        test('volver a tocarlo lo regresa a pendiente y suelta el sello', () => {
+            P.togglePagoProp(idP, 'p1');
+            const l = P._cacheRecibos[0].recibo.lineas.find(x => x.staffId === 'p1');
+            return eq(l.pagado + '·' + l.pagadoEn, 'false·', 'no se soltó');
+        });
+        /* LO QUE MÁS DUELE SI SE PIERDE: editar el reparto no puede poner a
+           todos en pendiente otra vez —habría que volver a palomear a los que
+           ya cobraron—. */
+        test('editar el reparto conserva quién ya cobró', () => {
+            P.togglePagoProp(idP, 'p2');
+            P.editarPropina(idP);
+            P._propAjustar('p1', 300);
+            P.guardarPropinas();
+            const ls = (P._cacheRecibos.find(x => x.id === idP) || {}).recibo.lineas;
+            return eq(ls.filter(l => l.pagado).map(l => l.staffId).join(','), 'p2',
+                      'se perdió el estado de pago al editar');
+        });
+        /* El detalle: quién recibe qué, con su estado y su recibo propio. */
+        P._propDetalle(idP);
+        const det = () => P.document.getElementById('propHistBody').innerHTML;
+        test('el detalle enseña a cada quien con su estado', () =>
+            eq(/Pagado/.test(det()) && /Pendiente/.test(det()), true, 'sin estado'));
+        test('…agrupado por área, como la lista', () =>
+            eq(['Barra','Cocina','Piso'].every(a => det().indexOf(a) > -1), true, 'sin agrupar'));
+        test('…con el recibo de cada persona a un clic', () =>
+            eq(det().indexOf("verReciboColab('" + idP + "','p1')") > -1, true, 'sin recibo propio'));
+        test('…y el reporte por área desde ahí mismo', () =>
+            eq(det().indexOf('verReporteProp') > -1 && det().indexOf('imprimirReporteProp') > -1,
+               true, 'sin reporte'));
+        test('el detalle dice cuántos van pagados', () =>
+            eq(/1 de 4 pagados/.test(det()), true, det().slice(det().indexOf('Folio'), det().indexOf('Folio') + 160)));
+        /* El permiso manda también para marcar pagos. */
+        test('sin permiso no se puede marcar un pago', () => {
+            P._exigeVG = () => false;
+            P.togglePagoProp(idP, 'p3');
+            P._exigeVG = () => true;
+            return eq((P._cacheRecibos.find(x => x.id === idP) || {}).recibo.lineas
+                        .filter(l => l.pagado).map(l => l.staffId).join(','), 'p2', 'marcó sin permiso');
+        });
+        /* Y el papel de cada quien no se mezcla con el de los demás. */
+        test('el recibo de una persona no enseña los importes de otras', () => {
+            let visto = '';
+            const v0 = P.verReciboEnPagina; P.verReciboEnPagina = (h) => { visto = h; };
+            P.verReciboColab(idP, 'p3');
+            P.verReciboEnPagina = v0;
+            return eq(visto.indexOf('Caro') > -1 && visto.indexOf('Ana') === -1, true, 'mezcló');
+        });
+        P._cacheRecibos = [];
+    }
 
     /* ── Los candados de la pantalla ────────────────────────────────── */
     test('sin total, no se guarda nada', () => {
