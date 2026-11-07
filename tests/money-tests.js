@@ -6742,9 +6742,14 @@ console.log('\n══ BB0 · Las acciones de un gasto en un solo menú ══');
     const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
     test('existe el menú de gastos', () =>
         eq(dia.indexOf('function _menuGasto(ev, id){') > -1, true, 'menú'));
-    /* Tres tablas pintan gastos: las dos listas y el panel de nóminas. */
-    test('las tres tablas de gastos lo usan', () =>
-        eq((dia.match(/_menuGasto\(event/g) || []).length, 3, 'las tres'));
+    /* Tres tablas pintan gastos. Las DOS listas usan este menú tal cual; el
+       panel de nóminas elige: para un pago de nómina abre el suyo —con el
+       recibo dentro— y para cualquier otro gasto, este mismo. Lo que no puede
+       es que alguna se quede sin menú y vuelvan los botones sueltos. */
+    test('las dos listas de gastos lo usan', () =>
+        eq((dia.match(/_menuGasto\(event/g) || []).length, 2, 'las dos'));
+    test('…y el panel de nóminas elige entre los dos, sin quedarse sin ninguno', () =>
+        eq(/\(_nomEsGastoDeNomina\(g\)\?'_menuPagoNomina':'_menuGasto'\)/.test(dia), true, 'elige'));
     /* Los botones sueltos no pueden volver: si vuelven, quedan LOS DOS y la
        columna se rompe justo en la pantalla donde más estorba. */
     test('ya no hay botones sueltos de ver/editar/eliminar en la fila', () =>
@@ -33118,9 +33123,10 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         if (i < 0) throw new Error('no está la opción ' + txt);
         return html.lastIndexOf('onclick', i) > html.lastIndexOf('<div', i);
     };
-    test('el menú ofrece siempre las cinco opciones', () => {
+    test('el menú ofrece siempre sus opciones', () => {
         const h = menu('s2');
-        return eq(['Generar recibo','Editar recibo','Ver recibo','Imprimir recibo','Generar gasto']
+        return eq(['Generar recibo','Editar recibo','Ver recibo','Imprimir recibo',
+                   'Generar gasto','Eliminar recibo']
                     .every(t => h.indexOf('>' + t + '<') > -1), true, 'faltan opciones');
     });
     /* Sin recibo: solo se puede generar. Las otras se ven apagadas y DICEN por
@@ -33128,8 +33134,8 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
     test('sin recibo, solo «Generar recibo» responde', () => {
         const h = menu('s2');
         return eq([activa(h,'Generar recibo'), activa(h,'Editar recibo'), activa(h,'Ver recibo'),
-                   activa(h,'Imprimir recibo'), activa(h,'Generar gasto')].join(','),
-                  'true,false,false,false,false', 'opciones mal habilitadas');
+                   activa(h,'Imprimir recibo'), activa(h,'Generar gasto'), activa(h,'Eliminar recibo')].join(','),
+                  'true,false,false,false,false,false', 'opciones mal habilitadas');
     });
     test('…y las apagadas explican por qué', () =>
         eq(/title="[^"]*gen[eé]ralo primero/i.test(menu('s2')), true, 'apagadas y mudas'));
@@ -33137,14 +33143,14 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
     test('con recibo sin pagar, se puede editar, ver, imprimir y pagar', () => {
         const h = menu('s1');
         return eq([activa(h,'Generar recibo'), activa(h,'Editar recibo'), activa(h,'Ver recibo'),
-                   activa(h,'Imprimir recibo'), activa(h,'Generar gasto')].join(','),
-                  'false,true,true,true,true', 'opciones mal habilitadas');
+                   activa(h,'Imprimir recibo'), activa(h,'Generar gasto'), activa(h,'Eliminar recibo')].join(','),
+                  'false,true,true,true,true,true', 'opciones mal habilitadas');
     });
     /* Los iconos son los de la línea gráfica, no emojis sueltos: si el nombre
        no existiera, etaaxIcono devuelve cadena vacía y el menú saldría pelón. */
     test('las opciones llevan iconos de la línea gráfica', () => {
         const h = menu('s1');
-        return eq((h.match(/<svg class="etx-ic"/g) || []).length, 5, 'iconos');
+        return eq((h.match(/<svg class="etx-ic"/g) || []).length, 6, 'iconos');
     });
 
     /* ── 3 · pagar ─────────────────────────────────────────────────────── */
@@ -33166,10 +33172,10 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         const r = (X._cacheRecibos || [])[0] || {};
         return eq((r.gastoId === g1.id) + '·' + (r.pagadoEn.length > 10), 'true·true', 'sin sello');
     });
-    test('ya pagado, el menú apaga editar y pagar', () => {
+    test('ya pagado, el menú apaga editar, pagar y eliminar', () => {
         const h = menu('s1');
-        return eq([activa(h,'Editar recibo'), activa(h,'Generar gasto'),
-                   activa(h,'Ver recibo')].join(','), 'false,false,true', 'deja repagar');
+        return eq([activa(h,'Editar recibo'), activa(h,'Generar gasto'), activa(h,'Eliminar recibo'),
+                   activa(h,'Ver recibo')].join(','), 'false,false,false,true', 'deja repagar o borrar');
     });
     /* Y por si alguien llega por otro camino: la función también se niega. */
     test('…y pagarlo otra vez por la fuerza tampoco pasa', () => {
@@ -33367,6 +33373,14 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         test('los modales de nómina se montan ENCIMA del catálogo', () => {
             const z = (id) => parseInt(X.document.getElementById(id).style.zIndex, 10) || 0;
             const borrar = (id) => { X.document.getElementById(id).style.zIndex = ''; };
+            /* La capa a superar se LEE de la hoja de la página, no se escribe
+               aquí de memoria: esta página redefine .modal-overlay en 9000 —el
+               de styles.css es 200— y comparar contra el número equivocado
+               daba por bueno un modal que salía DEBAJO del catálogo. */
+            const src0 = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+            const mz = src0.match(/\.modal-overlay\{[^}]*z-index:(\d+)/);
+            if (!mz) throw new Error('no se encontró el z-index de .modal-overlay');
+            const PISO = parseInt(mz[1], 10);
             /* Cada camino se mide por separado y con la pizarra limpia: si no,
                basta que una apertura anterior lo haya dejado puesto para que
                esto pase por nada. */
@@ -33377,7 +33391,7 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
                         nomina:{ folio:'N-1', desde:'2026-11-01', hasta:'2026-11-30',
                                  dias:7, diario:300, origen:{ conceptos:[] } } }, ana), 'modalPagoNom'],
             ];
-            const flojos = caminos.filter(c => { borrar(c[2]); c[1](); return !(z(c[2]) > 200); })
+            const flojos = caminos.filter(c => { borrar(c[2]); c[1](); return !(z(c[2]) > PISO); })
                                   .map(c => c[0]);
             borrar('modalGasto');
             silencio(() => { X._exigeVG = () => true; X.generarGastoNomina('s1'); });
@@ -33436,6 +33450,127 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         const bloque = cab.slice(0, cab.indexOf('nomBuscaInp'));
         test('…y el bloque pegado no se tira hacia arriba con margen negativo', () =>
             eq(/margin:0 -22px/.test(bloque), true, 'se sale por arriba'));
+    }
+
+
+    /* ── 11 · eliminar lo que todavía no es dinero ─────────────────────── */
+    {
+        X._cacheRecibos = [{ id:'nrE', negocioId:'n1', sucursalId:'suc_principal', staffId:'s2',
+                             desde:'2026-11-01', hasta:'2026-11-30',
+                             recibo:{ folio:'N-8', desde:'2026-11-01', hasta:'2026-11-30', total:900 },
+                             gastoId:'', pagadoEn:'' }];
+        X._cacheGastos = [];
+        X._exigeVG = () => true;
+        let preguntado = '';
+        X.confirm = (m) => { preguntado = String(m); return true; };
+        X._sbDel = () => {};
+        X.eliminarReciboGenerado('s2');
+        test('eliminar un recibo sin pagar lo quita', () =>
+            eq((X._cacheRecibos || []).length, 0, 'siguió ahí'));
+        /* Se pregunta con NOMBRE y PERIODO: «¿eliminar este recibo?» a secas
+           hace que el que borra el equivocado no sepa que se equivocó. */
+        test('…preguntando con nombre, periodo e importe', () =>
+            eq(/Bea/.test(preguntado) && /2026-11-01/.test(preguntado) &&
+               preguntado.indexOf(X.fmtM(900)) > -1, true, preguntado.slice(0, 80)));
+        test('y si se dice que no, no se borra nada', () => {
+            X._cacheRecibos = [{ id:'nrE2', negocioId:'n1', sucursalId:'suc_principal', staffId:'s2',
+                                 desde:'2026-11-01', hasta:'2026-11-30', recibo:{ total:900 },
+                                 gastoId:'', pagadoEn:'' }];
+            X.confirm = () => false;
+            X.eliminarReciboGenerado('s2');
+            X.confirm = () => true;
+            return eq((X._cacheRecibos || []).length, 1, 'borró sin permiso');
+        });
+        /* Uno PAGADO no se borra por aquí: es el comprobante de dinero que
+           salió, y borrarlo dejaría el gasto sin papel que lo explique. */
+        test('un recibo ya pagado no se borra desde el catálogo', () => {
+            X._cacheRecibos = [{ id:'nrP', negocioId:'n1', sucursalId:'suc_principal', staffId:'s2',
+                                 desde:'2026-11-01', hasta:'2026-11-30', recibo:{ total:900 },
+                                 gastoId:'gP', pagadoEn:new Date().toISOString() }];
+            avisos.length = 0;
+            X.eliminarReciboGenerado('s2');
+            return eq((X._cacheRecibos || []).length + '·' + /ya se pagó/i.test(avisos.join(' ')),
+                      '1·true', 'borró un comprobante pagado');
+        });
+    }
+
+    /* ── 12 · el menú del historial de pagos ───────────────────────────── */
+    {
+        const gasto = { id:'gH', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-09',
+                        monto:2100, concepto:'Nómina semanal — Ana', categoria:'Nómina y personal',
+                        staffId:'s1', reciboId:'nrH',
+                        nomina:{ folio:'N-7', periodicidad:'Semanal', desde:'2026-11-01',
+                                 hasta:'2026-11-07', dias:7, diario:300,
+                                 staff:{ id:'s1', nombre:'Ana', puesto:'Barista' },
+                                 percepciones:[{concepto:'Sueldo del periodo',detalle:'',monto:2100}],
+                                 deducciones:[], totalPerc:2100, totalDed:0, total:2100,
+                                 origen:{ conceptos:[] } } };
+        X._cacheGastos = [gasto];
+        X._cacheRecibos = [{ id:'nrH', negocioId:'n1', sucursalId:'suc_principal', staffId:'s1',
+                             desde:'2026-11-01', hasta:'2026-11-07', recibo:gasto.nomina,
+                             gastoId:'gH', pagadoEn:new Date().toISOString() }];
+        const abrirMenu = (fn, id) => {
+            let puesto = '';
+            const ce = X.document.createElement;
+            X.document.createElement = () => ({ className:'', style:{ cssText:'' },
+                set innerHTML(v){ puesto = v; }, get innerHTML(){ return puesto; },
+                appendChild(){}, addEventListener(){} });
+            const ap = X.document.body.appendChild; X.document.body.appendChild = () => {};
+            try { X[fn]({ stopPropagation(){},
+                          currentTarget:{ getBoundingClientRect:() => ({ bottom:0, right:0 }) } }, id); }
+            finally { X.document.createElement = ce; X.document.body.appendChild = ap; }
+            return puesto;
+        };
+        const h = abrirMenu('_menuPagoNomina', 'gH');
+        test('el historial de pagos tiene su propio menú', () =>
+            eq(['Ver gasto','Editar gasto','Ver recibo','Imprimir recibo','Editar recibo','Eliminar pago']
+                .every(t => h.indexOf('>' + t + '<') > -1), true, 'faltan opciones'));
+        /* Mismo estilo e iconos que el del catálogo: es la misma faena vista
+           desde el otro lado. */
+        test('…con los iconos de la línea gráfica, como el del catálogo', () =>
+            eq((h.match(/<svg class="etx-ic"/g) || []).length, 6, 'iconos'));
+        /* «Editar recibo» aquí NO es un reemplazo en silencio: el dinero ya
+           salió, así que pasa por la corrección, con su motivo y su rastro. */
+        test('editar el recibo de un pago va por la corrección, con rastro', () =>
+            eq(h.indexOf("editarReciboNomina('gH')") > -1, true, 'reemplaza en silencio'));
+        /* Y el renglón del panel lo llama de verdad: una función perfecta a la
+           que nadie llama no sirve de nada. */
+        test('el renglón del panel abre ese menú y no el de un gasto cualquiera', () =>
+            eq(X._filaPagoPanel(gasto).indexOf('_menuPagoNomina(event') > -1 &&
+               X._filaPagoPanel({ id:'x', fecha:'2026-11-09', monto:10, concepto:'Servilletas',
+                                  categoria:'Varios' }).indexOf('_menuGasto(event') > -1,
+               true, 'el panel abre el menú equivocado'));
+        /* ELIMINAR EL PAGO SE LLEVA SU RECIBO: dejarlo suelto haría que la
+           persona volviera a aparecer como «recibo listo» por una nómina que
+           ya nadie va a pagar. */
+        test('eliminar el pago se lleva el gasto Y su recibo', () => {
+            X._pedirClaveAdmin = (t, cb) => cb();
+            X._puedeEditarGasto = () => true;
+            const g0 = X.gRenderAll, s0 = X._syncGastosCortes, r0 = X.renderNominasPanel, d0 = X._sbDel;
+            const borrados = [];
+            X.gRenderAll = () => {}; X._syncGastosCortes = () => {}; X.renderNominasPanel = () => {};
+            X._sbDel = (t, id) => { borrados.push(t + ':' + id); };
+            try { X.eliminarPagoNomina('gH'); }
+            finally { X.gRenderAll = g0; X._syncGastosCortes = s0; X.renderNominasPanel = r0; X._sbDel = d0; }
+            return eq((X._cacheGastos || []).length + '·' + (X._cacheRecibos || []).length + '·' +
+                      borrados.sort().join(','),
+                      '0·0·gastos:gH,nomina_recibos:nrH', 'quedó algo suelto');
+        });
+        /* Y pide la clave, como cualquier borrado de dinero. */
+        test('…pidiendo la contraseña, como todo borrado de dinero', () => {
+            X._cacheGastos = [gasto];
+            let pedida = false;
+            X._pedirClaveAdmin = () => { pedida = true; };   // no se confirma: no debe borrar
+            /* El repintado se silencia para que, si el candado se cayera, esto
+               falle DICIENDO que borró sin clave —y no reventando en el
+               primer render, que no explica nada. */
+            const g0 = X.gRenderAll, s0 = X._syncGastosCortes, r0 = X.renderNominasPanel;
+            X.gRenderAll = () => {}; X._syncGastosCortes = () => {}; X.renderNominasPanel = () => {};
+            try { X.eliminarPagoNomina('gH'); }
+            finally { X.gRenderAll = g0; X._syncGastosCortes = s0; X.renderNominasPanel = r0;
+                      X._pedirClaveAdmin = (t, cb) => cb(); }
+            return eq(pedida + '·' + (X._cacheGastos || []).length, 'true·1', 'borró sin clave');
+        });
     }
 
     /* ── 6 · si la v85 no está corrida, el panel no se cae ─────────────── */

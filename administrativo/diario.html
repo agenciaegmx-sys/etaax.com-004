@@ -6870,7 +6870,7 @@ function _abrirModalGasto(g,tipo){
     renderEvidenciasGasto();
     /* El de gasto va ARRIBA de todo: puede abrirse desde el catálogo, desde el
        modal de nómina o solo. */
-    _nomEncima('modalGasto', 340).classList.add('open');
+    _nomEncima('modalGasto', _Z_GASTO).classList.add('open');
     _cerrarPuenteGasto(); // QR apagado al abrir — el usuario lo activa con el botón (📱)
 }
 
@@ -6945,8 +6945,16 @@ function _cerrarSelPago(){ var m=document.getElementById('modalSelPago'); if(m) 
    renglón —dieciséis veces—.
 
    Así que el catálogo se queda abierto detrás y el modal de turno se le monta
-   encima. Los dos son `.modal-overlay` (z-index 200), y quién tapa a quién
-   dependería del orden en que se crearon: se dice a la mano. */
+   encima. Los dos son `.modal-overlay` y quién tapa a quién dependería del
+   orden en que se crearon, así que se dice a la mano.
+
+   OJO CON EL NÚMERO: esta página REDEFINE `.modal-overlay` en 9000 —el de
+   styles.css es 200—. Poner 320 aquí dejaba los modales DEBAJO del catálogo,
+   que es justo lo que se quería evitar. Por eso las capas salen de la hoja de
+   la página y no de memoria. */
+var _Z_MODAL = 9000;   // el de .modal-overlay de ESTA página (ver el <style> de arriba)
+var _Z_NOMINA = _Z_MODAL + 200;   // el modal de nómina, encima del catálogo
+var _Z_GASTO  = _Z_MODAL + 300;   // y el de gasto, encima de los dos
 function _nomEncima(id, z){
     var m=document.getElementById(id);
     if(m && m.style) m.style.zIndex=z;
@@ -7082,7 +7090,13 @@ function _nomAcciones(staffId, rango){
          + '<div style="height:1px;background:var(--border);margin:5px 2px"></div>'
          + mi('nom-continuar','Generar gasto',"generarGastoNomina('"+q+"')", !!rec && !pagado,
               pagado ? 'Esta nómina ya tiene su gasto registrado.'
-                     : 'Primero genera el recibo: el gasto sale de él.');
+                     : 'Primero genera el recibo: el gasto sale de él.')
+         /* Borrar solo lo que NO se ha pagado. Un recibo con gasto es el
+            comprobante de dinero que salió: ese se borra desde su renglón en
+            el panel, y arrastra al gasto con él. */
+         + mi('mov-eliminar','Eliminar recibo',"eliminarReciboGenerado('"+q+"')", !!rec && !pagado,
+              pagado ? 'Ya se pagó: para deshacerlo, elimina el pago desde el panel.'
+                     : 'Todavía no hay recibo que eliminar.');
 }
 function _menuNomina(ev, staffId){
     ev.stopPropagation();
@@ -7557,7 +7571,7 @@ function abrirPagoNomina(staffId){
     _pnCptTipoChange();   // ajusta el captador de conceptos
     _pnReponerBonos();    // los bonos de su ficha entran solos, con su concepto
     _pnCalc();
-    _nomEncima('modalPagoNom', 320).classList.add('open');
+    _nomEncima('modalPagoNom', _Z_NOMINA).classList.add('open');
 }
 
 /* ══ LOS BONOS DEL EXPEDIENTE SE CARGAN SOLOS ══════════════════════════════
@@ -8338,6 +8352,26 @@ function _visorImprimir(){
     if (!_visorHTML) return;
     etaaxAbrirReporte(_visorHTML);
 }
+/* Un recibo sin pagar no es dinero: se puede tirar. Pero se pregunta con
+   NOMBRE y PERIODO —no «¿eliminar este recibo?»—, porque el que borra el
+   equivocado no lo recupera. */
+function eliminarReciboGenerado(staffId){
+    var reg = _reciboGeneradoDe(staffId), s = _staffDe(staffId);
+    if (!reg || !s) return;
+    if (reg.gastoId){ alert('Esta nómina ya se pagó. Para deshacerla, elimina el pago desde el panel de nóminas.'); return; }
+    if (!_exigeVG('gastos.nominas','No puedes tocar las nóminas.')) return;
+    var r = reg.recibo || {};
+    if (!confirm('Eliminar el recibo de ' + s.nombre + '\n\n' +
+                 'Periodo ' + (r.desde||'—') + ' a ' + (r.hasta||'—') + ' · ' + fmtM(r.total) + '\n\n' +
+                 'Todavía no se ha pagado, así que no se toca ningún gasto. El recibo sí se pierde.')) return;
+    _borrarRecibo(reg.id);
+    _volverAlCatalogo();
+}
+function _borrarRecibo(id){
+    if (!id) return;
+    _cacheRecibos = (_cacheRecibos || []).filter(function(x){ return x.id !== id; });
+    _sbDel('nomina_recibos', id);
+}
 function verReciboGenerado(staffId){
     var reg = _reciboGeneradoDe(staffId);
     if (!reg) return;
@@ -8468,7 +8502,7 @@ function _pnAbrirDesdeRecibo(reg, s){
             '. Todavía no se ha pagado: al guardar se reemplaza el recibo, sin rastro ni motivo. '+
             'Para pagarlo usa <b>Generar gasto</b>.';
     }
-    _nomEncima('modalPagoNom', 320).classList.add('open');
+    _nomEncima('modalPagoNom', _Z_NOMINA).classList.add('open');
 }
 function _pnAbrirCorreccion(g,s){
     _cerrarSelPago();
@@ -8488,7 +8522,7 @@ function _pnAbrirCorreccion(g,s){
             ' del '+_esc(_fmtFechaCortaDx(g.fecha))+'. Al confirmar se actualiza ese mismo gasto (no se crea otro) y el recibo guarda qué decía antes.'+
             (_ncor?'<br><span style="color:var(--text-dim)">Ya tiene '+_ncor+' corrección'+(_ncor!==1?'es':'')+' registrada'+(_ncor!==1?'s':'')+'.</span>':'');
     }
-    _nomEncima('modalPagoNom', 320).classList.add('open');
+    _nomEncima('modalPagoNom', _Z_NOMINA).classList.add('open');
 }
 function _reciboNominaHTML(d, fechaPago){
     var _e=(typeof etx==='function')?etx:function(x){ return String(x==null?'':x); };
@@ -9083,10 +9117,79 @@ function _filaPagoPanel(g){
                 'style="padding:4px 9px;font-size:13px;line-height:1'+(g.nomina?'':';opacity:.72')+'">🧾</button> ' : '')+
             ((g.nomina&&g.nomina.origen) ? '<button class="btn-row" title="Corregir este pago (reabre la nómina y deja rastro en el recibo)" onclick="editarReciboNomina(\''+g.id+'\')" '+
                 'style="padding:4px 9px;font-size:13px;line-height:1">✏️</button> ' : '')+
-            '<button class="btn-row" title="Opciones" onclick="_menuGasto(event,\''+g.id+'\')" '+
+            '<button class="btn-row" title="Opciones" onclick="'+
+                (_nomEsGastoDeNomina(g)?'_menuPagoNomina':'_menuGasto')+'(event,\''+g.id+'\')" '+
                 'style="padding:4px 10px;font-size:15px;line-height:1">⋯</button>'+
         '</td>'+
     '</tr>';
+}
+/* ══ EL MENÚ DEL HISTORIAL DE PAGOS ══════════════════════════════════════
+   El mismo estilo y los mismos iconos que el del catálogo, porque es la misma
+   faena vista desde el otro lado: aquí la nómina YA se pagó.
+
+   Por eso «Editar recibo» no es lo mismo que allá: el dinero ya salió, así que
+   pasa por la corrección —con su motivo y su rastro en el papel— y no por un
+   reemplazo en silencio.                                                     */
+function _menuPagoNomina(ev, gastoId){
+    ev.stopPropagation();
+    _cerrarMenusCorte();
+    var g=(_cacheGastos||[]).find(function(x){ return x.id===gastoId; })||{};
+    var q=String(gastoId).replace(/'/g,"\\'");
+    var tieneRec=!!_reciboDeGasto(g);
+    var puedeCorregir=!!(g.nomina && g.nomina.origen);
+    var mi=function(ico, txt, accion, activo, porQue, peligro){
+        if (activo) return _miCorte(_ic(ico), txt, accion, peligro);
+        return '<div title="'+_esc(porQue)+'" style="display:flex;align-items:center;gap:9px;padding:9px 11px;'+
+            'border-radius:7px;font-size:13px;color:var(--text-dim);opacity:.45;cursor:default">'+
+            '<span style="width:18px;text-align:center">'+_ic(ico)+'</span><span>'+txt+'</span></div>';
+    };
+    var html=
+        mi('adm-datos-gasto','Ver gasto',"verGasto('"+q+"')", true, '') +
+        mi('mov-editar','Editar gasto',"editarGasto('"+q+"')", _puedeEditarGasto(g),
+           'Tu rol no puede editar gastos de días anteriores.') +
+        '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
+        mi('nom-recibo','Ver recibo',"verReciboNomina('"+q+"')", tieneRec,
+           'Este gasto no es un pago de nómina.') +
+        mi('nom-imprimir','Imprimir recibo',"imprimirReciboNomina2('"+q+"')", tieneRec,
+           'Este gasto no es un pago de nómina.') +
+        mi('nom-conceptos','Editar recibo',"editarReciboNomina('"+q+"')", puedeCorregir,
+           'Este pago no guardó la captura de la nómina, así que el cálculo no se puede reabrir.') +
+        '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
+        mi('mov-eliminar','Eliminar pago',"eliminarPagoNomina('"+q+"')", _puedeEditarGasto(g),
+           'Tu rol no puede eliminar gastos de días anteriores.', true);
+    var m=document.createElement('div');
+    m.className='cx-menu';
+    var r=ev.currentTarget.getBoundingClientRect();
+    m.style.cssText='position:fixed;z-index:10001;min-width:210px;background:var(--surface);'+
+        'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);'+
+        'top:'+Math.min(r.bottom+6, window.innerHeight-260)+'px;left:'+Math.max(10, r.right-210)+'px';
+    m.innerHTML=html;
+    document.body.appendChild(m);
+    setTimeout(function(){ document.addEventListener('click', _cerrarMenusCorte, { once:true }); }, 0);
+}
+/* Imprimir el recibo de un gasto (el guardado o el reconstruido). */
+function imprimirReciboNomina2(gastoId){
+    var g=gLoad().find(function(x){ return x.id===gastoId; });
+    var rec=g&&_reciboDeGasto(g);
+    if(!rec) return;
+    etaaxAbrirReporte(_reciboNominaHTML(rec, g.pagadoEl||g.fecha));
+}
+/* Eliminar el pago se lleva su recibo: dejarlo suelto haría que la persona
+   apareciera como «recibo listo» por una nómina que ya nadie va a pagar. */
+function eliminarPagoNomina(gastoId){
+    var g=gLoad().find(function(x){ return x.id===gastoId; });
+    if(!g) return;
+    if(!_puedeEditarGasto(g)){ alert('Tu rol no puede eliminar gastos de días anteriores.'); return; }
+    _pedirClaveAdmin('Eliminar el pago de nómina: '+(g.concepto||''), function(){
+        var rid=g.reciboId || ((_cacheRecibos||[]).find(function(x){ return x.gastoId===g.id; })||{}).id;
+        _cacheGastos = (_cacheGastos||[]).filter(function(x){ return x.id!==g.id; });
+        _sbDel('gastos', g.id);
+        if(rid) _borrarRecibo(rid);
+        gRenderAll();
+        _syncGastosCortes();
+        renderNominasPanel();
+        _volverAlCatalogo();
+    });
 }
 function renderNominasPanel(){
     var tb=document.getElementById('tbodyNomPagos'); if(!tb) return;
