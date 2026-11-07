@@ -33983,6 +33983,89 @@ console.log('\n══ BH66 · Las ventanas tienen que poder verse ══');
     });
 }
 
+/* ═══════════ BH67 · EL MENÚ TIENE QUE CABER EN LA PANTALLA ═══════════
+   Cada menú se colocaba restando un alto ADIVINADO a la altura de la ventana
+   (…-180, …-230, …-260). Con tres renglones funcionaba; al crecer a seis, el
+   último —«Eliminar pago»— se salía de la pantalla y no había manera de
+   tocarlo. Adivinar el alto no sirve: depende de cuántas opciones traiga el
+   menú, de los separadores y del zoom.                                      */
+console.log('\n══ BH67 · El menú tiene que caber en la pantalla ══');
+{
+    const Y = crearContexto();
+    cargarJS(Y, 'etaax-core.js');
+    cargarInline(Y, 'administrativo/diario.html');
+    Y.window.innerHeight = 800; Y.window.innerWidth = 1200;
+    const menu = (alto) => ({ style:{}, offsetHeight:alto });
+    const top = (m) => parseInt(m.style.top, 10);
+    const left = (m) => parseInt(m.style.left, 10);
+
+    /* Cabe debajo del botón: va debajo, como siempre. */
+    {
+        const m = menu(240);
+        Y._colocarMenu(m, { top:100, bottom:130, right:900 }, 210);
+        test('si cabe debajo del botón, se abre debajo', () => eq(top(m), 136, 'debajo'));
+    }
+    /* NO cabe debajo —el botón está al final de la lista— pero sí arriba: se
+       abre hacia arriba, como cualquier menú del sistema. */
+    {
+        const m = menu(300);
+        Y._colocarMenu(m, { top:700, bottom:730, right:900 }, 210);
+        test('si no cabe debajo, se abre hacia ARRIBA', () => eq(top(m), 394, 'arriba'));
+        test('…y queda entero dentro de la pantalla', () =>
+            eq(top(m) >= 8 && top(m) + 300 <= 800, true, 'se sale'));
+    }
+    /* EL CASO DE EDWIN: menú de seis opciones, botón al fondo. Con el cálculo
+       viejo (innerHeight-260 = 540) el menú empezaba en 540 y terminaba en
+       880: ochenta píxeles fuera de la pantalla, y ahí vivía «Eliminar pago». */
+    {
+        const m = menu(340);
+        Y._colocarMenu(m, { top:690, bottom:720, right:900 }, 210);
+        test('el menú de seis opciones no se corta por abajo', () =>
+            eq(top(m) + 340 <= 800, true, 'termina en ' + (top(m) + 340) + ' y la pantalla mide 800'));
+    }
+    /* Un menú más alto que la pantalla entera no puede empujarse fuera por
+       arriba: se pega al borde y el navegador hará el resto. */
+    {
+        const m = menu(900);
+        Y._colocarMenu(m, { top:400, bottom:430, right:900 }, 210);
+        test('un menú más alto que la pantalla se pega al borde', () => eq(top(m), 8, 'top=' + top(m)));
+    }
+    /* De lado: pegado a la derecha del botón, sin salirse por ninguno de los
+       dos bordes. */
+    {
+        const m = menu(200);
+        Y._colocarMenu(m, { top:100, bottom:130, right:100 }, 210);
+        test('un botón pegado a la izquierda no saca el menú de la pantalla', () =>
+            eq(left(m) >= 10, true, 'left=' + left(m)));
+        const m2 = menu(200);
+        Y._colocarMenu(m2, { top:100, bottom:130, right:1400 }, 210);
+        test('…ni uno pegado a la derecha', () =>
+            eq(left(m2) + 210 <= 1200, true, 'left=' + left(m2)));
+    }
+    /* Si el navegador no sabe decir el alto, se cae al cálculo de antes: nadie
+       se queda sin menú por no poder medir. */
+    {
+        const m = { style:{} };
+        Y._colocarMenu(m, { top:100, bottom:130, right:900 }, 210);
+        test('sin medida, se cae al cálculo de siempre en vez de reventar', () =>
+            eq(top(m), 136, 'top=' + top(m)));
+    }
+    /* Y que los CUATRO menús usen el mismo colocador: eran cuatro cuentas
+       distintas y por eso el bug solo apareció en uno. */
+    {
+        const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        /* Se cuentan las LLAMADAS, no la definición: `function _colocarMenu(m,
+           r, ancho)` casa con el mismo patrón y haría pasar la prueba con un
+           menú de menos. */
+        test('los cuatro menús se colocan con la misma función', () =>
+            eq((dia.match(/^\s+_colocarMenu\(m, r, \d+\);$/gm) || []).length, 4,
+               'cada uno con su cuenta'));
+        test('…y ya nadie adivina el alto restándoselo a la ventana', () =>
+            eq(/top:'\+Math\.min\(r\.bottom\+6, window\.innerHeight-\d+\)/.test(dia), false,
+               'quedó una cuenta adivinada'));
+    }
+}
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }

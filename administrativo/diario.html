@@ -4822,7 +4822,7 @@ function _menuGasto(ev, id){
     var r=ev.currentTarget.getBoundingClientRect();
     m.style.cssText='position:fixed;z-index:10001;min-width:200px;background:var(--surface);'+
         'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);'+
-        'top:'+Math.min(r.bottom+6, window.innerHeight-180)+'px;left:'+Math.max(10, r.right-200)+'px';
+        'top:0;left:-9999px';   // se coloca abajo, ya medido
     var q=String(id).replace(/'/g,"\\'");
     /* El recibo también se ve DESDE LA LISTA DE GASTOS: ahí es donde se
        encuentra uno con el pago cuando lo busca por fecha o por importe, y
@@ -4837,6 +4837,7 @@ function _menuGasto(ev, id){
               _miCorte('🗑️','Eliminar',"eliminarGasto('"+q+"')", true)
             : '');
     document.body.appendChild(m);
+    _colocarMenu(m, r, 200);
     setTimeout(function(){ document.addEventListener('click', _cerrarMenusCorte, { once:true }); }, 0);
 }
 function _menuCorte(ev, id){
@@ -4848,7 +4849,7 @@ function _menuCorte(ev, id){
     var r=ev.currentTarget.getBoundingClientRect();
     m.style.cssText='position:fixed;z-index:10001;min-width:200px;background:var(--surface);'+
         'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);'+
-        'top:'+Math.min(r.bottom+6, window.innerHeight-180)+'px;left:'+Math.max(10, r.right-200)+'px';
+        'top:0;left:-9999px';   // se coloca abajo, ya medido
     var q=String(id).replace(/'/g,"\\'");
     m.innerHTML =
         _miCorte('👁','Ver corte',"verCorte('"+q+"')") +
@@ -4858,6 +4859,7 @@ function _menuCorte(ev, id){
               _miCorte('🗑️','Eliminar',"eliminarCorte('"+q+"')", true)
             : '');
     document.body.appendChild(m);
+    _colocarMenu(m, r, 200);
     setTimeout(function(){ document.addEventListener('click', _cerrarMenusCorte, { once:true }); }, 0);
 }
 function _miCorte(ico, txt, accion, peligro){
@@ -4867,6 +4869,38 @@ function _miCorte(ico, txt, accion, peligro){
         'onmouseover="this.style.background=\'var(--surface2)\'" '+
         'onmouseout="this.style.background=\'transparent\'">'+
         '<span style="width:18px;text-align:center">'+ico+'</span><span>'+txt+'</span></div>';
+}
+/* ══ DÓNDE CABE EL MENÚ ═══════════════════════════════════════════════════
+   Cada menú se colocaba restando un alto ADIVINADO a la altura de la ventana
+   (…-180, …-230, …-260). Mientras los menús tuvieron tres renglones funcionó;
+   al crecer a seis, el último —«Eliminar pago»— se salía de la pantalla y no
+   había manera de tocarlo.
+
+   Adivinar el alto no sirve: depende de cuántas opciones traiga el menú, de
+   los separadores y del zoom. Así que se MIDE ya puesto en la página y, si no
+   cabe debajo del botón, se abre hacia ARRIBA —que es lo que hace cualquier
+   menú del sistema cuando se toca algo del final de una lista—.
+
+   Si el navegador no sabe decir el alto (pasa en el DOM de mentira del
+   candado), se cae al cálculo de antes y nadie se queda sin menú.          */
+function _colocarMenu(m, r, ancho){
+    var W = window.innerWidth || 1024, H = window.innerHeight || 768;
+    var alto = m.offsetHeight || 0;
+    var margen = 8;
+    var top;
+    if (!alto) {                                  // sin medida: lo de siempre
+        top = Math.min(r.bottom + 6, H - 180);
+    } else if (r.bottom + 6 + alto <= H - margen) {
+        top = r.bottom + 6;                       // cabe debajo
+    } else if (r.top - 6 - alto >= margen) {
+        top = r.top - 6 - alto;                   // cabe arriba
+    } else {
+        /* No cabe ni arriba ni abajo (un menú más alto que la pantalla): se
+           pega abajo y el clamp de la última línea lo detiene en el borde. */
+        top = H - alto - margen;
+    }
+    m.style.top  = Math.max(margen, top) + 'px';
+    m.style.left = Math.max(10, Math.min(r.right - ancho, W - ancho - 10)) + 'px';
 }
 function _cerrarMenusCorte(){
     var ms=document.querySelectorAll('.cx-menu');
@@ -7131,9 +7165,10 @@ function _menuNomina(ev, staffId){
     var r=ev.currentTarget.getBoundingClientRect();
     m.style.cssText='position:fixed;z-index:10001;min-width:210px;background:var(--surface);'+
         'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);'+
-        'top:'+Math.min(r.bottom+6, window.innerHeight-230)+'px;left:'+Math.max(10, r.right-210)+'px';
+        'top:0;left:-9999px';   // se coloca abajo, ya medido
     m.innerHTML=_nomAcciones(staffId, (_nomSel && _nomSel.rg) || dxpRango('nom'));
     document.body.appendChild(m);
+    _colocarMenu(m, r, 210);
     setTimeout(function(){ document.addEventListener('click', _cerrarMenusCorte, { once:true }); }, 0);
 }
 
@@ -9313,9 +9348,10 @@ function _menuPagoNomina(ev, gastoId){
     var r=ev.currentTarget.getBoundingClientRect();
     m.style.cssText='position:fixed;z-index:10001;min-width:210px;background:var(--surface);'+
         'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);'+
-        'top:'+Math.min(r.bottom+6, window.innerHeight-260)+'px;left:'+Math.max(10, r.right-210)+'px';
+        'top:0;left:-9999px';   // se coloca abajo, ya medido
     m.innerHTML=html;
     document.body.appendChild(m);
+    _colocarMenu(m, r, 210);
     setTimeout(function(){ document.addEventListener('click', _cerrarMenusCorte, { once:true }); }, 0);
 }
 /* Imprimir el recibo de un gasto (el guardado o el reconstruido). */
