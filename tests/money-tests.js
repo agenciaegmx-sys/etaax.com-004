@@ -29832,6 +29832,7 @@ function suitePrebatchFamilias20261023() {
 suitePrebatchFamilias20261023();
 require('./rendimientos-casos.cjs')({test,eq,crearContexto,cargarJS});
 require('./inventarios-stock-casos.cjs')({test,eq,crearContexto,cargarJS});
+require('./inventarios-compuestos-equivalencias.cjs')({test,eq,crearContexto,cargarJS,setVar});
 require('./inventarios-salidas-casos.cjs')({test,eq,crearContexto,cargarJS});
 require('./admin-documentos-casos.cjs')({test,eq,crearContexto,cargarJS});
 

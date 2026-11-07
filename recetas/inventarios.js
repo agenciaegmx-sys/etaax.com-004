@@ -9533,6 +9533,28 @@ function _equivBarra(copas, fila) {
     if (!fila || fila.tipo !== 'copa' || typeof EtaaxCore === 'undefined') return null;
     return EtaaxCore.equivalenciasBarra(copas, { contNeto: fila.contNeto, copaML: fila.copaML });
 }
+/* Un compuesto suma las equivalencias de sus presentaciones. No tiene un
+   envase ni una copa únicos: 0.5 bot de 950 ml + 1 bot de 700 ml = 1.5 bot,
+   pero son 1175 ml, no 1.5 veces la capacidad de la primera presentación.
+   Cantidades con signo conservan el saldo de cada unidad, sin redondear antes.
+   Si falta una referencia no se presenta una suma parcial como total. */
+function _equivBarraGrupo(partes) {
+    if (!partes || !partes.length) return null;
+    var medidas = partes.map(function(p){ return _equivBarra(p.cantidad, p.fila); });
+    if (medidas.some(function(e){ return !e; })) return null; // piezas/peso/mezclas
+    var total = { grupo:true, faltan:[] };
+    ['botellas','onzas','copas','litros','ml'].forEach(function(k){
+        total[k] = medidas.some(function(e){ return e[k] === null; }) ? null
+            : medidas.reduce(function(s,e){ return s + e[k]; }, 0);
+    });
+    if (medidas.some(function(e){ return e.contNeto === null; })) total.faltan.push('el contenido de la botella');
+    if (medidas.some(function(e){ return e.copaML === null; })) total.faltan.push('el tamaño de la copa');
+    return total;
+}
+function _equivBarraGrupoHTML(partes, opts) {
+    var e = _equivBarraGrupo(partes);
+    return e ? _equivBarraHTML(0, null, Object.assign({}, opts, {equivalencias:e})) : '';
+}
 /* Un número con su signo y sin `−0.00`: un faltante de 8 microlitros daba
    «−0.00 bot», que se lee como un error del sistema y no como «cuadró».
 
@@ -9547,7 +9569,7 @@ function _nEquiv(v, dec, signo) {
 }
 function _equivBarraHTML(copas, fila, opts) {
     opts = opts || {};
-    var e = _equivBarra(copas, fila);
+    var e = opts.equivalencias || _equivBarra(copas, fila);
     if (!e) return '';
     var bot = _nEquiv(e.botellas, 2, opts.signo);
     var oz  = _nEquiv(e.onzas,    1, opts.signo);
@@ -9557,19 +9579,22 @@ function _equivBarraHTML(copas, fila, opts) {
     var lt  = (bot === null) ? _nEquiv(e.litros, 2, opts.signo) : null;
     /* Sin referencia no se inventa el número: se dice que falta, y se dice
        CUÁL falta, que es lo único accionable. */
-    var faltan = [];
-    if (e.contNeto === null && e.ml === null) faltan.push('el contenido de la botella');
-    if (e.copaML   === null) faltan.push('el tamaño de la copa');
+    var faltan = e.grupo ? e.faltan : [];
+    if (!e.grupo) {
+        if (e.contNeto === null && e.ml === null) faltan.push('el contenido de la botella');
+        if (e.copaML   === null) faltan.push('el tamaño de la copa');
+    }
     var partes = [
         bot !== null ? bot + ' bot' : (lt !== null ? lt + ' L' : '— bot'),
         (oz  === null ? '—' : oz)  + ' oz',
         (cp  === null ? '—' : cp)  + ' cp'
     ].join(' · ');
-    var ref = [e.contNeto !== null ? _fmtBase(e.contNeto) + ' ml/bot' : null,
+    var ref = e.grupo ? 'suma por presentación, con su propia botella y copa' :
+              [e.contNeto !== null ? _fmtBase(e.contNeto) + ' ml/bot' : null,
                e.copaML   !== null ? _fmtBase(e.copaML)   + ' ml/copa' : null]
               .filter(Boolean).join(' · ');
     var titulo = faltan.length
-        ? 'Falta capturar ' + faltan.join(' y ') + ' de este insumo: sin eso no se puede convertir.'
+        ? 'Falta capturar ' + faltan.join(' y ') + (e.grupo ? ' de una o más presentaciones' : ' de este insumo') + ': sin eso no se puede convertir.'
         : 'La MISMA cantidad, leída de tres maneras (no se suman). Referencia: ' + ref;
     /* En el IMPRESO no hay variables de tema ni se puede pasar el ratón por
        encima: el papel se imprime en escala de grises y el `title` no existe
@@ -10052,8 +10077,8 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' '+mU.mov:'—'}</td>
                 <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' '+mU.mov:'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${mcancel>0?_nc(mcancel)+' '+mU.mov:'—'}</td>
-                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} ${mU.exist}</td>
-                <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} ${mU.mov}</td>
+                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} ${mU.exist}${_equivBarraHTML(mfis, m)}</td>
+                <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} ${mU.mov}${_equivBarraHTML(mdif, m, {signo:true})}</td>
                 <td style="text-align:center;font-size:11px;color:${mcol}">${mpct!==null?((mpct>=0?'+':'')+mpct.toFixed(1)+'%'):'—'}</td>
                 <td style="text-align:right;font-weight:600;color:${mcol};white-space:nowrap">${mDifCosto>=0?'+':''}$${mDifCosto.toFixed(2)}</td>
             </tr>`;
@@ -10096,8 +10121,8 @@ function _step5TablasHTML() {
             <td style="text-align:center;color:var(--viol)">${ventaCoct>0?_nc(ventaCoct)+' '+uC.mov:'—'}</td>
             <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} ${uC.mov}</div>`:'—'}</td>
             <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' '+uC.mov:'—'}</td>
-            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisBot)} ${uC.exist}</td>
-            <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(dif)} ${uC.mov}</td>
+            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisBot)} ${uC.exist}${_equivBarraGrupoHTML(members.map(m => ({fila:m, cantidad:calcExistencia(m)})))}</td>
+            <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(dif)} ${uC.mov}${_equivBarraGrupoHTML(members.map(m => ({fila:m, cantidad:calcDiferencia(m)})), {signo:true})}</td>
             <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
         </tr>${desglose}`;
@@ -10235,6 +10260,7 @@ function _step5GaleriaHTML(q, mapaC5, vcomps) {
         items.map(function(fila){ try { return _step5DesgloseCard(fila, _refMap); } catch(e){ console.warn('[desglose]', fila && fila.nombre, e); return ''; } }).join('') + '</div>';
 }
 function _step5DesgloseCard(fila, refMap) {
+    var miembrosEquiv = fila.esCompuesto ? _miembrosFila(getCompuestos().find(function(c){ return c.id === fila.compId; })) : [];
     var esComp   = !!fila.esCompuesto;
     var esPB     = !esComp && _esPrebatchRepartido(fila.insumoId);
     var adjG     = (esComp || esPB) ? _repZero : _repartoDe(fila.insumoId);
@@ -10294,10 +10320,10 @@ function _step5DesgloseCard(fila, refMap) {
         /* La MISMA línea de equivalencias que la vista Lista, con el MISMO
            formateador: si cada pantalla la arma, se desalinean y el que compara
            las dos deja de creerle a ninguna. */
-        _equivBarraHTML(fisico, fila)+
+        (esComp ? _equivBarraGrupoHTML(miembrosEquiv.map(function(m){ return {fila:m, cantidad:calcExistencia(m)}; })) : _equivBarraHTML(fisico, fila))+
         '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">'+
             fila2('Diferencia', _fmtCopSgn(dif, fila)+' · '+pct, color)+
-            _equivBarraHTML(dif, fila, {signo:true})+
+            (esComp ? _equivBarraGrupoHTML(miembrosEquiv.map(function(m){ return {fila:m, cantidad:calcDiferencia(m)}; }), {signo:true}) : _equivBarraHTML(dif, fila, {signo:true}))+
             fila2('Dif. $ (carta)', (difCarta>=0?'+':'')+'$'+difCarta.toFixed(2), color)+
         '</div>'+
     '</div>';
@@ -11015,8 +11041,8 @@ function verReporteDirectivo(gerencial, modo) {
               <td class="tc">${a.ventaCopaDir>0?_ncRd(a.ventaCopaDir)+' '+uVta:'—'}</td>
               <td class="tc">${a.ventaBot>0?_ncRd(a.ventaBot)+' '+uEnt:'—'}</td>
               <td class="tc" style="color:#9b8de8" title="${a.prodPBver>0?_ncRd(a.prodPBver)+' se fueron en producir batches de sub-receta'+(a.prodPB>0?' (van sumadas aquí: este batch no se está repartiendo)':' (no se suman a la cifra: ese producto sigue contado dentro del batch)'):''}">${(a.ventaCoct+a.prodPB)>0?_ncRd(a.ventaCoct+a.prodPB)+' c':'—'}${a.prodPBver>0&&!(a.prodPB>0)?`<div style="font-size:9px;opacity:.7;white-space:nowrap">↳ ${_ncRd(a.prodPBver)} c en batches</div>`:''}</td>
-              <td class="tc" style="font-weight:600">${_ncRd(a.fisBot)} ${uEx}</td>
-              <td class="tc" style="color:${cDifC};font-weight:700">${a.dif>=0?'+':''}${_ncRd(a.dif)} ${uMov}</td>
+              <td class="tc" style="font-weight:600">${_ncRd(a.fisBot)} ${uEx}${_equivBarraGrupoHTML(a.members.map(m => ({fila:m.f, cantidad:m.fisico})), {impreso:true})}</td>
+              <td class="tc" style="color:${cDifC};font-weight:700">${a.dif>=0?'+':''}${_ncRd(a.dif)} ${uMov}${_equivBarraGrupoHTML(a.members.map(m => ({fila:m.f, cantidad:m.dif})), {signo:true, impreso:true})}</td>
               <td class="tc" style="color:${cDifC}">${a.varPct.toFixed(0)}%</td>
               <td class="tr" style="color:${cCostC};font-weight:700">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td>
             </tr>`;
