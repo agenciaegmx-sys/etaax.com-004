@@ -8501,8 +8501,8 @@ function _sellarReciboPagado(gasto){
    Lo que NO se puede reconstruir es el periodo: nunca estuvo escrito. Se
    propone uno (termina el día del pago y dura los días pagados) y el aviso
    dice que hay que revisarlo. */
-function _origenDesdeReconstruido(rec){
-    if(!rec || !rec.reconstruido || !rec.reconstruido.cuadra) return null;
+function _origenDesdeReconstruido(rec, montoGasto){
+    if(!rec || !rec.reconstruido) return null;
     var cps=[], retardos=0, tarifa=0, prima=false;
     (rec.percepciones||[]).forEach(function(x, i){
         if(i===0) return;                                   // el sueldo no es un concepto extra
@@ -8519,8 +8519,25 @@ function _origenDesdeReconstruido(rec){
         cps.push({ concepto:x.concepto, detalle:x.detalle==='—'?'':x.detalle, monto:-Math.abs(n(x.monto)),
                    pago:'mismo', fecha:'', auto:false, bonoKey:'', retardos:false, cantidad:0, tarifa:0 });
     });
+    /* ══ CUANDO EL DESGLOSE NO CUADRA, MANDA EL IMPORTE ══════════════════
+       Hay pagos cuyos renglones no suman lo que salió de la caja: parte se
+       pagó por otra caja, o el total se ajustó a mano, o el desglose se quedó
+       corto. Antes eso dejaba el pago sin poder editarse —y sin recibo que
+       valiera—, que es peor: el dinero YA salió y el papel tiene que existir.
+
+       Así que se abre igual, con el total CLAVADO en el importe registrado
+       (como un total a mano). Lo que se ve en el modal podrá no sumar, pero el
+       número que manda es el que de verdad se pagó, y no se mueve solo. */
+    var suma = n(rec.diario) * n(rec.dias);
+    cps.forEach(function(c){ suma += n(c.monto); });
+    if(prima) suma += n((rec.percepciones||[]).reduce(function(a,x){
+        return /^Prima dominical$/i.test(x.concepto) ? n(x.monto) : a; }, 0));
+    suma -= (retardos * tarifa);
+    var mg = n(montoGasto);
+    var cuadra = mg > 0 && Math.abs(suma - mg) < 0.01;
     return { tipo:'personalizado', retardos:retardos, multaRetardo:tarifa,
-             primaIncluida:prima, totalManual:null, bonosQuitados:[], conceptos:cps };
+             primaIncluida:prima, totalManual:(cuadra ? null : (mg > 0 ? mg : null)),
+             bonosQuitados:[], conceptos:cps, _cuadra:cuadra };
 }
 /* El periodo PROPUESTO para un pago viejo: termina el día en que se pagó y
    dura los días que dice el desglose. Es una suposición, y se avisa. */
@@ -8539,7 +8556,7 @@ function _periodoPropuesto(g, dias){
 function _nominaParaCorregir(g){
     if(g && g.nomina && g.nomina.origen) return g.nomina;
     var rec=_reciboNominaReconstruido(g);
-    var org=_origenDesdeReconstruido(rec);
+    var org=_origenDesdeReconstruido(rec, g && g.monto);
     if(!org) return null;
     var per=_periodoPropuesto(g, n(rec.dias));
     var copia={}; for(var k in rec){ if(Object.prototype.hasOwnProperty.call(rec,k)) copia[k]=rec[k]; }
@@ -8551,7 +8568,7 @@ function editarReciboNomina(gastoId){
     if(!g) return;
     var _nomCorr=_nominaParaCorregir(g);
     if(!_nomCorr){
-        alert('De este pago no se puede reabrir el cálculo: su desglose no cuadra con el importe registrado (parte se pagó por otra caja, o el total se ajustó a mano).\n\nPuedes editarlo como gasto con ⋯ → Editar gasto.');
+        alert('Este gasto no es un pago de nómina, así que no tiene recibo que editar.');
         return;
     }
     var _sid=g.staffId||(g.nomina.staff&&g.nomina.staff.id)||'';
@@ -8620,7 +8637,12 @@ function _pnAbrirCorreccion(g,s){
         _bn.innerHTML=(g._reconstruido
             ? '🧩 <b>Captura reconstruida</b> — este pago es anterior a los recibos digitales: los conceptos salen '+
               'del desglose que quedó en el gasto. <b>El periodo no se guardaba entonces</b>, así que el de arriba '+
-              'es una propuesta (termina el día del pago): revísalo antes de guardar.<br>'
+              'es una propuesta (termina el día del pago): revísalo antes de guardar.'+
+              (((g.nomina&&g.nomina.origen&&g.nomina.origen._cuadra)===false)
+                ? ' Además, sus renglones no suman el importe que salió de la caja (parte se pagó aparte, o el total '+
+                  'se ajustó a mano), así que el <b>total viene clavado en '+fmtM(g.monto)+'</b>: cámbialo solo si sabes por qué.'
+                : '')+
+              '<br>'
             : '')+
             '✏️ <b>Estás corrigiendo un pago ya registrado</b> — folio '+_esc(g.nomina.folio||'—')+
             ' del '+_esc(_fmtFechaCortaDx(g.fecha))+'. <b>Actualizar gasto</b> guarda el recibo Y el gasto juntos: '+
@@ -9240,11 +9262,10 @@ function _filaPagoPanel(g){
         '<td style="text-align:right;white-space:nowrap">'+
             (_nomEsGastoDeNomina(g) ? '<button class="btn-row" title="'+(g.nomina?'Ver el recibo de este pago':'Ver el recibo (reconstruido del desglose del gasto)')+'" onclick="verReciboNomina(\''+g.id+'\')" '+
                 'style="padding:4px 9px;font-size:13px;line-height:1'+(g.nomina?'':';opacity:.72')+'">🧾</button> ' : '')+
-            /* La MISMA regla que el menú de tres puntos: un botón que aparece
-               y otro que no, por la misma pregunta, es un sistema que se
-               contradice a sí mismo. */
-            (_nominaParaCorregir(g) ? '<button class="btn-row" title="Corregir este pago (reabre la nómina y deja rastro en el recibo)" onclick="editarReciboNomina(\''+g.id+'\')" '+
-                'style="padding:4px 9px;font-size:13px;line-height:1">✏️</button> ' : '')+
+            /* El lápiz se fue: hacía lo mismo que «Editar recibo» del menú de
+               tres puntos, y además aparecía en unos renglones y en otros no,
+               así que la columna cambiaba de ancho y parecía que a unos pagos
+               les faltaba algo. Una acción, un lugar. */
             '<button class="btn-row" title="Opciones" onclick="'+
                 (_nomEsGastoDeNomina(g)?'_menuPagoNomina':'_menuGasto')+'(event,\''+g.id+'\')" '+
                 'style="padding:4px 10px;font-size:15px;line-height:1">⋯</button>'+
@@ -9283,7 +9304,7 @@ function _menuPagoNomina(ev, gastoId){
         mi('nom-imprimir','Imprimir recibo',"imprimirReciboNomina2('"+q+"')", tieneRec,
            'Este gasto no es un pago de nómina.') +
         mi('nom-conceptos','Editar recibo',"editarReciboNomina('"+q+"')", puedeCorregir,
-           'El desglose de este pago no cuadra con su importe, así que reabrir el cálculo cambiaría números que nadie revisó.') +
+           'Este gasto no es un pago de nómina.') +
         '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
         mi('mov-eliminar','Eliminar pago',"eliminarPagoNomina('"+q+"')", _puedeEditarGasto(g),
            'Tu rol no puede eliminar gastos de días anteriores.', true);

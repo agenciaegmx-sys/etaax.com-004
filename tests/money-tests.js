@@ -32253,18 +32253,28 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
     abrirCorreccion(g2b.id);
     test('sin permiso, la corrección no abre', () => eq(X._pnEditandoGasto, null, 'abrió sin permiso'));
     X._exigeVG = () => true;
-    /* Un pago viejo (sin captura guardada) no puede fingir que se reabre. */
+    /* ══ TODO PAGO DE NÓMINA SE PUEDE REABRIR ════════════════════════════
+       Aunque no guardara captura y aunque su desglose no sume: el dinero YA
+       salió y el papel tiene que existir. Lo que cambia es que el total viene
+       CLAVADO en el importe registrado, para que reabrirlo no mueva solo lo
+       que de verdad se pagó. */
     avisos.length = 0;
     const viejo = { id:'gv', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-10-01',
                     monto:1000, concepto:'Nómina semanal — Ana', staffId:'s1',
                     nomina:{ folio:'N-00001', desde:'2026-09-28', hasta:'2026-10-04', dias:7, total:1000 } };
     X._cacheGastos.push(viejo);
+    X._pedirClaveAdmin = (t, cb) => cb();
+    X._exigeVG = () => true; X._puedeEditarGasto = () => true; X._nomAutorizado = false;
     X.editarReciboNomina('gv');
-    test('un pago sin captura guardada lo dice en vez de reabrir a medias', () =>
-        eq(X._pnEditandoGasto === null && avisos.length === 1, true, 'reabrió a medias'));
-    test('…y su renglón no ofrece el botón de corregir', () =>
+    test('un pago sin desglose legible también se puede reabrir', () =>
+        eq(X._pnEditandoGasto, 'gv', 'se quedó sin manera de arreglarse'));
+    test('…con el total clavado en lo que de verdad salió de la caja', () =>
+        eq(X._pnTotalManual, 1000, 'el total se movió solo'));
+    /* El lápiz del renglón se fue: hacía lo mismo que «Editar recibo» del
+       menú, y aparecía en unos renglones y en otros no. Una acción, un sitio. */
+    test('el renglón ya no lleva un botón suelto de corregir', () =>
         eq(X._filaPagoPanel(viejo).indexOf('editarReciboNomina') === -1 &&
-           X._filaPagoPanel(g2b).indexOf('editarReciboNomina') > -1, true, 'botón mentiroso'));
+           X._filaPagoPanel(g2b).indexOf('editarReciboNomina') === -1, true, 'quedó el botón duplicado'));
 
     /* ── 7 · la fecha del recibo es la del pago, no la de hoy ───────────── */
     /* Se mira SOLO el campo «Fecha de pago»: el documento también lleva la
@@ -32938,18 +32948,19 @@ console.log('\n══ BH64 · El recibo de las nóminas viejas ══');
     /* ── Dónde se toca ── */
     test('el renglón del panel ofrece el recibo también en los viejos', () =>
         eq(X._filaPagoPanel(viejo).indexOf("verReciboNomina('gv')") > -1, true, 'sin botón'));
-    /* Y SÍ ofrece corregirlo, porque su desglose cuadra con el importe: la
-       captura se reconstruye de las notas. Lo que no se puede reconstruir es
-       el periodo, y de eso avisa el modal. */
-    test('…y ofrece corregirlo, porque su desglose cuadra con el importe', () =>
-        eq(X._filaPagoPanel(viejo).indexOf('editarReciboNomina') > -1, true, 'no deja corregir'));
-    /* Pero si NO cuadra —parte salió por otra caja, o el total se ajustó a
-       mano—, reabrir el cálculo cambiaría números que nadie revisó. Ahí no. */
-    test('un pago cuyo desglose no cuadra NO se puede reabrir', () => {
+    /* Su captura se reconstruye de las notas, así que se puede reabrir. Lo
+       que no se puede reconstruir es el periodo, y de eso avisa el modal. */
+    test('…y su captura se puede reconstruir del desglose', () =>
+        eq(!!(X._nominaParaCorregir(viejo) || {}).origen, true, 'no deja corregir'));
+    /* Y si NO cuadra —parte salió por otra caja, o el total se ajustó a mano—
+       TAMBIÉN se reabre, pero con el total clavado: el dinero ya salió y el
+       papel tiene que existir; lo que no puede es moverse solo. */
+    test('…y uno cuyo desglose no cuadra, también: con el total clavado', () => {
         const torcido = JSON.parse(JSON.stringify(viejo));
         torcido.id = 'gt'; torcido.monto = 1518.75;
         torcido.notas = NOTAS + '\nPagado aparte: Bono $500.00 (Efectivo)';
-        return eq(X._filaPagoPanel(torcido).indexOf('editarReciboNomina') === -1, true, 'botón mentiroso');
+        const org = (X._nominaParaCorregir(torcido) || {}).origen || {};
+        return eq(org.totalManual + '·' + org._cuadra, '1518.75·false', 'el total se movería solo');
     });
     /* Desde la LISTA DE GASTOS, que es donde Edwin lo buscó. */
     test('el menú del gasto ofrece ver el recibo', () => {
@@ -33536,6 +33547,33 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
             return puesto;
         };
         const h = abrirMenu('_menuPagoNomina', 'gH');
+        /* TODO pago de nómina tiene su recibo, su folio y su opción de
+           editarlo: si a unos se les ofrece y a otros no, los renglones se ven
+           distintos y parece que a algunos pagos les falta algo. */
+        test('editar el recibo se ofrece en TODOS los pagos de nómina', () => {
+            const casos = [
+                ['con captura guardada', gasto],
+                ['viejo con desglose',   { id:'gX1', negocioId:'n1', sucursalId:'suc_principal',
+                    fecha:'2026-11-08', monto:2225, staffId:'s1', categoria:'Nómina y personal',
+                    concepto:'Nómina semanal — Ana',
+                    notas:'Sueldo: $300.00 × 7 días = $2,100.00\n+ Bono: $125.00' }],
+                ['viejo sin desglose',   { id:'gX2', negocioId:'n1', sucursalId:'suc_principal',
+                    fecha:'2026-11-08', monto:900, staffId:'s1', categoria:'Nómina y personal',
+                    concepto:'Nómina semanal — Ana', notas:'' }],
+                ['sin staffId, por categoría', { id:'gX3', negocioId:'n1', sucursalId:'suc_principal',
+                    fecha:'2026-11-08', monto:500, categoria:'Nómina y personal',
+                    concepto:'Nómina semanal — Alguien', notas:'' }],
+            ];
+            const sinRecibo = casos.filter(c => !X._nominaParaCorregir(c[1])).map(c => c[0]);
+            /* Y todos traen folio: un recibo sin folio no se puede nombrar. */
+            const sinFolio = casos.filter(c => !((X._reciboDeGasto(c[1]) || {}).folio)).map(c => c[0]);
+            return eq(sinRecibo.join(',') + '|' + sinFolio.join(','), '|',
+                      'sin recibo: ' + sinRecibo.join(',') + ' · sin folio: ' + sinFolio.join(','));
+        });
+        /* Pero un gasto que NO es nómina no estrena recibo por accidente. */
+        test('…y un gasto cualquiera sigue sin recibo', () =>
+            eq(X._nominaParaCorregir({ id:'gY', concepto:'Servilletas', categoria:'Varios', monto:120 }),
+               null, 'le inventó un recibo a las servilletas'));
         test('el historial de pagos tiene su propio menú', () =>
             eq(['Ver gasto','Editar gasto','Ver recibo','Imprimir recibo','Editar recibo','Eliminar pago']
                 .every(t => h.indexOf('>' + t + '<') > -1), true, 'faltan opciones'));
@@ -33757,26 +33795,36 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         test('…y con su bono y su descuento', () =>
             eq(X._pagoNomConceptos.filter(c => /Bono/.test(c.concepto)).length + '·' +
                X._pagoNomConceptos.filter(c => c._retardos).length, '1·1', 'conceptos'));
-        /* Si el desglose NO cuadra con el importe, no se reabre: cambiar
-           números que nadie revisó es peor que no poder editar. */
-        test('un desglose que no cuadra no se reabre, y lo dice', () => {
+        /* Si el desglose NO cuadra con el importe, SE REABRE IGUAL pero con el
+           total clavado en lo que salió de la caja: el dinero ya se pagó y el
+           papel tiene que existir. Lo que no puede es moverse solo. */
+        test('un desglose que no cuadra se reabre con el total clavado', () => {
             const torcido = JSON.parse(JSON.stringify(viejo2));
             torcido.id = 'gT2'; torcido.monto = 1725;
             torcido.notas = NOTAS2 + '\nPagado aparte: Bono $500.00 (Efectivo)';
             X._cacheGastos = [torcido];
-            avisos.length = 0;
             X._pnEditandoGasto = null;
             X.editarReciboNomina('gT2');
-            return eq((X._nominaParaCorregir(torcido) === null) + '·' +
-                      /no cuadra con el importe/.test(avisos.join(' ')), 'true·true', 'reabrió a ciegas');
+            return eq(X._pnEditandoGasto + '·' + X._pnTotalManual, 'gT2·1725', 'no se pudo reabrir');
+        });
+        test('…y el aviso dice que el total viene clavado y por qué', () => {
+            const t = X.document.getElementById('pnCorrBanner').innerHTML;
+            return eq(/total viene clavado/.test(t) && /pag[oó] aparte|ajust/.test(t), true, 'sin explicar');
+        });
+        /* Y cuando SÍ cuadra, el total no se clava: el modal recalcula como
+           siempre y editar un concepto mueve la suma. */
+        test('cuando cuadra, el total sigue siendo automático', () => {
+            X._cacheGastos = [viejo2];
+            const org = (X._nominaParaCorregir(viejo2) || {}).origen || {};
+            return eq(org.totalManual + '·' + org._cuadra, 'null·true', 'clavó un total que no hacía falta');
         });
         /* El menú del historial ofrece la opción en el que cuadra y la apaga
            en el que no: la misma pregunta, la misma respuesta en los dos
            sitios. */
-        /* Un botón que aparece en el renglón y una opción que sale apagada en
-           el menú, por la MISMA pregunta, es un sistema que se contradice a sí
-           mismo. Así que se miran los dos. */
-        test('el menú y el renglón usan la misma regla', () => {
+        /* El menú es el ÚNICO sitio donde se edita un recibo: el lápiz suelto
+           del renglón se fue porque hacía lo mismo y aparecía en unos
+           renglones y en otros no. */
+        test('editar el recibo se ofrece en el menú, y solo ahí', () => {
             X._cacheGastos = [viejo2];
             const fila = X._filaPagoPanel(viejo2);
             let puesto = '';
@@ -33791,8 +33839,8 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
             /* En el menú, «activa» es llevar onclick: lo apagado es un div mudo. */
             const i = puesto.indexOf('>Editar recibo<');
             const enMenu = i > -1 && puesto.lastIndexOf('onclick', i) > puesto.lastIndexOf('<div', i);
-            return eq((fila.indexOf('editarReciboNomina') > -1) + '·' + enMenu, 'true·true',
-                      'se contradicen: renglón y menú');
+            return eq((fila.indexOf('editarReciboNomina') === -1) + '·' + enMenu, 'true·true',
+                      'o quedó el botón duplicado, o el menú no lo ofrece');
         });
     }
 
