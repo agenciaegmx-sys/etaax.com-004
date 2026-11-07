@@ -82,8 +82,15 @@
         }
 
         /* ══════════ MODAL FLOTANTE DE FUNCIÓN (responsive) ══════════ */
-        .dx-overlay {
-            display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:8000;
+        /* La banda del total: la misma arriba y abajo de la tabla, igual que en
+           el papel. Arriba dice qué se está mirando antes de leer un renglón;
+           abajo cierra la cuenta donde termina la lista —que es por donde se
+           acaba de leer y por donde se firma—. */
+        .nom-banda { font-size:12px; font-weight:700; color:var(--text);
+            background:rgba(255,255,255,.03); border-left:3px solid var(--green);
+            padding:8px 14px; }
+        .nom-banda:empty { display:none; }
+        .dx-overlay { background:rgba(0,0,0,.7); z-index:8000;
             align-items:flex-start; justify-content:center; overflow-y:auto; padding:24px 16px; box-sizing:border-box;
         }
         .dx-overlay.open { display:flex; }
@@ -858,7 +865,7 @@
 <div class="dxp" id="nom_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('nom','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('nom','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('nom','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('nom','rango',this)">Rango</button></div><input type="date" id="nom_val" onchange="dxpChange('nom')"><input type="date" id="nom_end" style="display:none" onchange="dxpChange('nom')"><span class="dxp-semana" id="nom_sem"></span></div>
 <div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:var(--blue)" onclick="abrirSelectorPago('nomina')">💰 Pagar nómina</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Pagos de nómina','tablaNomPagos',_nomPanelResumen)">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Pagos de nómina','tablaNomPagos')">⬇️ CSV</button></div>
 <div style="margin-bottom:12px"><input type="text" id="nomPanelBusca" placeholder="🔍 Buscar por colaborador o concepto…" oninput="renderNominasPanel()" style="width:100%;box-sizing:border-box;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px"></div>
-<div class="card"><div class="card-header" style="justify-content:space-between"><h2>💰 Pagos de nómina del periodo</h2><span id="totalNomLbl" style="font-size:12px;color:var(--text-dim)"></span></div><div class="card-body" style="padding:0;overflow-x:auto"><table class="gastos-table" id="tablaNomPagos"><thead><tr><th>Fecha</th><th>Concepto</th><th>Método</th><th>Estatus</th><th class="ar">Monto</th><th></th></tr></thead><tbody id="tbodyNomPagos"></tbody></table><div id="emptyNomPagos" class="empty-state" style="display:none;padding:32px"><div class="empty-state-icon">💰</div><div>Sin pagos de nómina en este período.</div></div></div></div>
+<div class="card"><div class="card-header" style="justify-content:space-between"><h2>💰 Pagos de nómina del periodo</h2><span id="totalNomLbl" style="font-size:12px;color:var(--text-dim)"></span></div><div class="card-body" style="padding:0;overflow-x:auto"><div id="nomTotArriba" class="nom-banda"></div><table class="gastos-table" id="tablaNomPagos"><thead><tr><th>Fecha</th><th>Concepto</th><th>Método</th><th>Estatus</th><th class="ar">Monto</th><th></th></tr></thead><tbody id="tbodyNomPagos"></tbody></table><div id="nomTotAbajo" class="nom-banda"></div><div id="emptyNomPagos" class="empty-state" style="display:none;padding:32px"><div class="empty-state-icon">💰</div><div>Sin pagos de nómina en este período.</div></div></div></div>
 </div>
     </div>
 </div>
@@ -7552,7 +7559,7 @@ function _ensurePagoNomModal(){
         +'</div>'
       +'</div>'
       +'<div class="modal-footer"><button class="btn-ghost" onclick="_cerrarPagoNom()">Cancelar</button>'
-        +'<button class="btn-ghost" onclick="imprimirReciboNomina()" title="Comprobante interno — no es un CFDI">🧾 Recibo</button>'
+        +'<button class="btn-ghost" onclick="verReciboNominaEnCurso()" title="Mira cómo va a quedar el recibo antes de guardarlo — comprobante interno, no es un CFDI">🧾 Ver recibo</button>'
         +'<button class="btn-primary" id="pnBtnConfirmar" onclick="_confirmarPagoNom()">Guardar recibo</button></div>'
       +'</div>';
     document.body.appendChild(el);
@@ -8480,11 +8487,70 @@ function _sellarReciboPagado(gasto){
    recibo nuevo salía con otro folio y en los reportes quedaban dos. Corregir
    reabre la MISMA nómina, actualiza su gasto y apunta en el recibo qué decía
    antes. */
+/* ══ LA CAPTURA DE UN PAGO VIEJO, RECONSTRUIDA ════════════════════════════
+   Los pagos anteriores a la v85 no guardaron la captura, solo el desglose en
+   las notas. Pero el desglose ES la captura escrita en palabras: de ahí salen
+   los conceptos, la prima y el descuento por retardos, con sus importes.
+
+   Se reconstruye SOLO si las cuentas cuadran con el importe del gasto. Si no
+   cuadran —parte se pagó por otra caja, o el total se ajustó a mano—, reabrir
+   el cálculo cambiaría números que nadie revisó, y eso es peor que no poder
+   editar.
+
+   Lo que NO se puede reconstruir es el periodo: nunca estuvo escrito. Se
+   propone uno (termina el día del pago y dura los días pagados) y el aviso
+   dice que hay que revisarlo. */
+function _origenDesdeReconstruido(rec){
+    if(!rec || !rec.reconstruido || !rec.reconstruido.cuadra) return null;
+    var cps=[], retardos=0, tarifa=0, prima=false;
+    (rec.percepciones||[]).forEach(function(x, i){
+        if(i===0) return;                                   // el sueldo no es un concepto extra
+        if(/^Prima dominical$/i.test(x.concepto)){ prima=true; return; }
+        cps.push({ concepto:x.concepto, detalle:x.detalle==='—'?'':x.detalle, monto:n(x.monto),
+                   pago:'mismo', fecha:'', auto:false, bonoKey:'', retardos:false, cantidad:0, tarifa:0 });
+    });
+    (rec.deducciones||[]).forEach(function(x){
+        var m=/^(\d+)\s+retardos?\s*×\s*\$\s?([\d,]+(?:\.\d+)?)/i.exec(x.detalle||'');
+        if(/retardo/i.test(x.concepto) && m){
+            retardos=n(m[1]); tarifa=n(m[2].replace(/,/g,''));
+            return;                                          // lo rehace _pnActualizarRetardos
+        }
+        cps.push({ concepto:x.concepto, detalle:x.detalle==='—'?'':x.detalle, monto:-Math.abs(n(x.monto)),
+                   pago:'mismo', fecha:'', auto:false, bonoKey:'', retardos:false, cantidad:0, tarifa:0 });
+    });
+    return { tipo:'personalizado', retardos:retardos, multaRetardo:tarifa,
+             primaIncluida:prima, totalManual:null, bonosQuitados:[], conceptos:cps };
+}
+/* El periodo PROPUESTO para un pago viejo: termina el día en que se pagó y
+   dura los días que dice el desglose. Es una suposición, y se avisa. */
+function _periodoPropuesto(g, dias){
+    var fin=String(g.pagadoEl||g.fecha||'').slice(0,10);
+    /* El mediodía evita que el cambio de huso mueva el día —es el mismo truco
+       que usa el recibo para escribir la fecha larga—. */
+    var d=fin?new Date(fin+'T12:00:00'):null;
+    if(!d || isNaN(d) || !(dias>0)) return { desde:fin, hasta:fin };
+    var ini=new Date(d.getTime() - (dias-1)*86400000);
+    var iso=function(x){ return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); };
+    return { desde:iso(ini), hasta:fin };
+}
+/* El recibo con el que se va a reabrir el modal: el guardado si lo hay, y si
+   no, el reconstruido con su captura y su periodo propuesto. */
+function _nominaParaCorregir(g){
+    if(g && g.nomina && g.nomina.origen) return g.nomina;
+    var rec=_reciboNominaReconstruido(g);
+    var org=_origenDesdeReconstruido(rec);
+    if(!org) return null;
+    var per=_periodoPropuesto(g, n(rec.dias));
+    var copia={}; for(var k in rec){ if(Object.prototype.hasOwnProperty.call(rec,k)) copia[k]=rec[k]; }
+    copia.origen=org; copia.desde=per.desde; copia.hasta=per.hasta;
+    return copia;
+}
 function editarReciboNomina(gastoId){
     var g=gLoad().find(function(x){ return x.id===gastoId; });
     if(!g) return;
-    if(!g.nomina || !g.nomina.origen){
-        alert('Este pago no guardó la captura de la nómina (se registró antes de esta versión), así que el cálculo no se puede reabrir.\n\nPuedes editarlo como gasto con ⋯ → Editar, o eliminarlo y registrarlo de nuevo.');
+    var _nomCorr=_nominaParaCorregir(g);
+    if(!_nomCorr){
+        alert('De este pago no se puede reabrir el cálculo: su desglose no cuadra con el importe registrado (parte se pagó por otra caja, o el total se ajustó a mano).\n\nPuedes editarlo como gasto con ⋯ → Editar gasto.');
         return;
     }
     var _sid=g.staffId||(g.nomina.staff&&g.nomina.staff.id)||'';
@@ -8494,9 +8560,15 @@ function editarReciboNomina(gastoId){
     if(!_puedeEditarGasto(g)){ alert('Tu rol no puede editar gastos de días anteriores.'); return; }
     /* Misma puerta que pagar: quien entró al panel ya se identificó. Fuera del
        panel —desde la lista de gastos— sí se pide. */
-    if(_nomAutorizado){ _pnAbrirCorreccion(g,s); return; }
+    /* Se le pasa el recibo con el que hay que trabajar: el guardado, o el
+       reconstruido con su captura. El gasto que se actualiza sigue siendo el
+       mismo —se busca por id—, así que nada de esto crea un pago nuevo. */
+    var _gCorr={}; for(var k2 in g){ if(Object.prototype.hasOwnProperty.call(g,k2)) _gCorr[k2]=g[k2]; }
+    _gCorr.nomina=_nomCorr;
+    _gCorr._reconstruido=!(g.nomina && g.nomina.origen);
+    if(_nomAutorizado){ _pnAbrirCorreccion(_gCorr,s); return; }
     _pedirClaveAdmin('Corregir el pago de nómina de '+s.nombre+' — Autorización requerida', function(){
-        _pnAbrirCorreccion(g,s);
+        _pnAbrirCorreccion(_gCorr,s);
     }, '🔓 Autorizar');
 }
 /* Reabrir el modal con lo que se capturó. Es el mismo camino que la
@@ -8544,7 +8616,12 @@ function _pnAbrirCorreccion(g,s){
     if(_bn){
         var _ncor=((g.nomina.correcciones||[]).length);
         _bn.style.display='';
-        _bn.innerHTML='✏️ <b>Estás corrigiendo un pago ya registrado</b> — folio '+_esc(g.nomina.folio||'—')+
+        _bn.innerHTML=(g._reconstruido
+            ? '🧩 <b>Captura reconstruida</b> — este pago es anterior a los recibos digitales: los conceptos salen '+
+              'del desglose que quedó en el gasto. <b>El periodo no se guardaba entonces</b>, así que el de arriba '+
+              'es una propuesta (termina el día del pago): revísalo antes de guardar.<br>'
+            : '')+
+            '✏️ <b>Estás corrigiendo un pago ya registrado</b> — folio '+_esc(g.nomina.folio||'—')+
             ' del '+_esc(_fmtFechaCortaDx(g.fecha))+'. <b>Actualizar gasto</b> guarda el recibo Y el gasto juntos: '+
             'se actualiza ese mismo gasto (no se crea otro) y el recibo apunta qué decía antes. '+
             'Si cancelas en el gasto, no se guarda nada —tampoco el recibo—.'+
@@ -8678,6 +8755,17 @@ function _reciboCorreccionesHTML(d, _e){
         '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#8a7a4a;font-weight:700;margin-bottom:4px">'+
         'Recibo corregido · '+cs.length+' '+(cs.length===1?'vez':'veces')+'</div>'+filas+'</div>';
 }
+/* Mirar el recibo ANTES de guardarlo, con lo que hay escrito en el modal en
+   este momento. Es una vista previa, así que va dentro de la misma página —y
+   sin mandar nada a la impresora: lo que se quiere es revisar un número, no
+   gastar papel para descubrir que faltaba un bono. */
+function verReciboNominaEnCurso(){
+    var d=_reciboNominaDatos();
+    if(!d){ alert('Abre el pago de un colaborador para ver su recibo.'); return; }
+    if(!(d.total>0)){ alert('El total a pagar debe ser mayor a cero para ver el recibo.'); return; }
+    verReciboEnPagina(_reciboNominaHTML(d), 'Vista previa — '+((d.staff&&d.staff.nombre)||''));
+}
+/* Sigue disponible para quien quiera el papel de una vez. */
 function imprimirReciboNomina(){
     var d=_reciboNominaDatos();
     if(!d){ alert('Abre el pago de un colaborador para generar su recibo.'); return; }
@@ -8794,7 +8882,7 @@ function _confirmarPagoNom(){
     }
     /* El recibo se arma AQUÍ, con el modal todavía abierto, y viaja pegado al
        gasto. Armarlo después es imposible: el desglose solo vive en pantalla. */
-    var _rec=_reciboNominaGuardable(_reciboNominaDatos(), _edit?(_gViejo.nomina||{}):null, _motivo);
+    var _rec=_reciboNominaGuardable(_reciboNominaDatos(), _edit?(_reciboDeGasto(_gViejo)||{}):null, _motivo);
     /* Si parte se pagó aparte, el recibo acompaña al gasto PRINCIPAL y su total
        sigue siendo el del periodo completo: el comprobante que firma la persona
        es por todo lo que recibió, aunque el dinero saliera por dos cajas. */
@@ -9151,7 +9239,10 @@ function _filaPagoPanel(g){
         '<td style="text-align:right;white-space:nowrap">'+
             (_nomEsGastoDeNomina(g) ? '<button class="btn-row" title="'+(g.nomina?'Ver el recibo de este pago':'Ver el recibo (reconstruido del desglose del gasto)')+'" onclick="verReciboNomina(\''+g.id+'\')" '+
                 'style="padding:4px 9px;font-size:13px;line-height:1'+(g.nomina?'':';opacity:.72')+'">🧾</button> ' : '')+
-            ((g.nomina&&g.nomina.origen) ? '<button class="btn-row" title="Corregir este pago (reabre la nómina y deja rastro en el recibo)" onclick="editarReciboNomina(\''+g.id+'\')" '+
+            /* La MISMA regla que el menú de tres puntos: un botón que aparece
+               y otro que no, por la misma pregunta, es un sistema que se
+               contradice a sí mismo. */
+            (_nominaParaCorregir(g) ? '<button class="btn-row" title="Corregir este pago (reabre la nómina y deja rastro en el recibo)" onclick="editarReciboNomina(\''+g.id+'\')" '+
                 'style="padding:4px 9px;font-size:13px;line-height:1">✏️</button> ' : '')+
             '<button class="btn-row" title="Opciones" onclick="'+
                 (_nomEsGastoDeNomina(g)?'_menuPagoNomina':'_menuGasto')+'(event,\''+g.id+'\')" '+
@@ -9172,7 +9263,9 @@ function _menuPagoNomina(ev, gastoId){
     var g=(_cacheGastos||[]).find(function(x){ return x.id===gastoId; })||{};
     var q=String(gastoId).replace(/'/g,"\\'");
     var tieneRec=!!_reciboDeGasto(g);
-    var puedeCorregir=!!(g.nomina && g.nomina.origen);
+    /* También los pagos viejos, si su desglose cuadra con el importe: la
+       captura se reconstruye de las notas. */
+    var puedeCorregir=!!_nominaParaCorregir(g);
     var mi=function(ico, txt, accion, activo, porQue, peligro){
         if (activo) return _miCorte(_ic(ico), txt, accion, peligro);
         return '<div title="'+_esc(porQue)+'" style="display:flex;align-items:center;gap:9px;padding:9px 11px;'+
@@ -9189,7 +9282,7 @@ function _menuPagoNomina(ev, gastoId){
         mi('nom-imprimir','Imprimir recibo',"imprimirReciboNomina2('"+q+"')", tieneRec,
            'Este gasto no es un pago de nómina.') +
         mi('nom-conceptos','Editar recibo',"editarReciboNomina('"+q+"')", puedeCorregir,
-           'Este pago no guardó la captura de la nómina, así que el cálculo no se puede reabrir.') +
+           'El desglose de este pago no cuadra con su importe, así que reabrir el cálculo cambiaría números que nadie revisó.') +
         '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
         mi('mov-eliminar','Eliminar pago',"eliminarPagoNomina('"+q+"')", _puedeEditarGasto(g),
            'Tu rol no puede eliminar gastos de días anteriores.', true);
@@ -9248,6 +9341,12 @@ function renderNominasPanel(){
         (q?' · filtro «'+((document.getElementById('nomPanelBusca')||{}).value||'')+'»':'');
     var lbl=document.getElementById('totalNomLbl');
     if(lbl) lbl.textContent=_nomPanelResumen;
+    /* Y las dos bandas, con LA MISMA cadena: la pantalla y el papel no pueden
+       decir dos cuentas parecidas. */
+    ['nomTotArriba','nomTotAbajo'].forEach(function(id){
+        var el=document.getElementById(id);
+        if(el) el.textContent=lista.length?_nomPanelResumen:'';
+    });
     var em=document.getElementById('emptyNomPagos');
     if(!lista.length){ tb.innerHTML=''; if(em)em.style.display='block'; return; }
     if(em)em.style.display='none';

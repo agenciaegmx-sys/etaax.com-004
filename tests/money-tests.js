@@ -32938,8 +32938,19 @@ console.log('\n══ BH64 · El recibo de las nóminas viejas ══');
     /* ── Dónde se toca ── */
     test('el renglón del panel ofrece el recibo también en los viejos', () =>
         eq(X._filaPagoPanel(viejo).indexOf("verReciboNomina('gv')") > -1, true, 'sin botón'));
-    test('…pero NO ofrece corregir: no hay captura que reabrir', () =>
-        eq(X._filaPagoPanel(viejo).indexOf('editarReciboNomina') === -1, true, 'botón mentiroso'));
+    /* Y SÍ ofrece corregirlo, porque su desglose cuadra con el importe: la
+       captura se reconstruye de las notas. Lo que no se puede reconstruir es
+       el periodo, y de eso avisa el modal. */
+    test('…y ofrece corregirlo, porque su desglose cuadra con el importe', () =>
+        eq(X._filaPagoPanel(viejo).indexOf('editarReciboNomina') > -1, true, 'no deja corregir'));
+    /* Pero si NO cuadra —parte salió por otra caja, o el total se ajustó a
+       mano—, reabrir el cálculo cambiaría números que nadie revisó. Ahí no. */
+    test('un pago cuyo desglose no cuadra NO se puede reabrir', () => {
+        const torcido = JSON.parse(JSON.stringify(viejo));
+        torcido.id = 'gt'; torcido.monto = 1518.75;
+        torcido.notas = NOTAS + '\nPagado aparte: Bono $500.00 (Efectivo)';
+        return eq(X._filaPagoPanel(torcido).indexOf('editarReciboNomina') === -1, true, 'botón mentiroso');
+    });
     /* Desde la LISTA DE GASTOS, que es donde Edwin lo buscó. */
     test('el menú del gasto ofrece ver el recibo', () => {
         /* El menú lee el caché del lado de cortes (`_cacheGastosExt`), que
@@ -33695,6 +33706,166 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
             finally { X._dxTablaLimpia = t0; X.window.print = pr0; }
             return eq(puestos, 1, 'le metió una banda a un panel que no la pidió');
         });
+    }
+
+
+    /* ── 15 · reabrir la captura de un pago viejo ─────────────────────── */
+    {
+        /* Los pagos anteriores a la v85 no guardaron la captura, solo el
+           desglose en las notas. Pero el desglose ES la captura escrita en
+           palabras: de ahí salen los conceptos, la prima y los retardos. */
+        const NOTAS2 = [
+            'Sueldo: $300.00 × 7 días = $2,100.00',
+            '+ Prima dominical (1 domingo): $75.00',
+            '+ Bono de puntualidad: $100.00',
+            '− Descuento por retardos (2 retardos × $25.00): $50.00'
+        ].join('\n');
+        const viejo2 = { id:'gV2', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-08',
+                         monto:2225, concepto:'Nómina semanal — Ana',
+                         categoria:'Nómina y personal', staffId:'s1', notas:NOTAS2 };
+        X._cacheGastos = [viejo2];
+        const org = (X._nominaParaCorregir(viejo2) || {}).origen || {};
+        test('del desglose sale una captura, no un «no se puede»', () =>
+            eq(!!org.conceptos, true, 'el dato estaba y no se usó'));
+        /* El bono entra como concepto; la prima NO —es una casilla, no un
+           renglón capturado— y los retardos tampoco: se rehacen de su cantidad
+           y su tarifa, que es como los pinta el modal. */
+        test('el bono entra como concepto capturado', () =>
+            eq(org.conceptos.map(c => c.concepto).join(','), 'Bono de puntualidad', 'conceptos'));
+        test('…la prima vuelve como casilla marcada', () => eq(org.primaIncluida, true, 'prima'));
+        test('…y los retardos, con su cantidad y su tarifa', () =>
+            eq(org.retardos + '×' + org.multaRetardo, '2×25', 'retardos'));
+        /* El periodo NO se puede reconstruir —nunca se guardó—, así que se
+           propone: termina el día del pago y dura los días pagados. */
+        test('el periodo se propone: termina el día del pago', () => {
+            const nom = X._nominaParaCorregir(viejo2) || {};
+            return eq(nom.desde + ' a ' + nom.hasta, '2026-11-02 a 2026-11-08', 'propuesta');
+        });
+        test('…y el modal avisa que esa fecha es una propuesta', () => {
+            X._pedirClaveAdmin = (t, cb) => cb();
+            X._exigeVG = () => true; X._puedeEditarGasto = () => true; X._nomAutorizado = false;
+            X.editarReciboNomina('gV2');
+            const t = X.document.getElementById('pnCorrBanner').innerHTML;
+            return eq(/Captura reconstruida/.test(t) && /propuesta/.test(t), true, 'no avisa');
+        });
+        /* Y la captura llega COMPLETA al modal: si no, corregir cambiaría
+           números que nadie tocó. */
+        test('el modal se abre con los números del pago viejo', () =>
+            eq(X.document.getElementById('pnDiario').value + '·' +
+               X.document.getElementById('pnDias').value + '·' + X._pnPrimaInclude,
+               '300·7·true', 'se abrió con otros números'));
+        test('…y con su bono y su descuento', () =>
+            eq(X._pagoNomConceptos.filter(c => /Bono/.test(c.concepto)).length + '·' +
+               X._pagoNomConceptos.filter(c => c._retardos).length, '1·1', 'conceptos'));
+        /* Si el desglose NO cuadra con el importe, no se reabre: cambiar
+           números que nadie revisó es peor que no poder editar. */
+        test('un desglose que no cuadra no se reabre, y lo dice', () => {
+            const torcido = JSON.parse(JSON.stringify(viejo2));
+            torcido.id = 'gT2'; torcido.monto = 1725;
+            torcido.notas = NOTAS2 + '\nPagado aparte: Bono $500.00 (Efectivo)';
+            X._cacheGastos = [torcido];
+            avisos.length = 0;
+            X._pnEditandoGasto = null;
+            X.editarReciboNomina('gT2');
+            return eq((X._nominaParaCorregir(torcido) === null) + '·' +
+                      /no cuadra con el importe/.test(avisos.join(' ')), 'true·true', 'reabrió a ciegas');
+        });
+        /* El menú del historial ofrece la opción en el que cuadra y la apaga
+           en el que no: la misma pregunta, la misma respuesta en los dos
+           sitios. */
+        /* Un botón que aparece en el renglón y una opción que sale apagada en
+           el menú, por la MISMA pregunta, es un sistema que se contradice a sí
+           mismo. Así que se miran los dos. */
+        test('el menú y el renglón usan la misma regla', () => {
+            X._cacheGastos = [viejo2];
+            const fila = X._filaPagoPanel(viejo2);
+            let puesto = '';
+            const ce = X.document.createElement;
+            X.document.createElement = () => ({ className:'', style:{ cssText:'' },
+                set innerHTML(v2){ puesto = v2; }, get innerHTML(){ return puesto; },
+                appendChild(){}, addEventListener(){} });
+            const ap = X.document.body.appendChild; X.document.body.appendChild = () => {};
+            try { X._menuPagoNomina({ stopPropagation(){},
+                      currentTarget:{ getBoundingClientRect:() => ({ bottom:0, right:0 }) } }, 'gV2'); }
+            finally { X.document.createElement = ce; X.document.body.appendChild = ap; }
+            /* En el menú, «activa» es llevar onclick: lo apagado es un div mudo. */
+            const i = puesto.indexOf('>Editar recibo<');
+            const enMenu = i > -1 && puesto.lastIndexOf('onclick', i) > puesto.lastIndexOf('<div', i);
+            return eq((fila.indexOf('editarReciboNomina') > -1) + '·' + enMenu, 'true·true',
+                      'se contradicen: renglón y menú');
+        });
+    }
+
+    /* ── 16 · el total también en pantalla, arriba y abajo ─────────────── */
+    {
+        X._cacheGastos = [
+            { id:'t1', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-03', monto:1000,
+              concepto:'Nómina semanal — Ana', categoria:'Nómina y personal', staffId:'s1' },
+            { id:'t2', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-04', monto:2000,
+              concepto:'Nómina semanal — Bea', categoria:'Nómina y personal', staffId:'s2' },
+        ];
+        X._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
+        X.document.getElementById('nomPanelBusca').value = '';
+        X.renderNominasPanel();
+        /* La pantalla dice la cuenta donde empieza y donde acaba la lista,
+           igual que el papel: abajo es por donde se termina de leer. */
+        test('la pantalla lleva el total arriba y abajo de la tabla', () =>
+            eq(X.document.getElementById('nomTotArriba').textContent + ' | ' +
+               X.document.getElementById('nomTotAbajo').textContent,
+               '2 pagos · ' + X.fmtM(3000) + ' | ' + '2 pagos · ' + X.fmtM(3000), 'bandas'));
+        test('…la misma cadena que el papel, no una cuenta parecida', () =>
+            eq(X.document.getElementById('nomTotArriba').textContent, X._nomPanelResumen, 'dos cuentas'));
+        test('al buscar, las bandas siguen a lo que se ve', () => {
+            X.document.getElementById('nomPanelBusca').value = 'bea';
+            X.renderNominasPanel();
+            return eq(X.document.getElementById('nomTotAbajo').textContent.indexOf('1 pago'), 0,
+                      X.document.getElementById('nomTotAbajo').textContent);
+        });
+        /* Sin renglones no hay cuenta que dar: una banda que dice «0 pagos ·
+           $0.00» dos veces sobre una tabla vacía es ruido. */
+        test('sin pagos, las bandas se callan', () => {
+            X.document.getElementById('nomPanelBusca').value = 'zzz';
+            X.renderNominasPanel();
+            return eq(X.document.getElementById('nomTotArriba').textContent + '|' +
+                      X.document.getElementById('nomTotAbajo').textContent, '|', 'ruido');
+        });
+        X.document.getElementById('nomPanelBusca').value = '';
+    }
+
+    /* ── 17 · ver el recibo ANTES de guardarlo ─────────────────────────── */
+    {
+        /* Mirar cómo va a quedar el papel antes de guardarlo, sin gastar una
+           hoja para descubrir que faltaba un bono. */
+        X._pagoNomStaff = ana; X._pagoNomConceptos = []; X._pnTotalManual = null;
+        X._pnPrimaInclude = false; X._pnEditandoGasto = null;
+        X.document.getElementById('pnTipo').value = 'semana';
+        X.document.getElementById('pnDesde').value = '2026-11-02';
+        X.document.getElementById('pnHasta').value = '2026-11-08';
+        X.document.getElementById('pnDiario').value = 300;
+        X.document.getElementById('pnDias').value = 7;
+        X._pnCalc();
+        let pestanas = 0, impreso = 0, abierto = false;
+        const ov = X.document.getElementById('nomVisorOverlay');
+        const add0 = ov.classList.add;
+        ov.classList.add = (c) => { if (c === 'open') abierto = true; };
+        const vr0 = X.etaaxVerReporte, ar0 = X.etaaxAbrirReporte, wo0 = X.window.open;
+        X.etaaxVerReporte = () => { pestanas++; return true; };
+        X.etaaxAbrirReporte = () => { impreso++; return true; };
+        X.window.open = () => { pestanas++; return null; };
+        try { X.verReciboNominaEnCurso(); }
+        finally { ov.classList.add = add0; X.etaaxVerReporte = vr0;
+                  X.etaaxAbrirReporte = ar0; X.window.open = wo0; }
+        test('el botón del modal ENSEÑA el recibo, no lo imprime', () =>
+            eq(abierto + '·' + impreso + '·' + pestanas, 'true·0·0', 'imprimió o se fue a otra pestaña'));
+        test('…con los números que están escritos en ese momento', () =>
+            eq((X.document.getElementById('nomVisorFrame').srcdoc || '').indexOf(X.fmtM(2100)) > -1,
+               true, 'enseñó otra cosa'));
+        /* Y el rótulo lo dice: «Recibo» a secas no deja claro si va a imprimir. */
+        test('el botón se llama «Ver recibo» en la página', () => {
+            const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+            return eq(/onclick="verReciboNominaEnCurso\(\)"[^>]*>🧾 Ver recibo</.test(src), true, 'rótulo');
+        });
+        X.cerrarVisorRecibo();
     }
 
     /* ── 6 · si la v85 no está corrida, el panel no se cae ─────────────── */
