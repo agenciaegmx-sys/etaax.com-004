@@ -33038,25 +33038,44 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
                              gastoId:'', pagadoEn:'' }];
         X._cacheGastos = [];
         X._exigeVG = () => true;
+        /* Ya no es el `confirm()` del navegador —esa ventana no puede decir
+           de quién es ni pintar de rojo lo que borra—: es la del módulo. */
         let preguntado = '';
-        X.confirm = (m) => { preguntado = String(m); return true; };
+        X._confirmar = (o, cb) => { preguntado = (o.titulo||'') + ' | ' + (o.texto||'') + ' | ' + (o.nota||''); cb(); };
         X._sbDel = () => {};
         X.eliminarReciboGenerado('s2');
         test('eliminar un recibo sin pagar lo quita', () =>
             eq((X._cacheRecibos || []).length, 0, 'siguió ahí'));
         /* Se pregunta con NOMBRE y PERIODO: «¿eliminar este recibo?» a secas
            hace que el que borra el equivocado no sepa que se equivocó. */
+        /* La ventana dice DE QUIÉN, DE CUÁNDO y CUÁNTO. «¿Eliminar este
+           recibo?» a secas hace que quien borra el equivocado no se entere.
+           El periodo va en formato corto, que es como se lee en pantalla. */
         test('…preguntando con nombre, periodo e importe', () =>
-            eq(/Bea/.test(preguntado) && /2026-11-01/.test(preguntado) &&
-               preguntado.indexOf(X.fmtM(900)) > -1, true, preguntado.slice(0, 80)));
+            eq(/Bea/.test(preguntado) && /1 nov/.test(preguntado) &&
+               preguntado.indexOf(X.fmtM(900)) > -1, true, preguntado.slice(0, 120)));
         test('y si se dice que no, no se borra nada', () => {
             X._cacheRecibos = [{ id:'nrE2', negocioId:'n1', sucursalId:'suc_principal', staffId:'s2',
                                  desde:'2026-11-01', hasta:'2026-11-30', recibo:{ total:900 },
                                  gastoId:'', pagadoEn:'' }];
-            X.confirm = () => false;
+            const c0 = X._confirmar;
+            X._confirmar = () => {};          // se abre la ventana y no se acepta
             X.eliminarReciboGenerado('s2');
-            X.confirm = () => true;
+            X._confirmar = c0;
             return eq((X._cacheRecibos || []).length, 1, 'borró sin permiso');
+        });
+        /* Y la ventana es la del módulo, con su botón en rojo: la del
+           navegador no puede decir cuánto ni de quién. */
+        test('…y la ventana que pregunta es la del módulo, marcada como peligro', () => {
+            X._cacheRecibos = [{ id:'nrE3', negocioId:'n1', sucursalId:'suc_principal', staffId:'s2',
+                                 desde:'2026-11-01', hasta:'2026-11-30', recibo:{ total:900 },
+                                 gastoId:'', pagadoEn:'' }];
+            let opts = null;
+            const c0 = X._confirmar;
+            X._confirmar = (o) => { opts = o; };
+            X.eliminarReciboGenerado('s2');
+            X._confirmar = c0;
+            return eq((opts && opts.peligro) + '·' + (opts && opts.ok), 'true·Eliminar', JSON.stringify(opts));
         });
         /* Uno PAGADO no se borra por aquí: es el comprobante de dinero que
            salió, y borrarlo dejaría el gasto sin papel que lo explique. */
@@ -33954,17 +33973,45 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
         eq(((((P._cacheRecibos || []).find(x => x.id === idEd) || {}).recibo || {}).correcciones || []).length > 0,
            true, 'sin rastro'));
     test('eliminar el reparto lo quita, y solo ese', () => {
-        P.confirm = () => true;
+        /* Ventana del módulo + contraseña: borrar un reparto desaparece el
+           papel que dice qué se le dio a cada quien. */
+        P._confirmar = (o, cb) => cb();
+        P._pedirClaveAdmin = (t, cb) => cb();
         P.cerrarPropinas();
         P.eliminarPropina(idEd);
         return eq((P._cacheRecibos || []).length + '·' + (P._cacheRecibos || []).some(x => x.id === idEd),
                   '1·false', 'borró de más o de menos');
     });
     test('…y si se dice que no, no se borra', () => {
-        P.confirm = () => false;
+        const c0 = P._confirmar;
+        P._confirmar = () => {};
         P.eliminarPropina((P._cacheRecibos || [])[0].id);
-        P.confirm = () => true;
+        P._confirmar = c0;
         return eq((P._cacheRecibos || []).length, 1, 'borró sin permiso');
+    });
+    /* Y aunque se acepte la ventana, sin contraseña no se borra: es la misma
+       regla que eliminar un gasto. */
+    test('…y sin la contraseña tampoco', () => {
+        const c0 = P._confirmar, p0 = P._pedirClaveAdmin;
+        P._confirmar = (o, cb) => cb();
+        P._pedirClaveAdmin = () => {};        // se pide y no se da
+        P.eliminarPropina((P._cacheRecibos || [])[0].id);
+        P._confirmar = c0; P._pedirClaveAdmin = p0;
+        return eq((P._cacheRecibos || []).length, 1, 'borró sin clave');
+    });
+    /* La ventana dice cuánto y a cuántos, y avisa si ya hay gente pagada: eso
+       es lo que la del navegador no puede hacer. */
+    test('la ventana dice el importe, la gente y si ya hay pagados', () => {
+        const reg2 = (P._cacheRecibos || [])[0];
+        reg2.recibo.lineas[0].pagado = true;
+        let o = null;
+        const c0 = P._confirmar;
+        P._confirmar = (op) => { o = op; };
+        P.eliminarPropina(reg2.id);
+        P._confirmar = c0;
+        return eq(/personas/.test(o.texto) && /ya está marcada como pagada/.test(o.nota) &&
+                  o.texto.indexOf(P.fmtM(reg2.recibo.total)) > -1 &&
+                  o.peligro === true && o.ok === 'Eliminar', true, JSON.stringify(o));
     });
 
 
@@ -34118,6 +34165,71 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
             return eq(h2.indexOf('entregados') > -1 && h2.indexOf('pendientes') > -1, true, 'sin desglose');
         });
         P._cacheRecibos = [];
+    }
+
+
+    /* ── Sin emojis: la línea gráfica también en los rótulos ───────────── */
+    {
+        /* Los emojis los dibuja el sistema operativo: cambian de forma, de
+           color y de peso entre un Mac y un Windows, y al lado de los iconos
+           de trazo se ven de otra casa. */
+        const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        /* Se mira el MARCADO y también el JAVASCRIPT del módulo: los títulos
+           de los modales se escriben desde el código, así que revisar solo el
+           HTML dejaba la mitad sin vigilar —y ahí se coló el emoji del título
+           en la primera versión—. */
+        const zona = dia.slice(dia.indexOf('REPARTIR PROPINAS'), dia.indexOf('VISOR DE RECIBO')) +
+                     dia.slice(dia.indexOf('REPARTIR PROPINAS\n\n   No es un pago'),
+                               dia.indexOf('EL RECIBO GENERADO: GUARDARLO'));
+        /* Se buscan los PICTOGRAMAS de color (el bloque 1F300+), no los
+           símbolos de texto: la ✕ de cerrar y la ✓ de aceptar son la
+           convención del módulo desde antes y se dibujan con la tipografía,
+           no con la paleta del sistema operativo. */
+        /* Se perdona UNA cosa, y es a propósito: «Sin área». Los nombres de
+           las áreas viven en /staff-area.js y ahí llevan su emoji desde antes
+           (🍸 Barra, 🍳 Cocina…). Cambiar solo el de «Sin área» lo dejaría
+           distinto de sus hermanos en la misma lista; cambiarlos todos es un
+           barrido del archivo compartido, que no es esto. */
+        const emojis = (zona.replace(/'🧩 Sin área'/g, '').match(/[\u{1F300}-\u{1FAFF}]/gu) || []);
+        test('el modal de propinas no trae emojis en sus rótulos', () =>
+            eq(emojis.length, 0, 'quedaron: ' + emojis.join(' ')));
+        /* Los botones de la barra llevan icono del sprite, no un dibujo del
+           teclado. */
+        ['Pagar nómina', 'Repartir propinas', 'Repartos y recibos', 'Imprimir', 'CSV'].forEach(t => {
+            test('«' + t + '» lleva icono de la línea gráfica', () =>
+                eq(new RegExp('class="rotIco" data-ico="[a-z-]+">' + t + '<').test(dia), true, 'sin icono'));
+        });
+        /* Y los rótulos del marcado se pintan de verdad al arrancar: si nadie
+           los recorre, se quedan como texto pelón y el icono no aparece
+           nunca. */
+        test('los rótulos del marcado se pintan al arrancar', () => {
+            let pintados = 0;
+            const qs = P.document.querySelectorAll;
+            P.document.querySelectorAll = (sel) => {
+                if (sel !== '.rotIco') return qs.call(P.document, sel);
+                return [{ getAttribute: () => 'cor-propinas', querySelector: () => null,
+                          get textContent(){ return 'Repartir propinas'; },
+                          set innerHTML(v){ if (/<svg/.test(v)) pintados++; } }];
+            };
+            try { P._pintarRotulos(); } finally { P.document.querySelectorAll = qs; }
+            return eq(pintados, 1, 'se quedan como texto pelón');
+        });
+        /* Y no se registra otro arranque para eso: cada DOMContentLoaded de
+           más es una pieza que puede fallar sola. */
+        test('…enganchado a un arranque que ya existía', () =>
+            eq(/DOMContentLoaded',function\(\)\{\s*_pintarRotulos\(\);/.test(dia), true, 'registró otro arranque'));
+        /* Volver a pintar no duplica el icono. */
+        test('pintar dos veces no duplica el icono', () => {
+            let html = 'Repartir propinas', veces = 0;
+            const qs = P.document.querySelectorAll;
+            const falso = { getAttribute: () => 'cor-propinas',
+                            querySelector: () => (/<svg/.test(html) ? {} : null),
+                            get textContent(){ return html; },
+                            set innerHTML(v){ html = v; veces++; } };
+            P.document.querySelectorAll = (sel) => (sel === '.rotIco' ? [falso] : qs.call(P.document, sel));
+            try { P._pintarRotulos(); P._pintarRotulos(); } finally { P.document.querySelectorAll = qs; }
+            return eq(veces, 1, 'pintó dos veces');
+        });
     }
 
     /* ── Los candados de la pantalla ────────────────────────────────── */
