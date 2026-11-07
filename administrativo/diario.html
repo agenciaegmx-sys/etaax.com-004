@@ -90,7 +90,8 @@
             background:rgba(255,255,255,.03); border-left:3px solid var(--green);
             padding:8px 14px; }
         .nom-banda:empty { display:none; }
-        .dx-overlay { background:rgba(0,0,0,.7); z-index:8000;
+        .dx-overlay {
+            display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:8000;
             align-items:flex-start; justify-content:center; overflow-y:auto; padding:24px 16px; box-sizing:border-box;
         }
         .dx-overlay.open { display:flex; }

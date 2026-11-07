@@ -33886,6 +33886,55 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
     });
 }
 
+/* ═══════════ BH66 · LAS VENTANAS TIENEN QUE PODER VERSE ═══════════
+   Un bug que ninguna prueba vio y que dejó el módulo entero inservible:
+   editando el <style> se perdieron tres palabras de `.dx-overlay`
+   —`display:none; position:fixed; inset:0`— y, sin ellas, cada ventana dejó de
+   ser una capa sobre la pantalla para volverse un bloque suelto al final del
+   documento. Los cards «abrían» (el JS corría, la clase .open se ponía) pero no
+   se veía nada: la ventana estaba kilómetros abajo, en el flujo de la página.
+
+   El candado corría todo en verde mientras tanto, porque comprueba conducta y
+   esto era presentación. Así que aquí se vigila lo MÍNIMO de la presentación
+   sin lo cual la conducta no sirve de nada: que una capa sea una capa.      */
+console.log('\n══ BH66 · Las ventanas tienen que poder verse ══');
+{
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    /* Se lee la PRIMERA declaración de cada clase —la base—, no las de las
+       consultas de medios, que solo retocan. */
+    /* Con o sin espacio antes de la llave: las reglas de esta página se
+       escriben de las dos maneras y buscar solo una daba por inexistente una
+       clase que está ahí. */
+    const regla = (sel) => {
+        const re = new RegExp(sel.replace('.', '\\.') + '\\s*\\{([^}]*)\\}');
+        const m = re.exec(dia);
+        if (!m) throw new Error('no existe la regla ' + sel);
+        return m[1];
+    };
+    [['.dx-overlay', 'la ventana de cada card'],
+     ['.modal-overlay', 'los modales de captura'],
+     ['.cj-overlay', 'el visor y los historiales']].forEach(([sel, que]) => {
+        const r = regla(sel);
+        test(sel + ' se dibuja como una capa, no como un bloque (' + que + ')', () =>
+            eq(/position:\s*fixed/.test(r) && /inset:\s*0/.test(r), true,
+               'sin esto la ventana aparece al final del documento y parece que no abre'));
+        /* Y empieza ESCONDIDA: la clase .open es la que la enseña. Sin el
+           display:none de base, todas se ven a la vez desde que carga. */
+        test('…y empieza escondida hasta que algo la abra', () =>
+            eq(/display:\s*none/.test(r), true, 'se ven todas al cargar'));
+        test('…con su regla de apertura', () =>
+            eq(new RegExp(sel.replace('.', '\\.') + '\\.open\\s*\\{\\s*display:\\s*flex').test(dia),
+               true, 'no hay manera de enseñarla'));
+    });
+    /* La prueba de que la prueba mira: si el selector no estuviera, `regla`
+       truena en vez de dar por buena una cadena vacía. */
+    test('la revisión truena si la clase desaparece, en vez de celebrar', () => {
+        let truena = false;
+        try { regla('.no-existe-esta-clase'); } catch (e) { truena = true; }
+        return eq(truena, true, 'pasaría con el CSS borrado');
+    });
+}
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
