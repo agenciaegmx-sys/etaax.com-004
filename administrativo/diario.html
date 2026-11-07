@@ -7207,6 +7207,18 @@ function _nomAcciones(staffId, rango){
     /* Enlazado a un gasto que todavía no se paga: lo que falta no es «generar
        el gasto» otra vez —sería un segundo egreso— sino terminar ese. */
     var aMedias = !!(rec && rec.gastoId && !pagado && _gastoDeRecibo(rec));
+    /* ══ TENER UN RECIBO NO ES TENER EL PERIODO CUBIERTO ══════════════════
+       El menú apagaba «Generar recibo» en cuanto encontraba UN recibo que
+       tocara el periodo en pantalla. Con la vista en el mes y una semana ya
+       pagada, eso dejaba sin poder preparar las otras tres —la etiqueta decía
+       PARCIAL y el menú decía que no—.
+
+       Son dos preguntas distintas: ¿hay un recibo SIN PAGAR que editar?, y
+       ¿queda periodo por cubrir? Se puede generar cuando no hay uno libre y
+       todavía faltan días. */
+    var libre = _nomReciboLibre(staffId, rango);
+    var cob = EtaaxCore.coberturaPeriodo(rango.from, rango.to, _nomPeriodosPagados(staffId));
+    var puedeGenerar = !libre && cob.estado !== 'completo';
     var q = String(staffId).replace(/'/g,"\\'");
     var mi = function(ico, txt, accion, activo, porQue){
         if (activo) return _miCorte(_ic(ico), txt, accion);
@@ -7214,9 +7226,9 @@ function _nomAcciones(staffId, rango){
             'border-radius:7px;font-size:13px;color:var(--text-dim);opacity:.45;cursor:default">'+
             '<span style="width:18px;text-align:center">'+_ic(ico)+'</span><span>'+txt+'</span></div>';
     };
-    return mi('nom-pagar-nomina','Generar recibo',"abrirPagoNomina('"+q+"')", !rec,
-              pagado ? 'Esta nómina ya se pagó. Su recibo está en el historial.'
-                     : 'Ya tiene un recibo de este periodo: usa «Editar recibo».')
+    return mi('nom-pagar-nomina','Generar recibo',"abrirPagoNomina('"+q+"')", puedeGenerar,
+              libre ? 'Ya tiene un recibo sin pagar de este periodo: usa «Editar recibo».'
+                    : 'El periodo que estás mirando ya está pagado completo.')
          + mi('mov-editar','Editar recibo',"editarReciboGenerado('"+q+"')", !!rec && !pagado,
               rec ? 'Ya se pagó: para cambiarlo, corrígelo desde el pago.'
                   : 'Todavía no hay recibo que editar.')
@@ -7692,6 +7704,7 @@ function abrirPagoNomina(staffId){
     _ensurePagoNomModal();
     _pagoNomStaff=s; _pagoNomConceptos=[]; _pnTotalManual=null; _pnBonosQuitados=[];
     _pnEditandoGasto=null;
+    _pnPrimaPct=null;          // nómina nueva: el porcentaje de hoy
     var _bn=document.getElementById('pnCorrBanner'); if(_bn){ _bn.style.display='none'; _bn.innerHTML=''; }
     document.getElementById('pnMultaRetardo').value=EtaaxCore.descuentoRetardos(1,s.multaRetardo).tarifa;
     document.getElementById('pnRetardos').value=0;
@@ -7856,10 +7869,21 @@ function _pnDomingosEnRango(desde,hasta){
     return c;
 }
 /* Prima dominical: domingos del periodo × sueldo diario × % (parámetro de nómina) */
+/* ══ LA PRIMA SE CALCULA CON EL PORCENTAJE DE ENTONCES ═══════════════════
+   El porcentaje vive en los parámetros del negocio y puede cambiar. Al
+   reabrir un pago viejo se recalculaba con el de HOY: un recibo de $2,175
+   pasaba a $2,190 por abrirlo, sin tocar un solo campo. El pago ya hecho se
+   mide con lo que se aplicó aquel día, y ese número ahora se guarda en la
+   captura. Lo encontró Codex (N09). */
+var _pnPrimaPct = null;   // null = el vigente; un número = el de ese recibo
+function _pnPrimaPctVigente(){
+    return (_pnPrimaPct !== null && _pnPrimaPct !== undefined)
+        ? n(_pnPrimaPct) : (_nomParams().primaVacacionalPct || 25);
+}
 function _pnPrimaDom(){
     var dom=_pnDomingosEnRango(document.getElementById('pnDesde').value, document.getElementById('pnHasta').value);
     var diario=n(document.getElementById('pnDiario').value);
-    var pct=_nomParams().primaVacacionalPct||25;
+    var pct=_pnPrimaPctVigente();
     return {domingos:dom, monto:Math.round(dom*diario*(pct/100)*100)/100, pct:pct};
 }
 function _pnRenderPrimaDom(p){
@@ -8101,6 +8125,9 @@ function _pnOrigenCaptura(){
         retardos:n((document.getElementById('pnRetardos')||{}).value),
         multaRetardo:n((document.getElementById('pnMultaRetardo')||{}).value),
         primaIncluida:!!_pnPrimaInclude,
+        /* El % con el que se calculó la prima: sin él, reabrir el pago lo
+           recalcula con el de hoy y el total cambia solo. */
+        primaPct:_pnPrimaPctVigente(),
         /* null = el total lo manda el cálculo; un número = alguien lo fijó a
            mano. Guardar solo el número perdería esa diferencia. */
         totalManual:(_pnTotalManual===null?null:n(_pnTotalManual)),
@@ -8126,6 +8153,9 @@ function _pnRestaurarCaptura(nom){
     document.getElementById('pnMultaRetardo').value=n(o.multaRetardo);
     document.getElementById('pnRetardos').value=n(o.retardos);
     _pnPrimaInclude=!!o.primaIncluida;
+    /* Si la captura guardó su porcentaje, manda ese. Los recibos de antes no
+       lo traen: ahí no hay más remedio que el vigente, y se dice en el aviso. */
+    _pnPrimaPct=(o.primaPct===undefined||o.primaPct===null)?null:n(o.primaPct);
     _pnBonosQuitados=(o.bonosQuitados||[]).slice();
     _pagoNomConceptos=(o.conceptos||[]).map(function(c){
         return { concepto:c.concepto, detalle:c.detalle||'', monto:n(c.monto),
@@ -9368,16 +9398,38 @@ function _periodoPropuesto(g, dias){
     var iso=function(x){ return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); };
     return { desde:iso(ini), hasta:fin };
 }
-/* El recibo con el que se va a reabrir el modal: el guardado si lo hay, y si
-   no, el reconstruido con su captura y su periodo propuesto. */
+/* ══ RECONSTRUIR SOLO LO QUE FALTA ════════════════════════════════════════
+   Hay tres clases de pago viejo y no son la misma:
+
+     · con captura (`origen`): se reabre tal cual;
+     · SIN captura pero CON recibo guardado —los del primer commit de recibos
+       digitales ya traían periodo, días, sueldo diario, folio y emisión—: de
+       ahí solo falta la captura, y el resto se CONSERVA;
+     · sin recibo: se reconstruye todo del desglose y el periodo se propone.
+
+   Tratar el segundo como el tercero proponía fechas inventadas sobre fechas
+   que ya estaban guardadas, y guardar sin corregirlas cambiaba la cobertura
+   histórica. Lo encontró Codex (N08). */
 function _nominaParaCorregir(g){
     if(g && g.nomina && g.nomina.origen) return g.nomina;
     var rec=_reciboNominaReconstruido(g);
     var org=_origenDesdeReconstruido(rec, g && g.monto);
     if(!org) return null;
-    var per=_periodoPropuesto(g, n(rec.dias));
+    var guardado = (g && g.nomina) || null;
     var copia={}; for(var k in rec){ if(Object.prototype.hasOwnProperty.call(rec,k)) copia[k]=rec[k]; }
-    copia.origen=org; copia.desde=per.desde; copia.hasta=per.hasta;
+    if (guardado){
+        /* Lo que el recibo SÍ guardó manda sobre lo reconstruido. */
+        ['folio','periodicidad','staff','desde','hasta','dias','diario',
+         'percepciones','deducciones','totalPerc','totalDed','total','emitido','correcciones']
+            .forEach(function(campo){ if (guardado[campo] !== undefined) copia[campo] = guardado[campo]; });
+    }
+    copia.origen = org;
+    /* El periodo se propone SOLO si de verdad no hay uno. */
+    if (!copia.desde || !copia.hasta){
+        var per = _periodoPropuesto(g, n(copia.dias || rec.dias));
+        copia.desde = per.desde; copia.hasta = per.hasta;
+        copia.periodoInferido = true;
+    }
     return copia;
 }
 function editarReciboNomina(gastoId){
@@ -9452,9 +9504,11 @@ function _pnAbrirCorreccion(g,s){
         var _ncor=((g.nomina.correcciones||[]).length);
         _bn.style.display='';
         _bn.innerHTML=(g._reconstruido
-            ? '🧩 <b>Captura reconstruida</b> — este pago es anterior a los recibos digitales: los conceptos salen '+
-              'del desglose que quedó en el gasto. <b>El periodo no se guardaba entonces</b>, así que el de arriba '+
-              'es una propuesta (termina el día del pago): revísalo antes de guardar.'+
+            ? '<b>Captura reconstruida</b> — este pago es anterior a los recibos digitales: los conceptos salen '+
+              'del desglose que quedó en el gasto.'+
+              (g.nomina && g.nomina.periodoInferido
+                ? ' <b>El periodo no estaba guardado</b>, así que el de arriba es una propuesta (termina el día del pago): revísalo antes de guardar.'
+                : ' El periodo es el que ya traía guardado el recibo.')+
               (((g.nomina&&g.nomina.origen&&g.nomina.origen._cuadra)===false)
                 ? ' Además, sus renglones no suman el importe que salió de la caja (parte se pagó aparte, o el total '+
                   'se ajustó a mano), así que el <b>total viene clavado en '+fmtM(g.monto)+'</b>: cámbialo solo si sabes por qué.'
@@ -10047,9 +10101,26 @@ function eliminarGasto(id){
     _pedirClaveAdmin('Eliminar gasto: '+(g.concepto||''), function(){
         _cacheGastos = (_cacheGastos||[]).filter(function(x){return x.id!==id;});
         _sbDel('gastos', id);
+        /* ══ Y SU RECIBO NO SE QUEDA COLGANDO ════════════════════════════
+           Si el gasto era el pago de una nómina, su recibo apuntaba a él.
+           Borrarlo por aquí dejaba un recibo «pagado» sin pago: la persona no
+           volvía a aparecer por pagar y tampoco se le podía cobrar.
+
+           El recibo NO se borra —nadie pidió borrar el comprobante, se pidió
+           borrar el gasto— sino que vuelve a estar LISTO SIN PAGAR, que es lo
+           que de verdad quedó: el trabajo capturado y el dinero sin salir.
+           Para deshacer las dos cosas está «Eliminar pago» en el panel. */
+        _desligarReciboDeGasto(id);
         gRenderAll();
         _syncGastosCortes();
     });
+}
+function _desligarReciboDeGasto(gastoId){
+    var reg = (_cacheRecibos||[]).find(function(x){ return x.gastoId === gastoId; });
+    if (!reg) return;
+    reg.gastoId = ''; reg.pagadoEn = ''; reg.updated = Date.now();
+    _sbUp('nomina_recibos', reg);
+    try { _volverAlCatalogo(); } catch(e) {}
 }
 
 /* Desbloquear y mostrar mayores */

@@ -34512,6 +34512,161 @@ console.log('\n══ BH71 · Los tres de la auditoría ══');
     });
 }
 
+/* ═══════════ BH72 · N06 A N09 DE LA AUDITORÍA ═══════════
+   Cuatro hallazgos más de Codex. Dos tocan el cálculo de un pago hecho; los
+   otros dos, la coherencia entre lo que la pantalla ofrece y lo que el
+   sistema sabe.                                                             */
+console.log('\n══ BH72 · N06 a N09 de la auditoría ══');
+{
+    const Z = crearContexto();
+    cargarJS(Z, 'etaax-core.js'); cargarJS(Z, 'reporte-marca.js'); cargarJS(Z, 'etaax-iconos.js');
+    cargarInline(Z, 'administrativo/diario.html');
+    Z._storage.etaax_negocio_activo = 'n1';
+    Z._storage.etaax_sucursal_activa = 'suc_principal';
+    let PCT = 25;
+    Z.NominaParams = { get(){ return { jornadaHoras:8, primaVacacionalPct:PCT, salarioDiarioDefault:300 }; } };
+    const ana = { id:'s1', nombre:'Ana', puesto:'Barista', sucursalId:'suc_principal',
+                  esquemaSueldo:'diario', sueldoDiario:300, bonos:[], multaRetardo:25 };
+    Z._cacheStaff = [ana]; Z._cacheHorarios = {};
+    Z._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
+    Z._exigeVG = () => true; Z._puedeEditarGasto = () => true;
+    Z._pedirClaveAdmin = (t, cb) => cb();
+    const el = (id) => Z.document.getElementById(id);
+    const silencio = (fn) => {
+        const d0 = Z.document.querySelector, g0 = Z.gRenderAll, s0 = Z._syncGastosCortes,
+              c0 = Z.gCerrarModal, u0 = Z._sbUp, a0 = Z._asegurarCategoria,
+              r0 = Z.renderNominasPanel, p0 = Z._nomPintarListas, e0 = Z._cerrarSelPago, d1 = Z._sbDel;
+        Z.document.querySelector = () => ({ style:{}, classList:{ add(){}, remove(){}, toggle(){} } });
+        Z.gRenderAll = () => {}; Z._syncGastosCortes = () => {}; Z._sbUp = () => {}; Z._sbDel = () => {};
+        Z._asegurarCategoria = () => {}; Z.renderNominasPanel = () => {};
+        Z._nomPintarListas = () => {}; Z._cerrarSelPago = () => {};
+        try { return fn(); }
+        finally { Z.document.querySelector = d0; Z.gRenderAll = g0; Z._syncGastosCortes = s0;
+                  Z.gCerrarModal = c0; Z._sbUp = u0; Z._asegurarCategoria = a0; Z._sbDel = d1;
+                  Z.renderNominasPanel = r0; Z._nomPintarListas = p0; Z._cerrarSelPago = e0; }
+    };
+    /* Una semana capturada y pagada. `prima` marca la casilla. */
+    const semana = (prima) => {
+        Z._cacheGastos = []; Z._cacheRecibos = [];
+        Z._pagoNomStaff = ana; Z._pagoNomConceptos = []; Z._pnTotalManual = null;
+        Z._pnBonosQuitados = []; Z._pnEditandoGasto = null; Z._pnPrimaPct = null;
+        Z._pnPrimaInclude = !!prima;
+        el('pnTipo').value = 'semana';
+        el('pnDesde').value = '2026-11-02'; el('pnHasta').value = '2026-11-08';
+        el('pnDiario').value = 300; el('pnDias').value = 7;
+        el('pnMultaRetardo').value = 25; el('pnRetardos').value = 0;
+        Z._pnCalc();
+        silencio(() => Z._confirmarPagoNom());
+        return silencio(() => {
+            Z.generarGastoNomina('s1');
+            el('gFecha').value = '2026-11-09';
+            Z.guardarGasto();
+            return (Z._cacheGastos || []).find(g => g.reciboId);
+        });
+    };
+    /* ¿La opción del menú responde? Lo apagado es un div mudo. */
+    const activa = (html, txt) => {
+        const i = html.indexOf('>' + txt + '<');
+        return i > -1 && html.lastIndexOf('onclick', i) > html.lastIndexOf('<div', i);
+    };
+    const MES = { from:'2026-11-01', to:'2026-11-30' };
+    const SEM = { from:'2026-11-02', to:'2026-11-08' };
+
+    /* ── N06 · tener un recibo no es tener el periodo cubierto ────────── */
+    semana(false);
+    test('N06 · con el mes a la vista y una semana pagada, dice PARCIAL', () =>
+        eq(Z._nomEstadoDe('s1', MES).txt, 'PARCIAL', 'cobertura'));
+    /* El menú se apagaba en cuanto encontraba UN recibo que tocara el periodo,
+       así que no se podían preparar las otras tres semanas. */
+    test('N06 · …y deja generar el recibo de las semanas que faltan', () =>
+        eq(activa(Z._nomAcciones('s1', MES), 'Generar recibo'), true, 'sigue apagado'));
+    /* Pero sobre la semana YA pagada no: ahí no falta nada. */
+    test('N06 · …y sobre la semana ya pagada, no', () =>
+        eq(activa(Z._nomAcciones('s1', SEM), 'Generar recibo'), false, 'deja pagarla dos veces'));
+    /* Y si hay uno SIN pagar, lo que toca es editarlo, no hacer otro. */
+    test('N06 · con un recibo sin pagar, se edita en vez de generar otro', () => {
+        Z._cacheGastos = []; Z._cacheRecibos = [];
+        Z._pagoNomStaff = ana; Z._pagoNomConceptos = []; Z._pnTotalManual = null;
+        Z._pnEditandoGasto = null; Z._pnPrimaInclude = false;
+        el('pnDesde').value = '2026-11-02'; el('pnHasta').value = '2026-11-08';
+        el('pnDiario').value = 300; el('pnDias').value = 7; Z._pnCalc();
+        silencio(() => Z._confirmarPagoNom());
+        const h = Z._nomAcciones('s1', MES);
+        return eq(activa(h, 'Generar recibo') + '·' + activa(h, 'Editar recibo'), 'false·true', 'al revés');
+    });
+
+    /* ── N07 · borrar el gasto por la lista ──────────────────────────── */
+    {
+        const g = semana(false);
+        silencio(() => Z.eliminarGasto(g.id));
+        test('N07 · borrar el gasto por la lista no deja el recibo sellado', () => {
+            const r = (Z._cacheRecibos || [])[0] || {};
+            return eq((Z._cacheGastos || []).length + '·' + r.gastoId + '·' + r.pagadoEn, '0··', JSON.stringify(r));
+        });
+        /* El comprobante NO se borra: nadie pidió borrarlo. Vuelve a estar
+           listo sin pagar, que es lo que de verdad quedó —el trabajo
+           capturado y el dinero sin salir—. */
+        test('N07 · …pero el recibo sobrevive, listo para pagarse otra vez', () =>
+            eq((Z._cacheRecibos || []).length, 1, 'se llevó el comprobante por delante'));
+        test('N07 · …y la persona vuelve a poder cobrar', () =>
+            eq(activa(Z._nomAcciones('s1', SEM), 'Generar gasto'), true, 'quedó bloqueada'));
+        test('N07 · …y su periodo deja de contar como pagado', () =>
+            eq(Z._nomEstadoDe('s1', SEM).txt, 'POR PAGAR', 'sigue dándola por pagada'));
+    }
+
+    /* ── N08 · lo que el recibo YA guardó no se reinventa ─────────────── */
+    {
+        const g = semana(false);
+        delete g.nomina.origen;                      // como los del primer commit
+        g.notas = 'Sueldo: $300.00 × 7 días = $2,100.00';
+        const rec = Z._nominaParaCorregir(g);
+        test('N08 · un recibo sin captura conserva SU periodo', () =>
+            eq(rec.desde + ' / ' + rec.hasta, '2026-11-02 / 2026-11-08',
+               'propuso ' + rec.desde + ' / ' + rec.hasta));
+        test('N08 · …y su folio y su emisión', () =>
+            eq(rec.folio + '·' + (rec.emitido === g.nomina.emitido), g.nomina.folio + '·true', 'los perdió'));
+        test('N08 · …pero estrena la captura que le faltaba', () =>
+            eq(!!(rec.origen && rec.origen.conceptos), true, 'sin captura no se puede reabrir'));
+        test('N08 · …y no se marca como periodo inventado', () =>
+            eq(!!rec.periodoInferido, false, 'dice que lo inventó cuando lo tenía'));
+        /* Sin NADA guardado sí se propone, y se dice. */
+        test('N08 · sin periodo guardado sí se propone, y lo avisa', () => {
+            const g2 = { id:'gz', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-09',
+                         monto:2100, staffId:'s1', categoria:'Nómina y personal',
+                         concepto:'Nómina semanal — Ana',
+                         notas:'Sueldo: $300.00 × 7 días = $2,100.00' };
+            const r2 = Z._nominaParaCorregir(g2);
+            return eq(r2.periodoInferido + '·' + r2.desde + '·' + r2.hasta,
+                      'true·2026-11-03·2026-11-09', JSON.stringify([r2.desde, r2.hasta]));
+        });
+    }
+
+    /* ── N09 · la prima, con el porcentaje de entonces ────────────────── */
+    {
+        PCT = 25;
+        const g = semana(true);
+        const total = g.nomina.total;
+        test('N09 · el recibo guarda con qué porcentaje se calculó la prima', () =>
+            eq(g.nomina.origen.primaPct, 25, 'no lo guardó'));
+        /* LA REPRODUCCIÓN DE CODEX: cambiar el parámetro y reabrir sin tocar
+           nada. El total no puede moverse: ese pago ya se hizo con el 25%. */
+        test('N09 · reabrirlo con otro parámetro no cambia el total', () => {
+            PCT = 30;
+            silencio(() => Z._pnAbrirCorreccion(g, ana));
+            return eq(Z.n(el('pnTotal').value), total, 'era ' + total + ' y quedó ' + el('pnTotal').value);
+        });
+        test('N09 · …y la prima sigue diciendo 25%', () =>
+            eq(Z._pnPrimaDom().pct, 25, 'usó el de hoy'));
+        /* Y una nómina NUEVA sí usa el de hoy: el parámetro cambió para los
+           pagos que vienen, no para los que ya se hicieron. */
+        test('N09 · una nómina nueva usa el porcentaje de hoy', () => {
+            Z.abrirPagoNomina('s1');
+            return eq(Z._pnPrimaDom().pct, 30, 'se quedó con el viejo');
+        });
+        PCT = 25;
+    }
+}
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
