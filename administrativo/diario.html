@@ -856,7 +856,8 @@
         <div class="dx-win-hdr"><div class="dx-win-title">💰 Pagar Nóminas</div><button class="dx-win-close" onclick="dxCerrar('nominas')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_nominas">
 <div class="dxp" id="nom_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('nom','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('nom','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('nom','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('nom','rango',this)">Rango</button></div><input type="date" id="nom_val" onchange="dxpChange('nom')"><input type="date" id="nom_end" style="display:none" onchange="dxpChange('nom')"><span class="dxp-semana" id="nom_sem"></span></div>
-<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:var(--blue)" onclick="abrirSelectorPago('nomina')">💰 Pagar nómina</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Pagos de nómina','tablaNomPagos')">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Pagos de nómina','tablaNomPagos')">⬇️ CSV</button></div>
+<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:var(--blue)" onclick="abrirSelectorPago('nomina')">💰 Pagar nómina</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Pagos de nómina','tablaNomPagos',_nomPanelResumen)">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Pagos de nómina','tablaNomPagos')">⬇️ CSV</button></div>
+<div style="margin-bottom:12px"><input type="text" id="nomPanelBusca" placeholder="🔍 Buscar por colaborador o concepto…" oninput="renderNominasPanel()" style="width:100%;box-sizing:border-box;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px"></div>
 <div class="card"><div class="card-header" style="justify-content:space-between"><h2>💰 Pagos de nómina del periodo</h2><span id="totalNomLbl" style="font-size:12px;color:var(--text-dim)"></span></div><div class="card-body" style="padding:0;overflow-x:auto"><table class="gastos-table" id="tablaNomPagos"><thead><tr><th>Fecha</th><th>Concepto</th><th>Método</th><th>Estatus</th><th class="ar">Monto</th><th></th></tr></thead><tbody id="tbodyNomPagos"></tbody></table><div id="emptyNomPagos" class="empty-state" style="display:none;padding:32px"><div class="empty-state-icon">💰</div><div>Sin pagos de nómina en este período.</div></div></div></div>
 </div>
     </div>
@@ -2426,9 +2427,18 @@ function _dxTablaLimpia(tablaId){
     }
     return c;
 }
-function dxImprimir(titulo, tablaId){
+/* `resumen` es la misma línea que se ve en pantalla («14 pagos · $29,030.00»).
+   Va ARRIBA y ABAJO del papel, como en Gastos: arriba para saber qué se está
+   mirando antes de leer un solo renglón, y abajo porque la hoja se imprime y
+   se firma por el final —y nadie va a sumar catorce cifras a mano para ver si
+   cuadra—. Si no se pasa, el papel sale como siempre. */
+function dxImprimir(titulo, tablaId, resumen){
     var tabla = _dxTablaLimpia(tablaId);
     if (!tabla) { alert('No hay tabla que exportar.'); return; }
+    var _banda = function(txt){
+        return '<div style="font-family:Arial;font-size:12px;font-weight:700;background:#f2f2f2;'+
+               'border-left:3px solid #3dbe7a;padding:7px 11px;margin:8px 0">' + etx(txt) + '</div>';
+    };
     var m = (typeof etaaxMarca === 'function') ? etaaxMarca() : {};
     var area = document.getElementById('dxPrintArea');
     var hoy = new Date().toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
@@ -2440,8 +2450,14 @@ function dxImprimir(titulo, tablaId){
         '</div>' +
         '<div style="margin-left:auto;text-align:right;font-size:10px;color:#777">' + etx(titulo) + '<br>' + hoy + '</div>' +
         '</div>' +
-        '<div style="font-family:Arial;font-weight:700;font-size:14px;margin-bottom:8px">' + etx(titulo) + '</div>';
+        '<div style="font-family:Arial;font-weight:700;font-size:14px;margin-bottom:8px">' + etx(titulo) + '</div>' +
+        (resumen ? _banda(resumen) : '');
     area.appendChild(tabla);
+    if (resumen) {
+        var pie = document.createElement('div');
+        pie.innerHTML = _banda(resumen);
+        area.appendChild(pie);
+    }
     window.print();
 }
 function dxCSV(nombre, tablaId){
@@ -6818,6 +6834,7 @@ function _abrirModalGasto(g,tipo){
     _gastoStaffId=(d.staffId)||'';
     _gastoNomina=(d.nomina)||null;
     _gastoReciboId=(d.reciboId)||'';
+    _gRotularGuardar(d._corrigiendo ? 'Actualizar gasto y recibo' : 'Guardar gasto');
     document.getElementById('gModalTitulo').textContent=g?'Editar gasto':'Nuevo gasto';
     document.getElementById('gId').value=d.id||'';
     document.getElementById('gFecha').value=d.fecha||todayStr();
@@ -8510,7 +8527,16 @@ function _pnAbrirCorreccion(g,s){
     _pagoNomStaff=s; _pagoNomConceptos=[]; _pnTotalManual=null; _pnBonosQuitados=[]; _pnPrimaInclude=false;
     _pnEditandoGasto=g.id;
     document.getElementById('pagoNomTitle').textContent='Corregir pago — '+s.nombre;
-    var _bc1=document.getElementById('pnBtnConfirmar'); if(_bc1) _bc1.textContent='Continuar a corregir el pago →';
+    /* ══ AQUÍ SE ACTUALIZAN LAS DOS COSAS O NINGUNA ══════════════════════
+       Este pago ya está cerrado: el recibo y su gasto son el mismo hecho
+       contado dos veces. Si se pudiera arreglar el papel y dejar el gasto como
+       estaba, los reportes seguirían diciendo lo viejo y el recibo lo nuevo —y
+       nadie sabría cuál creer—.
+
+       Por eso el botón dice ACTUALIZAR GASTO: lo que viene después no es un
+       trámite, es el gasto abriéndose para guardarse con los números nuevos. Y
+       si se cancela ahí, no se guarda NADA: ni el recibo. Las dos o ninguna. */
+    var _bc1=document.getElementById('pnBtnConfirmar'); if(_bc1) _bc1.textContent='Actualizar gasto →';
     document.getElementById('pnCptTipo').value='bono';
     _pnCptTipoChange();
     _pnRestaurarCaptura(g.nomina);
@@ -8519,7 +8545,9 @@ function _pnAbrirCorreccion(g,s){
         var _ncor=((g.nomina.correcciones||[]).length);
         _bn.style.display='';
         _bn.innerHTML='✏️ <b>Estás corrigiendo un pago ya registrado</b> — folio '+_esc(g.nomina.folio||'—')+
-            ' del '+_esc(_fmtFechaCortaDx(g.fecha))+'. Al confirmar se actualiza ese mismo gasto (no se crea otro) y el recibo guarda qué decía antes.'+
+            ' del '+_esc(_fmtFechaCortaDx(g.fecha))+'. <b>Actualizar gasto</b> guarda el recibo Y el gasto juntos: '+
+            'se actualiza ese mismo gasto (no se crea otro) y el recibo apunta qué decía antes. '+
+            'Si cancelas en el gasto, no se guarda nada —tampoco el recibo—.'+
             (_ncor?'<br><span style="color:var(--text-dim)">Ya tiene '+_ncor+' corrección'+(_ncor!==1?'es':'')+' registrada'+(_ncor!==1?'s':'')+'.</span>':'');
     }
     _nomEncima('modalPagoNom', _Z_NOMINA).classList.add('open');
@@ -8781,6 +8809,7 @@ function _confirmarPagoNom(){
         g.concepto='Nómina '+perLbl+' — '+s.nombre;
         g.monto=montoPrincipal; g.notas=desg; g.nomina=_rec;
         g.categoriaNomina=_ggStaffCat(s); g.staffId=s.id;
+        g._corrigiendo=true;   // solo para rotular el botón; no se guarda
     } else {
         g={ concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal', monto:montoPrincipal, proveedor:'', notas:desg, categoriaNomina:_ggStaffCat(s), staffId:s.id, nomina:_rec };
     }
@@ -8976,6 +9005,13 @@ function eliminarEvidenciaGasto(i){
     if(e.path && window.sbBorrarEvidencia) sbBorrarEvidencia(e.path);
 }
 
+/* El rótulo del botón de guardar dice si esto es un alta o la segunda mitad de
+   una corrección: en el segundo caso, apretarlo es lo que cierra LAS DOS —el
+   recibo y el gasto—, y hasta que se apriete no se guardó ninguna. */
+function _gRotularGuardar(txt){
+    var b=document.getElementById('btnGuardar');
+    if(b) b.textContent=txt;
+}
 function guardarGasto(){
     var fecha=document.getElementById('gFecha').value;
     var monto=parseFloat(document.getElementById('gMonto').value);
@@ -9191,14 +9227,27 @@ function eliminarPagoNomina(gastoId){
         _volverAlCatalogo();
     });
 }
+/* La línea de arriba a la derecha: cuántos pagos y cuánto suman. Vive aquí
+   para que la pantalla y el papel digan LO MISMO —el impreso la recibe tal
+   cual— y no dos cuentas parecidas que un día se separan. */
+var _nomPanelResumen = '';
 function renderNominasPanel(){
     var tb=document.getElementById('tbodyNomPagos'); if(!tb) return;
     var r=dxpRango('nom');
     var lista=gLoad().filter(function(g){ return inRange(g.fecha,r.from,r.to) && (g.staffId || g.categoria==='Nómina y personal'); })
         .filter(gGastoVisible).sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
+    /* El buscador recorta la lista Y el total: un total que no corresponde con
+       los renglones que se están viendo es peor que no tener total. */
+    var q=_normProv((document.getElementById('nomPanelBusca')||{}).value||'');
+    if(q) lista=lista.filter(function(g){
+        return _normProv(g.concepto).indexOf(q)>-1 ||
+               _normProv((g.nomina&&g.nomina.staff&&g.nomina.staff.nombre)||'').indexOf(q)>-1;
+    });
     var tot=lista.reduce(function(s,g){return s+n(g.monto);},0);
+    _nomPanelResumen=lista.length+' pago'+(lista.length!==1?'s':'')+' · '+fmtM(tot)+
+        (q?' · filtro «'+((document.getElementById('nomPanelBusca')||{}).value||'')+'»':'');
     var lbl=document.getElementById('totalNomLbl');
-    if(lbl) lbl.textContent=lista.length+' pago'+(lista.length!==1?'s':'')+' · '+fmtM(tot);
+    if(lbl) lbl.textContent=_nomPanelResumen;
     var em=document.getElementById('emptyNomPagos');
     if(!lista.length){ tb.innerHTML=''; if(em)em.style.display='block'; return; }
     if(em)em.style.display='none';

@@ -33252,8 +33252,11 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         const b = lbl();
         X._pnAbrirCorreccion({ id:'g', fecha:'2026-11-09', nomina:{ folio:'N-1', desde:'2026-11-01',
                                hasta:'2026-11-30', dias:7, diario:300, origen:{ conceptos:[] } } }, bea);
+        /* En una corrección el botón NO dice «guardar recibo»: lo que viene es
+           el gasto abriéndose para guardarse con los números nuevos, y las dos
+           cosas se guardan juntas o ninguna. */
         return eq(a + ' | ' + b + ' | ' + lbl(),
-                  'Guardar recibo | Guardar recibo | Continuar a corregir el pago →', a + '|' + b);
+                  'Guardar recibo | Guardar recibo | Actualizar gasto →', a + '|' + b);
     });
     /* El rótulo que trae la página es el que se ve si alguna vez se abre el
        modal por un camino que olvide ponerlo. Por eso el de la página es el
@@ -33570,6 +33573,127 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
             finally { X.gRenderAll = g0; X._syncGastosCortes = s0; X.renderNominasPanel = r0;
                       X._pedirClaveAdmin = (t, cb) => cb(); }
             return eq(pedida + '·' + (X._cacheGastos || []).length, 'true·1', 'borró sin clave');
+        });
+    }
+
+
+    /* ── 13 · corregir: las dos cosas o ninguna ────────────────────────── */
+    {
+        /* Un pago cerrado es el recibo y su gasto contando el MISMO hecho. Si
+           se pudiera arreglar el papel y dejar el gasto como estaba, los
+           reportes dirían lo viejo y el recibo lo nuevo, y nadie sabría cuál
+           creer. Por eso el botón anuncia el gasto, no el recibo. */
+        const gastoC = { id:'gC', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-09',
+                         monto:2100, concepto:'Nómina semanal — Ana', categoria:'Nómina y personal',
+                         staffId:'s1', reciboId:'nrC',
+                         nomina:{ folio:'N-5', periodicidad:'Semanal', desde:'2026-11-01',
+                                  hasta:'2026-11-07', dias:7, diario:300,
+                                  staff:{ id:'s1', nombre:'Ana', puesto:'Barista' },
+                                  percepciones:[], deducciones:[], totalPerc:2100, totalDed:0,
+                                  total:2100, origen:{ conceptos:[] } } };
+        X._cacheGastos = [gastoC];
+        X._pnAbrirCorreccion(gastoC, ana);
+        test('al corregir, el botón anuncia que se actualiza el GASTO', () =>
+            eq(X.document.getElementById('pnBtnConfirmar').textContent, 'Actualizar gasto →', 'rótulo'));
+        test('…y el aviso dice que se guardan juntos, o ninguno', () => {
+            const t = X.document.getElementById('pnCorrBanner').innerHTML;
+            return eq(/recibo Y el gasto juntos/.test(t) && /no se guarda nada/.test(t),
+                      true, 'no avisa que es todo o nada');
+        });
+        /* Y la segunda mitad: el modal de gasto lo dice también. Apretar ESE
+           botón es lo que cierra las dos. */
+        test('el modal de gasto dice que va a actualizar las dos', () => {
+            let entregado = null;
+            const ab0 = X._abrirModalGasto, cat0 = X._asegurarCategoria;
+            X._abrirModalGasto = (g, t) => { entregado = g; ab0.call(X, g, t); };
+            X._asegurarCategoria = () => {};
+            X.prompt = () => 'ajuste de días';
+            silencio(() => { X.document.getElementById('pnDias').value = 6; X._pnCalc(); X._confirmarPagoNom(); });
+            X._abrirModalGasto = ab0; X._asegurarCategoria = cat0;
+            return eq((entregado && entregado._corrigiendo) + '·' +
+                      X.document.getElementById('btnGuardar').textContent,
+                      'true·Actualizar gasto y recibo', 'no lo dice');
+        });
+        /* La llave de rotular es de la PANTALLA y no puede viajar al registro.
+           Comprobarlo sobre el gasto de antes no probaba nada —nunca la tuvo—:
+           hay que GUARDAR y mirar lo que quedó escrito. */
+        test('…y esa marca no se guarda en el gasto', () => {
+            silencio(() => { X.document.getElementById('gFecha').value = '2026-11-09'; X.guardarGasto(); });
+            const g = (X._cacheGastos || []).find(x => x.id === 'gC') || {};
+            return eq(('_corrigiendo' in g) + '·' + (g.id === 'gC'), 'false·true',
+                      'una llave de adorno acabó en la nube');
+        });
+        /* Un alta normal NO puede salir rotulada como corrección. */
+        test('un gasto normal dice «Guardar gasto», como siempre', () => {
+            silencio(() => X._abrirModalGasto({ concepto:'Servilletas', categoria:'Varios', monto:120 }, 'menor'));
+            return eq(X.document.getElementById('btnGuardar').textContent, 'Guardar gasto', 'rótulo');
+        });
+    }
+
+    /* ── 14 · el total del historial, en pantalla y en el papel ────────── */
+    {
+        const pagos = [
+            { id:'p1', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-03', monto:1000,
+              concepto:'Nómina semanal — Ana', categoria:'Nómina y personal', staffId:'s1' },
+            { id:'p2', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-04', monto:2000,
+              concepto:'Nómina semanal — Bea', categoria:'Nómina y personal', staffId:'s2' },
+        ];
+        X._cacheGastos = pagos;
+        X._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
+        const busca = X.document.getElementById('nomPanelBusca');
+        busca.value = '';
+        X.renderNominasPanel();
+        test('el historial dice cuántos pagos y cuánto suman', () =>
+            eq(X.document.getElementById('totalNomLbl').textContent,
+               '2 pagos · ' + X.fmtM(3000), 'resumen'));
+        /* EL BUSCADOR RECORTA LA LISTA Y EL TOTAL. Un total que no corresponde
+           con los renglones que se están viendo es peor que no tener total. */
+        test('al buscar, el total sigue a lo que se está viendo', () => {
+            busca.value = 'bea';
+            X.renderNominasPanel();
+            const t = X.document.getElementById('totalNomLbl').textContent;
+            return eq(t.indexOf('1 pago') === 0 && t.indexOf(X.fmtM(2000)) > -1, true, t);
+        });
+        test('…y dice por qué filtro está recortado', () =>
+            eq(/filtro «bea»/.test(X.document.getElementById('totalNomLbl').textContent), true, 'mudo'));
+        test('la tabla también se recorta, no solo el número', () =>
+            eq(X.document.getElementById('tbodyNomPagos').innerHTML.indexOf('Ana'), -1, 'el total miente'));
+        /* El papel recibe LA MISMA línea: dos cuentas parecidas se separan un
+           día, y ese día nadie sabe cuál es la buena. */
+        test('el impreso lleva el total arriba Y abajo', () => {
+            busca.value = '';
+            X.renderNominasPanel();
+            const area = X.document.getElementById('dxPrintArea');
+            const t0 = X._dxTablaLimpia, pr0 = X.window.print;
+            X._dxTablaLimpia = () => ({ nodeType:1 });
+            X.window.print = () => {};
+            let puestos = [];
+            area.appendChild = (el) => { puestos.push((el && el.innerHTML) || ''); };
+            try { X.dxImprimir('Pagos de nómina', 'tablaNomPagos', X._nomPanelResumen); }
+            finally { X._dxTablaLimpia = t0; X.window.print = pr0; }
+            const arriba = area.innerHTML.indexOf(X.fmtM(3000)) > -1;
+            const abajo  = puestos.some(h => h.indexOf(X.fmtM(3000)) > -1);
+            return eq(arriba + '·' + abajo, 'true·true', 'arriba=' + arriba + ' abajo=' + abajo);
+        });
+        /* Y el botón de la página le pasa el resumen VIVO: una función perfecta
+           a la que nadie le pasa el dato imprime una hoja sin total. */
+        test('el botón de imprimir le pasa el resumen de la pantalla', () => {
+            const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+            return eq(/dxImprimir\('Pagos de nómina','tablaNomPagos',_nomPanelResumen\)/.test(src),
+                      true, 'imprime sin total');
+        });
+        /* Los otros paneles siguen imprimiendo como siempre: sin resumen, sin
+           bandas. */
+        test('un panel sin resumen imprime como antes', () => {
+            const area = X.document.getElementById('dxPrintArea');
+            const t0 = X._dxTablaLimpia, pr0 = X.window.print;
+            X._dxTablaLimpia = () => ({ nodeType:1 });
+            X.window.print = () => {};
+            let puestos = 0;
+            area.appendChild = () => { puestos++; };
+            try { X.dxImprimir('Gastos fijos', 'tablaFijosPag'); }
+            finally { X._dxTablaLimpia = t0; X.window.print = pr0; }
+            return eq(puestos, 1, 'le metió una banda a un panel que no la pidió');
         });
     }
 
