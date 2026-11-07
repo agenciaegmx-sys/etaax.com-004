@@ -1694,6 +1694,93 @@
        Se cuenta por DÍAS y sobre la UNIÓN de los periodos: dos recibos que se
        traslapan —una quincena recapturada, por ejemplo— no pueden sumar más
        días de los que tiene el mes. Lo de fuera del rango no cuenta.         */
+    /* ══ REPARTO DE PROPINAS ══════════════════════════════════════════════
+       La propina es dinero de OTROS que pasa por la caja: lo que se reparte
+       tiene que sumar EXACTAMENTE lo que entró, ni un centavo más ni uno
+       menos. Por eso toda la cuenta se hace en centavos enteros: dividir 1000
+       entre 3 en pesos deja 333.33 × 3 = 999.99, y ese centavo perdido es una
+       discusión con una persona el viernes.
+
+       El sobrante de la división no se tira ni se le regala al primero por
+       casualidad: se reparte de a un centavo, en el orden en que viene la
+       lista, que es el mismo orden que se ve en pantalla. Así el reparto es
+       reproducible: los mismos datos dan el mismo resultado siempre.        */
+    function _aCent(v) { return Math.round(n(v) * 100); }
+    function _repartirCent(totalC, ids) {
+        var out = {}, k = ids.length;
+        if (!k) return out;
+        var base = Math.floor(totalC / k), resto = totalC - base * k;
+        ids.forEach(function (id, i) { out[id] = base + (i < resto ? 1 : 0); });
+        return out;
+    }
+    /* El reparto inicial. `grupos` es [{monto, ids}]: uno solo con todo el
+       total es el reparto uniforme; uno por área es el reparto por área. Un
+       grupo sin gente no se reparte —su dinero se queda fuera y el que llama
+       decide qué hacer—, porque repartirlo entre los demás sería inventar una
+       regla que nadie pidió. */
+    function propinasReparto(grupos) {
+        var out = {};
+        (grupos || []).forEach(function (g) {
+            var ids = (g && g.ids) || [];
+            var parte = _repartirCent(_aCent(g && g.monto), ids);
+            ids.forEach(function (id) { out[id] = (out[id] || 0) + (parte[id] || 0); });
+        });
+        var pesos = {};
+        Object.keys(out).forEach(function (id) { pesos[id] = out[id] / 100; });
+        return pesos;
+    }
+    /* Mover a UNO y compensar entre los demás.
+
+       Lo que se reparte es la DIFERENCIA, y uniformemente: si a alguien se le
+       quitan 70 y quedan siete personas, a cada una le tocan 10 más. No
+       proporcional —eso le daría más al que más tiene— sino parejo, que es lo
+       que se entiende cuando se reparten propinas.
+
+       Nadie puede quedar en negativo. El que llega a cero se queda ahí y lo
+       que falte se sigue repartiendo entre los que todavía tienen de dónde:
+       por eso es un bucle y no una división. */
+    function propinasAjuste(montos, id, nuevo, total) {
+        var ids = Object.keys(montos || {});
+        if (ids.indexOf(id) < 0) return montos || {};
+        var totalC = _aCent(total);
+        var cent = {};
+        ids.forEach(function (k) { cent[k] = _aCent(montos[k]); });
+        var nuevoC = Math.max(0, Math.min(totalC, _aCent(nuevo)));
+        cent[id] = nuevoC;
+        var otros = ids.filter(function (k) { return k !== id; });
+        if (!otros.length) { cent[id] = totalC; }
+        else {
+            var faltaC = totalC - nuevoC;             // lo que deben sumar los demás
+            var pool = otros.slice(), vueltas = 0;
+            while (pool.length && vueltas++ < 200) {
+                var suma = pool.reduce(function (a, k) { return a + cent[k]; }, 0);
+                var fijos = otros.filter(function (k) { return pool.indexOf(k) < 0; })
+                                 .reduce(function (a, k) { return a + cent[k]; }, 0);
+                var objetivo = faltaC - fijos;         // lo que tiene que sumar el pool
+                var deltaC = objetivo - suma;
+                if (!deltaC) break;
+                var ajuste = _repartirCent(Math.abs(deltaC), pool);
+                var signo = deltaC > 0 ? 1 : -1;
+                var negativos = [];
+                pool.forEach(function (k) {
+                    cent[k] += signo * ajuste[k];
+                    if (cent[k] < 0) { cent[k] = 0; negativos.push(k); }
+                });
+                if (!negativos.length) break;
+                /* Los que tocaron fondo salen del reparto y el resto vuelve a
+                   repartirse entre los que quedan. */
+                pool = pool.filter(function (k) { return negativos.indexOf(k) < 0; });
+            }
+        }
+        /* Último cuadre: si por los topes faltó o sobró un centavo, se le deja
+           al editado —es el único que el usuario está mirando— sin pasar de
+           cero. La suma SIEMPRE da el total. */
+        var suma2 = ids.reduce(function (a, k) { return a + cent[k]; }, 0);
+        cent[id] = Math.max(0, cent[id] + (totalC - suma2));
+        var pesos = {};
+        ids.forEach(function (k) { pesos[k] = cent[k] / 100; });
+        return pesos;
+    }
     function coberturaPeriodo(desde, hasta, periodos) {
         var d0 = fechaLocal(desde), d1 = fechaLocal(hasta);
         if (!d0 || !d1 || d1 < d0) return { total: 0, cubiertos: 0, estado: 'ninguno' };
@@ -2196,6 +2283,7 @@
         importeLetra: importeLetra,
         multiploReceta: multiploReceta, costeoReceta: costeoReceta, costeoAplicado: costeoAplicado,
         coberturaPeriodo: coberturaPeriodo,
+        propinasReparto: propinasReparto, propinasAjuste: propinasAjuste,
         COSTEO_MULT_DEFAULT: COSTEO_MULT_DEFAULT, COSTEO_GASTO_OP_PCT: COSTEO_GASTO_OP_PCT,
         COSTEO_IVA_PCT: COSTEO_IVA_PCT, COSTEO_DELIVERY_PCT: COSTEO_DELIVERY_PCT,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,

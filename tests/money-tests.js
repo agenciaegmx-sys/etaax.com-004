@@ -34066,6 +34066,334 @@ console.log('\n══ BH67 · El menú tiene que caber en la pantalla ══');
     }
 }
 
+/* ═══════════ BH68 · EL REPARTO DE PROPINAS ═══════════
+   La propina es dinero de OTROS que pasa por la caja. Lo que se reparte tiene
+   que sumar EXACTAMENTE lo que entró: ni un centavo más ni uno menos, porque
+   ese centavo es una discusión con una persona el viernes.
+
+   Por eso la cuenta va en centavos enteros. 1000 entre 3 en pesos deja
+   333.33 × 3 = 999.99.                                                      */
+console.log('\n══ BH68 · El reparto de propinas ══');
+{
+    const R = Core.propinasReparto, A = Core.propinasAjuste;
+    const suma = (o) => Math.round(Object.values(o).reduce((a, b) => a + b, 0) * 100) / 100;
+
+    /* ── El reparto inicial ──────────────────────────────────────────── */
+    test('uniforme: lo que no divide exacto no se pierde', () => {
+        const r = R([{ monto:1000, ids:['a','b','c'] }]);
+        return eq(suma(r), 1000, JSON.stringify(r));
+    });
+    test('…y el centavo suelto se le da al primero, no se tira', () =>
+        eq(JSON.stringify(R([{ monto:1000, ids:['a','b','c'] }])),
+           '{"a":333.34,"b":333.33,"c":333.33}', 'reparto'));
+    /* Reproducible: los mismos datos dan el mismo resultado siempre. Si el
+       sobrante se repartiera al azar, dos personas verían repartos distintos
+       del mismo dinero. */
+    test('el mismo reparto dos veces da lo mismo', () =>
+        eq(JSON.stringify(R([{ monto:777.77, ids:['a','b','c','d'] }])),
+           JSON.stringify(R([{ monto:777.77, ids:['a','b','c','d'] }])), 'cambia solo'));
+    test('por área: cada área reparte lo suyo entre los suyos', () => {
+        const r = R([{ monto:600, ids:['m1','m2'] }, { monto:400, ids:['c1','c2','c3'] }]);
+        return eq(r.m1 + '·' + r.c1 + '·' + suma(r), '300·133.34·1000', JSON.stringify(r));
+    });
+    /* Un área SIN GENTE no reparte su dinero entre los demás: eso sería
+       inventar una regla que nadie pidió. Se queda fuera y quien llama decide. */
+    test('un área sin gente no le regala su dinero a las otras', () => {
+        const r = R([{ monto:600, ids:[] }, { monto:400, ids:['c1'] }]);
+        return eq(suma(r) + '·' + Object.keys(r).length, '400·1', JSON.stringify(r));
+    });
+    test('quien está en dos áreas cobra de las dos', () => {
+        const r = R([{ monto:100, ids:['a'] }, { monto:100, ids:['a','b'] }]);
+        return eq(r.a + '·' + r.b, '150·50', JSON.stringify(r));
+    });
+
+    /* ── El ajuste compensado ────────────────────────────────────────── */
+    const base = R([{ monto:1000, ids:['a','b','c','d','e'] }]);
+    test('bajarle a uno le sube parejo a los demás', () => {
+        const r = A(base, 'a', 100, 1000);
+        return eq(r.a + '·' + r.b + '·' + suma(r), '100·225·1000', JSON.stringify(r));
+    });
+    /* Parejo, NO proporcional: proporcional le daría más al que más tiene, y
+       eso no es lo que se entiende al repartir propinas. */
+    test('…y el reparto es parejo aunque vengan de montos distintos', () => {
+        const r = A({ a:50, b:100, c:850 }, 'a', 20, 1000);
+        return eq((r.b - 100) + '·' + (r.c - 850), '15·15', JSON.stringify(r));
+    });
+    test('subirle a uno se lo quita parejo a los demás', () => {
+        const r = A(base, 'a', 900, 1000);
+        return eq(r.a + '·' + r.b + '·' + suma(r), '900·25·1000', JSON.stringify(r));
+    });
+    /* NADIE EN NEGATIVO. El que toca fondo se queda en cero y lo que falte se
+       sigue quitando de los que todavía tienen: por eso es un bucle y no una
+       división. */
+    test('nadie queda en negativo: el que toca fondo se queda en cero', () => {
+        const r = A({ a:50, b:200, c:200, d:200, e:350 }, 'a', 900, 1000);
+        return eq(JSON.stringify(r) + '·' + suma(r),
+                  '{"a":900,"b":0,"c":0,"d":0,"e":100}·1000', JSON.stringify(r));
+    });
+    test('…y lo que falta sale del que todavía tiene', () => {
+        const r = A({ a:0, b:10, c:990 }, 'a', 500, 1000);
+        return eq(r.b + '·' + r.c + '·' + suma(r), '0·500·1000', JSON.stringify(r));
+    });
+    /* Los topes: nada por debajo de cero ni por encima del total. */
+    test('un monto negativo se trata como cero', () => {
+        const r = A(base, 'a', -300, 1000);
+        return eq(r.a + '·' + suma(r), '0·1000', JSON.stringify(r));
+    });
+    test('pedir más que el total deja a los demás en cero', () => {
+        const r = A(base, 'a', 5000, 1000);
+        return eq(r.a + '·' + r.b + '·' + suma(r), '1000·0·1000', JSON.stringify(r));
+    });
+    test('con un solo colaborador, se lleva todo', () =>
+        eq(JSON.stringify(A({ a:1000 }, 'a', 300, 1000)), '{"a":1000}', 'uno solo'));
+    /* Tocar a alguien que no está en la lista no puede reescribir el reparto. */
+    test('ajustar a alguien que no está no toca nada', () =>
+        eq(JSON.stringify(A({ a:500, b:500 }, 'zz', 100, 1000)), '{"a":500,"b":500}', 'intacto'));
+    /* El cuadre final: pase lo que pase con los topes y los centavos, la suma
+       es el total. Es LA regla de este módulo. */
+    test('ajuste tras ajuste, la suma sigue siendo el total', () => {
+        let r = R([{ monto:1234.56, ids:['a','b','c','d','e','f','g'] }]);
+        const pasos = [['a',100],['b',0],['c',900],['d',12.34],['e',0],['a',0],['g',1234.56]];
+        const malos = [];
+        pasos.forEach(([id, v]) => {
+            r = A(r, id, v, 1234.56);
+            if (suma(r) !== 1234.56) malos.push(id + '→' + v + ' dio ' + suma(r));
+            if (Object.values(r).some(x => x < 0)) malos.push(id + ' dejó a alguien en negativo');
+        });
+        return eq(malos.join(' · '), '', malos.join(' · '));
+    });
+    /* Y con centavos de verdad, que es donde se pierde el peso. */
+    test('con centavos sueltos tampoco se pierde nada', () => {
+        let r = R([{ monto:100.01, ids:['a','b','c'] }]);
+        r = A(r, 'a', 33.34, 100.01);
+        r = A(r, 'b', 0.01, 100.01);
+        return eq(suma(r), 100.01, JSON.stringify(r));
+    });
+}
+
+/* ═══════════ BH69 · EL MODAL DE REPARTIR PROPINAS ═══════════
+   La cuenta vive en el núcleo y tiene sus pruebas (BH68). Aquí se vigila lo
+   otro: que la pantalla use ESA cuenta y no una propia, que el área salga del
+   normalizador compartido y no de una copia, que el comprobante se guarde con
+   su folio y que un reparto no se haga pasar por una nómina —viven en la misma
+   tabla—.                                                                    */
+console.log('\n══ BH69 · El modal de repartir propinas ══');
+{
+    const P = crearContexto();
+    cargarJS(P, 'etaax-core.js');
+    cargarJS(P, 'reporte-marca.js');
+    cargarJS(P, 'etaax-iconos.js');
+    cargarJS(P, 'staff-area.js');
+    cargarInline(P, 'administrativo/diario.html');
+    P._storage.etaax_negocio_activo = 'n1';
+    P._storage.etaax_sucursal_activa = 'suc_principal';
+    const sucP = 'suc_principal';
+    const eq2 = (s) => ({ sucursalId:sucP, estado:'Activo', ...s });
+    P._cacheStaff = [
+        eq2({ id:'p1', nombre:'Ana',  puesto:'Mesera' }),
+        eq2({ id:'p2', nombre:'Bea',  puesto:'Cocinera' }),
+        eq2({ id:'p3', nombre:'Caro', puesto:'Barman' }),
+        eq2({ id:'p4', nombre:'Dan',  puesto:'Mesero' }),
+    ];
+    P._cacheRecibos = []; P._cacheGastos = [];
+    P._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
+    P._exigeVG = () => true;
+    P._sbUp = () => {}; P._sbDel = () => {};
+    P.renderNominasPanel = () => {};
+    const el = (id) => P.document.getElementById(id);
+    const suma = () => Math.round(P._propStaff()
+        .reduce((a, s) => a + (P._propMontos[s.id] || 0), 0) * 100) / 100;
+
+    /* ── El área sale del normalizador compartido ────────────────────── */
+    test('el área de cada quien sale de staff-area.js, no de una copia', () =>
+        eq(P._cacheStaff.map(s => P._propArea(s)).join(','), 'piso,cocina,barra,piso', 'áreas'));
+    test('…y solo se ofrecen las áreas que de verdad hay en la sucursal', () =>
+        eq(P._propAreasPresentes().join(','), 'barra,cocina,piso', 'sin gente, sin casilla'));
+    /* Quien no tiene área reconocible no desaparece: cobra igual. */
+    test('quien no tiene área reconocible sigue en la lista', () => {
+        P._cacheStaff.push(eq2({ id:'p5', nombre:'Eva', puesto:'Jardinería espacial' }));
+        const hay = P._propAreasPresentes().indexOf('sin') > -1;
+        const enLista = P._propStaff().some(s => s.id === 'p5');
+        P._cacheStaff.pop();
+        return eq(hay + '·' + enLista, 'true·true', 'se quedó sin propina por el puesto');
+    });
+
+    /* ── Reparto parejo ─────────────────────────────────────────────── */
+    P.abrirPropinas();
+    el('propTotal').value = 1000; P._propCalcular();
+    test('parejo: el total se divide entre todos los de la sucursal', () =>
+        eq(P._propMontos.p1 + '·' + suma(), '250·1000', JSON.stringify(P._propMontos)));
+    /* LO QUE PIDIÓ EDWIN: bajarle a uno le sube parejo a los demás, y la suma
+       sigue siendo el total. */
+    test('bajarle a uno le sube parejo a los otros tres', () => {
+        P._propAjustar('p1', 100);
+        return eq(P._propMontos.p1 + '·' + P._propMontos.p2 + '·' + suma(), '100·300·1000', JSON.stringify(P._propMontos));
+    });
+    test('subirle a uno se lo quita parejo a los otros', () => {
+        P._propAjustar('p1', 400);
+        return eq(P._propMontos.p1 + '·' + P._propMontos.p2 + '·' + suma(), '400·200·1000', JSON.stringify(P._propMontos));
+    });
+    /* La pantalla NO hace su propia cuenta: usa la del núcleo. Si se separaran,
+       el papel y la lista dirían cosas distintas del mismo dinero. */
+    test('la pantalla reparte con la cuenta del núcleo, no con una propia', () => {
+        const aj0 = P.EtaaxCore.propinasAjuste;
+        let llamada = null;
+        P.EtaaxCore.propinasAjuste = (m, id, v, t) => { llamada = [id, v, t]; return aj0(m, id, v, t); };
+        P._propAjustar('p2', 50);
+        P.EtaaxCore.propinasAjuste = aj0;
+        return eq(JSON.stringify(llamada), '["p2",50,1000]', 'la pantalla hace su cuenta aparte');
+    });
+    /* Cambiar el total rehace el reparto desde cero: conservar lo editado
+       dejaría una suma que no da el total y nadie sabría por qué. */
+    test('cambiar el total rehace el reparto', () => {
+        el('propTotal').value = 400; P._propTotalChange();
+        return eq(P._propMontos.p1 + '·' + suma(), '100·400', JSON.stringify(P._propMontos));
+    });
+
+    /* ── Reparto por área ───────────────────────────────────────────── */
+    P._propModo('area');
+    el('propA_piso').value = 600; el('propA_cocina').value = 300; el('propA_barra').value = 100;
+    P._propCalcular();
+    test('por área: cada área reparte lo suyo entre los suyos', () =>
+        eq(P._propMontos.p1 + '·' + P._propMontos.p4 + '·' + P._propMontos.p2 + '·' + P._propMontos.p3,
+           '300·300·300·100', JSON.stringify(P._propMontos)));
+    /* En modo área el total que manda es la SUMA DE LAS ÁREAS: si mandara el
+       campo de arriba, ajustar a alguien reclamaría un dinero que nadie puso. */
+    test('el total vigente en modo área es la suma de las áreas', () =>
+        eq(P._propTotalVigente(), 1000, 'total'));
+    test('…y ajustar a uno sigue cuadrando contra ese total', () => {
+        P._propAjustar('p3', 400);
+        return eq(suma(), 1000, JSON.stringify(P._propMontos));
+    });
+
+    /* ── El comprobante ─────────────────────────────────────────────── */
+    P._propModo('uniforme');
+    el('propTotal').value = 1000; el('propDesde').value = '2026-11-01'; el('propHasta').value = '2026-11-07';
+    P._propCalcular();
+    const d = P._propDatos();
+    test('el comprobante lleva a cada quien con su área y su importe', () =>
+        eq(d.lineas.length + '·' + d.lineas[0].nombre + '·' + d.lineas[0].monto + '·' + d.total,
+           '4·Ana·250·1000', JSON.stringify(d.lineas)));
+    /* Folio estable: el mismo reparto reimpreso da el mismo folio. Si fuera
+       aleatorio, dos copias parecerían dos repartos. */
+    test('el folio es estable entre reimpresiones', () =>
+        eq(P._propDatos().folio, d.folio, 'folio distinto cada vez'));
+    const papel = P._propReciboHTML(d);
+    test('el papel dice a cada quien con su nombre y su importe', () =>
+        eq(papel.indexOf('Ana') > -1 && papel.indexOf(P.fmtM(250)) > -1, true, 'papel'));
+    test('…y dice que no es un CFDI', () =>
+        eq(papel.indexOf('No es un CFDI') > -1, true, 'sin la advertencia'));
+    test('…con el total repartido al pie', () =>
+        eq(/Total repartido/.test(papel) && papel.indexOf(P.fmtM(1000)) > -1, true, 'sin total'));
+    /* Quien recibe 0 no sale en el papel: un renglón en cero en un recibo de
+       propinas es una pregunta, no un dato. */
+    test('quien no recibe nada no sale en el comprobante', () => {
+        P._propAjustar('p1', 0);
+        const d2 = P._propDatos();
+        return eq(d2.lineas.length + '·' + d2.lineas.some(l => l.staffId === 'p1'), '3·false', 'renglón en cero');
+    });
+
+    /* ── Guardar, editar, borrar ────────────────────────────────────── */
+    el('propTotal').value = 1000; P._propCalcular();
+    P.guardarPropinas();
+    const reg = (P._cacheRecibos || [])[0] || {};
+    test('el reparto se guarda con su periodo y su total', () =>
+        eq(reg.tipo + '·' + reg.desde + '·' + (reg.recibo || {}).total, 'propina·2026-11-01·1000', JSON.stringify(reg)));
+    /* VIVE EN LA MISMA TABLA QUE LOS RECIBOS DE NÓMINA, y lo que lo mantiene
+       aparte es que se guarda SIN `staffId`: un reparto no es de una persona,
+       es de un equipo, y la búsqueda de recibos de nómina pide uno. Si un día
+       un reparto estrena staffId, esta prueba cae y obliga a mirar. */
+    test('el reparto se guarda sin dueño: no es la nómina de nadie', () =>
+        eq(reg.staffId, '', 'con staffId se colaría como recibo de nómina'));
+    test('…y por eso no sale como recibo de nómina de ningún colaborador', () => {
+        const colados = P._cacheStaff.filter(s =>
+            P._nomReciboDe(s.id, { from:'2026-11-01', to:'2026-11-30' }));
+        return eq(colados.length, 0, 'se coló en ' + colados.map(s => s.nombre).join(','));
+    });
+    test('…y no sale en el historial de recibos de una persona', () =>
+        eq(P._nomRecibosDe('p1').length, 0, 'se coló en su historial'));
+    test('el historial de repartos lo encuentra', () =>
+        eq(P._propRepartos().length, 1, 'no lo encuentra'));
+    /* Dos repartos del MISMO periodo son legítimos —uno por turno—, así que
+       guardar dos veces deja dos comprobantes. Lo que no puede es que EDITAR
+       uno deje dos. */
+    test('guardar otro reparto del mismo periodo deja dos comprobantes', () => {
+        P.abrirPropinas();
+        el('propDesde').value = '2026-11-01'; el('propHasta').value = '2026-11-07';
+        el('propTotal').value = 500; P._propCalcular();
+        P.guardarPropinas();
+        return eq((P._cacheRecibos || []).length, 2, 'se pisaron entre sí');
+    });
+    /* Editar repone los montos TAL CUAL quedaron: si recalculara, se perdería
+       lo que se ajustó a mano. */
+    const idEd = (P._cacheRecibos || [])[0].id;
+    const folioEd = ((P._cacheRecibos || [])[0].recibo || {}).folio;
+    test('editar repone los montos como quedaron, no los recalcula', () => {
+        P.editarPropina(idEd);
+        /* Se mueve también el PERIODO: el folio se calcula con las fechas, así
+           que sin moverlas la prueba del folio de abajo quedaría vacía —un
+           folio recalculado daría el mismo— . */
+        el('propHasta').value = '2026-11-08';
+        P._propAjustar('p1', 700);
+        P.guardarPropinas();
+        P._propMontos = {};
+        P.editarPropina(idEd);
+        return eq(P._propMontos.p1, 700, JSON.stringify(P._propMontos));
+    });
+    test('…y editar NO crea un comprobante de más', () =>
+        eq((P._cacheRecibos || []).length, 2, 'duplicó el comprobante'));
+    test('…conservando su folio: es el mismo reparto', () => {
+        /* Guardia contra una prueba hueca: si el folio recalculado fuera el
+           mismo, esto pasaría aunque nadie lo conservara. */
+        if (P._propFolio('suc_principal', '2026-11-01', '2026-11-08') === folioEd)
+            throw new Error('la prueba quedó vacía: el periodo no cambió');
+        return eq((((P._cacheRecibos || []).find(x => x.id === idEd) || {}).recibo || {}).folio,
+                  folioEd, 'renumerado');
+    });
+    test('…y dejando rastro de que se editó', () =>
+        eq(((((P._cacheRecibos || []).find(x => x.id === idEd) || {}).recibo || {}).correcciones || []).length > 0,
+           true, 'sin rastro'));
+    test('eliminar el reparto lo quita, y solo ese', () => {
+        P.confirm = () => true;
+        P.cerrarPropinas();
+        P.eliminarPropina(idEd);
+        return eq((P._cacheRecibos || []).length + '·' + (P._cacheRecibos || []).some(x => x.id === idEd),
+                  '1·false', 'borró de más o de menos');
+    });
+    test('…y si se dice que no, no se borra', () => {
+        P.confirm = () => false;
+        P.eliminarPropina((P._cacheRecibos || [])[0].id);
+        P.confirm = () => true;
+        return eq((P._cacheRecibos || []).length, 1, 'borró sin permiso');
+    });
+
+    /* ── Los candados de la pantalla ────────────────────────────────── */
+    test('sin total, no se guarda nada', () => {
+        P._cacheRecibos = [];
+        P.abrirPropinas(); el('propTotal').value = 0; P._propCalcular();
+        let dijo = ''; P.alert = (m) => { dijo = String(m); };
+        P.guardarPropinas();
+        return eq((P._cacheRecibos || []).length + '·' + /nada que repartir/.test(dijo), '0·true', dijo);
+    });
+    test('el permiso de nóminas manda también aquí', () => {
+        P._exigeVG = () => false;
+        let abierto = false;
+        const m = P.document.getElementById('modalPropinas');
+        const add0 = m.classList.add; m.classList.add = () => { abierto = true; };
+        P.abrirPropinas();
+        m.classList.add = add0; P._exigeVG = () => true;
+        return eq(abierto, false, 'abrió sin permiso');
+    });
+    /* El botón tiene que existir donde Edwin lo pidió: junto a Pagar nómina. */
+    {
+        const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        test('el botón vive junto al de pagar nómina', () =>
+            eq(/abrirSelectorPago\('nomina'\)[\s\S]{0,260}abrirPropinas\(\)/.test(dia), true, 'no está donde se pidió'));
+        test('…y la página carga el normalizador de áreas', () =>
+            eq(/src="\/staff-area\.js/.test(dia), true, 'sin staff-area el área sale vacía'));
+    }
+}
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
