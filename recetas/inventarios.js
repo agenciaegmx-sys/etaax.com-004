@@ -835,37 +835,17 @@ function _btnCopiarAnterior(idx, fila, estilo) {
 // en cada render (lento con 200+ insumos). Ahora se recorren las recetas UNA vez y se acumula por
 // insumo; la consulta por fila es O(1). Se re-calcula solo si cambian recetas o lo vendido.
 var _consumoIdxCache = null, _consumoIdxKey = '', _consumoDirty = true; window._step5Dirty = true;
-/* El MISMO índice, con otra fuente: lo CANCELADO. Un trago cancelado se preparó
-   y se tiró, así que se lleva sus insumos igual que uno vendido — pero no es una
-   venta y no puede sumarse a la columna de coctelería vendida, que tiene que
-   seguir cuadrando con lo capturado en el Paso 3. Por eso son dos montones. */
-var _cancelIdxCache = null, _cancelIdxKey = '', _cancelDirty = true;
-
-function _consumoIdx() { return _construirIdx(false); }
-function _cancelIdx()  { return _construirIdx(true); }
-
-function _construirIdx(esCancel) {
-    /* ANTES de mirar la caché, no después. Al abrir un inventario guardado, sus
-       cancelaciones llegan sin resolver; quien las resuelve es esta llamada, y
-       es ella la que marca el montón como sucio. Si se hiciera después de la
-       caché, el primer cálculo devolvería el montón vacío que se guardó en la
-       llamada anterior y el teórico saldría sin descontar nada — justo al abrir,
-       que es cuando se mira. La guarda por firma la hace barata. */
-    if (esCancel) _autoMatchCancelaciones();
+/* Solo las ventas se desglosan en ingredientes. Las cancelaciones de recetas
+   se conservan en el informe POS y nunca se reparten entre sus insumos. */
+function _consumoIdx() {
     var recetas = getRecetas();
     // Llave BARATA + dirty-flag: antes la llave hacía JSON.stringify(vendidos) en
     // CADA llamada (200 filas × varios cálculos por render = miles de stringify)
     // — parte importante de la lentitud del Paso 5. Los 3 puntos que escriben
     // cocktailsVendidos marcan _consumoDirty.
     var key = (invActual && invActual.id || '') + '|' + recetas.length;
-    if (esCancel) { if (_cancelIdxCache  && !_cancelDirty  && _cancelIdxKey  === key) return _cancelIdxCache; }
-    else          { if (_consumoIdxCache && !_consumoDirty && _consumoIdxKey === key) return _consumoIdxCache; }
-    /* DESPUÉS de la caché, no antes: armar el mapa de lo cancelado recorre la
-       lista entera, y esto se llama una vez POR FILA en el Paso 5. Con 200
-       renglones eso era recorrer las cancelaciones 200 veces por render, que es
-       exactamente el tipo de retraso que esta caché existe para evitar. */
-    var vendidos = esCancel ? _cancelUnidadesPorReceta()
-                            : ((invActual && invActual.cocktailsVendidos) || {});
+    if (_consumoIdxCache && !_consumoDirty && _consumoIdxKey === key) return _consumoIdxCache;
+    var vendidos = (invActual && invActual.cocktailsVendidos) || {};
     var idx = {};
     function slot(id){ return idx[id] || (idx[id] = { mlBeb:0, baseBeb:0, baseAli:0, pzaDir:0, mlPza:0 }); }
     /* La receta guarda el id del insumo TAL COMO estaba al agregarlo: si el
@@ -915,22 +895,10 @@ function _construirIdx(esCancel) {
             });
         });
     });
-    if (esCancel) { _cancelIdxCache  = idx; _cancelIdxKey  = key; _cancelDirty  = false; }
-    else          { _consumoIdxCache = idx; _consumoIdxKey = key; _consumoDirty = false; }
+    _consumoIdxCache = idx; _consumoIdxKey = key; _consumoDirty = false;
     return idx;
 }
 
-/* Las unidades canceladas, agrupadas por receta. Mismo formato que
-   cocktailsVendidos para poder pasarlas por el mismo molino. */
-function _cancelUnidadesPorReceta() {
-    _autoMatchCancelaciones();
-    var out = {};
-    ((invActual && invActual.cancelaciones) || []).forEach(function (c) {
-        if (!c || !c.recetaId) return;
-        out[c.recetaId] = (out[c.recetaId] || 0) + (parseFloat(c.cantidad) || 0);
-    });
-    return out;
-}
 /* Consumo por recetas EN LA UNIDAD DE LA FILA. Una lata de 355 ml usada en un
    coctel es 1 PIEZA, no 7.9 copas: dividir entre el tamaño de copa (45 ml por
    default, aunque el insumo sea de pieza) inflaba la columna de coctelería
@@ -940,16 +908,6 @@ function consumoRecetasFila(f) {
     if (f.tipo === 'pza')  return calcVentasPzaRecetas(f.insumoId);
     if (f.tipo === 'peso') return _consumoRecetasBase(f.insumoId);
     return calcVentasCopasRecetas(f.insumoId, f.copaML);
-}
-/* Lo que se llevaron las CANCELACIONES de cócteles y platillos, en la unidad de
-   la fila. Mismo camino que el consumo por ventas —prebatch, id canónico,
-   renglón duplicado—, solo cambia el montón de donde sale. */
-function cancelRecetasFila(f) {
-    if (!f) return 0;
-    var idx = _cancelIdx();
-    if (f.tipo === 'pza')  return calcVentasPzaRecetas(f.insumoId, idx);
-    if (f.tipo === 'peso') return _consumoRecetasBase(f.insumoId, idx);
-    return calcVentasCopasRecetas(f.insumoId, f.copaML, idx);
 }
 /* El montón de consumo de UNA fila. Si la fila es un prebatch, manda el montón de
    su SUB-RECETA (ver _recetaIdDePrebatch): el coctel pudo quedar apuntando a otro
@@ -1068,13 +1026,6 @@ function _batchesDeSubReceta(recetaId) {
 // Lo VENDIDO de una sub-receta por las recetas del menú, en unidad base (ml/g).
 function _consumoBaseSubReceta(recetaId) {
     var s = _consumoIdx()['sr:' + recetaId];
-    return s ? (s.baseBeb + s.baseAli) : 0;
-}
-/* Lo mismo, pero de lo CANCELADO. Va aparte de la venta a propósito: la venta
-   del batch tiene que seguir siendo la venta, o el reparto de la variancia deja
-   de cuadrar con lo que se capturó en el Paso 3. */
-function _cancelBaseSubReceta(recetaId) {
-    var s = _cancelIdx()['sr:' + recetaId];
     return s ? (s.baseBeb + s.baseAli) : 0;
 }
 
@@ -1398,11 +1349,6 @@ function _repartoPrebatch() {
                    + _her('vco');
         var cmB    = ((parseFloat(pf.cortesiaCopas) || 0) + (parseFloat(pf.mermaCopas) || 0)) * toB +
                      (parseFloat(pf.mermaBase) || 0) + _her('cm');
-        /* El batch también se va en lo cancelado: si se cancelan diez Negronis
-           hechos con el Mix Negroni, ese mix salió de la botella. Sin esto, el
-           reparto de la variancia le echaba la culpa a los insumos. */
-        var canB   = getCancelacionesCopas(pf.insumoId) * toB
-                   + _cancelBaseSubReceta(ins.recetaId) + _her('can');
         var teoB   = calcExistenciaTeorica(pf) * toB + _her('teo');
         var fisB   = calcExistencia(pf) * toB + _her('fis');
         out.esPB[pf.insumoId] = 1;
@@ -1430,24 +1376,24 @@ function _repartoPrebatch() {
             // Se guarda bajo el id de la FILA (canónico): _repartoDe() se consulta
             // con ese id, y guardarlo bajo el de la copia lo dejaba inalcanzable.
             var _k = fi.insumoId;
-            var a = out.porInsumo[_k] || (out.porInsumo[_k] = { ea:0, ent:0, vco:0, cm:0, can:0, teo:0, fis:0, dif:0, venta:0 });
+            var a = out.porInsumo[_k] || (out.porInsumo[_k] = { ea:0, ent:0, vco:0, cm:0, teo:0, fis:0, dif:0, venta:0 });
             a.ea  += conv(eaB);   a.ent += conv(entB);
             a.vco += conv(ventaB); a.venta += conv(ventaB);
-            a.cm  += conv(cmB);   a.can += conv(canB);
+            a.cm  += conv(cmB);
             a.teo += conv(teoB);  a.fis += conv(fisB);
             a.dif += conv(fisB - teoB);
         });
         /* Lo heredado ya se repartió hacia abajo: si se quedara además en su
            propio renglón, el mismo producto contaría dos veces —una dentro del
            batch de arriba y otra en los insumos de este—. Se vacía. */
-        if (_rec) { ['ea','ent','vco','cm','can','teo','fis','dif','venta'].forEach(function (c) { _rec[c] = 0; }); }
+        if (_rec) { ['ea','ent','vco','cm','teo','fis','dif','venta'].forEach(function (c) { _rec[c] = 0; }); }
         out.lista.push({ insumoId: pf.insumoId, nombre: pf.nombre, fisML: fisB, teoML: teoB,
             rendimientoBase: rend, unidadBase: _unidadBaseBatch(pf), desglose: desg });
     });
     return out;
 }
 var _repCache = null;
-var _repZero  = { ea:0, ent:0, vco:0, cm:0, can:0, teo:0, fis:0, dif:0, venta:0 };
+var _repZero  = { ea:0, ent:0, vco:0, cm:0, teo:0, fis:0, dif:0, venta:0 };
 function _repartoDe(id) { return (_repCache && _repCache.porInsumo[id]) || _repZero; }
 
 /* ══ CUANDO UN PREBATCH NO SE PUEDE RASTREAR ═══════════════════════════════
@@ -1653,7 +1599,7 @@ async function _religarPrebatch(insumoId, recetaId) {
     }
     /* Todo lo que depende de la liga cambia: el consumo, el reparto, el
        teórico. Se tiran los tres cachés y se repinta. */
-    _consumoDirty = true; _cancelDirty = true;
+    _consumoDirty = true;
     window._step5Dirty = true; window._step5Force = true;
     if (typeof renderStepContent === 'function') renderStepContent();
 }
@@ -1743,7 +1689,7 @@ async function _soltarParentesco(recetaId) {
               ((e && e.message) || e));
         return;
     }
-    _consumoDirty = true; _cancelDirty = true;
+    _consumoDirty = true;
     window._step5Dirty = true; window._step5Force = true;
     if (typeof renderStepContent === 'function') renderStepContent();
 }
@@ -1780,7 +1726,7 @@ async function _reapuntarIngrediente(recetaId, viejoId, nuevoId) {
               ((e && e.message) || e));
         return;
     }
-    _consumoDirty = true; _cancelDirty = true;
+    _consumoDirty = true;
     window._step5Dirty = true; window._step5Force = true;
     if (typeof renderStepContent === 'function') renderStepContent();
 }
@@ -2060,20 +2006,9 @@ function _matchInsumo(nombreProducto) {
     return bestScore > 0 ? best : null;
 }
 
-/* ══ LAS RECETAS TAMBIÉN SE CANCELAN ═══════════════════════════════════════
-   El POS cancela lo que está en la CARTA: «Negroni», «Abeja Reina», «Guayaba
-   Splash». Nada de eso es un insumo — son recetas, las mismas que se capturan
-   en el Paso 3. Buscarlas solo en el catálogo de insumos dejaba casi toda la
-   coctelería en «Sin match», y una cancelación sin match no descuenta nada: el
-   trago se preparó, se tiró, y el faltante aparecía después como una diferencia
-   que nadie sabía explicar.
-
-   Las mismas recetas del Paso 3, para que lo que se puede cancelar sea
-   exactamente lo que se puede vender. */
+/* El match usa las mismas recetas de la carta disponibles en el Paso 3.
+   Solo relaciona el informe POS: no representa una salida de ingredientes. */
 function _recetasCancelables() {
-    /* La MISMA sucursal que lee el Paso 3 (y de la misma clave): si aquí se
-       resolviera distinto, se podría cancelar un coctel que esa sucursal no
-       vende, y el descuento caería sobre insumos que nunca salieron. */
     const suc = localStorage.getItem('etaax_sucursal_activa') || '';
     return getRecetas().filter(r =>
         (r.tipo === 'alimentos' || r.tipo === 'bebidas') &&
@@ -2083,11 +2018,8 @@ function _recetasCancelables() {
     );
 }
 
-/* La receta GANA los empates. El renglón que cancela el POS es un producto de
-   la carta, y el insumo que se le parece suele ser su propio prebatch: con
-   «Negroni» → «Mix Negroni PR» se descontaba el mix pero no la ginebra ni el
-   Campari del resto de la receta. Con la receta se descuenta todo, el mix
-   incluido, por el mismo camino que una venta. */
+/* La receta gana los empates: el POS cancela el producto de la carta.
+   Relacionarlo con su prebatch homónimo lo atribuiría al insumo equivocado. */
 function _matchCancelacion(nombreProducto) {
     if (!nombreProducto) return null;
     const q     = _normMatch(nombreProducto);
@@ -2110,9 +2042,8 @@ function _matchCancelacion(nombreProducto) {
     return null;
 }
 
-/* Deja un renglón apuntando a UNA cosa y solo una. Sin esto, un renglón que
-   antes pegó con un insumo y ahora pega con una receta se descontaría dos
-   veces: una por el insumo y otra por los ingredientes de la receta. */
+/* Cada cancelación apunta a una sola referencia. Una receta se muestra solo
+   en el informe POS; un insumo también en su fila, como dato informativo. */
 function _aplicarMatchCancel(c, m) {
     c.insumoId = null; c.insumoNombre = null;
     c.recetaId = null; c.recetaNombre = null;
@@ -2132,31 +2063,22 @@ function _autoMatchCancelaciones() {
        receta— seguía contando como pendiente: la firma nunca se estabilizaba y
        el matching completo volvía a correr en cada render. Era justo el retraso
        de varios segundos que esta guarda existe para evitar. */
-    const _pend = (l) => l.reduce((s,c)=> s + ((c.insumoId || c.recetaId) ? 0 : 1), 0);
+    const _pend = (l) => l.reduce((s,c)=> s + ((c.insumoId || c.recetaId || c.matchManual) ? 0 : 1), 0);
     const firma = (invActual?.id || '') + '|' + lista.length + '|' + _pend(lista);
     if (firma === _autoMatchFirma) return;
     lista.forEach(c => {
-        if (!c.insumoId && !c.recetaId) _aplicarMatchCancel(c, _matchCancelacion(c.nombreProducto));
+        if (!c.insumoId && !c.recetaId && !c.matchManual) _aplicarMatchCancel(c, _matchCancelacion(c.nombreProducto));
     });
     _autoMatchFirma = (invActual?.id || '') + '|' + lista.length + '|' + _pend(lista);
-    _cancelDirty = true; window._step5Dirty = true;
+    window._step5Dirty = true;
 }
 
 function getCancelacionesCopas(insumoId) {
     _autoMatchCancelaciones(); // idempotente y con guarda: solo trabaja si hay cancelaciones nuevas
-    const fila = _filaDe(insumoId);
     return (invActual?.cancelaciones || [])
-        .filter(c => {
-            if (c.insumoId) return _movimientoDelInsumo(c, insumoId);
-            /* Si el renglón ya pegó con una RECETA, aquí no cuenta: sus insumos
-               se descuentan por los ingredientes (ver cancelRecetasFila). Sin
-               esta línea el fallback por nombre lo cazaría otra vez y el
-               descuento saldría doble. */
-            if (c.recetaId) return false;
-            // legacy fallback
-            return fila && c.nombreProducto &&
-                fila.nombre.toLowerCase().includes(c.nombreProducto.toLowerCase().split(' ')[0]);
-        })
+        // Solo la asociación por ID. Buscar la primera palabra del POS metía
+        // «TE» en «Estate» y «White», incluso con la cancelación sin match.
+        .filter(c => c.insumoId && !c.recetaId && _movimientoDelInsumo(c, insumoId))
         .reduce((s, c) => s + (parseFloat(c.cantidad) || 0), 0);
 }
 
@@ -2273,33 +2195,28 @@ function calcExistenciaTeorica(fila) {
     // Prebatch: + lo producido (si esta fila es un prebatch) / − lo consumido al producir batches (si es base).
     const prodAdd = _prodPrebatchUnidades(fila);
     const prodSub = _consumoBaseProd(fila);
-    /* Lo CANCELADO por recetas. Un Negroni cancelado se preparó y se tiró: se
-       llevó su ginebra, su Campari y su vermut igual que uno vendido. Antes la
-       cancelación solo bajaba el insumo cuando el POS cancelaba un producto
-       suelto —una cerveza—; si cancelaba un coctel no bajaba nada y el faltante
-       aparecía después como diferencia sin explicación. */
-    const cancelRec = cancelRecetasFila(fila);
+    // Las cancelaciones POS son informativas. Las salidas reales se registran
+    // en ventas, cortesías, mermas o producción, nunca se infieren del POS.
     if (fila.tipo === 'peso') {
         const eaP    = parseFloat(fila.existenciaAnterior) || 0;
         const entP   = getEntradasBottles(fila.insumoId);     // entradas en unidad base
         const ventP  = _consumoRecetasBase(fila.insumoId); // consumo por lo vendido (platillos y cocteles)
         const mermaP = parseFloat(fila.mermaBase) || 0;
-        return eaP + entP + prodAdd - ventP - cancelRec - mermaP - prodSub;
+        return eaP + entP + prodAdd - ventP - mermaP - prodSub;
     }
     const ea          = parseFloat(fila.existenciaAnterior) || 0;
     const ventasRec   = calcVentasCopasRecetas(fila.insumoId, fila.copaML);
     const ventasDir   = parseFloat(fila.ventasCopasDirectas) || 0;
-    const cancelCopas = getCancelacionesCopas(fila.insumoId);
     const cortesia    = parseFloat(fila.cortesiaCopas) || 0;
     const merma       = parseFloat(fila.mermaCopas) || 0;
-    const totalCopas  = ventasRec + ventasDir + cancelCopas + cancelRec + cortesia + merma;
+    const totalCopas  = ventasRec + ventasDir + cortesia + merma;
     const entTotal    = getEntradasCopas(fila);
     if (fila.tipo === 'pza') {
         const ventaPzaRec = calcVentasPzaRecetas(fila.insumoId);     // venta por menú/recetas (piezas)
         const ventaPzaDir = parseFloat(fila.ventasCopasDirectas) || 0; // venta directa por pieza (campo "Pzas")
         return ea + entTotal + prodAdd
             - (fila.ventasBotella || 0) - ventaPzaDir - ventaPzaRec
-            - cancelCopas - cancelRec - cortesia - merma - prodSub;
+            - cortesia - merma - prodSub;
     }
     return ea + entTotal + prodAdd - totalCopas - prodSub - (fila.ventasBotella || 0) * (fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0);
 }
@@ -3594,7 +3511,7 @@ function _virtualFilaCompuesto(comp) {
         _entLista: mems.reduce(function(a,m){ return a.concat((_entradasDeInsumo(m.insumoId)||[]).map(function(e){
                        return Object.assign({}, e, { _de: m.nombre }); })); }, []),
         _ventaCoct: mems.reduce(function(s,m){ return s + (consumoRecetasFila(m)||0); }, 0),
-        _cancel:    mems.reduce(function(s,m){ return s + (getCancelacionesCopas(m.insumoId)||0); }, 0),
+        _cancel:    mems.reduce(function(s,m){ return s + (getCancelacionesCopas(m.insumoId)); }, 0),
         _eaBot:     mems.reduce(function(s,m){ return s + _botellasDeFila(m, parseFloat(m.existenciaAnterior)||0); }, 0),
         _existBot:  _compSumaBot(comp, function(m){ return calcExistencia(m); }),
         _teoBot:    _compSumaBot(comp, function(m){ return calcExistenciaTeorica(m); })
@@ -5211,7 +5128,7 @@ function _filaHistoricaNecesaria(f, movQR) {
 }
 
 function cargarProductosCaptura() {
-    _consumoDirty = true; _cancelDirty = true; window._step5Dirty = true;
+    _consumoDirty = true; window._step5Dirty = true;
     // Solo insumos de la sucursal activa Y del ÁREA de este inventario. Sin área → no
     // entra (qué hace la canela en un inventario de barra 😅). PERO sí entran: lo YA
     // capturado en este inventario, y los que tienen un MOVIMIENTO del QR (merma/entrada/
@@ -6924,7 +6841,7 @@ function _prodPbAplicar(id, nuevo) {
        dos quedaban en false. Hoy la producción no pasa por esos dos montones y
        no mordía, pero es exactamente la familia de bugs que ya costó dos
        sesiones: un dato que cambia y un caché que no se entera. */
-    _consumoDirty = true; _cancelDirty = true; window._step5Dirty = true;
+    _consumoDirty = true; window._step5Dirty = true;
     if (typeof _autoGuardar === 'function') _autoGuardar(); // persistir (antes solo quedaba en memoria)
     const el = document.getElementById('prod-' + id);
     if (el) {
@@ -7761,20 +7678,6 @@ function _renderCancelacionesTab(cancelaciones) {
     // Run auto-match on cancelaciones that haven't been matched yet
     _autoMatchCancelaciones();
     const noMatch = cancelaciones.filter(c => !c.insumoId && !c.recetaId).length;
-    /* Dos listas, separadas y rotuladas. Revueltas, «Negroni» el coctel y «Mix
-       Negroni PR» el insumo salen pegados en el desplegable y es imposible
-       saber cuál se está eligiendo — que es justo la decisión que importa. */
-    const recetaOpts = _recetasCancelables()
-        .slice().sort((a,b) => String(a.nombre||'').localeCompare(String(b.nombre||''), 'es'))
-        .map(r => `<option value="r:${etx(r.id)}">${etx(r.nombre)}</option>`).join('');
-    const insumoOpts = filasCaptura.map(f =>
-        `<option value="${f.insumoId}">${etx(insumoEtiqueta(f))}</option>`
-    ).join('');
-    const opcionesMatch =
-        `<option value="">— cambiar —</option>` +
-        (recetaOpts ? `<optgroup label="Carta (cócteles y platillos)">${recetaOpts}</optgroup>` : '') +
-        `<optgroup label="Insumos del inventario">${insumoOpts}</optgroup>`;
-
     const tabla = cancelaciones.length ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:820px">
         <thead><tr>
             <th style="width:110px">Fecha / Hora</th>
@@ -7786,9 +7689,7 @@ function _renderCancelacionesTab(cancelaciones) {
             <th style="width:28px"></th>
         </tr></thead>
         <tbody>${cancelaciones.map((c,i)=>{
-            /* Se distingue a simple vista de qué pegó. Una receta descuenta TODOS
-               sus ingredientes y un insumo descuenta solo ese: no es lo mismo y
-               quien revisa la lista tiene que poder verlo sin abrir nada. */
+            // La asociación es informativa; conserva el producto original del POS.
             const esRec  = !!c.recetaId;
             const nombre = esRec ? (c.recetaNombre || '—') : (c.insumoNombre || '—');
             const badge = (esRec || c.insumoId)
@@ -7798,27 +7699,24 @@ function _renderCancelacionesTab(cancelaciones) {
                     color:${esRec ? '#7ab8f5' : 'var(--green)'};border-radius:6px;
                     padding:2px 8px;font-size:11px;font-weight:600;max-width:100%;overflow:hidden;
                     text-overflow:ellipsis;white-space:nowrap"
-                    title="${etx(nombre)}${esRec ? ' — descuenta todos sus ingredientes' : ''}">
+                    title="${etx(nombre)} — referencia informativa">
                     ${esRec ? '🍸' : '✓'} ${etx(nombre)}</span>`
                 : `<span style="background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.4);
                     color:var(--accent);border-radius:6px;padding:2px 8px;font-size:11px">
                     ⚠ Sin match</span>`;
             return `<tr>
-                <td style="font-size:11px;color:var(--text-dim);white-space:nowrap">${c.fechaHora||'—'}</td>
+                <td style="font-size:11px;color:var(--text-dim);white-space:nowrap">${etx(c.fechaHora||'—')}</td>
                 <td style="font-size:12px;font-weight:500">${etx(c.nombreProducto||'—')}</td>
                 <td style="text-align:center;font-weight:600">${c.cantidad||'—'}</td>
                 <td>
                     <div style="display:flex;flex-direction:column;gap:4px">
                         ${badge}
-                        <select onchange="_setCancelInsumo(${i},this.value)"
-                            style="font-size:10px;background:var(--surface2);border:1px solid var(--border);
-                            color:var(--text-muted);border-radius:5px;padding:2px 4px;width:100%;font-family:inherit">
-                            ${opcionesMatch}
-                        </select>
+                        <button type="button" class="btn-vista cancel-match-trigger" data-cancel-match="${i}"
+                            onclick="abrirMatchCancelacion(${i},this)">Buscar / cambiar match</button>
                     </div>
                 </td>
-                <td style="color:var(--text-dim);font-size:11px">${c.motivo||'—'}</td>
-                <td style="color:var(--text-dim);font-size:11px">${c.mesero||'—'}</td>
+                <td style="color:var(--text-dim);font-size:11px">${etx(c.motivo||'—')}</td>
+                <td style="color:var(--text-dim);font-size:11px">${etx(c.mesero||'—')}</td>
                 <td><button class="btn-vista" style="padding:3px 8px;font-size:10px;color:var(--red);border-color:var(--red)"
                     onclick="eliminarCancelacion(${i})">🗑️</button></td>
             </tr>`;
@@ -7828,6 +7726,7 @@ function _renderCancelacionesTab(cancelaciones) {
         <div class="empty-desc">Agrega manualmente o importa desde tu POS</div></div>`;
 
     return `
+    <p class="cancel-info-note">Las cancelaciones del POS son informativas: no descuentan existencias ni afectan consumo, faltantes o sobrantes. Si hubo una salida real, regístrala como merma o cortesía.</p>
     <div class="card" style="max-width:none;margin:12px 16px 0">
         <div class="card-header">
             <h2>📥 Cancelaciones — pega por columna o importa archivo</h2>
@@ -7892,7 +7791,7 @@ function _renderCancelacionesTab(cancelaciones) {
                     ${cancelaciones.length} cancelación${cancelaciones.length!==1?'es':''}</span>
                 ${noMatch > 0 ? `<span class="pill pill-amber">${noMatch} sin detectar</span>` : `<span class="pill pill-green">Todos detectados</span>`}
                 <button class="btn-vista" style="font-size:11px;padding:4px 10px"
-                    onclick="_reDetectarCancelaciones()">🔍 Re-detectar</button>
+                    onclick="_reDetectarCancelaciones()" title="Conserva las selecciones manuales, incluido Sin match">🔍 Re-detectar automáticos</button>
             </div>
         </div>
         <div class="card-body" style="padding:0">${tabla}</div>
@@ -8000,7 +7899,7 @@ function agregarCancelacionManual() {
     const entrada = { fechaHora, nombreProducto, cantidad, autorizo, motivo, mesero };
     _aplicarMatchCancel(entrada, _matchCancelacion(nombreProducto));
     invActual.cancelaciones.push(entrada);
-    _cancelDirty = true; window._step5Dirty = true;
+    window._step5Dirty = true;
     _autoGuardar(); renderStepContent();
 }
 
@@ -8008,7 +7907,7 @@ function eliminarCancelacion(idx) {
     _pedirClaveAdmin('Eliminar cancelación', function() {
         if (invActual?.cancelaciones) {
             invActual.cancelaciones.splice(idx,1);
-            _autoMatchFirma = ''; _cancelDirty = true; window._step5Dirty = true;
+            _autoMatchFirma = ''; window._step5Dirty = true;
             _autoGuardar(); renderStepContent();
         }
     });
@@ -8166,16 +8065,16 @@ function confirmarTablaCancelaciones() {
     if (!toAdd.length) { alert('Sin datos válidos. Ingresa productos en la columna Producto.'); return; }
     if (!invActual.cancelaciones) invActual.cancelaciones = [];
     invActual.cancelaciones.push(...toAdd);
-    _cancelDirty = true; window._step5Dirty = true;
+    window._step5Dirty = true;
     _autoGuardar(); renderStepContent();
 }
 
 function _reDetectarCancelaciones() {
     (invActual?.cancelaciones || []).forEach(c => {
-        _aplicarMatchCancel(c, _matchCancelacion(c.nombreProducto));
+        if (!c.matchManual) _aplicarMatchCancel(c, _matchCancelacion(c.nombreProducto));
     });
     _autoMatchFirma = '';   // se rehízo todo: que la guarda no crea que ya estaba
-    _cancelDirty = true; window._step5Dirty = true;
+    window._step5Dirty = true;
     _autoGuardar(); renderStepContent();
 }
 
@@ -8184,16 +8083,111 @@ function _reDetectarCancelaciones() {
    receta pueden tener el mismo id si uno se convirtió del otro. */
 function _setCancelInsumo(idx, valor) {
     const c = invActual?.cancelaciones?.[idx];
-    if (!c) return;
-    if (!valor) { _aplicarMatchCancel(c, null); }
-    else if (valor.indexOf('r:') === 0) {
-        const r = getRecetas().find(x => x.id === valor.slice(2));
-        _aplicarMatchCancel(c, r ? { tipo:'receta', id:r.id, nombre:r.nombre } : null);
-    } else {
+    if (!c || window._soloVistaInv) return;
+    let match = null;
+    if (valor && valor.indexOf('r:') === 0) {
+        const r = _recetasCancelables().find(x => x.id === valor.slice(2));
+        if (!r) return;
+        match = { tipo:'receta', id:r.id, nombre:r.nombre };
+    } else if (valor) {
         const fila = filasCaptura.find(f => f.insumoId === valor);
-        _aplicarMatchCancel(c, { tipo:'insumo', id:valor, nombre: fila ? fila.nombre : null });
+        if (!fila) return;
+        match = { tipo:'insumo', id:valor, nombre:fila.nombre };
     }
-    _cancelDirty = true; window._step5Dirty = true;
+    _aplicarMatchCancel(c, match);
+    c.matchManual = true; // incluye Sin match: sobrevive guardado, recarga y re-detección.
+    _guardarMatchCancelacion();
+}
+
+/* El POS conserva su nombre original. El match solo añade una referencia
+   informativa; una selección manual, incluso «Sin match», no se re-detecta. */
+var _cancelMatchEdicion = null;
+function _opcionesCancelMatch(busqueda) {
+    const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const palabras = norm(busqueda).trim().split(/\s+/).filter(Boolean);
+    const opciones = _recetasCancelables().map(r => ({
+        valor:'r:' + r.id, nombre:r.nombre || 'Sin nombre', grupo:'Carta (cócteles y platillos)',
+        detalle:r.tipo === 'alimentos' ? 'Platillo' : 'Cóctel'
+    })).concat(filasCaptura.map(f => ({
+        valor:f.insumoId, nombre:insumoEtiqueta(f), grupo:'Insumos del inventario', detalle:f.categoria || 'Insumo'
+    })));
+    return opciones.filter(o => palabras.every(p => norm(o.nombre + ' ' + o.detalle).includes(p)))
+        .sort((a,b) => a.grupo.localeCompare(b.grupo, 'es') || a.nombre.localeCompare(b.nombre, 'es'));
+}
+function abrirMatchCancelacion(idx, boton) {
+    const c = invActual?.cancelaciones?.[idx];
+    if (!c || window._soloVistaInv) return;
+    cerrarMatchCancelacion();
+    _cancelMatchEdicion = { inventario:invActual, cancelacion:c, boton:boton };
+    const ov = document.createElement('div');
+    ov.id = 'cancelMatchOverlay'; ov.className = 'cancel-match-overlay';
+    ov.innerHTML = `<section class="cancel-match-dialog" role="dialog" aria-modal="true" aria-labelledby="cancelMatchTitulo">
+        <header class="cancel-match-header">
+            <div><h2 id="cancelMatchTitulo">Relacionar cancelación</h2><p>${etx(c.nombreProducto || 'Producto POS')}</p></div>
+            <button type="button" class="btn-vista" onclick="cerrarMatchCancelacion()" aria-label="Cerrar selector">✕ Cerrar</button>
+        </header>
+        <div class="cancel-match-tools">
+            <label for="cancelMatchBusca">Buscar receta o insumo</label>
+            <input id="cancelMatchBusca" type="search" placeholder="Nombre, variedad o categoría…" autocomplete="off" oninput="_renderCancelMatch(this.value)">
+            <button type="button" class="cancel-match-option cancel-match-none" onclick="_elegirCancelMatch('')">
+                <strong>Sin match</strong><span>Conservar solo el dato del POS, sin asociarlo a un producto.</span>
+            </button>
+            <p class="cancel-match-help">Insumo: aparece en su fila. Receta: solo en el informe de cancelaciones. No modifica existencias, consumo ni diferencias.</p>
+        </div>
+        <div id="cancelMatchResultados" class="cancel-match-results" aria-live="polite"></div>
+        <footer class="cancel-match-footer"><button type="button" class="btn-vista" onclick="_elegirCancelMatch('',true)">Detectar automáticamente</button></footer>
+    </section>`;
+    ov.addEventListener('click', e => { if (e.target === ov) cerrarMatchCancelacion(); });
+    ov.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarMatchCancelacion(); }
+        if (e.key === 'Tab') {
+            const campos = Array.from(ov.querySelectorAll('button:not([disabled]), input'));
+            const primero = campos[0], ultimo = campos[campos.length - 1];
+            if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+            else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+        }
+    });
+    document.body.appendChild(ov);
+    _renderCancelMatch('');
+    document.getElementById('cancelMatchBusca').focus();
+}
+function cerrarMatchCancelacion() {
+    const boton = _cancelMatchEdicion && _cancelMatchEdicion.boton;
+    document.getElementById('cancelMatchOverlay')?.remove();
+    _cancelMatchEdicion = null;
+    if (boton && boton.isConnected) boton.focus();
+}
+function _renderCancelMatch(busqueda) {
+    const el = document.getElementById('cancelMatchResultados');
+    if (!el || !_cancelMatchEdicion) return;
+    const opciones = _opcionesCancelMatch(busqueda);
+    const c = _cancelMatchEdicion.cancelacion;
+    const actual = c.recetaId ? 'r:' + c.recetaId : c.insumoId;
+    let grupo = '';
+    el.innerHTML = opciones.length ? opciones.map(o => {
+        const titulo = o.grupo !== grupo ? `<h3>${etx(o.grupo)}</h3>` : '';
+        grupo = o.grupo;
+        return titulo + `<button type="button" class="cancel-match-option${o.valor === actual ? ' is-selected' : ''}"
+            data-valor="${etx(o.valor)}" onclick="_elegirCancelMatch(this.dataset.valor)">
+            <strong>${etx(o.nombre)}</strong><span>${etx(o.detalle)}${o.valor === actual ? ' · Selección actual' : ''}</span></button>`;
+    }).join('') : '<p class="cancel-match-empty">Sin resultados. Prueba otro nombre o elige «Sin match».</p>';
+}
+function _elegirCancelMatch(valor, automatico) {
+    const ed = _cancelMatchEdicion;
+    const idx = ed && invActual === ed.inventario ? (invActual.cancelaciones || []).indexOf(ed.cancelacion) : -1;
+    cerrarMatchCancelacion();
+    if (idx < 0 || window._soloVistaInv) return;
+    if (automatico) {
+        ed.cancelacion.matchManual = false;
+        _aplicarMatchCancel(ed.cancelacion, _matchCancelacion(ed.cancelacion.nombreProducto));
+        _guardarMatchCancelacion();
+    } else _setCancelInsumo(idx, valor);
+    const boton = document.querySelector('[data-cancel-match="' + idx + '"]');
+    if (boton) boton.focus();
+}
+function _guardarMatchCancelacion() {
+    _autoMatchFirma = '';
+    window._step5Dirty = true;
     _autoGuardar(); renderStepContent();
 }
 
@@ -8772,7 +8766,7 @@ function renderStep5() {
         <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
             <div class="stat-card"><div class="stat-label">Capital a costo</div><div class="stat-val">$${_M2(capitalCosto)}</div></div>
             <div class="stat-card"><div class="stat-label">Capital a carta</div><div class="stat-val green">$${_M2(capitalCarta)}</div></div>
-            <div class="stat-card"><div class="stat-label">Cancelaciones POS</div>
+            <div class="stat-card"><div class="stat-label">Cancelaciones POS · informativo</div>
                 <div class="stat-val" style="color:${numCancel>0?'var(--accent)':'var(--text)'}">${numCancel}</div></div>
             <div class="stat-card"><div class="stat-label">Total descuentos</div>
                 <div class="stat-val" style="color:${totalDescuentos>0?'var(--red)':'var(--text)'}">$${_M2(totalDescuentos)}</div></div>
@@ -9794,7 +9788,7 @@ function _step5TablasHTML() {
         const merma     = parseFloat(fila.mermaCopas)    || 0;
         const cmTotal   = cortesia + merma + adj.cm;
         const cmConc    = [fila.cortesiaConcepto, fila.mermaConcepto].filter(Boolean).join(' / ');
-        const cancelCop = getCancelacionesCopas(fila.insumoId) + adj.can;
+        const cancelCop = getCancelacionesCopas(fila.insumoId);
         const teorico   = calcExistenciaTeorica(fila) + adj.teo;
         const fisico    = calcExistencia(fila) + adj.fis;
         const dif       = fisico - teorico;
@@ -9891,7 +9885,7 @@ function _step5TablasHTML() {
         const ventaCoct = consumoRecetasFila(fila) + adjP.vco + prodPBpMat;
         const ventasDir = peso ? 0 : (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
         const ventas    = ventasDir + ventaCoct;
-        const cancelPza = getCancelacionesCopas(fila.insumoId) + cancelRecetasFila(fila) + adjP.can;
+        const cancelPza = getCancelacionesCopas(fila.insumoId);
         const cortMerma = (peso ? (parseFloat(fila.mermaBase) || 0) :
             (parseFloat(fila.cortesiaCopas) || 0) + (parseFloat(fila.mermaCopas) || 0)) + adjP.cm;
         const teorico   = calcExistenciaTeorica(fila) + adjP.teo;
@@ -10069,8 +10063,8 @@ function _step5TablasHTML() {
             <div style="padding:8px 20px 12px"><div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px">📐 Desglose por presentación</div>
             <table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
                 ${esPzaComp0
-                    ? `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Ventas</th><th style="text-align:center">Cancelac.</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Teórico</th><th style="text-align:center">Físico</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`
-                    : `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Botella</th><th style="text-align:center">Copa</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Cancelac.</th><th style="text-align:center">Actual</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`}
+                    ? `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Ventas</th><th style="text-align:center">Cancelac.<br><small>Informativo</small></th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Teórico</th><th style="text-align:center">Físico</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`
+                    : `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Botella</th><th style="text-align:center">Copa</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Cancelac.<br><small>Informativo</small></th><th style="text-align:center">Actual</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`}
             </tr></thead><tbody>${desgloseRows}</tbody></table></div></td></tr>`;
         const _tdNom = `<td style="min-width:150px">
                 <div style="font-size:14px;font-weight:600">🧩 ${etx(comp.nombre||vf.nombre)}</div>
@@ -10117,7 +10111,7 @@ function _step5TablasHTML() {
                         <th rowspan="2" style="text-align:center;width:65px;vertical-align:bottom">Entradas</th>
                         <th colspan="3" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
                         <th rowspan="2" style="text-align:center;width:95px;vertical-align:bottom">Cortesía /<br>Merma</th>
-                        <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Cancelac.<br>POS</th>
+                        <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Cancelac.<br><small>Informativo</small></th>
                         <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Exist.<br>actual</th>
                         <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Diferencia</th>
                         <th rowspan="2" style="text-align:center;width:50px;vertical-align:bottom">%</th>
@@ -10135,7 +10129,7 @@ function _step5TablasHTML() {
                     <th style="text-align:center;width:65px">Entradas</th>
                     <th style="text-align:center;width:70px">Coctelería</th>
                     <th style="text-align:center;width:65px">Ventas</th>
-                    <th style="text-align:center;width:70px">Cancelac.</th>
+                    <th style="text-align:center;width:70px">Cancelac.<br><small>Informativo</small></th>
                     <th style="text-align:center;width:90px">Cortesía /<br>Merma</th>
                     <th style="text-align:center;width:70px">Teórico</th>
                     <th style="text-align:center;width:70px">Físico</th>
@@ -10259,7 +10253,7 @@ function _step5DesgloseCard(fila, refMap) {
     var ventaBot  = parseFloat(fila.ventasBotella)||0;
     var cort = fila.tipo === 'peso' ? 0 : parseFloat(fila.cortesiaCopas)||0;
     var merma = (parseFloat(fila.tipo === 'peso' ? fila.mermaBase : fila.mermaCopas)||0) + adjG.cm;
-    var cancel = esComp ? (fila._cancel||0) : getCancelacionesCopas(fila.insumoId) + cancelRecetasFila(fila) + adjG.can;
+    var cancel = esComp ? (fila._cancel||0) : getCancelacionesCopas(fila.insumoId);
     var _n1 = function(v){ return fila.tipo === 'pza' ? Math.round(v*10000)/10000 : v%1 ? (Math.round(v*10)/10).toFixed(1) : v; };
     var eaDisp, fiDisp, uEx;
     if (esComp) {
@@ -10295,7 +10289,7 @@ function _step5DesgloseCard(fila, refMap) {
         (entradas.length?'<div style="font-size:10px;color:var(--text-dim);padding:1px 0 4px 10px;line-height:1.6">'+entradas.map(function(e){return '• '+_n1(e.cantidad)+' '+uEnt+(e._de?' · '+etx(e._de):'')+(e.fecha?' · '+e.fecha:'')+(e.tipo?' ('+tipoEntradaLabel(e.tipo)+')':'');}).join('<br>')+'</div>':'')+
         fila2('Ventas', ventasParts.length?ventasParts.join(' · '):'—', 'var(--accent)')+
         fila2('Cortesía / Merma', (cort+merma)>0?_fmtCop(cort+merma, fila):'—', (cort+merma)>0?'var(--red)':'var(--text-dim)')+
-        fila2('Cancelaciones', cancel>0?_fmtCop(cancel, fila):'—', 'var(--text-muted)')+
+        fila2('Cancelaciones (informativo)', cancel>0?_fmtCop(cancel, fila):'—', 'var(--text-muted)')+
         fila2('Exist. actual', fiDisp+' '+uEx+(pesosAct.length?' <span style="font-size:10px;color:var(--text-dim)">('+pesosAct.join(', ')+')</span>':''))+
         /* La MISMA línea de equivalencias que la vista Lista, con el MISMO
            formateador: si cada pantalla la arma, se desalinean y el que compara
@@ -10525,7 +10519,7 @@ function verReporteDirectivo(gerencial, modo) {
         const ventaBot  = parseFloat(f.ventasBotella) || 0;
         const cortesia  = f.tipo === 'peso' ? 0 : parseFloat(f.cortesiaCopas) || 0;
         const merma     = (parseFloat(f.tipo === 'peso' ? f.mermaBase : f.mermaCopas) || 0) + adjO.cm;
-        const cancel    = getCancelacionesCopas(f.insumoId) + cancelRecetasFila(f) + adjO.can;
+        const cancel    = getCancelacionesCopas(f.insumoId);
         // pza: venta total en piezas = botella + directa + por menú/recetas (igual que el Resultado).
         const ventaPzaTot = f.tipo === 'pza' ? ventaBot + ventaCopa : 0;
         /* prodPB entra al CONSUMO: producir un batch gasta el insumo tal cual, así
@@ -10533,8 +10527,8 @@ function verReporteDirectivo(gerencial, modo) {
            es una venta —no se le cobró a nadie—, por eso vive fuera de ventaNeta y
            del % de varianza, que se miden contra lo vendido. */
         const consumo   = (f.tipo === 'pza'
-            ? ventaPzaTot + cortesia + merma + cancel
-            : ventaCopa + ventaBot * copasBot + cortesia + merma + cancel) + prodPB;
+            ? ventaPzaTot + cortesia + merma
+            : ventaCopa + ventaBot * copasBot + cortesia + merma) + prodPB;
         const disponible = ea + (f.tipo === 'copa' ? entBot * copasBot : entBot);
         const pctConsumo = disponible > 0 ? (consumo / disponible) * 100 : 0;
         /* % de varianza contra TODO el uso del insumo (misma definición que la columna
@@ -11147,10 +11141,10 @@ function verReporteDirectivo(gerencial, modo) {
 
     const movimientosHTML = `
       <div class="rd-sec">Movimientos especiales del período</div>
-      ${_cancels.length ? `<div class="rd-grp">${_movTit('🚫 Productos cancelados (POS) — '+_cancels.length)}
+      ${_cancels.length ? `<div class="rd-grp">${_movTit('🚫 Cancelaciones POS · informativo — '+_cancels.length)}
         <table class="rd-t"><thead><tr><th>Fecha / Hora</th><th>Producto</th><th class="tc">Cant.</th><th>Autorizó</th><th>Motivo</th><th>Mesero</th></tr></thead>
-          <tbody>${_cancels.map(c=>`<tr><td style="white-space:nowrap;color:#888">${c.fechaHora||'—'}</td><td style="font-weight:500">${etx(c.nombreProducto||'—')}</td><td class="tc" style="font-weight:700">${c.cantidad||'—'}</td><td>${etx(c.autorizo||c.responsable||'—')}</td><td style="color:#888">${etx(c.motivo||'—')}</td><td style="color:#888">${etx(c.mesero||'—')}</td></tr>`).join('')}</tbody></table></div>`
-        : _movTit('🚫 Productos cancelados (POS) — 0')+_movVacio}
+          <tbody>${_cancels.map(c=>`<tr><td style="white-space:nowrap;color:#888">${etx(c.fechaHora||'—')}</td><td style="font-weight:500">${etx(c.nombreProducto||'—')}</td><td class="tc" style="font-weight:700">${c.cantidad||'—'}</td><td>${etx(c.autorizo||c.responsable||'—')}</td><td style="color:#888">${etx(c.motivo||'—')}</td><td style="color:#888">${etx(c.mesero||'—')}</td></tr>`).join('')}</tbody></table></div>`
+        : _movTit('🚫 Cancelaciones POS · informativo — 0')+_movVacio}
       ${_mermados.length ? `<div class="rd-grp">${_movTit('🗑️ Productos mermados — '+_mermados.length)}
         <table class="rd-t"><thead><tr><th>Producto</th><th class="tc">Grupo</th><th class="tc">Merma</th><th>Motivo</th><th class="tr">Valor (carta)</th></tr></thead>
           <tbody>${_mermados.map(a=>`<tr><td style="font-weight:600">${etx(a.f.nombre)}</td><td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td><td class="tc" style="color:${cCrit};font-weight:700">${a.merma.toFixed(1)} ${_uMC(a)}</td><td style="color:#888">${etx(a.f.mermaConcepto||'—')}</td><td class="tr" style="font-weight:600">$${_m2(a.merma*(a.f.precioCarta||0))}</td></tr>`).join('')}</tbody></table></div>`
@@ -11298,9 +11292,9 @@ function verReporteDirectivo(gerencial, modo) {
       <div class="rd-ks">Carta − costo</div>
     </div>
     <div class="rd-kpi">
-      <div class="rd-kl">Cancelaciones POS</div>
+      <div class="rd-kl">Cancelaciones POS · informativo</div>
       <div class="rd-kv" style="color:${numCancel > 5 ? cCrit : numCancel > 0 ? cWarn : '#555'}">${numCancel}</div>
-      <div class="rd-ks">Registros del período</div>
+      <div class="rd-ks">No afectan existencias ni consumo</div>
     </div>
     <div class="rd-kpi" style="border-left:4px solid ${totalDesc > 0 ? cWarn : '#e8e8e0'}">
       <div class="rd-kl">Descuentos aplicados</div>
@@ -11446,8 +11440,8 @@ function verReporteDirectivo(gerencial, modo) {
       <th class="tc">Venta bot.</th>
       <th class="tc">Cortesía</th>
       <th class="tc">Merma</th>
-      <th class="tc">Cancelac.</th>
-      <th class="tc">Total consumo</th>
+      <th class="tc">Cancelac.<br><small>Informativo</small></th>
+      <th class="tc" title="Excluye cancelaciones POS">Total consumo</th>
       <th class="tr">% consumo</th>
     </tr></thead>
     <tbody>
