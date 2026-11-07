@@ -3589,39 +3589,60 @@ console.log('\n══ SUITE AA · Bonos automáticos y sanciones (diario.html) �
         return eq(!!(g2 && g2.nomina) && g2.nomina.folio === rec.folio, true,
                   'editar el gasto borró el comprobante');
     });
-    /* Y de punta a punta: darle a «Continuar a registrar pago» tiene que
-       mandar el recibo con el gasto. Es el único camino por el que un pago de
-       nómina llega al registro, y armar el comprobante después es imposible —
-       el desglose solo vive mientras el modal está abierto. */
-    test('confirmar el pago manda el recibo junto con el gasto', () => {
-        A._pagoNomStaff = { id:'s1', nombre:'Ana', puesto:'Barista' };
-        A._pagoNomConceptos = [];
-        A._pnTotalManual = null; A._pnPrimaInclude = false;
+    /* Y de punta a punta. Desde la v85 son DOS pasos a propósito: confirmar
+       GUARDA el recibo (sin tocar dinero) y «Generar gasto» es el que paga.
+       Armar el comprobante después del modal es imposible —el desglose solo
+       vive mientras está abierto—, así que lo que se vigila es que el recibo
+       sobreviva al primer paso y llegue entero al gasto en el segundo. */
+    test('confirmar GUARDA el recibo y no registra ningún gasto', () => {
+        A._pagoNomStaff = { id:'s9', nombre:'Nora', puesto:'Barista', sucursalId:'suc_principal' };
+        A._cacheStaff = [A._pagoNomStaff];
+        A._cacheRecibos = []; A._cacheGastos = [];
+        A._pagoNomConceptos = []; A._pnTotalManual = null; A._pnPrimaInclude = false; A._pnEditandoGasto = null;
         A.document.getElementById('pnTipo').value   = 'semana';
         A.document.getElementById('pnDesde').value  = '2026-09-01';
         A.document.getElementById('pnHasta').value  = '2026-09-07';
         A.document.getElementById('pnDiario').value = 315;
         A.document.getElementById('pnDias').value   = 6;
         let entregado = null;
-        const abrir0 = A._abrirModalGasto, cerrar0 = A._cerrarPagoNom, cat0 = A._asegurarCategoria;
+        const abrir0 = A._abrirModalGasto, cerrar0 = A._cerrarPagoNom, up0 = A._sbUp,
+              pl0 = A._nomPintarListas, rp0 = A.renderNominasPanel;
         A._abrirModalGasto = (g) => { entregado = g; };
-        A._cerrarPagoNom = () => {}; A._asegurarCategoria = () => {};
+        A._cerrarPagoNom = () => {}; A._sbUp = () => {};
+        A._nomPintarListas = () => {}; A.renderNominasPanel = () => {};
         try { A._confirmarPagoNom(); }
-        finally { A._abrirModalGasto = abrir0; A._cerrarPagoNom = cerrar0; A._asegurarCategoria = cat0; }
-        if (!entregado) throw new Error('no se entregó ningún gasto al modal');
-        return eq(!!entregado.nomina + ' · ' + (entregado.nomina && entregado.nomina.dias) +
-                  ' · ' + (entregado.nomina && entregado.nomina.staff.nombre),
-                  'true · 6 · Ana', 'el pago llegó al registro sin comprobante');
+        finally { A._abrirModalGasto = abrir0; A._cerrarPagoNom = cerrar0; A._sbUp = up0;
+                  A._nomPintarListas = pl0; A.renderNominasPanel = rp0; }
+        const reg = (A._cacheRecibos || [])[0] || {};
+        return eq((entregado === null) + '·' + (A._cacheGastos || []).length + '·' +
+                  ((reg.recibo || {}).dias) + '·' + (reg.gastoId === ''),
+                  'true·0·6·true', 'generar un recibo movió dinero');
     });
+    /* Y el recibo guardado es EL MISMO que se ve en pantalla: si el folio
+       cambiara, el papel que firma la persona y el del sistema serían dos. */
     test('…con el mismo folio que el recibo que se ve en pantalla', () => {
         const enPantalla = A._reciboNominaDatos();
+        const reg = (A._cacheRecibos || [])[0] || {};
+        return eq((reg.recibo || {}).folio, enPantalla.folio, 'dos folios para el mismo pago');
+    });
+    /* El segundo paso: «Generar gasto» arma el gasto CON su recibo pegado. */
+    test('generar el gasto lleva el recibo pegado y de dónde salió', () => {
+        /* El menú trabaja con el periodo que la pantalla está mirando, así que
+           se le pone el del recibo —si no, no lo encuentra, igual que en la
+           pantalla real si cambias de mes a media faena. */
+        A._dxPer = { nom:{ tipo:'rango', val:'2026-09-01', end:'2026-09-07' } };
         let entregado = null;
-        const abrir0 = A._abrirModalGasto, cerrar0 = A._cerrarPagoNom, cat0 = A._asegurarCategoria;
+        const abrir0 = A._abrirModalGasto, cat0 = A._asegurarCategoria,
+              cer0 = A._cerrarSelPago, ex0 = A._exigeVG;
         A._abrirModalGasto = (g) => { entregado = g; };
-        A._cerrarPagoNom = () => {}; A._asegurarCategoria = () => {};
-        try { A._confirmarPagoNom(); }
-        finally { A._abrirModalGasto = abrir0; A._cerrarPagoNom = cerrar0; A._asegurarCategoria = cat0; }
-        return eq(entregado.nomina.folio, enPantalla.folio, 'dos folios para el mismo pago');
+        A._asegurarCategoria = () => {}; A._cerrarSelPago = () => {}; A._exigeVG = () => true;
+        try { A.generarGastoNomina('s9'); }
+        finally { A._abrirModalGasto = abrir0; A._asegurarCategoria = cat0;
+                  A._cerrarSelPago = cer0; A._exigeVG = ex0; }
+        if (!entregado) throw new Error('no se entregó ningún gasto al modal');
+        return eq(!!entregado.nomina + '·' + entregado.nomina.staff.nombre + '·' +
+                  (entregado.reciboId === (A._cacheRecibos[0] || {}).id),
+                  'true·Nora·true', 'el gasto llegó sin comprobante o sin su recibo');
     });
     test('un gasto cualquiera no carga la llave del recibo', () => {
         const g = abrirYGuardar({ concepto:'Servilletas', categoria:'Varios', monto:120 });
@@ -32022,8 +32043,13 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
         X._pnCalc();
     };
     /* El camino real: confirmar manda el gasto al modal y ahí se guarda. */
+    /* El camino real desde la v85: confirmar GUARDA el recibo, y pagar es otra
+       decisión —«Generar gasto»—. Se hacen las dos para dejar un pago
+       registrado, que es lo que estas pruebas necesitan de punto de partida. */
     const registrar = (fecha) => silencio(() => {
-        X._confirmarPagoNom();
+        X._exigeVG = X._exigeVG || (() => true);
+        X._confirmarPagoNom();              // guarda el recibo, no paga
+        X.generarGastoNomina(X._pagoNomStaff.id);   // abre el modal de gasto con sus números
         if (fecha) el('gFecha').value = fecha;
         /* El gasto nuevo no trae id hasta que guardarGasto se lo pone, así que
            se reconoce por diferencia. Buscarlo por `gId` devolvía el PAGADO
@@ -32184,7 +32210,10 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
     });
 
     /* ── 5 · los pagados aparte no se vuelven a registrar ───────────────── */
-    X._cacheGastos = [];
+    /* También se limpian los RECIBOS: su id sale de la persona y el periodo,
+       así que sin esto el recibo pagado de la sección anterior haría que
+       «Generar gasto» dijera «ya tiene su gasto registrado». */
+    X._cacheGastos = []; X._cacheRecibos = [];
     capturar();
     X._pagoNomConceptos = [{ concepto:'Bono en efectivo', detalle:'', monto:500,
                              pago:'efectivo', fecha:'2026-11-09' }];
@@ -32757,6 +32786,7 @@ console.log('\n══ BH64 · El recibo de las nóminas viejas ══');
     const X = crearContexto();
     cargarJS(X, 'etaax-core.js');
     cargarJS(X, 'reporte-marca.js');
+    cargarJS(X, 'etaax-iconos.js');   // los nombres de icono se comprueban contra el sprite real
     cargarInline(X, 'administrativo/diario.html');
     X._storage.etaax_negocio_activo = 'n1';
     X._storage.etaax_sucursal_activa = 'suc_principal';
@@ -32999,6 +33029,275 @@ console.log('\n══ BH64 · El recibo de las nóminas viejas ══');
         test('los gastos fijos la siguen pidiendo: no tienen puerta', () =>
             eq(pedidas.length, 1, 'se quedó sin candado'));
     }
+}
+
+/* ═══════════ BH65 · GENERAR EL RECIBO NO ES PAGARLO ═══════════
+   Hasta la v85, para que existiera un recibo tenía que existir primero el
+   gasto: el modal empujaba al pago y, si no lo concluías, lo capturado se
+   perdía. No se podían preparar las dieciséis nóminas de la semana, revisarlas
+   y pagarlas después —que es como se hace en la vida real—.
+
+   Ahora son dos pasos. Lo que se vigila:
+     · que generar un recibo NO mueva dinero (ni gasto, ni caja, ni panel);
+     · que las cinco opciones se apaguen según el estado y DIGAN por qué;
+     · que un recibo ya pagado no se pueda reescribir desde aquí;
+     · y que lo pagado salga de la cola a las 24 h sin perderse.            */
+console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
+{
+    const X = crearContexto();
+    cargarJS(X, 'etaax-core.js');
+    cargarJS(X, 'reporte-marca.js');
+    cargarJS(X, 'etaax-iconos.js');
+    cargarInline(X, 'administrativo/diario.html');
+    X._storage.etaax_negocio_activo = 'n1';
+    X._storage.etaax_sucursal_activa = 'suc_principal';
+    X.NominaParams = { get(){ return { jornadaHoras:8, primaVacacionalPct:25, salarioDiarioDefault:300 }; } };
+    const ana = { id:'s1', nombre:'Ana', puesto:'Barista', sucursalId:'suc_principal',
+                  esquemaSueldo:'diario', sueldoDiario:300, bonos:[], multaRetardo:25 };
+    const bea = { id:'s2', nombre:'Bea', puesto:'Cocina', sucursalId:'suc_principal',
+                  esquemaSueldo:'diario', sueldoDiario:300, bonos:[] };
+    X._cacheStaff = [ana, bea];
+    X._cacheGastos = []; X._cacheRecibos = []; X._cacheHorarios = {};
+    X._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
+    const avisos = []; X.alert = (m) => { avisos.push(String(m)); };
+    const el = (id) => X.document.getElementById(id);
+    const silencio = (fn) => {
+        const d0 = X.document.querySelector, g0 = X.gRenderAll, s0 = X._syncGastosCortes,
+              c0 = X.gCerrarModal, u0 = X._sbUp, a0 = X._asegurarCategoria, r0 = X.renderNominasPanel;
+        X.document.querySelector = () => ({ style:{}, classList:{ add(){}, remove(){}, toggle(){} } });
+        X.gRenderAll = () => {}; X._syncGastosCortes = () => {}; X.gCerrarModal = () => {};
+        X._sbUp = () => {}; X._asegurarCategoria = () => {}; X.renderNominasPanel = () => {};
+        try { return fn(); }
+        finally { X.document.querySelector = d0; X.gRenderAll = g0; X._syncGastosCortes = s0;
+                  X.gCerrarModal = c0; X._sbUp = u0; X._asegurarCategoria = a0; X.renderNominasPanel = r0; }
+    };
+    const capturar = (s, desde, hasta, dias) => {
+        X._pagoNomStaff = s; X._pagoNomConceptos = []; X._pnTotalManual = null;
+        X._pnPrimaInclude = false; X._pnBonosQuitados = []; X._pnEditandoGasto = null;
+        el('pnTipo').value = 'semana';
+        el('pnDesde').value = desde; el('pnHasta').value = hasta;
+        el('pnDiario').value = 300; el('pnDias').value = dias;
+        el('pnMultaRetardo').value = 25; el('pnRetardos').value = 0;
+        X._pnCalc();
+    };
+    const generar = (s, desde, hasta, dias) => silencio(() => {
+        capturar(s, desde, hasta, dias);
+        /* Se silencia el repintado SOLO mientras dura la llamada: dejarlo
+           apagado hacía que las pruebas de la lista midieran un div vacío y
+           pasaran por nada. */
+        const p0 = X._nomPintarListas;
+        X._nomPintarListas = () => {};
+        try { X._confirmarPagoNom(); } finally { X._nomPintarListas = p0; }
+    });
+
+    /* ── 1 · generar un recibo no mueve dinero ─────────────────────────── */
+    generar(ana, '2026-11-02', '2026-11-08', 7);
+    test('el recibo queda guardado con su periodo y su total', () => {
+        const r = (X._cacheRecibos || [])[0] || {};
+        return eq(r.staffId + '·' + r.desde + '·' + (r.recibo || {}).total, 's1·2026-11-02·2100', 'recibo');
+    });
+    /* LO QUE IMPORTA: no hay gasto. Ni caja, ni panel, ni KPIs tocados. */
+    test('…y NO se registró ningún gasto', () =>
+        eq((X._cacheGastos || []).length, 0, 'generar un recibo sacó dinero de la caja'));
+    test('…ni se marcó como pagado', () => {
+        const r = (X._cacheRecibos || [])[0] || {};
+        return eq(r.gastoId + '|' + r.pagadoEn, '|', 'nació pagado sin que nadie pagara');
+    });
+    /* Volver a generar el mismo periodo REEMPLAZA, no deja dos recibos. */
+    test('generar otra vez el mismo periodo reemplaza, no duplica', () => {
+        generar(ana, '2026-11-02', '2026-11-08', 5);
+        return eq((X._cacheRecibos || []).length + '·' + (X._cacheRecibos[0].recibo || {}).total,
+                  '1·1500', 'quedaron dos recibos del mismo periodo');
+    });
+
+    /* ── 2 · las cinco opciones ────────────────────────────────────────── */
+    const rg = { from:'2026-11-01', to:'2026-11-30' };
+    const menu = (id) => X._nomAcciones(id, rg);
+    const activa = (html, txt) => {
+        const i = html.indexOf('>' + txt + '<');
+        if (i < 0) throw new Error('no está la opción ' + txt);
+        return html.lastIndexOf('onclick', i) > html.lastIndexOf('<div', i);
+    };
+    test('el menú ofrece siempre las cinco opciones', () => {
+        const h = menu('s2');
+        return eq(['Generar recibo','Editar recibo','Ver recibo','Imprimir recibo','Generar gasto']
+                    .every(t => h.indexOf('>' + t + '<') > -1), true, 'faltan opciones');
+    });
+    /* Sin recibo: solo se puede generar. Las otras se ven apagadas y DICEN por
+       qué —un botón que no responde y no explica se siente como una falla. */
+    test('sin recibo, solo «Generar recibo» responde', () => {
+        const h = menu('s2');
+        return eq([activa(h,'Generar recibo'), activa(h,'Editar recibo'), activa(h,'Ver recibo'),
+                   activa(h,'Imprimir recibo'), activa(h,'Generar gasto')].join(','),
+                  'true,false,false,false,false', 'opciones mal habilitadas');
+    });
+    test('…y las apagadas explican por qué', () =>
+        eq(/title="[^"]*gen[eé]ralo primero/i.test(menu('s2')), true, 'apagadas y mudas'));
+    /* Con recibo sin pagar: todas menos generar. */
+    test('con recibo sin pagar, se puede editar, ver, imprimir y pagar', () => {
+        const h = menu('s1');
+        return eq([activa(h,'Generar recibo'), activa(h,'Editar recibo'), activa(h,'Ver recibo'),
+                   activa(h,'Imprimir recibo'), activa(h,'Generar gasto')].join(','),
+                  'false,true,true,true,true', 'opciones mal habilitadas');
+    });
+    /* Los iconos son los de la línea gráfica, no emojis sueltos: si el nombre
+       no existiera, etaaxIcono devuelve cadena vacía y el menú saldría pelón. */
+    test('las opciones llevan iconos de la línea gráfica', () => {
+        const h = menu('s1');
+        return eq((h.match(/<svg class="etx-ic"/g) || []).length, 5, 'iconos');
+    });
+
+    /* ── 3 · pagar ─────────────────────────────────────────────────────── */
+    const pagar = (id, fecha) => silencio(() => {
+        X._exigeVG = () => true; X._cerrarSelPago = () => {};
+        X.generarGastoNomina(id);
+        if (fecha) el('gFecha').value = fecha;
+        const previos = (X._cacheGastos || []).map(g => g.id);
+        X.guardarGasto();
+        return (X._cacheGastos || []).find(g => previos.indexOf(g.id) === -1);
+    });
+    const g1 = pagar('s1', '2026-11-09');
+    test('«Generar gasto» registra el pago con su recibo', () =>
+        eq((X._cacheGastos || []).length + '·' + !!(g1 && g1.nomina) + '·' + g1.monto,
+           '1·true·1500', 'no se registró'));
+    /* EL SELLO: sin él la persona nunca sale de «por pagar» y se le paga dos
+       veces. Se pone al GUARDAR el gasto, no al abrir el modal. */
+    test('…y sella el recibo con su gasto y el instante', () => {
+        const r = (X._cacheRecibos || [])[0] || {};
+        return eq((r.gastoId === g1.id) + '·' + (r.pagadoEn.length > 10), 'true·true', 'sin sello');
+    });
+    test('ya pagado, el menú apaga editar y pagar', () => {
+        const h = menu('s1');
+        return eq([activa(h,'Editar recibo'), activa(h,'Generar gasto'),
+                   activa(h,'Ver recibo')].join(','), 'false,false,true', 'deja repagar');
+    });
+    /* Y por si alguien llega por otro camino: la función también se niega. */
+    test('…y pagarlo otra vez por la fuerza tampoco pasa', () => {
+        avisos.length = 0;
+        const antes = (X._cacheGastos || []).length;
+        silencio(() => X.generarGastoNomina('s1'));
+        return eq((X._cacheGastos || []).length + '·' + /ya tiene su gasto/.test(avisos.join(' ')),
+                  antes + '·true', 'pagó dos veces');
+    });
+    /* El comprobante de un pago que ya salió de la caja no se reescribe: una
+       segunda nómina del mismo periodo nace con id propio. */
+    test('una segunda nómina del mismo periodo no pisa la pagada', () => {
+        generar(ana, '2026-11-02', '2026-11-08', 2);
+        const ids = (X._cacheRecibos || []).map(r => r.id);
+        const pagada = (X._cacheRecibos || []).find(r => r.gastoId);
+        return eq(ids.length + '·' + (new Set(ids).size) + '·' + ((pagada.recibo || {}).total),
+                  '2·2·1500', 'le escribió encima al comprobante pagado');
+    });
+
+    /* ── 4 · la cola de trabajo y las 24 h ─────────────────────────────── */
+    {
+        const lista = () => { X._abrirSelectorPagoReal('nomina');
+                              return X.document.getElementById('selPagoLista').innerHTML; };
+        X._cacheRecibos = []; X._cacheGastos = [];
+        X._nomFiltro = 'todos'; X._nomBusca = '';
+        /* Ana pagada HACE UN RATO, Bea sin pagar. */
+        X._cacheGastos = [{ id:'gA', negocioId:'n1', sucursalId:'suc_principal', fecha:'2026-11-08',
+                            monto:2100, staffId:'s1',
+                            nomina:{ desde:'2026-11-01', hasta:'2026-11-30', total:2100 } }];
+        X._cacheRecibos = [{ id:'nrA', negocioId:'n1', sucursalId:'suc_principal', staffId:'s1',
+                             desde:'2026-11-01', hasta:'2026-11-30', recibo:{ total:2100 },
+                             gastoId:'gA', pagadoEn:new Date().toISOString() }];
+        test('recién pagada, la persona está en «Pagadas»', () => {
+            const h = lista();
+            return eq(/Pagadas · 1/.test(h) && /Por pagar · 1/.test(h), true, 'cola');
+        });
+        /* A las 24 h sale de la cola: si no, en tres semanas la lista de
+           pagadas es un muro por el que hay que bajar para hallar al que falta. */
+        test('a las 24 h sale de la cola y queda solo en su historial', () => {
+            X._cacheRecibos[0].pagadoEn = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
+            const h = lista();
+            return eq(h.indexOf('Pagadas') === -1 && h.indexOf('Ana') === -1 && h.indexOf('Bea') > -1,
+                      true, 'la cola se vuelve un muro');
+        });
+        /* LA ESCOTILLA: buscándola por nombre sí aparece, aunque haya salido.
+           Sin esto, pagarle algo extra a quien cobró ayer sería imposible. */
+        test('…pero buscándola por nombre vuelve a aparecer', () => {
+            X._nomBuscar('ana');
+            const h = X.document.getElementById('selPagoLista').innerHTML;
+            X._nomBusca = '';
+            return eq(h.indexOf('Ana') > -1, true, 'no hay manera de alcanzarla');
+        });
+        /* Quien tiene recibo pero no pago lleva su etiqueta: capturarlo y
+           pagarlo son trabajos distintos y la lista tiene que distinguirlos. */
+        test('con recibo listo, el renglón lo dice', () => {
+            X._cacheRecibos.push({ id:'nrB', negocioId:'n1', sucursalId:'suc_principal', staffId:'s2',
+                                   desde:'2026-11-01', hasta:'2026-11-30', recibo:{ total:900 },
+                                   gastoId:'', pagadoEn:'' });
+            const h = lista();
+            return eq(/Recibo listo/.test(h), true, 'no distingue capturar de pagar');
+        });
+    }
+
+    /* El botón del modal es lo único que la gente lee antes de apretarlo: tiene
+       que decir qué va a pasar. Guardar un recibo y corregir un pago son cosas
+       distintas y el mismo rótulo para las dos manda a alguien a pagar cuando
+       solo quería capturar. */
+    test('el botón del modal dice lo que hace en cada modo', () => {
+        const lbl = () => X.document.getElementById('pnBtnConfirmar').textContent;
+        X.abrirPagoNomina('s2');
+        const a = lbl();
+        X._pnAbrirDesdeRecibo({ recibo:{ desde:'2026-11-01', hasta:'2026-11-30', dias:7, diario:300,
+                                         origen:{ conceptos:[] } } }, bea);
+        const b = lbl();
+        X._pnAbrirCorreccion({ id:'g', fecha:'2026-11-09', nomina:{ folio:'N-1', desde:'2026-11-01',
+                               hasta:'2026-11-30', dias:7, diario:300, origen:{ conceptos:[] } } }, bea);
+        return eq(a + ' | ' + b + ' | ' + lbl(),
+                  'Guardar recibo | Guardar recibo | Continuar a corregir el pago →', a + '|' + b);
+    });
+    /* El rótulo que trae la página es el que se ve si alguna vez se abre el
+       modal por un camino que olvide ponerlo. Por eso el de la página es el
+       SEGURO: guardar un recibo no mueve dinero. Prometer «registrar pago» por
+       omisión manda a pagar a quien solo venía a capturar. */
+    test('el rótulo que viene en la página no promete mover dinero', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        const m = src.match(/id="pnBtnConfirmar"[^>]*>([^<]*)</);
+        if (!m) throw new Error('no se encontró el botón en la página');
+        return eq(m[1], 'Guardar recibo', m[1]);
+    });
+    /* Y el aviso de corrección no puede quedarse pegado de una apertura a la
+       siguiente: diría que estás corrigiendo cuando estás capturando. */
+    test('el aviso de corrección no se queda pegado al abrir uno nuevo', () => {
+        X.abrirPagoNomina('s2');
+        return eq(X.document.getElementById('pnCorrBanner').style.display, 'none', 'aviso pegado');
+    });
+
+    /* ── 5 · el encabezado se queda fijo ───────────────────────────────── */
+    test('el buscador y los filtros van pegados arriba al hacer scroll', () => {
+        X._abrirSelectorPagoReal('nomina');
+        const cab = X.document.getElementById('selPagoBody').innerHTML;
+        const i = cab.indexOf('nomBuscaInp');
+        const bloque = cab.slice(0, i);
+        return eq(/position:sticky/.test(bloque) && /top:0/.test(bloque), true,
+                  'el campo se pierde justo cuando se baja a buscar a alguien');
+    });
+    /* Y pegado NO sirve si los renglones se ven por debajo. */
+    test('…con fondo propio, para que la lista no se transparente', () => {
+        const cab = X.document.getElementById('selPagoBody').innerHTML;
+        const bloque = cab.slice(0, cab.indexOf('nomBuscaInp'));
+        return eq(/background:var\(--surface\)/.test(bloque), true, 'se ve la lista por debajo');
+    });
+
+    /* ── 6 · si la v85 no está corrida, el panel no se cae ─────────────── */
+    /* Si la v85 todavía no se corre en Supabase, el caché llega vacío. El
+       panel tiene que seguir funcionando —lista, menú y todo— en vez de
+       quedarse en blanco: una tabla que falta no puede dejar a nadie sin
+       cobrar. Lo que sí cambia es que nadie aparece como «recién pagado»,
+       porque ese instante vive en la tabla nueva. */
+    test('sin la tabla nueva, el módulo sigue sirviendo', () => {
+        X._cacheRecibos = null;
+        X._nomBusca = '';
+        X._abrirSelectorPagoReal('nomina');
+        const h = X.document.getElementById('selPagoLista').innerHTML;
+        const m = X._nomAcciones('s2', { from:'2026-11-01', to:'2026-11-30' });
+        X._cacheRecibos = [];
+        return eq((h.indexOf('Bea') > -1) + '·' + (m.indexOf('Generar recibo') > -1),
+                  'true·true', 'una tabla que falta deja a alguien sin cobrar');
+    });
 }
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
