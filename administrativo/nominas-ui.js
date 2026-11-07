@@ -2,7 +2,7 @@
    Solo decora rótulos conocidos; nombres y conceptos del negocio son texto. */
 (function () {
     'use strict';
-    var RAICES = '#dxOv_nominas,#modalPagoNom,#modalSelPago';
+    var RAICES = '#dxOv_nominas,#modalPagoNom,#modalSelPago,#modalPropinas,#propHistOverlay';
     var pendiente = false;
     var prefijo = /^(?:\s|[💰🖨⬇✕✖＋+−—☀💡🧾💵💼🏦🏛🗑🗓✏]|\uFE0F)+/u;
     function cada(s, fn) { document.querySelectorAll(s).forEach(fn); }
@@ -21,7 +21,10 @@
         });
         var s = document.createElement('span'); s.className = 'n-ui-icon';
         s.dataset.icono = nombre; s.setAttribute('aria-hidden', 'true');
-        s.innerHTML = window.etaaxIcono('nom-' + nombre, { tam:20 });
+        /* Casi todos los iconos de esta pantalla son de la familia `nom-`, así
+           que el nombre se escribe corto. Los de otra familia —las propinas
+           viven en `cor-`— se escriben completos y se usan tal cual. */
+        s.innerHTML = window.etaaxIcono(/^(?:cor|adm|fij|mov|aut|cat|fin|gm)-/.test(nombre) ? nombre : 'nom-' + nombre, { tam:20 });
         el.insertBefore(s, el.firstChild); el.dataset.etxEmoji = '1';
     }
     function titulo(el, principal) {
@@ -52,12 +55,22 @@
         var nomina = !!(title && /Pagar nómina/.test(title.textContent));
         if (selector) selector.classList.toggle('n-selector', nomina);
         if (nomina) titulo(title, false);
-        cada('#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector', function (raiz) {
+        titulo(document.getElementById('propTitle'), false);
+        cada('#dxOv_nominas,#modalPagoNom,#modalSelPago.n-selector,#modalPropinas,#propHistOverlay', function (raiz) {
             raiz.querySelectorAll('.etx-min-btn').forEach(function (b) { icono(b, 'minimizar'); });
             raiz.querySelectorAll('.modal-close,.dx-win-close').forEach(function (b) { icono(b, 'cerrar'); });
         });
         var controles = {
             '#btnPagarNomina':'pagar-nomina', '#dxOv_nominas [onclick^="dxImprimir"]':'imprimir',
+            /* Propinas: botones de la barra y de su ventana. Van aquí y no en
+               la página para que ESTE siga siendo el único sitio que decide
+               cómo se ve el módulo. */
+            '#btnPropinas':'cor-pagar-propinas',
+            '#dxOv_nominas [onclick^="abrirHistPropinas"]':'cor-propinas',
+            '#modalPropinas [onclick="_propVerReporte()"]':'recibo',
+            '#modalPropinas [onclick="guardarPropinas()"]':'continuar',
+            '#propHistOverlay [onclick^="verReporteProp"]':'recibo',
+            '#propHistOverlay [onclick^="imprimirReporteProp"]':'imprimir',
             '#dxOv_nominas [onclick^="dxCSV"]':'exportar-csv', '#emptyNomPagos .empty-state-icon':'sin-pagos',
             '#dxOv_nominas .card-header h2':'recibo', '#pnCptCalcBtn':'calcular',
             '#modalPagoNom [onclick="_pnCptAgregar()"]':'agregar',
@@ -70,6 +83,10 @@
         Object.keys(controles).forEach(function (s) { cada(s, function (el) { icono(el, controles[s]); }); });
         var boton = document.getElementById('btnPagarNomina');
         if (boton) boton.parentElement.classList.add('n-toolbar');
+        cada('#modalPropinas .gs-sec-title', function (el, i) {
+            icono(el, ['periodo','conceptos','cor-propinas'][i] || 'conceptos');
+            el.dataset.paso = ('0' + (i + 1)).slice(-2);
+        });
         cada('#modalPagoNom .gs-sec-title', function (el, i) {
             icono(el, ['periodo','sueldo','descuento','conceptos'][i]); el.dataset.paso = ('0' + (i + 1)).slice(-2);
         });

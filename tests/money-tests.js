@@ -34213,23 +34213,36 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
         const emojis = (zona.match(/[\u{1F300}-\u{1FAFF}]/gu) || []);
         test('el modal de propinas no trae emojis en sus rótulos', () =>
             eq(emojis.length, 0, 'quedaron: ' + emojis.join(' ')));
-        /* ══ EL ICONO VA ESCRITO EN EL MARCADO ═══════════════════════════
-           Lo pintaba JavaScript al arrancar y en pantalla salían DOS iconos
-           por botón. Escrito a mano no hay nada que pueda correr dos veces:
-           el navegador resuelve el <use> cuando el sprite llega. */
-        ['Pagar nómina', 'Repartir propinas', 'Repartos y recibos', 'Imprimir', 'CSV'].forEach(t => {
-            test('«' + t + '» lleva su icono escrito en el marcado', () =>
-                eq(new RegExp('<use href="#etx-[a-z-]+"></use></svg><span>' + t + '</span>').test(dia),
-                   true, 'sin icono'));
+        /* ══ LOS ICONOS LOS PONE nominas-ui.js, Y SOLO ÉL ════════════════
+           Esta pantalla tiene una capa de presentación propia
+           (/administrativo/nominas-ui.js) que recorre el módulo por selector,
+           le quita el emoji al rótulo y le encaja el icono del sprite.
+
+           Yo no lo sabía y escribí los iconos a mano en la página: salían DOS
+           por botón —el suyo y el mío— en «Pagar nómina», «Imprimir» y «CSV».
+           Lo que se agregue al módulo va en TEXTO PELÓN y su icono se registra
+           allá. Un solo sitio decide cómo se ve. */
+        const ui = fs.readFileSync(path.join(RAIZ, 'administrativo/nominas-ui.js'), 'utf8');
+        test('la página no escribe iconos a mano en el módulo de nóminas', () =>
+            eq(/<use href="#etx-/.test(dia), false, 'volvieron los iconos a mano: salen dos por botón'));
+        test('…ni queda un pintor de rótulos propio', () =>
+            eq(/rotIco|_pintarRotulos|function _rot\(/.test(dia), false, 'volvió el pintor'));
+        /* Y lo nuevo está registrado donde manda: si no, sale sin icono. */
+        [['#btnPropinas', 'el botón de repartir'],
+         ['abrirHistPropinas', 'el de repartos y recibos'],
+         ['#modalPropinas [onclick="_propVerReporte()"]', 'el de ver reporte'],
+         ['#modalPropinas [onclick="guardarPropinas()"]', 'el de guardar'],
+         ['verReporteProp', 'el reporte del historial']].forEach(([sel, que]) => {
+            test('nominas-ui conoce ' + que, () =>
+                eq(ui.indexOf(sel) > -1, true, 'sin registrar: saldrá pelón'));
         });
-        test('…y ninguno lleva dos', () => {
-            const dobles = [...dia.matchAll(/<span style="display:inline-flex[^>]*>([\s\S]{0,400}?)<\/span><\/span>/g)]
-                .filter(m => (m[1].match(/<svg/g) || []).length > 1);
-            return eq(dobles.length, 0, 'hay botones con dos iconos');
-        });
-        /* Y ya no queda pintor en JavaScript: si volviera, volvería el doble. */
-        test('no queda ningún pintor de rótulos en javascript', () =>
-            eq(/rotIco|_pintarRotulos/.test(dia), false, 'volvió el pintor'));
+        /* El decorador prefija `nom-` al nombre corto; las propinas viven en
+           otra familia y tienen que pasar enteras. */
+        test('el decorador respeta los iconos de otras familias', () =>
+            eq(/\(?:cor\|adm/.test(ui.replace(/\?:/g,'?:')) || /cor\|adm\|fij/.test(ui), true,
+               'cor-pagar-propinas saldría como nom-cor-pagar-propinas'));
+        test('…y la ventana de propinas entra en sus raíces', () =>
+            eq(/RAICES = '[^']*#modalPropinas/.test(ui), true, 'no la repinta al abrirse'));
     }
 
     /* ── Los candados de la pantalla ────────────────────────────────── */
