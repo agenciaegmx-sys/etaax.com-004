@@ -864,7 +864,7 @@
         <div class="dx-win-hdr"><div class="dx-win-title">💰 Pagar Nóminas</div><button class="dx-win-close" onclick="dxCerrar('nominas')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_nominas">
 <div class="dxp" id="nom_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('nom','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('nom','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('nom','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('nom','rango',this)">Rango</button></div><input type="date" id="nom_val" onchange="dxpChange('nom')"><input type="date" id="nom_end" style="display:none" onchange="dxpChange('nom')"><span class="dxp-semana" id="nom_sem"></span></div>
-<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:var(--blue)" onclick="abrirSelectorPago('nomina')">💰 Pagar nómina</button><button class="btn-mayor" id="btnPropinas" style="background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.3);color:var(--green)" onclick="abrirPropinas()">🫱 Repartir propinas</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="abrirHistPropinas()" title="Los repartos de propina de este periodo">🫱 Repartos</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Pagos de nómina','tablaNomPagos',_nomPanelResumen)">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Pagos de nómina','tablaNomPagos')">⬇️ CSV</button></div>
+<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:var(--blue)" onclick="abrirSelectorPago('nomina')">💰 Pagar nómina</button><button class="btn-mayor" id="btnPropinas" style="background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.3);color:var(--green)" onclick="abrirPropinas()">🫱 Repartir propinas</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="abrirHistPropinas()" title="Los repartos de este periodo: recibo de cada quien, pagados y pendientes">🫱 Repartos y recibos</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Pagos de nómina','tablaNomPagos',_nomPanelResumen)">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Pagos de nómina','tablaNomPagos')">⬇️ CSV</button></div>
 <div style="margin-bottom:12px"><input type="text" id="nomPanelBusca" placeholder="🔍 Buscar por colaborador o concepto…" oninput="renderNominasPanel()" style="width:100%;box-sizing:border-box;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px"></div>
 <div class="card"><div class="card-header" style="justify-content:space-between"><h2>💰 Pagos de nómina del periodo</h2><span id="totalNomLbl" style="font-size:12px;color:var(--text-dim)"></span></div><div class="card-body" style="padding:0;overflow-x:auto"><div id="nomTotArriba" class="nom-banda"></div><table class="gastos-table" id="tablaNomPagos"><thead><tr><th>Fecha</th><th>Concepto</th><th>Método</th><th>Estatus</th><th class="ar">Monto</th><th></th></tr></thead><tbody id="tbodyNomPagos"></tbody></table><div id="nomTotAbajo" class="nom-banda"></div><div id="emptyNomPagos" class="empty-state" style="display:none;padding:32px"><div class="empty-state-icon">💰</div><div>Sin pagos de nómina en este período.</div></div></div></div>
 </div>
@@ -8556,16 +8556,27 @@ function _propPintarLista(){
                     '</div>';
             }).join('');
     }).join('');
-    var suma = st.reduce(function(a,s){ return a + n(_propMontos[s.id]); }, 0);
-    var tot = _propTotalVigente();
+    /* ══ EL RENGLÓN SE MIDE CONTRA EL TOTAL QUE SE DECLARÓ ARRIBA ════════
+       No contra lo que suman las áreas. En reparto por área es fácil poner
+       $500 a cocina y $300 a barra y que eso no llegue a la propina que de
+       verdad entró: si el renglón se comparara consigo mismo, diría «cuadra»
+       mientras faltan dos mil pesos por repartir.
+
+       Así que manda el número de arriba, y la diferencia se dice con su
+       nombre y su signo: FALTAN por repartir, o SE PASÓ del total. */
+    var suma = Math.round(st.reduce(function(a,s){ return a + n(_propMontos[s.id]); }, 0) * 100) / 100;
+    var declarado = n((document.getElementById('propTotal')||{}).value);
     var res = document.getElementById('propResumen');
     if (res){
-        var dif = Math.round((tot - suma) * 100) / 100;
-        res.innerHTML = st.length + ' colaborador' + (st.length !== 1 ? 'es' : '') + ' · reparte <b style="color:var(--text)">' +
-            fmtM(suma) + '</b> de ' + fmtM(tot) +
-            (Math.abs(dif) >= 0.01
-                ? ' · <span style="color:var(--accent)">quedan ' + fmtM(dif) + ' sin repartir</span>'
-                : ' · <span style="color:var(--green)">cuadra</span>');
+        var dif = Math.round((declarado - suma) * 100) / 100;
+        var estado;
+        if (!(declarado > 0)) estado = '<span style="color:var(--text-dim)">captura el total de propinas arriba</span>';
+        else if (Math.abs(dif) < 0.01) estado = '<span style="color:var(--green)">✓ cuadra con el total</span>';
+        else if (dif > 0) estado = '<span style="color:var(--accent)">faltan <b>' + fmtM(dif) + '</b> por repartir</span>';
+        else estado = '<span style="color:#ff9a9a">se pasó <b>' + fmtM(-dif) + '</b> del total</span>';
+        res.innerHTML = st.length + ' colaborador' + (st.length !== 1 ? 'es' : '') +
+            ' · reparte <b style="color:var(--text)">' + fmtM(suma) + '</b>' +
+            (declarado > 0 ? ' de ' + fmtM(declarado) : '') + ' · ' + estado;
     }
 }
 
@@ -8799,6 +8810,10 @@ function guardarPropinas(){
     _sbUp('nomina_recibos', reg);
     cerrarPropinas();
     renderNominasPanel();
+    /* Y se abre el DETALLE de lo que se acaba de guardar. Ahí están el recibo
+       de cada quien y el palomeo de pagado: dejarlos detrás de dos botones
+       hacía que no existieran —Edwin los buscó y no los encontró—. */
+    _propDetalle(reg.id);
 }
 /* ── El historial de repartos ────────────────────────────────────────── */
 function _propRepartos(){
@@ -8815,9 +8830,19 @@ function abrirHistPropinas(){
         body.innerHTML = '<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:34px 0">' +
             'Sin repartos de propina en este periodo.<br><span style="font-size:11px">Usa 🫱 Repartir propinas para hacer el primero.</span></div>';
     } else {
+        /* El total del periodo, y cuánto de eso ya se entregó de verdad.
+           «$29,000 repartidos» sin decir cuánto falta por entregar es la mitad
+           del dato: lo repartido es una decisión, lo entregado es dinero que
+           ya salió de la mano. */
         var tot = lista.reduce(function(a,x){ return a + n((x.recibo||{}).total); }, 0);
+        var pag = lista.reduce(function(a,x){
+            return a + ((x.recibo||{}).lineas||[]).reduce(function(b,l){ return b + (l.pagado ? n(l.monto) : 0); }, 0);
+        }, 0);
+        var pen = Math.round((tot - pag) * 100) / 100;
         body.innerHTML = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">' +
-                lista.length + ' reparto' + (lista.length!==1?'s':'') + ' · <b style="color:var(--text)">' + fmtM(tot) + '</b> repartidos</div>' +
+                lista.length + ' reparto' + (lista.length!==1?'s':'') + ' · <b style="color:var(--text)">' + fmtM(tot) + '</b> repartidos' +
+                ' · <span style="color:var(--green)">' + fmtM(pag) + ' entregados</span>' +
+                (pen >= 0.01 ? ' · <span style="color:var(--accent)">' + fmtM(pen) + ' pendientes</span>' : '') + '</div>' +
             '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
             '<thead><tr style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);text-align:left">' +
                 '<th style="padding:6px 10px">Periodo</th><th style="padding:6px 10px">Reparto</th>' +
@@ -8857,6 +8882,8 @@ function _propDetalle(id){
         porArea[l.area].push(l);
     });
     var pagados = (d.lineas||[]).filter(function(l){ return l.pagado; }).length;
+    var montoPag = (d.lineas||[]).reduce(function(a,l){ return a + (l.pagado ? n(l.monto) : 0); }, 0);
+    var montoPen = Math.round((n(d.total) - montoPag) * 100) / 100;
     var chip = function(l){
         var on = !!l.pagado;
         return '<span style="display:inline-block;font-size:9px;letter-spacing:.5px;text-transform:uppercase;' +
@@ -8869,7 +8896,10 @@ function _propDetalle(id){
             '<button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="abrirHistPropinas()">← Volver</button>' +
             '<span style="font-size:12px;color:var(--text-muted)">Folio <b style="color:var(--text)">' + _esc(d.folio||'—') + '</b> · ' +
                 _esc(_fmtFechaCortaDx(d.desde)) + ' – ' + _esc(_fmtFechaCortaDx(d.hasta)) + ' · ' +
-                '<b style="color:var(--text)">' + fmtM(d.total) + '</b> · ' + pagados + ' de ' + ((d.lineas||[]).length) + ' pagados</span>' +
+                '<b style="color:var(--text)">' + fmtM(d.total) + '</b> · ' + pagados + ' de ' + ((d.lineas||[]).length) + ' pagados' +
+                ' · <span style="color:var(--green)">' + fmtM(montoPag) + ' entregados</span>' +
+                (montoPen >= 0.01 ? ' · <span style="color:var(--accent)">' + fmtM(montoPen) + ' pendientes</span>' : '') +
+                '</span>' +
             '<span style="margin-left:auto;display:flex;gap:6px">' +
                 '<button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="verReporteProp(\''+id+'\')">📄 Reporte por área</button>' +
                 '<button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="imprimirReporteProp(\''+id+'\')">🖨️ Imprimir reporte</button>' +

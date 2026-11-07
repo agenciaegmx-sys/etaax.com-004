@@ -34052,6 +34052,73 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
         P._cacheRecibos = [];
     }
 
+
+    /* ── El total declarado manda ──────────────────────────────────────── */
+    {
+        /* En reparto por área es fácil poner $500 a cocina y $300 a barra y
+           que eso no llegue a la propina que de verdad entró. Si el renglón se
+           comparara consigo mismo diría «cuadra» mientras faltan dos mil pesos
+           por repartir, que es exactamente lo que Edwin vio. */
+        P.abrirPropinas();
+        el('propDesde').value = '2026-11-01'; el('propHasta').value = '2026-11-07';
+        el('propTotal').value = 10000;
+        P._propModo('area');
+        el('propA_piso').value = 100; el('propA_cocina').value = 100; el('propA_barra').value = 100;
+        P._propCalcular();
+        const res = () => P.document.getElementById('propResumen').innerHTML;
+        test('si lo repartido no llega al total declarado, dice cuánto falta', () =>
+            eq(/faltan/.test(res()) && res().indexOf(P.fmtM(9600)) > -1, true, res()));
+        test('…y si se pasa, también lo dice', () => {
+            el('propA_piso').value = 6000; P._propCalcular();
+            return eq(/se pasó/.test(res()), true, res());
+        });
+        test('cuando cuadra, lo dice en verde y sin alarma', () => {
+            P._propModo('uniforme'); el('propTotal').value = 10000; P._propCalcular();
+            return eq(/cuadra con el total/.test(res()) && !/faltan|se pasó/.test(res()), true, res());
+        });
+        /* Sin total capturado no se regaña: se pide. */
+        test('sin total capturado, pide el total en vez de decir que falta', () => {
+            el('propTotal').value = ''; P._propCalcular();
+            return eq(/captura el total/.test(res()), true, res());
+        });
+    }
+
+    /* ── Guardar lleva a donde están los recibos ───────────────────────── */
+    {
+        /* Dejar el recibo de cada quien y el palomeo de pagado detrás de dos
+           botones hacía que no existieran: Edwin los buscó y no los encontró. */
+        P._cacheRecibos = [];
+        P.abrirPropinas();
+        el('propDesde').value = '2026-11-01'; el('propHasta').value = '2026-11-07';
+        el('propTotal').value = 1000; P._propCalcular();
+        let detalleDe = '';
+        const d0 = P._propDetalle;
+        P._propDetalle = (id) => { detalleDe = id; return d0(id); };
+        P.guardarPropinas();
+        P._propDetalle = d0;
+        test('al guardar se abre el detalle de lo que se acaba de guardar', () =>
+            eq(detalleDe, (P._cacheRecibos[0]||{}).id, 'se queda escondido'));
+        const idQ = P._cacheRecibos[0].id;
+        P._propDetalle(idQ);
+        const det2 = () => P.document.getElementById('propHistBody').innerHTML;
+        /* Y ahí se ve cuánto se entregó y cuánto falta: «repartido» es una
+           decisión, «entregado» es dinero que ya salió de la mano. */
+        test('el detalle dice cuánto se entregó y cuánto falta', () =>
+            eq(/0 de 4 pagados/.test(det2()) && /pendientes/.test(det2()), true, 'sin el desglose'));
+        test('al marcar a uno, los importes se mueven', () => {
+            P.togglePagoProp(idQ, 'p1');
+            return eq(det2().indexOf(P.fmtM(250) + ' entregados') > -1, true, 'no se movió');
+        });
+        /* El historial del periodo también suma lo entregado: el total
+           repartido sin decir cuánto falta por entregar es la mitad del dato. */
+        P.abrirHistPropinas();
+        test('el historial suma lo repartido Y lo entregado', () => {
+            const h2 = P.document.getElementById('propHistBody').innerHTML;
+            return eq(h2.indexOf('entregados') > -1 && h2.indexOf('pendientes') > -1, true, 'sin desglose');
+        });
+        P._cacheRecibos = [];
+    }
+
     /* ── Los candados de la pantalla ────────────────────────────────── */
     test('sin total, no se guarda nada', () => {
         P._cacheRecibos = [];
