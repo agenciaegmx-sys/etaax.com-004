@@ -10,7 +10,12 @@
         if (document.getElementById('modalAdminGuard')) return;
         var el = document.createElement('div');
         el.id = 'modalAdminGuard';
-        el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.8);' +
+        /* POR ENCIMA DE TODO. Estaba en 9000, el mismo nivel que los modales
+           normales, así que al pedir la contraseña desde una ventana que ya
+           estaba encima —un historial, un visor— la clave se abría DETRÁS y
+           parecía que el botón no hacía nada. Una autorización que no se ve no
+           se puede dar. */
+        el.style.cssText = 'display:none;position:fixed;inset:0;z-index:10600;background:rgba(0,0,0,.8);' +
             'backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);' +
             'align-items:center;justify-content:center;padding:16px';
         el.innerHTML =

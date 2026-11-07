@@ -111,6 +111,12 @@
 
     function inject(header) {
         if (!header || header.querySelector('.etx-min-btn')) return;
+        /* Hay ventanas que NO son ventanas: una confirmación («¿eliminar
+           esto?») no se manda a segundo plano ni se cierra por la esquina —se
+           responde—. Con `data-nodock` se quedan como su autor las escribió. */
+        if (header.hasAttribute('data-nodock') ||
+            (header.parentNode && header.parentNode.hasAttribute &&
+             header.parentNode.hasAttribute('data-nodock'))) return;
         var b = document.createElement('button');
         b.className = 'etx-min-btn'; b.type = 'button'; b.title = 'Minimizar (segundo plano)';
         b.innerHTML = '<span aria-hidden="true">—</span><span class="etx-txt">Minimizar</span>';

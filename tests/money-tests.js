@@ -34013,6 +34013,20 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
                   o.texto.indexOf(P.fmtM(reg2.recibo.total)) > -1 &&
                   o.peligro === true && o.ok === 'Eliminar', true, JSON.stringify(o));
     });
+    /* Y cuando nadie ha cobrado todavía, explica QUÉ ES esto: un reparto de
+       dinero de los clientes, no un gasto del negocio. Decir «no deshace
+       ningún pago» dejaba a Edwin preguntándose de qué pago hablaba. */
+    test('…y sin pagados, explica que no mueve ninguna cuenta del negocio', () => {
+        const reg3 = (P._cacheRecibos || [])[0];
+        reg3.recibo.lineas.forEach(l => { l.pagado = false; });
+        let o = null;
+        const c0 = P._confirmar;
+        P._confirmar = (op) => { o = op; };
+        P.eliminarPropina(reg3.id);
+        P._confirmar = c0;
+        return eq(/no se mueve ninguna cuenta/i.test(o.nota) && /dinero de los clientes/i.test(o.nota),
+                  true, o.nota);
+    });
 
 
     /* ── Agrupado por área, pagado uno por uno ─────────────────────────── */
@@ -34026,6 +34040,13 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
         const lista = P.document.getElementById('propLista').innerHTML;
         test('la lista del modal se agrupa por área', () =>
             eq(['Barra','Cocina','Piso'].every(a => lista.indexOf(a) > -1), true, 'sin agrupar'));
+        /* Cada grupo lleva SU icono del sprite: sin él vuelve el emoji o se
+           queda el título pelón, que al lado del resto se ve de otra casa. */
+        test('…cada grupo con su icono de la línea gráfica', () => {
+            const conIco = ['cor-bebidas','cor-alimentos','cor-comedor']
+                .filter(i => lista.indexOf('#etx-' + i) > -1);
+            return eq(conIco.length, 3, 'solo ' + conIco.join(','));
+        });
         test('…con el subtotal de cada área', () =>
             eq(lista.indexOf(P.fmtM(500)) > -1, true, 'Piso son dos de 250: 500'));
         /* El orden es el de la operación (barra, cocina, piso), no el
@@ -34185,51 +34206,30 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
            símbolos de texto: la ✕ de cerrar y la ✓ de aceptar son la
            convención del módulo desde antes y se dibujan con la tipografía,
            no con la paleta del sistema operativo. */
-        /* Se perdona UNA cosa, y es a propósito: «Sin área». Los nombres de
-           las áreas viven en /staff-area.js y ahí llevan su emoji desde antes
-           (🍸 Barra, 🍳 Cocina…). Cambiar solo el de «Sin área» lo dejaría
-           distinto de sus hermanos en la misma lista; cambiarlos todos es un
-           barrido del archivo compartido, que no es esto. */
-        const emojis = (zona.replace(/'🧩 Sin área'/g, '').match(/[\u{1F300}-\u{1FAFF}]/gu) || []);
+        /* Ni uno. Los nombres de área venían con emoji de /staff-area.js
+           («🍸 Barra»); aquí se usa solo la palabra y el dibujo lo pone el
+           sprite, que además es lo que viaja al papel —un recibo impreso con
+           un emoji dentro depende de la tipografía de la impresora—. */
+        const emojis = (zona.match(/[\u{1F300}-\u{1FAFF}]/gu) || []);
         test('el modal de propinas no trae emojis en sus rótulos', () =>
             eq(emojis.length, 0, 'quedaron: ' + emojis.join(' ')));
-        /* Los botones de la barra llevan icono del sprite, no un dibujo del
-           teclado. */
+        /* ══ EL ICONO VA ESCRITO EN EL MARCADO ═══════════════════════════
+           Lo pintaba JavaScript al arrancar y en pantalla salían DOS iconos
+           por botón. Escrito a mano no hay nada que pueda correr dos veces:
+           el navegador resuelve el <use> cuando el sprite llega. */
         ['Pagar nómina', 'Repartir propinas', 'Repartos y recibos', 'Imprimir', 'CSV'].forEach(t => {
-            test('«' + t + '» lleva icono de la línea gráfica', () =>
-                eq(new RegExp('class="rotIco" data-ico="[a-z-]+">' + t + '<').test(dia), true, 'sin icono'));
+            test('«' + t + '» lleva su icono escrito en el marcado', () =>
+                eq(new RegExp('<use href="#etx-[a-z-]+"></use></svg><span>' + t + '</span>').test(dia),
+                   true, 'sin icono'));
         });
-        /* Y los rótulos del marcado se pintan de verdad al arrancar: si nadie
-           los recorre, se quedan como texto pelón y el icono no aparece
-           nunca. */
-        test('los rótulos del marcado se pintan al arrancar', () => {
-            let pintados = 0;
-            const qs = P.document.querySelectorAll;
-            P.document.querySelectorAll = (sel) => {
-                if (sel !== '.rotIco') return qs.call(P.document, sel);
-                return [{ getAttribute: () => 'cor-propinas', querySelector: () => null,
-                          get textContent(){ return 'Repartir propinas'; },
-                          set innerHTML(v){ if (/<svg/.test(v)) pintados++; } }];
-            };
-            try { P._pintarRotulos(); } finally { P.document.querySelectorAll = qs; }
-            return eq(pintados, 1, 'se quedan como texto pelón');
+        test('…y ninguno lleva dos', () => {
+            const dobles = [...dia.matchAll(/<span style="display:inline-flex[^>]*>([\s\S]{0,400}?)<\/span><\/span>/g)]
+                .filter(m => (m[1].match(/<svg/g) || []).length > 1);
+            return eq(dobles.length, 0, 'hay botones con dos iconos');
         });
-        /* Y no se registra otro arranque para eso: cada DOMContentLoaded de
-           más es una pieza que puede fallar sola. */
-        test('…enganchado a un arranque que ya existía', () =>
-            eq(/DOMContentLoaded',function\(\)\{\s*_pintarRotulos\(\);/.test(dia), true, 'registró otro arranque'));
-        /* Volver a pintar no duplica el icono. */
-        test('pintar dos veces no duplica el icono', () => {
-            let html = 'Repartir propinas', veces = 0;
-            const qs = P.document.querySelectorAll;
-            const falso = { getAttribute: () => 'cor-propinas',
-                            querySelector: () => (/<svg/.test(html) ? {} : null),
-                            get textContent(){ return html; },
-                            set innerHTML(v){ html = v; veces++; } };
-            P.document.querySelectorAll = (sel) => (sel === '.rotIco' ? [falso] : qs.call(P.document, sel));
-            try { P._pintarRotulos(); P._pintarRotulos(); } finally { P.document.querySelectorAll = qs; }
-            return eq(veces, 1, 'pintó dos veces');
-        });
+        /* Y ya no queda pintor en JavaScript: si volviera, volvería el doble. */
+        test('no queda ningún pintor de rótulos en javascript', () =>
+            eq(/rotIco|_pintarRotulos/.test(dia), false, 'volvió el pintor'));
     }
 
     /* ── Los candados de la pantalla ────────────────────────────────── */
@@ -34253,10 +34253,48 @@ console.log('\n══ BH69 · El modal de repartir propinas ══');
     {
         const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
         test('el botón vive junto al de pagar nómina', () =>
-            eq(/abrirSelectorPago\('nomina'\)[\s\S]{0,260}abrirPropinas\(\)/.test(dia), true, 'no está donde se pidió'));
+            eq(/abrirSelectorPago\('nomina'\)[\s\S]{0,420}abrirPropinas\(\)/.test(dia), true, 'no está donde se pidió'));
         test('…y la página carga el normalizador de áreas', () =>
             eq(/src="\/staff-area\.js/.test(dia), true, 'sin staff-area el área sale vacía'));
     }
+}
+
+/* ═══════════ BH70 · LAS VENTANAS QUE PIDEN ALGO ═══════════
+   Dos cosas que en pantalla dejaban al usuario sin saber qué pasó:
+
+     · la ventana de CONFIRMAR salía con «Minimizar» y «Cerrar» en la esquina,
+       porque modal-dock decora todo `.modal-header`. Una confirmación no se
+       manda a segundo plano: se responde;
+     · el modal de la CONTRASEÑA vivía en z-index 9000, el mismo nivel que un
+       modal cualquiera, así que al pedirla desde una ventana que ya estaba
+       encima se abría DETRÁS y parecía que el botón no hacía nada.          */
+console.log('\n══ BH70 · Las ventanas que piden algo ══');
+{
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    const dock = fs.readFileSync(path.join(RAIZ, 'modal-dock.js'), 'utf8');
+    const guard = fs.readFileSync(path.join(RAIZ, 'admin-guard.js'), 'utf8');
+
+    test('la ventana de confirmar se marca para que el dock no la toque', () => {
+        const i = dia.indexOf('id="modalConfirm"');
+        return eq(/data-nodock/.test(dia.slice(i, i + 320)), true, 'sale con Minimizar y Cerrar');
+    });
+    test('…y el dock de verdad respeta esa marca', () =>
+        eq(/hasAttribute\('data-nodock'\)/.test(dock), true, 'la marca no la mira nadie'));
+    /* El dock mira la cabecera Y su padre: la marca se pone en cualquiera de
+       los dos y tiene que valer igual. */
+    test('…tanto en la cabecera como en la ventana que la contiene', () =>
+        eq((dock.match(/hasAttribute\('data-nodock'\)/g) || []).length, 2, 'solo mira uno'));
+
+    /* LA CONTRASEÑA, POR ENCIMA DE TODO. Se compara contra la capa más alta
+       que levanta el módulo: si alguna crece, esta prueba cae y obliga a
+       subirla también. Una autorización que no se ve no se puede dar. */
+    const zGuard = parseInt((guard.match(/z-index:(\d+)/) || [])[1], 10);
+    const capas = [...dia.matchAll(/z-index:\s*(\d{4,5})/g)].map(m => parseInt(m[1], 10));
+    const techo = Math.max.apply(null, capas);
+    test('el modal de la contraseña se abre por encima de todo el módulo', () =>
+        eq(zGuard > techo, true, 'clave en ' + zGuard + ' y el módulo llega a ' + techo));
+    test('…y no se quedó en el nivel de un modal cualquiera', () =>
+        eq(zGuard > 9000, true, 'z=' + zGuard));
 }
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner

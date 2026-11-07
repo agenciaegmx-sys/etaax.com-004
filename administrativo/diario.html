@@ -864,7 +864,7 @@
         <div class="dx-win-hdr"><div class="dx-win-title">💰 Pagar Nóminas</div><button class="dx-win-close" onclick="dxCerrar('nominas')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_nominas">
 <div class="dxp" id="nom_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('nom','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('nom','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('nom','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('nom','rango',this)">Rango</button></div><input type="date" id="nom_val" onchange="dxpChange('nom')"><input type="date" id="nom_end" style="display:none" onchange="dxpChange('nom')"><span class="dxp-semana" id="nom_sem"></span></div>
-<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:var(--blue)" onclick="abrirSelectorPago('nomina')"><span class="rotIco" data-ico="nom-pagar-nomina">Pagar nómina</span></button><button class="btn-mayor" id="btnPropinas" style="background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.3);color:var(--green)" onclick="abrirPropinas()"><span class="rotIco" data-ico="cor-pagar-propinas">Repartir propinas</span></button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="abrirHistPropinas()" title="Los repartos de este periodo: recibo de cada quien, pagados y pendientes"><span class="rotIco" data-ico="cor-propinas">Repartos y recibos</span></button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Pagos de nómina','tablaNomPagos',_nomPanelResumen)"><span class="rotIco" data-ico="nom-imprimir">Imprimir</span></button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Pagos de nómina','tablaNomPagos')"><span class="rotIco" data-ico="nom-exportar-csv">CSV</span></button></div>
+<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:var(--blue)" onclick="abrirSelectorPago('nomina')"><span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle"><svg class="etx-ic" width="15" height="15" aria-hidden="true"><use href="#etx-nom-pagar-nomina"></use></svg><span>Pagar nómina</span></span></button><button class="btn-mayor" id="btnPropinas" style="background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.3);color:var(--green)" onclick="abrirPropinas()"><span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle"><svg class="etx-ic" width="15" height="15" aria-hidden="true"><use href="#etx-cor-pagar-propinas"></use></svg><span>Repartir propinas</span></span></button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="abrirHistPropinas()" title="Los repartos de este periodo: recibo de cada quien, pagados y pendientes"><span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle"><svg class="etx-ic" width="15" height="15" aria-hidden="true"><use href="#etx-cor-propinas"></use></svg><span>Repartos y recibos</span></span></button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Pagos de nómina','tablaNomPagos',_nomPanelResumen)"><span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle"><svg class="etx-ic" width="15" height="15" aria-hidden="true"><use href="#etx-nom-imprimir"></use></svg><span>Imprimir</span></span></button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Pagos de nómina','tablaNomPagos')"><span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle"><svg class="etx-ic" width="15" height="15" aria-hidden="true"><use href="#etx-nom-exportar-csv"></use></svg><span>CSV</span></span></button></div>
 <div style="margin-bottom:12px"><input type="text" id="nomPanelBusca" placeholder="🔍 Buscar por colaborador o concepto…" oninput="renderNominasPanel()" style="width:100%;box-sizing:border-box;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px"></div>
 <div class="card"><div class="card-header" style="justify-content:space-between"><h2>💰 Pagos de nómina del periodo</h2><span id="totalNomLbl" style="font-size:12px;color:var(--text-dim)"></span></div><div class="card-body" style="padding:0;overflow-x:auto"><div id="nomTotArriba" class="nom-banda"></div><table class="gastos-table" id="tablaNomPagos"><thead><tr><th>Fecha</th><th>Concepto</th><th>Método</th><th>Estatus</th><th class="ar">Monto</th><th></th></tr></thead><tbody id="tbodyNomPagos"></tbody></table><div id="nomTotAbajo" class="nom-banda"></div><div id="emptyNomPagos" class="empty-state" style="display:none;padding:32px"><div class="empty-state-icon">💰</div><div>Sin pagos de nómina en este período.</div></div></div></div>
 </div>
@@ -1574,7 +1574,7 @@
         </div>
         <div class="modal-footer">
             <button class="btn-ghost" onclick="cerrarPropinas()">Cancelar</button>
-            <button class="btn-ghost" onclick="_propVerReporte()" title="La hoja de reparto por área, para repartir con ella en la mano"><span class="rotIco" data-ico="nom-recibo">Ver reporte</span></button>
+            <button class="btn-ghost" onclick="_propVerReporte()" title="La hoja de reparto por área, para repartir con ella en la mano"><span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle"><svg class="etx-ic" width="15" height="15" aria-hidden="true"><use href="#etx-nom-recibo"></use></svg><span>Ver reporte</span></span></button>
             <button class="btn-primary" id="propBtnGuardar" onclick="guardarPropinas()">Guardar reparto</button>
         </div>
     </div>
@@ -1584,7 +1584,7 @@
 <div class="cj-overlay" id="propHistOverlay" style="z-index:9500" onclick="if(event.target===this)cerrarHistPropinas()">
     <div class="cj-panel" style="max-width:760px">
         <div class="cj-header">
-            <span class="cj-title"><span class="rotIco" data-ico="cor-propinas">Repartos de propina</span></span>
+            <span class="cj-title"><span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle"><svg class="etx-ic" width="15" height="15" aria-hidden="true"><use href="#etx-cor-propinas"></use></svg><span>Repartos de propina</span></span></span>
             <button class="modal-close" onclick="cerrarHistPropinas()">✕ Cerrar</button>
         </div>
         <div class="cj-body" id="propHistBody" style="padding:14px 18px 18px"></div>
@@ -1670,8 +1670,8 @@
 <!-- Confirmación con la cara del sistema. El cuadro gris del navegador rompe la
      pantalla, no dice de qué negocio habla y no deja explicar la consecuencia. -->
 <div class="modal-overlay" id="modalConfirm" onclick="if(event.target===this)_confirmNo()">
-  <div class="modal" style="max-width:440px">
-    <div class="modal-header">
+  <div class="modal" style="max-width:440px" data-nodock>
+    <div class="modal-header" data-nodock>
       <h2 id="cfTitulo">Confirmar</h2>
       <button class="modal-close" onclick="_confirmNo()">✕</button>
     </div>
@@ -7183,18 +7183,6 @@ function _ic(nombre, tam){
    peso entre un Mac y un Windows, y al lado de los iconos de la línea gráfica
    —trazo fino, un solo color, el mismo grosor— se ven de otra casa. Esta
    pantalla ya está en el estilo nuevo; lo que se agregue va igual. */
-/* Los rótulos escritos en el HTML se pintan cuando el sprite ya cargó: el
-   archivo de iconos va al final del documento, así que al leer el marcado
-   todavía no existe. Se engancha a un arranque QUE YA EXISTE y no se registra
-   otro: cada DOMContentLoaded de más es una pieza más que puede fallar sola. */
-function _pintarRotulos(){
-    var l = document.querySelectorAll('.rotIco');
-    for (var i = 0; i < l.length; i++) {
-        var el = l[i], ico = el.getAttribute('data-ico');
-        if (!ico || el.querySelector('svg')) continue;
-        el.innerHTML = _rot(ico, el.textContent);
-    }
-}
 function _rot(icono, texto, tam){
     return '<span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle">' +
            _ic(icono, tam || 15) + '<span>' + texto + '</span></span>';
@@ -8428,10 +8416,24 @@ function _propArea(s){
     var k = (window.StaffArea && StaffArea.de) ? StaffArea.de(s) : '';
     return k || 'sin';
 }
+/* ══ EL NOMBRE DE UN ÁREA, SIN EMOJI ══════════════════════════════════════
+   `StaffArea.nom()` devuelve el nombre CON su emoji (ej. el de la barra), que es como
+   se ve en horarios y en el portal. Aquí se usa solo la palabra y el dibujo lo
+   pone el sprite: en esta pantalla todo lo demás ya es de la línea gráfica, y
+   un emoji al lado de un icono de trazo se ve de otra casa.
+
+   El texto limpio también es el que viaja al papel y al comprobante: un
+   recibo impreso con un emoji dentro depende de qué tipografía tenga la
+   impresora. */
+var _PROP_ICO_AREA = { barra:'cor-bebidas', cocina:'cor-alimentos', piso:'cor-comedor',
+                       administracion:'adm-datos-gasto', sin:'nom-colaborador' };
 function _propAreaNom(k){
-    if (k === 'sin') return '🧩 Sin área';
-    return (window.StaffArea && StaffArea.nom) ? (StaffArea.nom(k) || k) : k;
+    if (k === 'sin') return 'Sin área';
+    var l = (window.StaffArea && StaffArea.LISTA) || [];
+    for (var i = 0; i < l.length; i++) if (l[i].k === k) return l[i].label;
+    return k;
 }
+function _propAreaIco(k){ return _PROP_ICO_AREA[k] || 'nom-colaborador'; }
 /* Las áreas que de verdad hay en la sucursal, en el orden de la operación.
    Enseñar «Barra» cuando no hay nadie de barra es pedir que se reparta dinero
    a nadie. */
@@ -8562,7 +8564,8 @@ function _propPintarLista(){
         var sub = g.gente.reduce(function(a,s){ return a + n(_propMontos[s.id]); }, 0);
         return '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;' +
                 'margin:14px 0 4px;padding-bottom:4px;border-bottom:1px solid var(--border)">' +
-                '<span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--green)">' +
+                '<span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--green);' +
+                'display:inline-flex;align-items:center;gap:6px">' + _ic(_propAreaIco(g.k), 14) +
                 _esc(g.nom) + ' · ' + g.gente.length + '</span>' +
                 '<span style="font-size:12px;font-weight:700">' + fmtM(sub) + '</span></div>' +
             g.gente.map(function(s){
@@ -8931,8 +8934,9 @@ function _propDetalle(id){
             var sub = ls.reduce(function(x,l){ return x + n(l.monto); }, 0);
             return '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;' +
                     'margin:14px 0 4px;padding-bottom:4px;border-bottom:1px solid var(--border)">' +
-                    '<span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--green)">' +
-                    _esc(a) + ' · ' + ls.length + '</span>' +
+                    '<span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--green);' +
+                    'display:inline-flex;align-items:center;gap:6px">' +
+                    _ic(_propAreaIco((ls[0]||{}).areaK), 14) + _esc(a) + ' · ' + ls.length + '</span>' +
                     '<span style="font-size:12px;font-weight:700">' + fmtM(sub) + '</span></div>' +
                 ls.map(function(l){
                     return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)">' +
@@ -9006,10 +9010,14 @@ function eliminarPropina(id){
         texto: '<b>' + fmtM(d.total) + '</b> entre ' + ((d.lineas||[]).length) + ' personas' +
                '<div style="margin-top:4px;color:var(--text-dim)">Folio ' + _esc(d.folio||'—') + ' · ' +
                _esc(_fmtFechaCortaDx(d.desde)) + ' – ' + _esc(_fmtFechaCortaDx(d.hasta)) + '</div>',
+        /* Qué se pierde y qué NO: la propina es dinero de los clientes que se
+           reparte aparte, no un gasto del negocio, así que borrar esto no
+           mueve ninguna cuenta. Lo que desaparece es el papel. */
         nota: yaPagados
-            ? 'Ojo: ' + yaPagados + ' ' + (yaPagados === 1 ? 'persona ya está marcada como pagada' : 'personas ya están marcadas como pagadas') +
-              '. Se pierde el comprobante de lo que se les entregó.'
-            : 'Se pierde el comprobante. Esto no deshace ningún pago: la propina no sale por un gasto.',
+            ? 'Se pierde el reparto y su comprobante. Ojo: ' + yaPagados + ' ' +
+              (yaPagados === 1 ? 'persona ya está marcada como pagada' : 'personas ya están marcadas como pagadas') +
+              ', y queda sin papel lo que se les entregó.'
+            : 'Se pierde el reparto y su comprobante. No se mueve ninguna cuenta del negocio: la propina es dinero de los clientes que se reparte aparte.',
         ok: 'Eliminar', peligro: true
     }, function(){
         _pedirClaveAdmin('Eliminar el reparto de propinas ' + (d.folio||''), function(){
@@ -9980,7 +9988,6 @@ document.getElementById('mayorWall').querySelector('button').onclick=function(){
 };
 
 document.addEventListener('DOMContentLoaded',function(){
-    _pintarRotulos();
     dxpInit('gm','dia', function(){ gRenderAll(); });
     dxpInit('gy','mes', function(){ gRenderAll(); });
     dxpInit('nom','mes', function(){ renderNominasPanel(); });
@@ -10200,7 +10207,7 @@ function renderFijosPanel(){
 <script src="/nomina-params.js?v=0464451a"></script>
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
-<script src="/modal-dock.js?v=6c9cab35"></script>
+<script src="/modal-dock.js?v=5cd269fc"></script>
 <script src="/novedades.js?v=fe34aab5"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única (reparto de propinas) -->
