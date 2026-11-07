@@ -31909,6 +31909,13 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
             rec('g1','s1','2026-11-01','2026-11-30'),   // Ana: mes completo
             rec('g2','s2','2026-11-01','2026-11-15'),   // Bea: media quincena → PARCIAL
         ];                                               // Caro: nada → POR PAGAR
+        /* El recibo de Ana, enlazado a SU gasto. Antes esta prueba se apoyaba
+           en un recibo que había quedado de otro bloque y que apuntaba a un
+           gasto ya borrado: pasaba por contaminación, no porque el reparto
+           estuviera bien. */
+        X._cacheRecibos = [{ id:'nrL1', negocioId:'n1', sucursalId:'suc_principal', staffId:'s1',
+                             desde:'2026-11-01', hasta:'2026-11-30', recibo:{ total:1 },
+                             gastoId:'g1', pagadoEn:new Date().toISOString() }];
         X._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
         /* El encabezado (botones y buscador) se pinta al abrir; la lista vive en
            su propio div y se repinta sola. Por eso se leen por separado. */
@@ -32756,7 +32763,7 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         avisos.length = 0;
         const antes = (X._cacheGastos || []).length;
         silencio(() => X.generarGastoNomina('s1'));
-        return eq((X._cacheGastos || []).length + '·' + /ya tiene su gasto/.test(avisos.join(' ')),
+        return eq((X._cacheGastos || []).length + '·' + /ya está pagada/.test(avisos.join(' ')),
                   antes + '·true', 'pagó dos veces');
     });
     /* El comprobante de un pago que ya salió de la caja no se reescribe: una
@@ -33080,6 +33087,10 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         /* Uno PAGADO no se borra por aquí: es el comprobante de dinero que
            salió, y borrarlo dejaría el gasto sin papel que lo explique. */
         test('un recibo ya pagado no se borra desde el catálogo', () => {
+            /* Con su gasto VIVO y pagado: «pagado» dejó de ser «tiene un
+               gastoId» y pasó a ser «el dinero salió». */
+            X._cacheGastos = [{ id:'gP', negocioId:'n1', sucursalId:'suc_principal',
+                                fecha:'2026-11-09', monto:900, staffId:'s2', estatus:'pagado' }];
             X._cacheRecibos = [{ id:'nrP', negocioId:'n1', sucursalId:'suc_principal', staffId:'s2',
                                  desde:'2026-11-01', hasta:'2026-11-30', recibo:{ total:900 },
                                  gastoId:'gP', pagadoEn:new Date().toISOString() }];
@@ -34308,6 +34319,197 @@ console.log('\n══ BH70 · Las ventanas que piden algo ══');
         eq(zGuard > techo, true, 'clave en ' + zGuard + ' y el módulo llega a ' + techo));
     test('…y no se quedó en el nivel de un modal cualquiera', () =>
         eq(zGuard > 9000, true, 'z=' + zGuard));
+}
+
+/* ═══════════ BH71 · LOS TRES DE LA AUDITORÍA (N01, N02, N03) ═══════════
+   Tres hallazgos de Codex, los tres de dinero, los tres reproducidos por él
+   antes de que yo los viera. Mis 5.400 pruebas pasaban mientras tanto: probaban
+   lo que yo pensé, no lo que el sistema hace.                               */
+console.log('\n══ BH71 · Los tres de la auditoría ══');
+{
+    const Y = crearContexto();
+    cargarJS(Y, 'etaax-core.js');
+    cargarJS(Y, 'reporte-marca.js');
+    cargarJS(Y, 'etaax-iconos.js');
+    cargarInline(Y, 'administrativo/diario.html');
+    Y._storage.etaax_negocio_activo = 'n1';
+    Y._storage.etaax_sucursal_activa = 'suc_principal';
+    Y.NominaParams = { get(){ return { jornadaHoras:8, primaVacacionalPct:25, salarioDiarioDefault:300 }; } };
+    const ana = { id:'s1', nombre:'Ana', puesto:'Barista', sucursalId:'suc_principal',
+                  esquemaSueldo:'diario', sueldoDiario:300, bonos:[], multaRetardo:25 };
+    Y._cacheStaff = [ana]; Y._cacheHorarios = {};
+    Y._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
+    Y._exigeVG = () => true;
+    const el = (id) => Y.document.getElementById(id);
+    const silencio = (fn) => {
+        const d0 = Y.document.querySelector, g0 = Y.gRenderAll, s0 = Y._syncGastosCortes,
+              c0 = Y.gCerrarModal, u0 = Y._sbUp, a0 = Y._asegurarCategoria,
+              r0 = Y.renderNominasPanel, p0 = Y._nomPintarListas, e0 = Y._cerrarSelPago;
+        Y.document.querySelector = () => ({ style:{}, classList:{ add(){}, remove(){}, toggle(){} } });
+        Y.gRenderAll = () => {}; Y._syncGastosCortes = () => {}; Y._sbUp = () => {};
+        Y._asegurarCategoria = () => {}; Y.renderNominasPanel = () => {};
+        Y._nomPintarListas = () => {}; Y._cerrarSelPago = () => {};
+        try { return fn(); }
+        finally { Y.document.querySelector = d0; Y.gRenderAll = g0; Y._syncGastosCortes = s0;
+                  Y.gCerrarModal = c0; Y._sbUp = u0; Y._asegurarCategoria = a0;
+                  Y.renderNominasPanel = r0; Y._nomPintarListas = p0; Y._cerrarSelPago = e0; }
+    };
+    /* Un recibo con un bono pagado POR OTRA CAJA, que es donde estaba la fuga. */
+    const nuevoRecibo = (conBono) => {
+        Y._cacheGastos = []; Y._cacheRecibos = [];
+        Y._pagoNomStaff = ana; Y._pnTotalManual = null; Y._pnPrimaInclude = false;
+        Y._pnBonosQuitados = []; Y._pnEditandoGasto = null;
+        Y._pagoNomConceptos = conBono
+            ? [{ concepto:'Bono en efectivo', detalle:'', monto:175, pago:'efectivo', fecha:'2026-11-09' }]
+            : [];
+        el('pnTipo').value = 'semana';
+        el('pnDesde').value = '2026-11-02'; el('pnHasta').value = '2026-11-08';
+        el('pnDiario').value = 300; el('pnDias').value = 7;
+        el('pnMultaRetardo').value = 25; el('pnRetardos').value = 0;
+        Y._pnCalc();
+        silencio(() => Y._confirmarPagoNom());
+        return Y._cacheRecibos[0];
+    };
+
+    /* ── N01 · abrir y CANCELAR el pago no puede escribir nada ────────── */
+    nuevoRecibo(true);
+    test('N01 · abrir el formulario de pago todavía no registra el bono aparte', () => {
+        silencio(() => Y.generarGastoNomina('s1'));
+        return eq((Y._cacheGastos || []).length, 0, 'escribió el bono antes de confirmar');
+    });
+    test('N01 · …y cancelar no deja nada', () => {
+        silencio(() => Y.gCerrarModal());
+        return eq((Y._cacheGastos || []).length, 0, 'quedaron gastos de un pago que nunca se hizo');
+    });
+    /* Y lo que esperaba se SUELTA al cancelar. Si se quedara en la mano, el
+       siguiente gasto que se registre —uno cualquiera, unas servilletas— se
+       llevaría el bono pegado. */
+    test('N01 · …y no se cuelan en el siguiente gasto que se registre', () => {
+        silencio(() => {
+            Y._abrirModalGasto({ concepto:'Servilletas', categoria:'Varios', monto:120 }, 'menor');
+            el('gFecha').value = '2026-11-09';
+            Y.guardarGasto();
+        });
+        const bonos = (Y._cacheGastos || []).filter(g => /Bono en efectivo/.test(g.concepto || ''));
+        return eq((Y._cacheGastos || []).length + '·' + bonos.length, '1·0',
+                  'el bono se coló en un gasto ajeno');
+    });
+    /* ABRIR, CANCELAR, ABRIR Y PAGAR: un solo bono, no tres. Antes cada
+       apertura escribía otro con id nuevo. */
+    test('N01 · abrir y cancelar dos veces y luego pagar deja UN bono', () => {
+        silencio(() => { Y.generarGastoNomina('s1'); Y.gCerrarModal(); });
+        silencio(() => { Y.generarGastoNomina('s1'); Y.gCerrarModal(); });
+        silencio(() => {
+            Y.generarGastoNomina('s1');
+            el('gFecha').value = '2026-11-09';
+            Y.guardarGasto();
+        });
+        const bonos = (Y._cacheGastos || []).filter(g => /Bono en efectivo/.test(g.concepto || ''));
+        const suma = bonos.reduce((a, g) => a + Y.n(g.monto), 0);
+        return eq(bonos.length + '·' + suma, '1·175', 'se duplicó el bono: ' + suma);
+    });
+    /* Y su id sale del recibo, no del reloj: reintentar reemplaza. */
+    test('N01 · el bono lleva un id derivado del recibo, no uno nuevo cada vez', () => {
+        const bono = (Y._cacheGastos || []).find(g => /Bono en efectivo/.test(g.concepto || ''));
+        return eq(bono.id.indexOf('ga_') === 0 && bono.id.indexOf(Y._cacheRecibos[0].id) > -1,
+                  true, bono.id);
+    });
+
+    /* ── N02 · el recibo, una sola versión ───────────────────────────── */
+    nuevoRecibo(false);
+    const pagar = () => silencio(() => {
+        Y.generarGastoNomina('s1');
+        el('gFecha').value = '2026-11-09';
+        Y.guardarGasto();
+        return (Y._cacheGastos || [])[0];
+    });
+    const g1 = pagar();
+    test('N02 · el gasto y la copia del recibo nacen iguales', () =>
+        eq(Y._cacheRecibos[0].recibo.total + '·' + g1.monto, '2100·2100', 'nacen distintos'));
+    /* LA REPRODUCCIÓN DE CODEX: corregir a $320 por día. El gasto decía 2240 y
+       el recibo abierto desde el CATÁLOGO seguía diciendo 2100: el mismo papel
+       con dos importes, y nadie sabía cuál creer. */
+    test('N02 · corregir el pago mueve las DOS copias del recibo', () => {
+        Y._pedirClaveAdmin = (t, cb) => cb();
+        Y._puedeEditarGasto = () => true; Y._nomAutorizado = true;
+        Y.editarReciboNomina(g1.id);
+        el('pnDiario').value = 320; Y._pnCalc();
+        Y.prompt = () => 'ajuste de sueldo';
+        silencio(() => { Y._confirmarPagoNom(); Y.guardarGasto(); });
+        const g2 = (Y._cacheGastos || []).find(x => x.id === g1.id);
+        const copia = Y._cacheRecibos[0].recibo;
+        return eq(g2.monto + '·' + g2.nomina.total + '·' + copia.total, '2240·2240·2240',
+                  'gasto=' + g2.monto + ' recibo del gasto=' + g2.nomina.total + ' copia=' + copia.total);
+    });
+    /* Y el periodo también: si se corrige y la copia guarda las fechas viejas,
+       la cobertura del historial se calcula sobre un periodo que ya no existe. */
+    test('N02 · …incluido el periodo', () => {
+        Y.editarReciboNomina(g1.id);
+        el('pnHasta').value = '2026-11-09'; el('pnDias').value = 8; Y._pnCalc();
+        Y.prompt = () => 'un día más';
+        silencio(() => { Y._confirmarPagoNom(); Y.guardarGasto(); });
+        return eq(Y._cacheRecibos[0].hasta, '2026-11-09', 'la copia se quedó con la fecha vieja');
+    });
+
+    /* ── N03 · pendiente NO es pagado ────────────────────────────────── */
+    nuevoRecibo(false);
+    test('N03 · guardar el gasto como PENDIENTE no sella el recibo', () => {
+        silencio(() => {
+            Y.generarGastoNomina('s1');
+            el('gFecha').value = '2026-11-09';
+            Y.setEstatus('pendiente');
+            Y.guardarGasto();
+        });
+        const reg = Y._cacheRecibos[0];
+        return eq(reg.gastoId.length > 0 ? ('enlazado·' + (reg.pagadoEn || 'sin sello')) : 'sin enlazar',
+                  'enlazado·sin sello', 'selló un pago que no ha salido');
+    });
+    /* Y la persona NO puede aparecer como pagada: el dinero no ha salido. Se
+       pregunta por LA SEMANA EXACTA del recibo: contra el mes entero daría
+       «parcial» de todos modos y la prueba no probaría nada. */
+    test('N03 · …y el periodo no cuenta como cubierto', () =>
+        eq(Y._nomEstadoDe('s1', { from:'2026-11-02', to:'2026-11-08' }).estado, 'ninguno',
+           'la dio por pagada con el dinero adentro'));
+    /* Y lo que se ofrece NO es «generar gasto» otra vez —sería un segundo
+       egreso por el mismo sueldo— sino TERMINAR el que está pendiente. */
+    test('N03 · …así que todavía se le puede pagar, terminando el que hay', () => {
+        const h = Y._nomAcciones('s1', { from:'2026-11-01', to:'2026-11-30' });
+        const i = h.indexOf('>Terminar el pago<');
+        return eq(i > -1 && h.lastIndexOf('onclick', i) > h.lastIndexOf('<div', i),
+                  true, 'se quedó sin poder cobrar');
+    });
+    test('N03 · …y hacerlo reabre ESE gasto, no crea otro', () => {
+        const antes = (Y._cacheGastos || []).length;
+        let abierto = null;
+        const ab0 = Y._abrirModalGasto;
+        Y._abrirModalGasto = (g) => { abierto = g; };
+        silencio(() => Y.generarGastoNomina('s1'));
+        Y._abrirModalGasto = ab0;
+        return eq((Y._cacheGastos || []).length + '·' + (abierto && abierto.id === (Y._cacheGastos||[])[0].id),
+                  antes + '·true', 'creó un segundo gasto');
+    });
+    /* Pendiente → pagado → pendiente: el sello va y viene con el estatus. */
+    test('N03 · al pasarlo a pagado, se sella', () => {
+        const g = (Y._cacheGastos || [])[0];
+        silencio(() => { Y._abrirModalGasto(g, 'menor'); Y.setEstatus('pagado'); Y.guardarGasto(); });
+        return eq((Y._cacheRecibos[0].pagadoEn || '').length > 10, true, 'no se selló al pagarlo');
+    });
+    test('N03 · y al devolverlo a pendiente, se suelta', () => {
+        const g = (Y._cacheGastos || [])[0];
+        silencio(() => { Y._abrirModalGasto(g, 'menor'); Y.setEstatus('pendiente'); Y.guardarGasto(); });
+        return eq(Y._cacheRecibos[0].pagadoEn, '', 'el sello se quedó pegado');
+    });
+    /* Editar un pago YA hecho (el método, la evidencia) no lo vuelve a pagar
+       hoy: el instante del primer pago se conserva, que es el reloj de las
+       24 h de la cola. */
+    test('N03 · editar un pago hecho no reinicia su instante', () => {
+        const g = (Y._cacheGastos || [])[0];
+        silencio(() => { Y._abrirModalGasto(g, 'menor'); Y.setEstatus('pagado'); Y.guardarGasto(); });
+        const sello = Y._cacheRecibos[0].pagadoEn;
+        silencio(() => { Y._abrirModalGasto((Y._cacheGastos||[])[0], 'menor');
+                         el('gConcepto').value = 'Nómina semanal — Ana (nota)'; Y.guardarGasto(); });
+        return eq(Y._cacheRecibos[0].pagadoEn, sello, 'lo volvió a fechar hoy');
+    });
 }
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
