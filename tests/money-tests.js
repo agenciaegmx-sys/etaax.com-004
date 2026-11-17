@@ -32925,6 +32925,11 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
     {
         /* Abrir el recibo en otra pestaña perdía el catálogo, chocaba con el
            bloqueo de ventanas emergentes y volver era un viaje. */
+        /* Sin gastos: el pago de Ana del 1 al 30 que dejó la sección 4 (gA)
+           convivía con este recibo del MISMO mes sin pagar —un pago doble—.
+           Desde que pagar revisa los días ya cobrados (BH73), «Generar gasto»
+           se niega ahí, y las pruebas de la sección 8 pasaban por nada. */
+        X._cacheGastos = [];
         X._cacheRecibos = [{ id:'nrV', negocioId:'n1', sucursalId:'suc_principal', staffId:'s1',
                              desde:'2026-11-01', hasta:'2026-11-30',
                              recibo:{ folio:'N-9', periodicidad:'Semanal', dias:7, diario:300,
@@ -34713,6 +34718,146 @@ console.log('\n══ BH72 · N06 a N09 de la auditoría ══');
         });
         PCT = 25;
     }
+}
+
+/* ═══════════ BH73 · DOS EQUIPOS PAGAN EL MISMO RECIBO ═══════════
+   El hueco que el reporte del 17-nov dejó escrito: «dos pestañas generando el
+   mismo recibo a la vez». El recibo nunca fue el problema —su id sale del
+   periodo, dos pestañas escriben la misma fila—. El GASTO sí: nacía con un id
+   al azar. El celular de la dueña y la tablet del gerente veían a Ana con
+   «Recibo listo», los dos pagaban, y en la nube quedaban dos gastos pagados
+   de la misma semana. Ninguno podía enterarse: el realtime de gastos se calla
+   con un modal abierto y la cola de recibos no tiene realtime.
+
+   Aquí la nube es un mapa de filas por id —lo que hace el upsert de verdad—,
+   así que se mide lo que QUEDA GUARDADO, no lo que se pinta en una pantalla. */
+console.log('\n══ BH73 · Dos equipos pagan el mismo recibo ══');
+{
+    const W = crearContexto();
+    cargarJS(W, 'etaax-core.js'); cargarJS(W, 'reporte-marca.js'); cargarJS(W, 'etaax-iconos.js');
+    cargarInline(W, 'administrativo/diario.html');
+    W._storage.etaax_negocio_activo = 'n1';
+    W._storage.etaax_sucursal_activa = 'suc_principal';
+    W.NominaParams = { get(){ return { jornadaHoras:8, primaVacacionalPct:25, salarioDiarioDefault:300 }; } };
+    const ana = { id:'s1', nombre:'Ana', puesto:'Barista', sucursalId:'suc_principal',
+                  esquemaSueldo:'diario', sueldoDiario:300, bonos:[], multaRetardo:25 };
+    W._cacheStaff = [ana]; W._cacheHorarios = {};
+    W._cacheGastos = []; W._cacheRecibos = [];
+    W._dxPer = { nom:{ tipo:'mes', val:'2026-11', end:null } };
+    W._exigeVG = () => true; W._puedeEditarGasto = () => true;
+    W._pedirClaveAdmin = (t, cb) => cb();
+    const avisos = []; W.alert = (m) => { avisos.push(String(m)); };
+    const el = (id) => W.document.getElementById(id);
+    const nube = { gastos:{}, nomina_recibos:{} };
+    const copia = (x) => JSON.parse(JSON.stringify(x));
+    const silencio = (fn) => {
+        const d0 = W.document.querySelector, g0 = W.gRenderAll, s0 = W._syncGastosCortes,
+              u0 = W._sbUp, d1 = W._sbDel, a0 = W._asegurarCategoria,
+              r0 = W.renderNominasPanel, p0 = W._nomPintarListas, e0 = W._cerrarSelPago;
+        W.document.querySelector = () => ({ style:{}, classList:{ add(){}, remove(){}, toggle(){} } });
+        W.gRenderAll = () => {}; W._syncGastosCortes = () => {};
+        W._sbUp = (t, r) => { (nube[t] = nube[t] || {})[r.id] = copia(r); };
+        W._sbDel = (t, id) => { if (nube[t]) delete nube[t][id]; };
+        W._asegurarCategoria = () => {}; W.renderNominasPanel = () => {};
+        W._nomPintarListas = () => {}; W._cerrarSelPago = () => {};
+        try { return fn(); }
+        finally { W.document.querySelector = d0; W.gRenderAll = g0; W._syncGastosCortes = s0;
+                  W._sbUp = u0; W._sbDel = d1; W._asegurarCategoria = a0;
+                  W.renderNominasPanel = r0; W._nomPintarListas = p0; W._cerrarSelPago = e0; }
+    };
+    const generar = (desde, hasta, dias) => silencio(() => {
+        W._pagoNomStaff = ana; W._pagoNomConceptos = []; W._pnTotalManual = null;
+        W._pnPrimaInclude = false; W._pnBonosQuitados = []; W._pnEditandoGasto = null; W._pnPrimaPct = null;
+        el('pnTipo').value = 'semana';
+        el('pnDesde').value = desde; el('pnHasta').value = hasta;
+        el('pnDiario').value = 300; el('pnDias').value = dias;
+        el('pnMultaRetardo').value = 25; el('pnRetardos').value = 0;
+        W._pnCalc();
+        W._confirmarPagoNom();
+    });
+    const pagar = (fecha) => silencio(() => {
+        W.generarGastoNomina('s1');
+        el('gFecha').value = fecha;
+        W.guardarGasto();
+    });
+    const pagosEnNube = (reciboId) => Object.values(nube.gastos)
+        .filter(g => g.nomina && g.staffId === 's1' && (!reciboId || g.reciboId === reciboId));
+
+    /* ── 1 · los dos pagan, cada uno con su pantalla de hace un rato ────── */
+    generar('2026-11-02', '2026-11-08', 7);
+    const rec = W._cacheRecibos[0];
+    const vistaVieja = JSON.stringify({ gastos: W._cacheGastos, recibos: W._cacheRecibos });
+    const antesDelPago = () => JSON.parse(vistaVieja);
+    pagar('2026-11-09');                                   // el celular
+    W._cacheGastos = antesDelPago().gastos;                // la tablet no se enteró
+    W._cacheRecibos = antesDelPago().recibos;
+    pagar('2026-11-09');                                   // la tablet
+    test('dos equipos pagan el mismo recibo → en la nube queda UN gasto', () => {
+        const ls = pagosEnNube(rec.id);
+        return eq(ls.length + '·' + ls.reduce((a, g) => a + W.n(g.monto), 0), '1·2100',
+                  'la misma semana salió ' + ls.length + ' veces');
+    });
+    test('…porque su id sale del recibo, no del reloj', () =>
+        eq(pagosEnNube(rec.id).map(g => g.id).join(','), 'gn_' + rec.id, 'id al azar'));
+    test('…y el recibo en la nube apunta a ese gasto, sellado', () => {
+        const r = nube.nomina_recibos[rec.id] || {};
+        return eq(r.gastoId + '·' + (String(r.pagadoEn).length > 10), 'gn_' + rec.id + '·true', JSON.stringify(r));
+    });
+
+    /* ── 1b · la tablet SÍ recibió el gasto, pero no el sello ──────────── */
+    /* El realtime de gastos sí llega cuando no hay modal abierto; el de
+       recibos no existe. La tablet ve el pago del celular en su lista de
+       gastos y, en la cola, el recibo todavía «listo». Pagar otra vez
+       sobrescribiría el gasto del celular con el método y la fecha de aquí. */
+    W._cacheGastos = copia(Object.values(nube.gastos));
+    W._cacheRecibos = antesDelPago().recibos;
+    avisos.length = 0;
+    el('gId').value = '';
+    silencio(() => W.generarGastoNomina('s1'));
+    test('si el gasto ya llegó y el sello no, NO se paga otra vez: se reconoce', () =>
+        eq(el('gId').value + '·' + /ya se pagó/.test(avisos.join(' ')), '·true',
+           'abrió otro pago: ' + avisos.join(' | ')));
+    test('…y el recibo queda sellado con aquel gasto', () => {
+        const r = W._cacheRecibos.find(x => x.id === rec.id) || {};
+        return eq(r.gastoId + '·' + (String(r.pagadoEn).length > 10), 'gn_' + rec.id + '·true', JSON.stringify(r));
+    });
+
+    /* ── 2 · al pagar se vuelve a mirar qué días ya salieron ───────────── */
+    /* Un recibo del 1 al 15 que nació antes del candado de generar (un «_2»
+       de antes del 17-nov) o en otra pestaña antes de que la semana se
+       pagara: con id propio, el id derivado no lo salva. */
+    const encimado = { id:'nr_s1_20261101', negocioId:'n1', sucursalId:'suc_principal', staffId:'s1',
+                       desde:'2026-11-01', hasta:'2026-11-15', gastoId:'', pagadoEn:'',
+                       recibo:{ total:4500, desde:'2026-11-01', hasta:'2026-11-15', periodicidad:'Quincenal' } };
+    W._cacheRecibos.push(encimado);
+    test('(el recibo encimado es el que la cola ofrece pagar)', () =>
+        eq((W._reciboGeneradoDe('s1') || {}).id, encimado.id, 'la prueba no mide lo que dice'));
+    avisos.length = 0;
+    el('gId').value = '';
+    silencio(() => W.generarGastoNomina('s1'));
+    test('un recibo que se encima con días ya pagados NO se paga', () =>
+        eq(/No se pagó/.test(avisos.join(' ')) + '·' + el('gId').value, 'true·', 'abrió el pago de días cobrados'));
+    test('…y dice qué se pagó y por cuánto', () =>
+        eq(/ya tiene pagado del .+\(\$2,100\.00\)/.test(avisos.join(' ')), true, avisos.join(' | ')));
+    W._cacheRecibos = W._cacheRecibos.filter(r => r !== encimado);
+
+    /* ── 3 · sin falsos positivos: lo que sigue se paga normal ─────────── */
+    generar('2026-11-09', '2026-11-15', 7);
+    avisos.length = 0;
+    pagar('2026-11-16');
+    test('el periodo que sigue, sin días pagados, se paga normal', () =>
+        eq(pagosEnNube().map(g => g.nomina.desde).sort().join(',') + '·' + avisos.length,
+           '2026-11-02,2026-11-09·0', 'bloqueó un periodo que nadie ha pagado: ' + avisos.join(' | ')));
+
+    /* ── 4 · borrar el gasto y volver a pagar reusa el id: sigue siendo uno ── */
+    silencio(() => W.eliminarGasto('gn_nr_s1_20261109'));
+    test('(borrar el gasto por la lista lo quita de la nube)', () =>
+        eq(pagosEnNube('nr_s1_20261109').length, 0, 'no se borró'));
+    pagar('2026-11-16');
+    test('borrar el gasto y volver a pagar deja otra vez UN gasto, con el mismo id', () => {
+        const ls = pagosEnNube('nr_s1_20261109');
+        return eq(ls.length + '·' + (ls[0] || {}).id, '1·gn_nr_s1_20261109', JSON.stringify(ls.map(g => g.id)));
+    });
 }
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner

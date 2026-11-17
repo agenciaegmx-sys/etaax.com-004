@@ -7181,6 +7181,25 @@ function _nomPagosEncimados(staffId, desde, hasta){
                EtaaxCore.gastoPagado(g) && _traslapa(g.nomina.desde, g.nomina.hasta, desde, hasta);
     });
 }
+/* «del 2 nov al 8 nov ($1,500), …»: lo que ya se pagó, dicho igual al generar
+   el recibo y al pagarlo. */
+function _nomListaPagados(ls){
+    return ls.map(function(g){ return 'del '+_fmtFechaCortaDx(g.nomina.desde)+' al '+
+        _fmtFechaCortaDx(g.nomina.hasta)+' ('+fmtM(g.monto)+')'; }).join(', ');
+}
+/* ══ EL GASTO DE UN RECIBO LLEVA UN ID QUE SALE DEL RECIBO ═════════════════
+   Dos equipos con la cola abierta —el celular de la dueña y la tablet del
+   gerente— ven a la misma persona con «Recibo listo». Los dos pican «Generar
+   gasto» y guardan. Con un id al azar salían DOS gastos pagados: el recibo
+   apuntaba al último y el primero seguía sumando en caja. Ninguno de los dos
+   equipos podía enterarse: el realtime de gastos se calla mientras hay un
+   modal abierto, y la cola de recibos no tiene realtime.
+
+   Con el id derivado, los dos escriben LA MISMA fila: queda un pago. Es el
+   trato que ya tenían los «pagados aparte» (ga_…). Borrar el gasto y volver a
+   pagar reusa el id, y está bien: la cola de salida respeta el orden, borrar
+   y luego escribir deja la fila viva.                                       */
+function _nomGastoId(reg){ return 'gn_' + reg.id; }
 /* Cuándo se CONCLUYÓ el pago en el sistema —el instante, no la fecha que se
    tecleó en el gasto—: es el reloj de las 24 h del filtro «Pagadas». Solo lo
    tienen los recibos nacidos con la v85; los pagos de antes no guardaron ese
@@ -9327,6 +9346,33 @@ function generarGastoNomina(staffId){
         _abrirModalGasto(_yaHay, _yaHay.tipo || 'menor');
         return;
     }
+    /* ══ AL PAGAR, OTRA VEZ: ¿ALGUNO DE ESTOS DÍAS YA SALIÓ DE LA CAJA? ═══
+       Generar el recibo ya lo pregunta, pero no alcanza. Llegan aquí recibos
+       encimados con días cobrados que nacieron antes de ese candado (los «_2»
+       de antes del 17-nov) o en otra pestaña antes de que la primera pagara
+       —uno de la semana y otro del mes, cada uno con su id—. Aquí es donde
+       sale el dinero, así que aquí se vuelve a mirar. */
+    var _yaPag = _nomPagosEncimados(s.id, reg.desde, reg.hasta);
+    /* Si uno de esos pagos es de ESTE MISMO recibo, ya se pagó desde otro
+       equipo: su gasto llegó por el realtime de gastos, pero el sello no
+       (la cola de recibos no tiene realtime). Volver a pagar sobrescribiría
+       aquel gasto con el método y la fecha de aquí. Se reconoce el pago, se
+       sella y se dice. */
+    var _suyo = _yaPag.filter(function(g){ return g.reciboId === reg.id; })[0];
+    if (_suyo){
+        _sellarReciboPagado(_suyo);
+        _volverAlCatalogo();
+        alert('Esta nómina ya se pagó ('+fmtM(_suyo.monto)+', '+_fmtFechaCortaDx(_suyo.pagadoEl || _suyo.fecha)+
+            '), seguramente desde otro equipo o pestaña. Ya quedó marcada como pagada.');
+        return;
+    }
+    if (_yaPag.length){
+        alert('No se pagó: '+s.nombre+' ya tiene pagado '+_nomListaPagados(_yaPag)+'.\n\n'+
+            'Este recibo ('+_fmtFechaCortaDx(reg.desde)+' – '+_fmtFechaCortaDx(reg.hasta)+
+            ') se encima con esos días y se pagarían dos veces. Edita el recibo a los días que faltan.\n\n'+
+            'Si aquel pago estuvo mal, corrígelo desde su renglón en el panel.');
+        return;
+    }
     if (!(n((reg.recibo||{}).total) > 0)){ alert('Este recibo quedó en cero: edítalo antes de pagarlo.'); return; }
     _cerrarMenusCorte();
     var rec = reg.recibo || {};
@@ -9349,7 +9395,8 @@ function generarGastoNomina(staffId){
         alert('Todo este recibo se paga por otra caja (conceptos «pagados aparte»), así que no hay un gasto principal que registrar.');
         return;
     }
-    var g = { concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal',
+    var g = { id:_nomGastoId(reg),          // dos equipos pagando a la vez → una sola fila
+              concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal',
               monto:montoPrincipal, proveedor:'', notas:_desgloseDeRecibo(rec),
               categoriaNomina:_ggStaffCat(s), staffId:s.id, nomina:rec, reciboId:reg.id,
               _aparte:aparte.map(function(c, i){
@@ -9782,9 +9829,7 @@ function _confirmarPagoNom(){
            fechas. Si aquel pago estuvo mal, se corrige desde su renglón. */
         var _yaPag=_nomPagosEncimados(s.id, _recNuevo.desde, _recNuevo.hasta);
         if(_yaPag.length){
-            alert('No se guardó: '+s.nombre+' ya tiene pagado '+
-                _yaPag.map(function(g){ return 'del '+_fmtFechaCortaDx(g.nomina.desde)+' al '+
-                    _fmtFechaCortaDx(g.nomina.hasta)+' ('+fmtM(g.monto)+')'; }).join(', ')+'.\n\n'+
+            alert('No se guardó: '+s.nombre+' ya tiene pagado '+_nomListaPagados(_yaPag)+'.\n\n'+
                 'Este recibo ('+_fmtFechaCortaDx(_recNuevo.desde)+' – '+_fmtFechaCortaDx(_recNuevo.hasta)+
                 ') se encima con esos días y se pagarían dos veces. Cambia el periodo a los días que faltan.\n\n'+
                 'Si aquel pago estuvo mal, corrígelo desde su renglón en el panel.');
@@ -10454,7 +10499,7 @@ function renderFijosPanel(){
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
-<script src="/novedades.js?v=fe34aab5"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=2c3cacbd"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única (reparto de propinas) -->
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>

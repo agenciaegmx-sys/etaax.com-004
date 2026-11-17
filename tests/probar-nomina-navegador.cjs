@@ -3,9 +3,11 @@
    el candado corre en un DOM simulado».
 
    Chromium real carga administrativo/diario.html tal cual, desde el disco. Lo
-   único de mentira es Supabase: un SDK falso con una «nube» en memoria que
-   sobrevive a las recargas (vive en sessionStorage de la pestaña), así que se
-   puede probar lo que queda guardado y no solo lo que se pinta. Ninguna
+   único de mentira es Supabase: un SDK falso con una «nube» que sobrevive a
+   las recargas y que COMPARTEN las pestañas del mismo navegador (vive en el
+   localStorage del contexto, y cada caso abre un contexto limpio), así que se
+   puede probar lo que queda guardado y no solo lo que se pinta —y dos
+   pestañas pagando a la vez escriben en la misma nube, como en la vida real—. Ninguna
    petición sale del origen de prueba: lo que no sea un archivo del repo se
    corta y se anota.
 
@@ -32,8 +34,8 @@ const TIPOS = { '.html':'text/html', '.js':'application/javascript', '.css':'tex
    fuera el UMD del CDN, así que supabase-config.js crea el cliente de siempre. */
 function sdkFalso() {
     var LLAVE = '__nube';
-    function nube(){ try { return JSON.parse(sessionStorage.getItem(LLAVE) || '{}'); } catch(e){ return {}; } }
-    function guarda(db){ sessionStorage.setItem(LLAVE, JSON.stringify(db)); }
+    function nube(){ try { return JSON.parse(localStorage.getItem(LLAVE) || '{}'); } catch(e){ return {}; } }
+    function guarda(db){ localStorage.setItem(LLAVE, JSON.stringify(db)); }
     window.__nube = { leer: nube, escribir: guarda, caida: false, escrituras: [] };
     var user = { id:'u1', email:'duena@fixture.invalid', user_metadata:{ nombre:'Dueña de prueba' } };
     function query(tabla){
@@ -121,7 +123,7 @@ function semilla(reloj) {
       window.alert = m => { __avisos.push(String(m)); };
       window.__confirmar = true; window.confirm = m => { __avisos.push('¿' + String(m)); return __confirmar; };
       window.__motivo = 'Prueba'; window.prompt = m => { __avisos.push('? ' + String(m)); return __motivo; };
-      if (!sessionStorage.getItem('__sembrado')) {
+      if (!localStorage.getItem('__sembrado')) {
         localStorage.clear();
         localStorage.setItem('etaax_negocio_activo', 'n1');
         localStorage.setItem('etaax_sucursal_activa', 'suc_principal');
@@ -131,11 +133,11 @@ function semilla(reloj) {
         localStorage.setItem('etaax_negocios', JSON.stringify([{ id:'n1', usuarioId:'u1', nombre:'Café de prueba', tipo:'cafe' }]));
         localStorage.setItem('etaax_n1_sucursales', JSON.stringify([{ id:'suc_principal', nombre:'Matriz', activa:true }]));
         localStorage.setItem('etaax_novedades_vista', JSON.stringify({}));
-        sessionStorage.setItem('__nube', JSON.stringify({
+        localStorage.setItem('__nube', JSON.stringify({
           negocios: [{ id:'n1', negocio_id:'n1', datos:{ id:'n1', usuarioId:'u1', nombre:'Café de prueba', tipo:'cafe' } }],
           staff: ${JSON.stringify(STAFF.map(s => ({ id:s.id, negocio_id:'n1', datos:s })))}
         }));
-        sessionStorage.setItem('__sembrado', '1');
+        localStorage.setItem('__sembrado', '1');
       }
     })();`;
 }
@@ -160,12 +162,18 @@ async function abrir(browser, reloj) {
         return route.abort();
     });
     await ctx.addInitScript(semilla(reloj));
+    const page = await pestana(ctx);
+    return { ctx, page, fuera };
+}
+/* Otra pestaña del MISMO navegador: misma nube, mismo reloj, su propia
+   memoria —lo que cargó al abrir, y nada más—. */
+async function pestana(ctx) {
     const page = await ctx.newPage();
     page.setDefaultTimeout(10000);
     page.on('pageerror', e => console.log('  [pageerror]', e.message));
     await page.goto(ORIGEN + '/administrativo/diario.html');
     await page.waitForFunction(() => Array.isArray(window._cacheRecibos) && Array.isArray(window._cacheStaff) && _cacheStaff.length > 0);
-    return { ctx, page, fuera };
+    return page;
 }
 
 /* ── pasos de persona ─────────────────────────────────────────────────── */
@@ -434,6 +442,84 @@ async function caso(nombre, fn) {
             await e.page.evaluate(() => _cerrarPagoNom());
         });
         await e.ctx.close();
+
+        /* ── F · dos pestañas pagan el mismo recibo ───────────────────────
+           El hueco que dejó escrito el reporte del 17-nov. El celular de la
+           dueña y la tablet del gerente —aquí, dos pestañas— ven a Ana con
+           «Recibo listo». Las dos abren el gasto antes de que ninguna guarde,
+           y las dos guardan. El gasto nacía con un id al azar: salían dos
+           pagos de la misma semana. */
+        console.log('\n══ F · Dos pestañas pagan el mismo recibo ══');
+        const f = await abrir(browser, '2026-11-17T12:00:00-06:00');
+        await entrarANominas(f.page); await abrirCola(f.page);
+        await (await menu(f.page, 'Ana Prueba', 'Generar recibo')).click();
+        await f.page.waitForSelector('#modalPagoNom.open');
+        await f.page.click('#pnBtnConfirmar');
+        await f.page.waitForSelector('#modalPagoNom.open', { state:'detached' });
+        await f.page.waitForTimeout(300);
+        const f2 = await pestana(f.ctx);
+        await entrarANominas(f2); await abrirCola(f2);
+        /* Se trae la pestaña al frente antes de usarla, como haría una persona.
+           Además, una pestaña de fondo no pinta cuadros, y waitForFunction
+           sondea por cuadro: se le pide sondear por tiempo. */
+        const abrirGasto = async (pg, quien) => {
+            await pg.bringToFront();
+            await (await menu(pg, quien || 'Ana Prueba', 'Generar gasto')).click();
+            await pg.waitForFunction(() => document.getElementById('gMonto') && document.getElementById('gMonto').offsetParent,
+                                     null, { polling: 100 });
+        };
+        await caso('la segunda pestaña ve el recibo listo (viene de la nube)', async () => {
+            assert.match(await textoFila(f2, 'Ana Prueba'), /Recibo listo/i);
+        });
+        await caso('las dos pagan a la vez → en la nube queda UN gasto, y el recibo apunta a él', async () => {
+            await abrirGasto(f.page); await abrirGasto(f2);          // las dos con el modal abierto
+            await f.page.click('#btnGuardar'); await leerAvisos(f.page);
+            await f2.click('#btnGuardar');     await leerAvisos(f2);
+            await f.page.waitForTimeout(500);
+            const nube = await f.page.evaluate(() => __nube.leer());
+            const g = (nube.gastos || []).map(r => r.datos).filter(x => x.staffId === 's_ana' && x.nomina);
+            const r = (nube.nomina_recibos || []).map(r => r.datos).find(x => x.staffId === 's_ana');
+            assert.equal(g.length, 1, 'la misma semana se pagó ' + g.length + ' veces: ' + g.map(x => x.id).join(', '));
+            assert.equal(r.gastoId, g[0].id, 'el recibo no apunta al gasto');
+        });
+        await f2.close();
+
+        /* ── G · a la otra pestaña le llegó el gasto, pero no el sello ─────
+           La lista de gastos se refresca sola (realtime) cuando no hay modal
+           abierto; la cola de recibos no. Esa pestaña ve el pago en gastos y,
+           en la cola, el recibo todavía «listo». Pagar otra vez pisaría el
+           gasto de la primera con su método y su fecha. */
+        console.log('\n══ G · Le llegó el gasto, pero no el sello del recibo ══');
+        await (await menu(f.page, 'Beto Prueba', 'Generar recibo')).click();
+        await f.page.waitForSelector('#modalPagoNom.open');
+        await f.page.click('#pnBtnConfirmar');
+        await f.page.waitForSelector('#modalPagoNom.open', { state:'detached' });
+        await f.page.waitForTimeout(300);
+        const g2 = await pestana(f.ctx);
+        await entrarANominas(g2); await abrirCola(g2);
+        await abrirGasto(f.page, 'Beto Prueba');
+        await f.page.click('#btnGuardar'); await leerAvisos(f.page);
+        await f.page.waitForTimeout(400);
+        await g2.bringToFront();
+        await g2.evaluate(() => _reloadGastosRT());                    // lo que hace el realtime de gastos
+        await caso('«Generar gasto» en la otra pestaña reconoce el pago: no paga otra vez y lo dice', async () => {
+            await (await menu(g2, 'Beto Prueba', 'Generar gasto')).click();
+            const av = await leerAvisos(g2);
+            const abierto = await g2.evaluate(() => !!(document.getElementById('gMonto') && gMonto.offsetParent));
+            assert.equal(abierto, false, 'abrió otro pago');
+            assert.ok(av.some(t => /ya se pagó/.test(t)), 'sin aviso: ' + JSON.stringify(av));
+            const nube = await g2.evaluate(() => __nube.leer());
+            const gs = (nube.gastos || []).map(r => r.datos).filter(x => x.staffId === 's_beto' && x.nomina);
+            assert.equal(gs.length, 1, 'pagos de Beto en la nube: ' + gs.length);
+        });
+        await caso('…y en esa pestaña el recibo queda sellado: Beto sale de «por pagar»', async () => {
+            const sellado = await g2.evaluate(() => { const r = _cacheRecibos.find(x => x.staffId === 's_beto');
+                                                      return !!(r && r.gastoId && r.pagadoEn); });
+            assert.equal(sellado, true, 'el recibo sigue sin sello');
+            await abrirCola(g2);
+            assert.doesNotMatch(await textoFila(g2, 'Beto Prueba'), /Recibo listo/i);
+        });
+        await f.ctx.close();
     } finally {
         await browser.close();
     }
