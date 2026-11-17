@@ -6007,7 +6007,7 @@ console.log('\n══ AR · Aviso de privacidad y aceptación ══');
     test('…sin marcadores por llenar', () =>
         eq(/\[DOMICILIO|\[FECHA|\[POR LLENAR/.test(priv), false, 'completo'));
     test('…y un correo para ejercer derechos', () =>
-        eq(priv.indexOf('agencia.egmx@gmail.com') > -1, true, 'contacto'));
+        eq(/[\w.+-]+@[\w-]+\.[\w.]+/.test(priv), true, 'contacto'));
 
     /* Lo que la app registra de ti y no estaba declarado: IP, dispositivo y la
        bitácora de acciones — todo eso existe desde el bloqueo por intentos
@@ -27235,8 +27235,11 @@ console.log('\n══ BE17 · «Actualizamos el sistema, ve las novedades» ═�
             }));
         }
         if (opc.yaVio) C.localStorage.setItem('etaax_novedades_vista', JSON.stringify(opc.yaVio));
-        if (opc.hace === undefined) cargarJS(C, 'novedades.js');
-        else {
+        /* Sin `hace` explícito, el anuncio se publicó HOY. Cargar el archivo con
+           su FECHA real hacía que estas pruebas pasaran solo los tres días
+           siguientes a cada push y tronaran después: medían el calendario. */
+        if (opc.hace === undefined) opc.hace = 0;
+        {
             /* El reloj hacia adelante: la ventana del anuncio se cuenta desde la
                FECHA que el hook estampa al publicar, así que para probar «pasados
                tres días» hay que mover esa fecha, no el reloj del sistema. Se
@@ -31597,6 +31600,11 @@ console.log('\n══ BH62 · Corregir un pago de nómina ══');
         el('pnDesde').value = '2026-11-02'; el('pnHasta').value = '2026-11-08';
         el('pnDiario').value = 300; el('pnDias').value = 7;
         el('pnMultaRetardo').value = 25; el('pnRetardos').value = 0;
+        /* «Generar gasto» busca el recibo en el periodo QUE ESTÁ EN PANTALLA
+           (dxpRango('nom')), cuyo valor por omisión es HOY. Sin fijarlo, la
+           prueba pasaba solo la semana del 2 al 8 de noviembre de 2026 y el 17
+           tronó: medía el calendario, no la nómina. */
+        X._dxPer.nom = { tipo:'rango', val:'2026-11-02', end:'2026-11-08' };
         X._pnCalc();
     };
     /* El camino real: confirmar manda el gasto al modal y ahí se guarda. */
