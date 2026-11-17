@@ -631,6 +631,9 @@ const TIPOS_ICON = { primer_lev:'📋', bebidas:'🍸', alimentos:'🍽️', alm
 // convertidos sin categoría), cae a heurística por subcategoría/categoría.
 function _grupoCategoria(f) {
     if (!f) return 'Otros';
+    /* Los batches van juntos, cada uno con su renglón y su diferencia (modelo
+       de consumo, 17-nov): repartidos en Licores o Alimentos no se encuentran. */
+    if (!f.esCompuesto && f.insumoId && _recetaIdDePrebatch(f.insumoId)) return '🏭 Producción propia';
     var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(f.insumoId) : null;
     var t = ((ins && ins.tipoInsumo) || f.tipoInsumo || '').toLowerCase();
     if (t === 'destilado') return 'Destilados';
@@ -1392,9 +1395,28 @@ function _repartoPrebatch() {
     });
     return out;
 }
+/* ══ MODELO DE CONSUMO (17-nov-2026, decisión de Edwin) ═══════════════════
+   Hasta hoy el prebatch era un TRASLADO: producirlo pasaba la Sprite de su
+   botella al batch, la Sprite seguía «siendo suya» y solo bajaba cuando se
+   vendía la paloma; lo que le faltara al batch se repartía como faltante entre
+   sus insumos. Resultado: el reporte decía «usé 1 Sprite en el prebatch» y el
+   teórico de la Sprite no se movía; y si las palomas no se capturaban, la
+   Sprite salía con −1 de FALTANTE aunque se hubiera usado en el batch.
+
+   Ahora producir es CONSUMIR. La cuenta de cada insumo es:
+     existencia anterior + entradas − venta en botella − venta en copas
+     − coctelería (recetas que lo usan DIRECTO + batches producidos que lo usan
+       DIRECTO) − cortesías − mermas  =  teórico;   físico − teórico = diferencia
+   Un coctel hecho con el batch NO toca la Sprite: consume el batch. Y el batch
+   es su propio renglón, con su propia diferencia (anterior + producido −
+   vendido en recetas − mermas, contra lo que se contó).
+
+   El reparto se sigue calculando, pero SOLO como información (cuánto de cada
+   insumo hay dentro de un batch): ya no entra a ninguna diferencia. */
+var _PREBATCH_REPARTE = false;
 var _repCache = null;
 var _repZero  = { ea:0, ent:0, vco:0, cm:0, teo:0, fis:0, dif:0, venta:0 };
-function _repartoDe(id) { return (_repCache && _repCache.porInsumo[id]) || _repZero; }
+function _repartoDe(id) { return (_PREBATCH_REPARTE && _repCache && _repCache.porInsumo[id]) || _repZero; }
 
 /* ══ CUANDO UN PREBATCH NO SE PUEDE RASTREAR ═══════════════════════════════
    La cadena del prebatch tiene cuatro eslabones: el insumo marcado como
@@ -1543,6 +1565,38 @@ function _prebatchDiagnostico() {
                 txt: 'se vendió en «' + r.nombre + '» pero no tiene renglón en este inventario: ' +
                      'lo que se fue de ese batch no se le descuenta a nadie' });
         });
+    });
+    /* EL CASO DE LA SPRITE: un refresco que se cuenta por pieza y no tiene su
+       contenido (2 LT) en el catálogo. Lo que el batch usa en ml no se puede
+       pasar a piezas, la conversión da CERO sin avisar y el refresco sale con
+       un faltante falso de exactamente lo que se usó. */
+    var _vistos = {};
+    Object.keys((invActual && invActual.prebatchProducidos) || {}).forEach(function (pid) {
+        if (!(parseFloat(invActual.prebatchProducidos[pid]) > 0)) return;
+        var pre = _res(pid); if (!pre || !pre.recetaId) return;
+        var sr = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : null) || porId[pre.recetaId];
+        _ingredientesSinContenido(sr).forEach(function (x) {
+            if (_vistos[x.insumoId]) return; _vistos[x.insumoId] = 1;
+            out.push({ fila: x.nombre, mal: 'sincontenido',
+                txt: 'se cuenta por pieza pero no tiene su contenido capturado en el catálogo: lo que usa «' +
+                     (pre.nombre || sr.nombre || 'el batch') + '» (' + x.porBatch + ' por batch) no se le puede descontar' });
+        });
+    });
+    return out;
+}
+/* Ingredientes de una sub-receta pedidos en ml/g cuyo renglón se cuenta por
+   PIEZA sin contenido por pieza: imposibles de convertir. */
+function _ingredientesSinContenido(sr) {
+    var out = [];
+    ((sr && sr.ingredientes) || []).forEach(function (ing) {
+        if (!ing || !ing.insumoId) return;
+        var z = _normIngrediente(ing), u = String(z.unidad || '').toUpperCase();
+        if (u === 'PZA' || u === 'PZ' || u === '' || !(parseFloat(z.cant) > 0)) return;
+        var fi = _filaDeMiembro(ing.insumoId); if (!fi) return;
+        var pieza = fi.tipo === 'pza' || (fi.tipo === 'peso' && String(fi.baseUnit || '').toUpperCase() === 'PZA');
+        if (!pieza || parseFloat(fi.contNeto) > 0) return;
+        out.push({ insumoId: fi.insumoId, nombre: fi.nombre || ing.insumoId,
+                   porBatch: _fmtEquivalenteBatch(ingredienteBase(z.cant, z.unidad), u === 'KG' || u === 'G' ? 'G' : 'ML') });
     });
     return out;
 }
@@ -1969,7 +2023,7 @@ function _prebatchAvisoHTML() {
         'Se arregla en Recetas → Insumos, volviendo a «Cargar como insumo» la sub-receta, ' +
         'o dándole su renglón en el Paso 1.</div></div>';
 }
-function _esPrebatchRepartido(id) { return !!(_repCache && _repCache.esPB[id]); }
+function _esPrebatchRepartido(id) { return !!(_PREBATCH_REPARTE && _repCache && _repCache.esPB[id]); }
 
 // ── Fuzzy match cancelación → insumo ─────────────────────────
 function _normMatch(s) {
@@ -6882,18 +6936,22 @@ function _revisarPrebatch(pre) {
              || (getRecetas() || []).find(function (r) { return r && r.id === pre.recetaId; });
     var probs = [];
     if (!sr) {
-        probs.push('su sub-receta ya no existe: no se descuentan sus insumos base ni se reparte el sobrante');
+        probs.push('su sub-receta ya no existe: no se descuentan sus insumos base');
     } else {
         var ligados = (sr.ingredientes || []).filter(function (ing) {
             return ing && ing.insumoId && (parseFloat(ing.cantidad) || 0) > 0;
         }).length;
         if (!ligados) probs.push('ningún ingrediente de la sub-receta está ligado a un insumo: produce, pero no descuenta nada');
+        _ingredientesSinContenido(sr).forEach(function (x) {
+            probs.push('«' + x.nombre + '» se cuenta por pieza pero no tiene su contenido capturado en el catálogo: ' +
+                       'lo que este batch usa de él (' + x.porBatch + ' por batch) no se le puede descontar');
+        });
     }
     if (!fila) {
-        probs.push('no tiene renglón en este inventario, así que su sobrante no se reparte a sus insumos');
+        probs.push('no tiene renglón en este inventario: lo producido sí se descuenta de sus insumos, pero el batch no lleva su propia cuenta');
     } else {
         if (fila.tipo === 'pza' && !_basePorUnidadFila(fila))
-            probs.push('está capturado por PIEZA pero falta el contenido por pieza para repartir su sobrante');
+            probs.push('está capturado por PIEZA pero falta el contenido por pieza para convertir lo producido a piezas');
         var cx = (sr && sr.camposExtra) || {};
         var rendSR = parseFloat(cx.rendimientoFinal) || 0;
         var rendPr = parseFloat(fila.rendimientoBatch) || 0;
@@ -9778,7 +9836,7 @@ function _step5TablasHTML() {
         var t = (fila.tipo === 'copa' ? _fmtCop(prodVer, fila) :
             _fmtEquivalenteBatch(prodVer, fila.tipo === 'pza' ? 'PZA' : fila.baseUnit || 'G')) +
             ' se fueron en producir batches de sub-receta.';
-        if (prodMat > 0) return t + ' Van sumadas aquí: este batch no se está repartiendo.';
+        if (prodMat > 0) return t + ' Van sumadas aquí: lo que se usa al producir un batch es consumo de este insumo.';
         return t + ' NO se suman a la cifra de arriba porque ese producto sigue contado ' +
                'dentro del batch — su parte ya viene en el teórico y en el físico de este renglón.';
     }
@@ -9846,6 +9904,11 @@ function _step5TablasHTML() {
                 ' embotellado.">↳ ' + _nb(copas / copasBot) + ' bot' + _lt + ' del insumo en batches</div>';
         };
         const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
+        /* Lo PRODUCIDO, si el renglón es un batch: para él es una entrada (suma a
+           su teórico). Sin enseñarlo, el teórico del batch sale de la nada. */
+        const _prodC  = _prodPrebatchUnidades(fila);
+        const prodStr = _prodC > 0 ? '<div style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +' +
+            (copasBot > 0 ? _nb(_prodC / copasBot) + ' bot · ' : '') + _fmtCop(_prodC, fila) + ' producido</div>' : '';
         const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
         const difStr    = _fmtCopSgn(dif, fila);
         const _contC = _fmtContenido(fila);
@@ -9874,7 +9937,7 @@ function _step5TablasHTML() {
                     <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}${_btnOcultoImpreso(fila.insumoId)}
                 </td>
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot${_dentroBat(adj.ea)}</td>
-                <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
+                <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}${prodStr}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? _fmtCop(ventaCopaDir, fila) : '—'}</td>
                 <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${ventaCoct > 0 ? _fmtCop(ventaCoct, fila) : '—'}${_lineaProd(fila, prodPBver, prodPBmat, _fmtCop(prodPBver, fila))}</td>
@@ -9930,7 +9993,7 @@ function _step5TablasHTML() {
                     <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}${_btnOcultoImpreso(fila.insumoId)}
                 </td>
                 <td style="text-align:center">${cant(ea)}</td>
-                <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+cant(entTotal):'—'}</td>
+                <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+cant(entTotal):'—'}${_prodPrebatchUnidades(fila)>0?'<div style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +'+cant(_prodPrebatchUnidades(fila))+' producido</div>':''}</td>
                 <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${ventaCoct>0?cant(ventaCoct):'—'}${_lineaProd(fila, prodPBpVer, prodPBpMat, cant(prodPBpVer))}</td>
                 <td style="text-align:center;color:var(--accent)">${ventasDir>0?cant(ventasDir):'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cant(cancelPza):'—'}</td>
@@ -10203,7 +10266,10 @@ function _step5TablasHTML() {
     }).join('');
 
     // ── Producción propia: prebatch repartido a sus insumos (opción A) ──
-    const _repL = (_repCache && _repCache.lista) || [];
+    /* La tarjeta que explicaba el REPARTO del batch entre sus insumos solo
+       existe en ese modelo. Con el de consumo, cada batch es un renglón del
+       grupo «Producción propia», con su propia diferencia. */
+    const _repL = (_PREBATCH_REPARTE && _repCache && _repCache.lista) || [];
     let prodCard = '';
     const _prodMatch = !q || GPROD.toLowerCase().includes(q) || _repL.some(r => (r.nombre||'').toLowerCase().includes(q));
     if (_repL.length && !_subcatStep5 && !_difStep5 && _prodMatch) {
@@ -10273,8 +10339,10 @@ function _step5DesgloseCard(fila, refMap) {
     var difCarta = esPB ? 0 : dif * (fila.precioCarta||0);
     var pctVal   = esPB ? null : _pctVarianza(dif, _consumoPeriodo(fila) + adjG.venta); // dif vs venta neta
     var pct      = pctVal !== null ? ((pctVal>=0?'+':'')+pctVal.toFixed(1)+'%') : '—';
+    var prodPBg   = esComp ? 0 : _prodPBVisible(fila, adjG);     // lo que se fue al producir batches
     var ventaCoct = esComp ? (fila._ventaCoct||0)
-        : consumoRecetasFila(fila) + adjG.vco + _prodPBVisible(fila, adjG);
+        : consumoRecetasFila(fila) + adjG.vco + prodPBg;
+    var producido = esComp ? 0 : _prodPrebatchUnidades(fila);   // si ESTE renglón es un batch
     var ventaDir  = parseFloat(fila.ventasCopasDirectas)||0;
     var ventaBot  = parseFloat(fila.ventasBotella)||0;
     var cort = fila.tipo === 'peso' ? 0 : parseFloat(fila.cortesiaCopas)||0;
@@ -10304,7 +10372,10 @@ function _step5DesgloseCard(fila, refMap) {
     var fila2 = function(lbl, val, col){ return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px"><span style="color:var(--text-dim)">'+lbl+'</span><span style="color:'+(col||'var(--text)')+';font-weight:600;text-align:right">'+val+'</span></div>'; };
     var ventasParts = [];
     if (ventaDir>0)  ventasParts.push(_fmtCop(ventaDir, fila));
-    if (ventaCoct>0) ventasParts.push('<span style="color:var(--viol)">'+_fmtCop(ventaCoct, fila)+' en recetas</span>');
+    /* «En recetas» y «en batches» por separado: son dos cosas que se revisan
+       en lugares distintos (las ventas capturadas y el Paso 3). */
+    if (ventaCoct - prodPBg > 0.0001) ventasParts.push('<span style="color:var(--viol)">'+_fmtCop(ventaCoct - prodPBg, fila)+' en recetas</span>');
+    if (prodPBg > 0) ventasParts.push('<span style="color:var(--viol)">'+_fmtCop(prodPBg, fila)+' en batches</span>');
     if (ventaBot>0)  ventasParts.push(_n1(ventaBot)+' bot');
     return '<div class="inv-item-card" style="padding:14px">'+
         '<div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:2px">'+(esComp?'🧩 ':'')+etx(esComp?fila.nombre:insumoTitulo(fila))+'</div>'+
@@ -10313,6 +10384,7 @@ function _step5DesgloseCard(fila, refMap) {
         fila2('Exist. anterior', eaDisp+' '+uEx+(pesosAnt.length?' <span style="font-size:10px;color:var(--text-dim)">('+pesosAnt.join(', ')+')</span>':''))+
         fila2('Entradas', entTotal>0?'+'+_n1(entTotal)+' '+uEnt:'—', entTotal>0?'var(--green)':'var(--text-dim)')+
         (entradas.length?'<div style="font-size:10px;color:var(--text-dim);padding:1px 0 4px 10px;line-height:1.6">'+entradas.map(function(e){return '• '+_n1(e.cantidad)+' '+uEnt+(e._de?' · '+etx(e._de):'')+(e.fecha?' · '+e.fecha:'')+(e.tipo?' ('+tipoEntradaLabel(e.tipo)+')':'');}).join('<br>')+'</div>':'')+
+        (producido>0?fila2('Producido (Paso 3)', '+'+_fmtCop(producido, fila), 'var(--green)'):'')+
         fila2('Ventas', ventasParts.length?ventasParts.join(' · '):'—', 'var(--accent)')+
         fila2('Cortesía / Merma', (cort+merma)>0?_fmtCop(cort+merma, fila):'—', (cort+merma)>0?'var(--red)':'var(--text-dim)')+
         fila2('Cancelaciones (informativo)', cancel>0?_fmtCop(cancel, fila):'—', 'var(--text-muted)')+

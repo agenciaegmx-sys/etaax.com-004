@@ -114,7 +114,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
     Object.assign(c, {
         _repartoDe:()=>({ea:0,ent:0,vco:0,cm:0,can:0,teo:0,fis:0}),
         getEntradasBottles:()=>0, getEntradasCopas:()=>0, getCancelacionesCopas:()=>0,
-        consumoRecetasFila:()=>0, _prodPBVisible:()=>0, _consumoBaseProd:()=>0,
+        consumoRecetasFila:()=>0, _prodPBVisible:()=>0, _consumoBaseProd:()=>0, _prodPrebatchUnidades:()=>0,
         _stockFilaHTML:()=>'', _comentarioVentaHTML:()=>'', _dentroBat:()=>'',
         _tituloCoct:()=>'', _lineaProd:()=>'', _unidadCompra:()=>'bot',
         esBateo:()=>false, _btnNotaInsumo:()=>'', _btnOcultoImpreso:()=>'',

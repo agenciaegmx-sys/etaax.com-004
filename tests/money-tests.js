@@ -830,27 +830,26 @@ const filaCamp2 = { insumoId: 'campari2', tipo: 'copa', contNeto: 750, copaML: 5
     cerradasBodega: 1, cerradasBarra: 0, pesos: ['0.150'], pesoCristal: 0 }; // físico: 15 + 3 = 18 copas = 900 ml
 setVar(B, 'filasCaptura', [filaPre2, filaCamp2]);
 vm.runInContext("_repCache = _repartoPrebatch();", B);
-test('reparto: el prebatch queda marcado como repartido', () =>
-    eq(B._esPrebatchRepartido('preNegMix'), true));
-test('reparto: Campari recibe su parte del físico pesado (375×13.3% = 50 ml = 1 copa)', () =>
-    eq(Math.round(B._repartoDe('campari2').fis * 100) / 100, 1));
-test('reparto: Campari cuadra a CERO (dif propia −2 copas por producción + 2 del batch… neto la parte vendida)', () => {
-    // dif fila Campari sola: físico 18 − teórico (20 − 100/50 prod) = 18 − 18 = 0
-    // adj.dif = share×(fisB−teoB) = 0.1333×(375−375) = 0 → dif final 0 ✓
-    const difFila = B.calcExistencia(filaCamp2) - B.calcExistenciaTeorica(filaCamp2);
-    eq(Math.round((difFila + B._repartoDe('campari2').dif) * 1000) / 1000, 0);
-});
-test('reparto: faltante del batch cae proporcional (pesa 300 en vez de 375 → Campari −0.2 copas)', () => {
+/* ══ MODELO DE CONSUMO (17-nov-2026) ══ Antes el batch se REPARTÍA entre sus
+   insumos: Campari recibía su parte del físico, de la venta y del faltante del
+   batch. Ahora producir es consumir: a Campari le sale lo que se usó al
+   producir, y el batch lleva su propia cuenta en su renglón. */
+test('consumo: el batch NO se reparte — lleva su propio renglón', () =>
+    eq(B._esPrebatchRepartido('preNegMix'), false));
+test('consumo: a Campari ya no le llega nada del batch (ni físico, ni venta)', () =>
+    eq(B._repartoDe('campari2').fis + '·' + B._repartoDe('campari2').venta, '0·0'));
+test('consumo: Campari cuadra a CERO — producir 1 batch le consumió 2 copas (20 − 2 = 18 contadas)', () =>
+    eq(Math.round(B.calcDiferencia(filaCamp2) * 1000) / 1000, 0));
+test('consumo: la coctelería de Campari es lo que se fue al batch (100 ml = 2 copas)', () =>
+    eq(B.consumoRecetasFila(filaCamp2) + B._prodPBVisible(filaCamp2, B._repartoDe('campari2')), 2));
+test('consumo: si faltan 75 ml del batch, el faltante queda EN EL BATCH (−1.5 copas), no en Campari', () => {
     const filaPreF = { ...filaPre2, pesos: ['0.300'] }; // faltan 75 ml del batch
     setVar(B, 'filasCaptura', [filaPreF, filaCamp2]);
-    vm.runInContext("_repCache = _repartoPrebatch();", B);
-    // 75 ml × 13.33% = 10 ml de Campari = 0.2 copas de 50 ml
-    eq(Math.round(B._repartoDe('campari2').dif * 1000) / 1000, -0.2);
+    const r = Math.round(B.calcDiferencia(filaPreF) * 1000) / 1000 + '·' +
+              Math.round(B.calcDiferencia(filaCamp2) * 1000) / 1000;
     setVar(B, 'filasCaptura', [filaPre2, filaCamp2]);
-    vm.runInContext("_repCache = _repartoPrebatch();", B);
+    return eq(r, '-1.5·0');
 });
-test('reparto: la venta del batch fluye a Campari como venta neta (375×13.3% = 1 copa)', () =>
-    eq(Math.round(B._repartoDe('campari2').venta * 100) / 100, 1));
 
 // Fix 2026-07: el TOTAL del reparto debe sumar TODOS los ingredientes, no solo los
 // ligados a un insumo. Cordial: Aperol 60 + Vodka 60 (ligados) + Sandía 600 + Azúcar 240
@@ -875,8 +874,12 @@ const filaAper = { insumoId:'aperol3', tipo:'copa', contNeto:750, copaML:50, exi
     ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], cerradasBodega:0, cerradasBarra:0, pesos:[], pesoCristal:0 };
 setVar(B, 'filasCaptura', [filaPreC, filaAper]);
 vm.runInContext("_repCache = _repartoPrebatch();", B);
-test('reparto usa TODOS los ingredientes: Aperol 60/960 del físico (= 1.2 copas, no 9.6)', () =>
-    eq(Math.round(B._repartoDe('aperol3').fis * 100) / 100, 1.2));
+/* El desglose INFORMATIVO (cuánto de cada insumo hay dentro del batch) sigue
+   dividiendo entre TODOS los ingredientes: Aperol son 60 ml de los 960. */
+test('el desglose del batch usa TODOS los ingredientes: Aperol 60 ml de 960 (no 480)', () => {
+    const d = (B._repartoPrebatch().lista[0].desglose || []).find(x => x.insumoId === 'aperol3') || {};
+    return eq(Math.round(d.ml * 100) / 100, 60);
+});
 
 /* ── PREBATCH DE COCINA (fila 'peso', se vende en un PLATILLO) ──
    El reparto leía lo vendido del batch con la fórmula de COPAS, que devuelve 0 sin
@@ -908,14 +911,14 @@ setVar(B, 'filasCaptura', [filaPreSalsa, filaJito]);
 vm.runInContext("_repCache = _repartoPrebatch();", B);
 test('prebatch de cocina: el platillo consume 250 g × 4 = 1000 g de salsa', () =>
     eq(B._consumoRecetasBase('preSalsa'), 1000));
-test('prebatch de cocina: la venta del batch llega al jitomate (1000 g × 60% = 600 g)', () =>
-    eq(Math.round(B._repartoDe('jitomate').venta), 600));
-test('prebatch de cocina: el físico pesado se reparte igual (900 g × 60% = 540 g)', () =>
-    eq(Math.round(B._repartoDe('jitomate').fis), 540));
+test('prebatch de cocina: el platillo NO toca el jitomate — consume la salsa', () =>
+    eq(B.consumoRecetasFila(filaJito) + '·' + B._repartoDe('jitomate').venta, '0·0'));
+test('prebatch de cocina: producir 2 batches consume 1200 g de jitomate (5000 − 1200 = 3800)', () =>
+    eq(B._consumoBaseProd(filaJito) + '·' + B.calcExistenciaTeorica(filaJito), '1200·3800'));
 test('prebatch de cocina: teórico del batch = 2000 producidos − 1000 vendidos = 1000 g', () =>
     eq(B.calcExistenciaTeorica(filaPreSalsa), 1000));
-test('prebatch de cocina: el faltante de 100 g cae proporcional (jitomate −60 g)', () =>
-    eq(Math.round(B._repartoDe('jitomate').dif), -60));
+test('prebatch de cocina: el faltante de 100 g queda en la SALSA; el jitomate cuadra en cero', () =>
+    eq(B.calcDiferencia(filaPreSalsa) + '·' + B.calcDiferencia(filaJito), '-100·0'));
 vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _consumoDirty = true;", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 
@@ -956,23 +959,25 @@ vm.runInContext("_repCache = _repartoPrebatch();", B);
 const copasAL = c => Math.round(c * 50) / 1000; // copas de 50 ml → litros
 test('dos vías: el uso DIRECTO en cocteles se cuenta (20 × 50 ml = 1 L)', () =>
     eq(copasAL(B.consumoRecetasFila(filaVodkaD)), 1));
-test('dos vías: el uso VÍA PREBATCH también se cuenta (le tocan 1.25 L de lo vendido)', () =>
-    eq(copasAL(B._repartoDe('vodkaD').vco), 1.25));
-test('dos vías: la coctelería del renglón suma las dos = 2.25 L', () => {
+/* Modelo de consumo: el uso del vodka es lo directo (Vodka Tonic) MÁS lo que
+   se fue al producir el batch. Los Spritz consumen el BATCH, no el vodka. */
+test('dos vías: lo que se fue al batch es uso del vodka (4 batches × 500 ml = 2 L)', () =>
+    eq(copasAL(B._prodPBVisible(filaVodkaD, B._repartoDe('vodkaD'))), 2));
+test('dos vías: la coctelería del renglón suma las dos = 3 L (1 directo + 2 en batches)', () => {
     const adj = B._repartoDe('vodkaD');
-    return eq(copasAL(B.consumoRecetasFila(filaVodkaD) + adj.vco + B._prodPBVisible(filaVodkaD, adj)), 2.25);
+    return eq(copasAL(B.consumoRecetasFila(filaVodkaD) + adj.vco + B._prodPBVisible(filaVodkaD, adj)), 3);
 });
-test('dos vías: lo que entró al batch NO se vuelve a sumar (los 2 L ya están dentro)', () =>
-    eq(B._prodPBVisible(filaVodkaD, B._repartoDe('vodkaD')), 0));
-test('dos vías: el renglón CUADRA — EA 10 L − coctelería 2.25 L = teórico 7.75 L', () => {
+test('dos vías: los Spritz NO le cobran al vodka — consumen el batch', () =>
+    eq(B._repartoDe('vodkaD').vco, 0));
+test('dos vías: el renglón CUADRA — EA 10 L − coctelería 3 L = teórico 7 L', () => {
     const adj = B._repartoDe('vodkaD');
     const ea       = ((parseFloat(filaVodkaD.existenciaAnterior) || 0) + adj.ea);
     const coct     = B.consumoRecetasFila(filaVodkaD) + adj.vco + B._prodPBVisible(filaVodkaD, adj);
     const teorico  = B.calcExistenciaTeorica(filaVodkaD) + adj.teo;
     return eq(copasAL(ea - coct), copasAL(teorico));
 });
-test('dos vías: y el vodka que sigue DENTRO del batch vuelve al teórico (0.75 L)', () =>
-    eq(copasAL(B._repartoDe('vodkaD').fis), 0.75));
+test('dos vías: el batch lleva su cuenta — 4 L producidos − 2.5 L de Spritz = 1.5 L, contados 1.5', () =>
+    eq(copasAL(B.calcExistenciaTeorica(filaPreLim)) + '·' + copasAL(B.calcDiferencia(filaPreLim)), '1.5·0'));
 vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _consumoDirty = true;", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 
@@ -1015,12 +1020,12 @@ setVar(B, 'filasCaptura', [filaTV2, filaVinoCal]);
 vm.runInContext("_repCache = _repartoPrebatch();", B);
 test('otro registro: el consumo del coctel se encuentra por SUB-RECETA (30 × 1 LT = 30 L)', () =>
     eq(B._consumoBaseSubReceta('srTV2'), 30000));
-test('otro registro: al vino le llegan sus 2/3 de lo vendido (20 L), ya no cero', () =>
-    eq(Math.round(B._repartoDe('vinoCal').venta * 1000) / 1000, 20));
+test('otro registro: los cocteles no le cobran al vino — lo vendido sale del batch', () =>
+    eq(B.consumoRecetasFila(filaVinoCal) + '·' + B._repartoDe('vinoCal').venta, '0·0'));
 test('otro registro: la producción sigue descontándole 14.4 L al vino (600×24)', () =>
     eq(Math.round(B._consumoBaseProd(filaVinoCal) * 1000) / 1000, 14.4));
-test('otro registro: y el batch queda marcado como repartido', () =>
-    eq(B._esPrebatchRepartido('preTV_fila'), true));
+test('otro registro: el batch NO se reparte — es su propio renglón', () =>
+    eq(B._esPrebatchRepartido('preTV_fila'), false));
 /* Y el TEÓRICO del batch tiene que moverse con las ventas del coctel. Arreglar solo
    el reparto dejaba el bug a medias: la columna de uso cambiaba, pero el teórico
    seguía creyendo que del batch no había salido nada — así que la existencia
@@ -1034,15 +1039,14 @@ test('otro registro: mover la venta del coctel MUEVE el teórico del batch', () 
     vm.runInContext("invActual.cocktailsVendidos = { coctTV: 30 }; _consumoDirty = true;", B);
     return eq(Math.round((despues - antes) * 1000) / 1000, 10); // 10 cocteles menos × 1 LT
 });
-test('otro registro: y eso mueve el teórico del VINO por su parte del batch (2/3)', () => {
+/* …y NO mueve el del vino: su cuenta es lo que se usó al PRODUCIR (14.4 L),
+   venda lo que venda el batch después. */
+test('otro registro: mover la venta del coctel NO mueve el teórico del vino', () => {
     const conVentas = B.calcExistenciaTeorica(filaVinoCal) + B._repartoDe('vinoCal').teo;
     vm.runInContext("invActual.cocktailsVendidos = { coctTV: 20 }; _consumoDirty = true;", B);
-    vm.runInContext("_repCache = _repartoPrebatch();", B);
     const menosVentas = B.calcExistenciaTeorica(filaVinoCal) + B._repartoDe('vinoCal').teo;
     vm.runInContext("invActual.cocktailsVendidos = { coctTV: 30 }; _consumoDirty = true;", B);
-    vm.runInContext("_repCache = _repartoPrebatch();", B);
-    // 10 cocteles menos = 10 L menos salidos del batch; al vino le tocan 2/3 = 6.667 L
-    return eq(Math.round((menosVentas - conVentas) * 1000) / 1000, 6.667);
+    return eq(Math.round((menosVentas - conVentas) * 1000) / 1000, 0);
 });
 vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _consumoDirty = true;", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
@@ -1168,33 +1172,28 @@ test('2 niveles · el coctel NO vuelve a cargar la Ginebra (ya se cargó al prod
 test('2 niveles · teórico del prebatch: 3 batches − 12 copas vendidas = 18 copas', () =>
     eq(B.calcExistenciaTeorica(filaPreN), 30 - 12));
 
-// 3) El SOBRANTE del prebatch se reparte proporcional a cada insumo.
+// 3) MODELO DE CONSUMO (17-nov-2026): el batch NO se reparte. Su faltante o
+//    sobrante es SUYO, y la Ginebra cuadra con lo que se usó al producir.
 vm.runInContext("_repCache = _repartoPrebatch();", B);
-test('2 niveles · el prebatch queda marcado como repartido', () =>
-    eq(B._esPrebatchRepartido('preNeg2'), true));
-test('2 niveles · Ginebra recibe 40% del físico del batch (1800×0.4 = 720 ml = 14.4 copas)', () =>
-    eq(Math.round(B._repartoDe('gin4').fis * 100) / 100, 14.4));
-test('2 niveles · la venta del batch fluye a Ginebra como venta neta (1200×0.4 = 480 ml = 9.6 copas)', () =>
-    eq(Math.round(B._repartoDe('gin4').venta * 100) / 100, 9.6));
-test('2 niveles · sin faltante en el batch, la Ginebra no arrastra diferencia', () =>
-    eq(Math.round(B._repartoDe('gin4').dif * 1000) / 1000, 0));
-test('2 niveles · si faltan 200 ml del batch, a Ginebra le tocan 80 ml (−1.6 copas)', () => {
-    setVar(B, 'filasCaptura', [{ ...filaPreN, pesos:['0.600'] }, filaGin4, filaCam4, filaVer4]);  // 1600 en vez de 1800
-    vm.runInContext("_repCache = _repartoPrebatch();", B);
-    const d = B._repartoDe('gin4').dif;
+test('2 niveles · el prebatch NO se reparte — lleva su propio renglón', () =>
+    eq(B._esPrebatchRepartido('preNeg2'), false));
+test('2 niveles · a la Ginebra no le llega nada del batch (ni físico, ni venta)', () =>
+    eq(B._repartoDe('gin4').fis + '·' + B._repartoDe('gin4').venta, '0·0'));
+test('2 niveles · el batch cuadra solo: 18 copas teóricas, 1800 ml contados = 18 copas', () =>
+    eq(Math.round(B.calcDiferencia(filaPreN) * 1000) / 1000, 0));
+test('2 niveles · si faltan 200 ml del batch, el faltante es del BATCH (−2 copas) y la Ginebra no se mueve', () => {
+    const roto = { ...filaPreN, pesos:['0.600'] };                     // 1600 en vez de 1800
+    setVar(B, 'filasCaptura', [roto, filaGin4, filaCam4, filaVer4]);
+    const r = Math.round(B.calcDiferencia(roto) * 1000) / 1000 + '·' +
+              Math.round(B.calcDiferencia(filaGin4) * 1000) / 1000;
     setVar(B, 'filasCaptura', [filaPreN, filaGin4, filaCam4, filaVer4]);
-    vm.runInContext("_repCache = _repartoPrebatch();", B);
-    eq(Math.round(d * 1000) / 1000, -1.6);
+    eq(r, '-2·' + Math.round(B.calcDiferencia(filaGin4) * 1000) / 1000);
 });
-/* Que la suma cierre es la prueba de que el reparto es PROPORCIONAL de verdad y no
-   se pierde ni se inventa producto por el camino. */
-test('2 niveles · el reparto cuadra: lo repartido a los 3 insumos = el físico del batch', () => {
-    const suma = ['gin4','campari4','vermut4'].reduce((t, id) => {
-        const r = B._repartoDe(id) || { fis: 0 };
-        // cada uno en SUS copas: gin/campari/vermut usan 50 ml → a ml para sumar
-        return t + r.fis * 50;
-    }, 0);
-    eq(Math.round(suma), 1800);
+/* El desglose INFORMATIVO sí sigue diciendo cuánto de cada insumo hay dentro
+   de lo contado del batch, y tiene que sumar exactamente lo contado. */
+test('2 niveles · el desglose informativo cuadra: los 3 insumos suman los 1800 ml contados', () => {
+    const d = B._repartoPrebatch().lista[0].desglose || [];
+    eq(Math.round(d.reduce((t, x) => t + x.ml, 0)), 1800);
 });
 
 vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _repCache = null; _consumoIdxCache = null; _consumoDirty = true;", B);
@@ -29652,11 +29651,13 @@ function suitePrebatchRendimiento20261023() {
             fila('vermouth',opts.vermouth === undefined ? 1600 : opts.vermouth,3000),fila('campari',1600,3000),fila('gin',2400,3000)]);
         vm.runInContext('_consumoDirty=true;_repCache=_repartoPrebatch();',P);
     }
+    /* MODELO DE CONSUMO (17-nov-2026): el vermouth y el mix llevan cada uno su
+       cuenta. `desg` es el desglose INFORMATIVO de lo que hay dentro del mix. */
     function valores() {
-        return vm.runInContext(`(()=>{const f=filasCaptura[1],a=_repartoDe('vermouth');return {
-            fis:a.fis*60,venta:a.venta*60,teo:calcExistenciaTeorica(f)*60,
-            totalTeo:(calcExistenciaTeorica(f)+a.teo)*60,
-            dif:calcDiferencia(f)+a.dif,desg:_repCache.lista[0].desglose[0].ml}})()`,P);
+        return vm.runInContext(`(()=>{const m=filasCaptura[0],f=filasCaptura[1],l=_repartoPrebatch().lista[0];return {
+            teo:calcExistenciaTeorica(f)*60, dif:calcDiferencia(f),
+            teoMix:calcExistenciaTeorica(m)*60, difMix:calcDiferencia(m)*60,
+            desg:l.desglose[0].ml}})()`,P);
     }
     test('4 batches descuentan 1,400 ml de CADA insumo y no consumen ginebra',()=>{
         montar();eq(P.consumoBasesPorProduccion('vermouth'),1400);eq(P.consumoBasesPorProduccion('campari'),1400);eq(P.consumoBasesPorProduccion('gin'),0);
@@ -29664,23 +29665,27 @@ function suitePrebatchRendimiento20261023() {
     test('el cóctel descuenta la ginebra directa una sola vez',()=>{
         montar();eq(P.calcVentasCopasRecetas('gin',60),10);eq(P.calcVentasCopasRecetas('vermouth',60),0);
     });
-    test('750 ml de mix representan 350 ml de vermouth, no 375 ni 750',()=>{
-        montar({mix:750});eq(n6(valores().fis),350);eq(n6(valores().desg),350);
+    test('el desglose informa: 750 ml de mix llevan 350 ml de vermouth, no 375 ni 750',()=>{
+        montar({mix:750});eq(n6(valores().desg),350);
     });
-    test('586.5 ml de MIX representan 273.7 ml de cada ingrediente con rendimiento 750',()=>{
-        montar({mix:586.5});eq(n6(valores().fis),273.7);
+    test('586.5 ml de MIX llevan 273.7 ml de cada ingrediente con rendimiento 750',()=>{
+        montar({mix:586.5});eq(n6(valores().desg),273.7);
     });
-    test('20 cócteles consumen 560 ml de vermouth en el mix (1200 × 350/750)',()=>{
-        montar();eq(n6(valores().venta),560);eq(n6(valores().totalTeo),2440);
+    test('el mix lleva su cuenta (4 × 750 − 20 × 60 = 1800 ml) y el vermouth la suya (3000 − 1400)',()=>{
+        montar();eq(n6(valores().teoMix),1800);eq(n6(valores().teo),1600);
     });
     test('el consumo de un batch adicional equivale a 5.833333 copas de 60 ml',()=>{
         montar({batches:4});const antes=valores().teo;montar({batches:5});eq(n6(antes-valores().teo),350);eq(n6((antes-valores().teo)/60),5.833333);
     });
-    test('corregir la producción no inventa diferencia si el producto sigue contado en el mix',()=>{
-        for(const batches of [0,0.5,3,4,5,12]) {montar({batches});eq(n6(valores().dif),0);eq(n6(valores().totalTeo),2440);}
+    /* Registrar batches de más o de menos YA NO se esconde: el vermouth lo marca
+       y el mix lo compensa del otro lado, en la proporción de la receta. Con los
+       batches bien registrados (4), los dos cuadran en cero. */
+    test('registrar batches de más o de menos se ve en los dos renglones, y se compensan',()=>{
+        for(const batches of [0,0.5,3,4,5,12]) {montar({batches});
+            eq(n6(valores().dif*60),n6(350*batches-1400));eq(n6(valores().difMix),n6(3000-750*batches));}
     });
-    test('un faltante de 19 copas sigue en -19 al cambiar solo los batches registrados',()=>{
-        for(const batches of [3,4,5]) {montar({batches,vermouth:460});eq(n6(valores().dif),-19);}
+    test('un faltante real de 19 copas de vermouth sale en el vermouth, y el mix cuadra',()=>{
+        montar({batches:4,vermouth:460});eq(n6(valores().dif),-19);eq(n6(valores().difMix),0);
     });
     test('si faltan OTROS 350 ml sin aparecer en el mix pasa de -19 a -24.833333 copas',()=>{
         montar({vermouth:110});eq(n6(valores().dif),-24.833333);
@@ -29690,26 +29695,24 @@ function suitePrebatchRendimiento20261023() {
     });
     test('también respeta un rendimiento menor por reducción y uno mayor por dilución',()=>{
         for(const rendimiento of [500,700,750,1000]) {
-            montar({rendimiento,mix:rendimiento*4-1200});eq(n6(valores().dif),0);
-            eq(n6(valores().venta),n6(1200*350/rendimiento));
+            montar({rendimiento,mix:rendimiento*4-1200});eq(n6(valores().dif),0);eq(n6(valores().difMix),0);
         }
     });
     test('rendimiento real 700 en envase 750: de 586.5 ml quedan 293.25 ml de cada insumo',()=>{
-        montar({rendimiento:700,mix:586.5});eq(n6(valores().fis),293.25);
+        montar({rendimiento:700,mix:586.5});eq(n6(valores().desg),293.25);
         eq(vm.runInContext('_repCache.lista[0].rendimientoBase',P),700);
         eq(vm.runInContext('_prodPrebatchUnidades(filasCaptura[0])*60',P),2800);
     });
     test('los ml del ingrediente no cambian si su copa es de 45 ml en vez de 60',()=>{
         montar({rendimiento:700,mix:586.5});
-        vm.runInContext('filasCaptura[1].copaML=45;_repCache=_repartoPrebatch();',P);
-        eq(n6(P._repartoDe('vermouth').fis*45),293.25);
+        vm.runInContext('filasCaptura[1].copaML=45;',P);
+        eq(n6(valores().desg),293.25);
     });
-    test('el desglose del resultado distingue el total de mix de los ml de cada insumo',()=>{
+    test('el resultado enseña el mix en «Producción propia», con su renglón y su faltante',()=>{
         montar({rendimiento:700,mix:586.5});
-        const html=P._step5TablasHTML();
-        eq(html.includes('586.5 ml de mix contados'),true);
-        eq(html.includes('293.25 ml (350 por cada 700 ml de receta)'),true);
-        eq(html.includes('del insumo en batches'),true);
+        const html=P._step5TablasHTML(), k=html.indexOf('🏭 Producción propia');
+        eq(k>-1,true);eq(html.indexOf('Mix Negroni PR',k)>-1,true);
+        eq(n6(valores().difMix),n6(586.5-(2800-1200)));
     });
     test('el rendimiento y el reparto usan la misma ficha local, aunque la fila guarde el ID maestro',()=>{
         montar({rendimiento:700,mix:700});
@@ -29720,7 +29723,7 @@ function suitePrebatchRendimiento20261023() {
             _consumoDirty=true;_repCache=_repartoPrebatch();
         `,P);
         eq(vm.runInContext('_rendBatch(filasCaptura[0])',P),700);
-        eq(P.consumoBasesPorProduccion('vermouth'),1400);eq(n6(valores().fis),350);
+        eq(P.consumoBasesPorProduccion('vermouth'),1400);eq(n6(valores().desg),350);
     });
 }
 /* Todas las familias usan la unidad de su fila; PZA puede ser un empaque,
@@ -29762,47 +29765,52 @@ function suitePrebatchFamilias20261023() {
     }
     for(const c of casos) {
         test(c[0]+' · producir descuenta en la unidad correcta',()=>{const f=montar(c);eq(n8(X._consumoBaseProd(f)),n8(2*c[7]));});
-        test(c[0]+' · medio batch restante devuelve solo su ingrediente',()=>{montar(c);eq(n8(X._repartoDe('base').fis),n8(c[7]*0.5));});
-        test(c[0]+' · ventas y diferencia cuadran sin importar los batches registrados',()=>{
-            for(const n of [1,2,3,0.5]){const f=montar(c,n),a=X._repartoDe('base');eq(n8(X.calcDiferencia(f)+a.dif),0);eq(n8(a.venta),n8(1.5*c[7]));}
+        /* Modelo de consumo: el cóctel hecho con el batch consume el BATCH. */
+        test(c[0]+' · el cóctel hecho con el batch NO toca el ingrediente',()=>{const f=montar(c);eq(n8(X.consumoRecetasFila(f)),0);eq(X._repartoDe('base').venta,0);});
+        /* Registrar batches de más o de menos se ve: el ingrediente lo marca y el
+           batch lo compensa del otro lado (hechos de verdad: 2). */
+        test(c[0]+' · registrar batches de más o de menos: el ingrediente lo marca y el batch lo compensa',()=>{
+            for(const n of [1,2,3,0.5]){const f=montar(c,n),pf=vm.runInContext('filasCaptura[0]',X);
+                eq(n8(X.calcDiferencia(f)),n8((n-2)*c[7]));eq(n8(X.calcDiferencia(pf)*50),n8((2-n)*1000));}
         });
     }
-    test('el desglose respeta gramos de masa drenada y no los etiqueta en ml',()=>{
+    test('el uso en batches respeta gramos de masa drenada (2 × 900 g) y no los etiqueta en ml',()=>{
         montar(casos[10]);const h=X._step5TablasHTML();
-        eq(h.includes('450 g (900 por cada 1000 ml de receta)'),true);eq(h.includes('8650 g'),true);
+        eq(h.includes('1800 g'),true);eq(h.includes('8200 g'),true);eq(h.includes('1800 ml'),false);
     });
-    test('las piezas parciales no se redondean a una pieza completa en el resultado',()=>{
-        montar(casos[7]);const h=X._step5TablasHTML();eq(h.includes('9999.25 pza'),true);
-        eq(h.includes('88.75 ml (177.5 por cada 1000 ml de receta)'),true);
+    test('las piezas parciales no se redondean: 1 batch de 177.5 ml de cerveza = 0.5 pza',()=>{
+        montar(casos[7],1);const h=X._step5TablasHTML();eq(h.includes('0.5 pza'),true);eq(h.includes('9999.5 pza'),true);
     });
-    test('galería de abarrotes suma solo ventas del batch, conservando gramos',()=>{
+    test('galería de abarrotes enseña lo usado en batches en gramos',()=>{
         const f=montar(casos[10]);const h=X._step5DesgloseCard(f,{});
-        eq(h.includes('1350 g en recetas'),true);eq(h.includes('1800 g en recetas'),false);
+        eq(h.includes('1800 g'),true);eq(h.includes('1800 ml'),false);
     });
     test('galería y formato conservan fracciones pequeñas de piezas',()=>{
         const f=montar(casos[8]);const h=X._step5DesgloseCard(f,{});
-        eq(h.includes('9999.85 pza'),true);eq(X._fmtEquivalenteBatch(0.0025,'PZA'),'0.0025 pza');
+        eq(h.includes('0.2 pza'),true);eq(h.includes('9999.8'),true);eq(X._fmtEquivalenteBatch(0.0025,'PZA'),'0.0025 pza');
     });
     test('el contenido drenado del catálogo llega a la conversión por empaque',()=>{
         montar(casos[10]);const ins=X._insumoResolver('base');
         eq(X._contenidoBasePresentacion(ins,ins.presentaciones[0]),900);
         eq(X.EtaaxCore.cantidadFilaInventario(1,'PZA',{tipo:'peso',baseUnit:'G',contNeto:900}),900);
     });
-    test('entradas de preparación contada en gramos también se reparten',()=>{
-        montar(casos[9]);vm.runInContext("filasCaptura[0].tipo='peso';filasCaptura[0].baseUnit='G';filasCaptura[0].entradas=[400];_cacheRecetasInv[0].camposExtra.unidadRendimientoFinal='G';_repCache=_repartoPrebatch();",X);
-        eq(X._repartoDe('base').ent,100);
+    test('las entradas de una preparación contada en gramos son de SU teórico, no de sus ingredientes',()=>{
+        montar(casos[9]);vm.runInContext("filasCaptura[0].tipo='peso';filasCaptura[0].baseUnit='G';filasCaptura[0].entradas=[400];_cacheRecetasInv[0].camposExtra.unidadRendimientoFinal='G';",X);
+        // 0 anterior + 400 de entrada + 2 × 1000 producidos − 15 × 100 vendidos = 900 g
+        eq(n8(X.calcExistenciaTeorica(vm.runInContext('filasCaptura[0]',X))),900);eq(X._repartoDe('base').ent,0);
     });
-    test('un batch contado por pieza conserva su consumo al vender una pieza en receta',()=>{
-        montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';_cacheRecetasInv[1].ingredientes=[{insumoId:'mix',cantidad:1,unidad:'PZA'}];_consumoDirty=true;_repCache=_repartoPrebatch();",X);
-        eq(X._repartoDe('base').venta,75); // 15 envases × 300 ml / 60
+    test('un batch contado por pieza descuenta las piezas vendidas en receta',()=>{
+        montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';_cacheRecetasInv[1].ingredientes=[{insumoId:'mix',cantidad:1,unidad:'PZA'}];_consumoDirty=true;",X);
+        eq(X.calcVentasPzaRecetas('mix'),15);
     });
     test('subreceta contada por envase: rendimiento de 2 L produce dos envases de 1 L',()=>{
         montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';_cacheRecetasInv[0].camposExtra.rendimientoFinal=2000;",X);
         eq(vm.runInContext('_prodPrebatchUnidades(filasCaptura[0])',X),4);
     });
-    test('subreceta por envase también reparte el sobrante a sus ingredientes',()=>{
-        montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';filasCaptura[0].pesos=[];filasCaptura[0].cerradasBodega=0.5;_repCache=_repartoPrebatch();",X);
-        eq(n8(X._repartoDe('base').fis),2.5);
+    test('subreceta por envase: lo que sobra es del batch (0.5 envases contados = 0.5 teóricos)',()=>{
+        montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';filasCaptura[0].pesos=[];filasCaptura[0].cerradasBodega=0.5;",X);
+        const pf=vm.runInContext('filasCaptura[0]',X);
+        eq(n8(X.calcExistencia(pf)),0.5);eq(n8(X.calcDiferencia(pf)),0);eq(X._repartoDe('base').fis,0);
     });
     test('subreceta que rinde 12 PZA suma 24 piezas al producir 2 batches',()=>{
         montar(casos[0]);vm.runInContext("filasCaptura[0].tipo='pza';filasCaptura[0].contNeto=1;_cacheRecetasInv[0].camposExtra={rendimientoFinal:12,unidadRendimientoFinal:'PZA'};",X);
@@ -29820,16 +29828,15 @@ function suitePrebatchFamilias20261023() {
         montar(casos[9]);
         vm.runInContext("_cacheInsumosInv[1].presentaciones=[{esRendimientoPorcion:true,rendimientoId:'vaso',nombreRendimiento:'Vaso',contenidoPorcionBase:250,unidadPorcionBase:'ML',costoUnitario:10}];_cacheRecetasInv[1].ingredientes=[{insumoId:'mix',cantidad:0.4,unidad:'RENDIMIENTO:vaso'}];_consumoDirty=true;_repCache=_repartoPrebatch();",X);
         eq(X._consumoRecetasBase('mix'),1500);
-        eq(n8(X._repartoDe('base').venta),375); // 15 × 100/1000 × 250 g de ingrediente
-        eq(n8(X.calcDiferencia(vm.runInContext('filasCaptura[1]',X))+X._repartoDe('base').dif),0);
+        eq(X._repartoDe('base').venta,0);                    // el cóctel no toca el ingrediente
+        eq(n8(X.calcDiferencia(vm.runInContext('filasCaptura[1]',X))),0);
     });
-    test('mezclar presentación y mililitros conserva el reparto y no duplica producción',()=>{
+    test('mezclar presentación y mililitros no duplica consumo ni producción',()=>{
         montar(casos[9]);
         vm.runInContext("_cacheInsumosInv[1].presentaciones=[{esRendimientoPorcion:true,rendimientoId:'vaso',nombreRendimiento:'Vaso',contenidoPorcionBase:250,unidadPorcionBase:'ML',costoUnitario:10}];_cacheRecetasInv[1].ingredientes=[{insumoId:'mix',cantidad:0.2,unidad:'RENDIMIENTO:vaso'},{insumoId:'mix',cantidad:50,unidad:'ML'}];_consumoDirty=true;_repCache=_repartoPrebatch();",X);
         eq(X._consumoRecetasBase('mix'),1500);
-        eq(n8(X._repartoDe('base').venta),375);
         eq(n8(X._consumoBaseProd(vm.runInContext('filasCaptura[1]',X))),500);
-        eq(n8(X.calcDiferencia(vm.runInContext('filasCaptura[1]',X))+X._repartoDe('base').dif),0);
+        eq(n8(X.calcDiferencia(vm.runInContext('filasCaptura[1]',X))),0);
     });
 }
 suitePrebatchFamilias20261023();
@@ -30766,16 +30773,16 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
     test('sin filtro, la hoja no se anuncia como filtrada', () =>
         eq(H.indexOf('Hoja filtrada'), -1, 'limpia'));
 
-    /* La pantalla y la hoja tienen que medir la diferencia IGUAL, reparto del
-       prebatch incluido. Si la pantalla lo ignorara, un insumo que recibe la
-       variancia de un batch saldría en una lista y no en la otra. */
-    test('la diferencia de pantalla lleva el reparto del prebatch, como la hoja', () => {
+    /* La pantalla y la hoja tienen que medir la diferencia IGUAL. Con el modelo
+       de consumo (17-nov-2026) ninguna de las dos le suma a un insumo la
+       variancia de un batch: aunque haya un reparto calculado, no entra. */
+    test('la diferencia de pantalla NO lleva reparto del prebatch (modelo de consumo), como la hoja', () => {
         const f = getVar(F, 'filasCaptura').filter(x => x.insumoId === 'f1')[0];
         const antes = F._difS5(f);
-        setVar(F, '_repCache', { porInsumo: { f1: { fis:3, teo:1, ea:0, ent:0, vco:0, cm:0, can:0 } } });
+        setVar(F, '_repCache', { porInsumo: { f1: { fis:3, teo:1, ea:0, ent:0, vco:0, cm:0, can:0 } }, esPB:{}, lista:[] });
         const con = F._difS5(f);
         setVar(F, '_repCache', null);
-        return eq(Math.round((con - antes) * 100) / 100, 2, 'antes=' + antes + ' con=' + con);
+        return eq(Math.round((con - antes) * 100) / 100, 0, 'antes=' + antes + ' con=' + con);
     });
 
     /* La galería es la MISMA lista con otra cara: si el filtro solo viviera en
@@ -34858,6 +34865,107 @@ console.log('\n══ BH73 · Dos equipos pagan el mismo recibo ══');
         const ls = pagosEnNube('nr_s1_20261109');
         return eq(ls.length + '·' + (ls[0] || {}).id, '1·gn_nr_s1_20261109', JSON.stringify(ls.map(g => g.id)));
     });
+}
+
+/* ═══════════ BH74 · EL PREBATCH ES CONSUMO: SPRITE Y SQUIRT ═══════════
+   El caso de Edwin (17-nov): una sub-receta de bebidas con Sprite 2 LTS y
+   Squirt 2 LTS, refrescos que se cuentan por PIEZA. «Me cuenta en el reporte
+   lo que se usó en el prebatch, pero no me lo descuenta del resultado.»
+
+   No era un error de suma: el sistema trataba el prebatch como un TRASLADO
+   (la Sprite pasaba al batch y seguía siendo suya) y él lo piensa como
+   CONSUMO. Su fórmula, que es la que queda:
+     anterior + entradas − botella − copas − coctelería (directa + batches
+     producidos que la usan directo) − cortesías − mermas = teórico
+   Los cocteles hechos con el batch consumen el BATCH, y el batch es su propio
+   renglón con su propia diferencia.
+
+   Batch Paloma: rinde 2000 ml con 500 ml de Sprite + 500 de Squirt + 1000 de
+   tequila. Cuatro batches = 1 botella de 2 L de cada refresco.            */
+console.log('\n══ BH74 · El prebatch es consumo: Sprite y Squirt ══');
+{
+    const P = crearContexto();
+    cargarJS(P, 'etaax-core.js'); cargarJS(P, 'insumo-label.js'); cargarJS(P, 'recetas/inventarios.js');
+    P._storage['etaax_negocio_activo'] = 'negT';
+    const RECS = [
+        { id:'srPal', nombre:'Batch Paloma', tipo:'sub-bebidas', status:'activa',
+          camposExtra:{ rendimientoFinal:'2000', unidadRendimientoFinal:'ML' },
+          ingredientes:[{ insumoId:'sprite', cantidad:500, unidad:'ML' },
+                        { insumoId:'squirt', cantidad:500, unidad:'ML' },
+                        { insumoId:'tequila', cantidad:1000, unidad:'ML' }] },
+        { id:'recPal', nombre:'Paloma', tipo:'bebidas', status:'activa',
+          ingredientes:[{ insumoId:'prePal', cantidad:250, unidad:'ML' }] }
+    ];
+    const INS = [
+        { id:'prePal', nombre:'Batch Paloma PR', esSubReceta:true, recetaId:'srPal', activo:'1' },
+        { id:'sprite', nombre:'Sprite 2 LTS', tipoInsumo:'refresco', activo:'1', presentaciones:[{ contNeto:2, umContenido:'LT' }] },
+        { id:'squirt', nombre:'Squirt 2 LTS', tipoInsumo:'refresco', activo:'1', presentaciones:[{ contNeto:2, umContenido:'LT' }] },
+        { id:'tequila', nombre:'Tequila', activo:'1' }
+    ];
+    const fPza = (id, nom, cont) => ({ insumoId:id, nombre:nom, tipo:'pza', contNeto:cont, copaML:0,
+        existenciaAnterior:10, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0,
+        entradas:[], pesos:[], cerradasBodega:9, cerradasBarra:0 });       // quedan 9: se usó 1 en batches
+    const fPre = (ml) => ({ insumoId:'prePal', nombre:'Batch Paloma PR', tipo:'copa', contNeto:2000, copaML:1,
+        rendimientoBatch:2000, existenciaAnterior:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0,
+        ventasBotella:0, entradas:[], pesos:[], cerradasBodega:ml / 2000, cerradasBarra:0 });
+    let S, Q, B;
+    const montar = ({ cont = 2000, palomas = 0, batchML = 8000 } = {}) => {
+        setVar(P, '_cacheRecetasInv', JSON.parse(JSON.stringify(RECS)));
+        setVar(P, '_cacheInsumosInv', JSON.parse(JSON.stringify(INS)));
+        setVar(P, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{}, cancelaciones:[],
+            descuentos:[], filas:[], prebatchProducidos:{ prePal: 4 }, cocktailsVendidos:{ recPal: palomas } });
+        S = fPza('sprite', 'Sprite 2 LTS', cont); Q = fPza('squirt', 'Squirt 2 LTS', cont); B = fPre(batchML);
+        setVar(P, 'filasCaptura', [S, Q, B]);
+        vm.runInContext('_consumoDirty = true; _repCache = _repartoPrebatch();', P);
+    };
+    const r3 = v => Math.round(v * 1000) / 1000;
+
+    /* ── la Sprite: lo usado en el batch SÍ baja su teórico ── */
+    montar();
+    test('4 batches usan 1 botella de Sprite (4 × 500 ml ÷ 2 L)', () => eq(r3(P._consumoBaseProd(S)), 1));
+    test('…y su teórico BAJA: 10 − 1 = 9 (antes se quedaba en 10)', () => eq(r3(P.calcExistenciaTeorica(S) + P._repartoDe('sprite').teo), 9));
+    test('…contadas 9 botellas, la Sprite cuadra en cero', () => eq(r3(P.calcDiferencia(S) + P._repartoDe('sprite').dif), 0));
+    test('…y su coctelería es esa botella usada en batches', () =>
+        eq(r3(P.consumoRecetasFila(S) + P._prodPBVisible(S, P._repartoDe('sprite'))), 1));
+    test('la Squirt, igual: −1 y cuadra', () => eq(r3(P.calcExistenciaTeorica(Q)) + '·' + r3(P.calcDiferencia(Q)), '9·0'));
+
+    /* ── el batch: su propio renglón y su propia cuenta ── */
+    test('el batch NO se reparte: lleva su propio renglón', () => eq(P._esPrebatchRepartido('prePal'), false));
+    test('…en el grupo «Producción propia»', () => eq(P._grupoCategoria(B), '🏭 Producción propia'));
+    test('…con su teórico: 0 + 4 × 2000 producidos − 0 palomas = 8000 ml', () => eq(r3(P.calcExistenciaTeorica(B)), 8000));
+    test('…y en pantalla se ve lo producido (no sale de la nada)', () => {
+        const h = P._step5TablasHTML().replace(/<[^>]+>/g, ' ');
+        return eq(/producido/.test(h) && h.indexOf('Batch Paloma PR') > -1, true);
+    });
+
+    /* ── EL CASO QUE ÉL VEÍA: palomas sin capturar y el batch ya se acabó ── */
+    montar({ palomas: 0, batchML: 0 });
+    test('palomas sin capturar y batch acabado: la Sprite cuadra (antes salía −1 de FALTANTE)', () =>
+        eq(r3(P.calcDiferencia(S) + P._repartoDe('sprite').dif), 0));
+    test('…el faltante queda en el BATCH: 8000 ml sin explicar (las palomas que faltan capturar)', () =>
+        eq(r3(P.calcDiferencia(B)), -8000));
+
+    /* ── vendidas 32 palomas (8000 ml): todo cuadra ── */
+    montar({ palomas: 32, batchML: 0 });
+    test('32 palomas capturadas: el batch cuadra en cero', () => eq(r3(P.calcDiferencia(B)), 0));
+    test('…y las palomas NO le cobran a la Sprite (consumen el batch)', () =>
+        eq(r3(P.consumoRecetasFila(S)) + '·' + r3(P.calcDiferencia(S)), '0·0'));
+
+    /* ── el refresco SIN contenido capturado: antes callaba, ahora avisa ── */
+    montar({ cont: 0 });
+    test('refresco sin contenido: lo usado en el batch no se puede pasar a piezas', () => eq(r3(P._consumoBaseProd(S)), 0));
+    test('…y el Resultado lo AVISA, con el nombre del refresco y lo que se usa', () => {
+        const d = P._prebatchDiagnostico().filter(x => x.mal === 'sincontenido');
+        return eq(d.length + '·' + /Sprite 2 LTS/.test(d.map(x => x.fila).join()) + '·' + /500 ml por batch/.test(d.map(x => x.txt).join()),
+                  '2·true·true');
+    });
+    test('…y el Paso 3 también, al capturar la producción', () => {
+        const r = P._revisarPrebatch(INS[0]);
+        return eq(!!r && r.probs.some(t => /Sprite 2 LTS.*contenido/.test(t)), true);
+    });
+    montar();
+    test('con el contenido capturado, ningún aviso de contenido', () =>
+        eq(P._prebatchDiagnostico().filter(x => x.mal === 'sincontenido').length, 0));
 }
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
