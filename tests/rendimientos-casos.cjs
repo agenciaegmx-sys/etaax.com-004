@@ -106,7 +106,8 @@ module.exports = function({test,eq,crearContexto,cargarJS}) {
 
     // Ejecutar el conversor REAL, incluidos catálogo, tombstones y botón.
     cargarJS(c,'recetas/subreceta-rendimientos.js');
-    cargar('recetas/index.html','_normNombreSR','_buscarInsumoSubReceta','_subRecetaYaEsInsumo','_actualizarBotonAgregarInsumo','_insumoDeSubReceta','_setChkIncluirInv','_areaDefaultSubReceta','agregarSubRecetaComoInsumo');
+    cargar('recetas/index.html','_normNombreSR','_buscarInsumoSubReceta','_subRecetaYaEsInsumo','_actualizarBotonAgregarInsumo','_insumoDeSubReceta','_setChkIncluirInv','_areaDefaultSubReceta','_pbInvQuiere','_pintarPrebatchInv','agregarSubRecetaComoInsumo');
+    c._pbInvElegido=null; // «¿usar como prebatch en el inventario?» sin contestar
     let catalogo=[],serial='[]',contador=0;
     c.recetaActualId='sr1';c.recetaTipoActual='sub-alimentos';c.ingredientes=[{cantidad:1,unidad:'KG',costoPorKgLt:800}];
     c.costoUnitEfectivo=i=>i.costoPorKgLt;c.genId=()=>String(++contador);
@@ -136,5 +137,45 @@ module.exports = function({test,eq,crearContexto,cargarJS}) {
         const id=catalogo[0].id;c.localStorage.setItem('etaax_sucursal_activa','s2');
         c._actualizarBotonAgregarInsumo();eq(boton.disabled,false);c.agregarSubRecetaComoInsumo();
         eq(catalogo.length,2);eq(catalogo[0].id,id);eq(catalogo[0].sucursales.length,1);eq(catalogo[1].sucursales[0],'s2');
+    });
+
+    /* ══ ¿USAR COMO PREBATCH EN EL INVENTARIO? (17-nov-2026) ══════════════
+       Una sola pregunta en vez de tres controles sueltos. La decisión es del
+       dueño, se guarda en negocio_insumos (la tabla del catálogo) y guardar la
+       receta no la cambia. */
+    cargar('recetas/index.html','_guardarInsumoSubReceta','_setPrebatchInv','_setAreaSubReceta');
+    const nube=[];
+    c._supabase={from:t=>({upsert:r=>{nube.push(t+'|'+(r.datos||{}).ocultoInventario+'|'+(r.datos||{}).area);return Promise.resolve({error:null});}})};
+    const avisos=[];c.alert=m=>avisos.push(String(m));
+    c.localStorage.setItem('etaax_sucursal_activa','s1');
+    const sel=c.document.getElementById('selAreaSubReceta');
+    const deS1=()=>catalogo.find(x=>x.sucursales&&x.sucursales[0]==='s1');
+    test('sin contestar la pregunta, la sub-receta dada de alta NO aparece en el inventario',()=>{
+        c._setChkIncluirInv();eq(deS1().ocultoInventario,true);eq(c._pbInvElegido,false);
+    });
+    test('decir «Sí» la mete al inventario, con el área por su tipo (alimentos → cocina)',()=>{
+        sel.value='';c._setChkIncluirInv();c._setPrebatchInv(true);
+        eq(deS1().ocultoInventario+'·'+deS1().area,'false·cocina');
+    });
+    test('…y se guarda en negocio_insumos, la tabla del catálogo',()=>eq(nube[nube.length-1],'negocio_insumos|false|cocina'));
+    test('cambiar el área también va a negocio_insumos (la tabla vieja «insumos» la rechazaba)',()=>{
+        sel.value='almacen_cocina';c._setAreaSubReceta();
+        eq(deS1().area+'·'+nube[nube.length-1],'almacen_cocina·negocio_insumos|false|almacen_cocina');
+    });
+    test('guardar la receta no cambia la decisión ni el área',()=>{
+        c._setChkIncluirInv();c.agregarSubRecetaComoInsumo(true);
+        eq(deS1().ocultoInventario+'·'+deS1().area,'false·almacen_cocina');
+    });
+    test('si la pantalla no conoce la decisión (catálogo tardío), guardar conserva la del insumo',()=>{
+        c._pbInvElegido=null;sel.value='barra';c.agregarSubRecetaComoInsumo(true);
+        eq(deS1().ocultoInventario+'·'+deS1().area,'false·almacen_cocina');
+    });
+    test('decir «No» la saca del inventario',()=>{
+        c._setChkIncluirInv();c._setPrebatchInv(false);eq(deS1().ocultoInventario,true);
+    });
+    test('sin guardar la sub-receta, «Sí» pide guardarla primero y no crea nada',()=>{
+        const n=catalogo.length;c.recetaActualId=null;c.localStorage.setItem('etaax_sucursal_activa','s3');avisos.length=0;
+        c._setPrebatchInv(true);c.recetaActualId='sr1';c.localStorage.setItem('etaax_sucursal_activa','s1');
+        eq(catalogo.length+'·'+/Guarda la sub receta primero/.test(avisos.join(' ')),n+'·true');
     });
 };

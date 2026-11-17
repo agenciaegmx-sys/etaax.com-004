@@ -122,7 +122,7 @@
         });
         cada('#editorWrap .costeo-col-title', function (el) { icono(el, el.closest('.col-aplicado') ? 'aplicado' : 'sugerido'); });
         cada('#cardAgregarInsumo .card-body > div:first-child > div > div:first-child', function (el) { icono(el,'insumos','📦'); });
-        cada('#cardAgregarInsumo label:has(#chkIncluirInventario) > span', function (el) { icono(el,'inventario','📦'); });
+        cada('#cardPrebatchInv .pbinv-titulo', function (el) { icono(el,'inventario','🏭'); });
         var area = document.getElementById('selAreaSubReceta');
         if (area) {
             icono(area.previousElementSibling,'inventario','📍');

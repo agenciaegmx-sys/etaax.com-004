@@ -4902,13 +4902,31 @@ function iniciarInventario() {
 // Regla: SIN área asignada NO aparece en ningún inventario; con área, solo en el
 // inventario de esa misma área (el inventario 'general' incluye todas las que SÍ
 // tengan área). Aplica igual a insumos y a sub-recetas-como-insumo.
+/* ══ QUÉ ÁREAS DE INSUMO ENTRAN A CADA INVENTARIO ═════════════════════════
+   El catálogo parte el almacén en tres (almacén barra / cocina / general,
+   ver staff-area.js), pero aquí se comparaba el texto exacto contra las áreas
+   del inventario (barra, bodega, cocina, general): un insumo —o una
+   sub-receta— puesto en «Almacén barra» no salía en el inventario de barra
+   ni en el de bodega, solo en el general. Desaparecía sin aviso.
+
+   El inventario de barra cuenta la barra Y lo que la barra guarda (cada
+   renglón ya separa «cerradas en barra» y «en bodega»); el de cocina igual;
+   el de bodega es el almacén completo. 'bodega' a secas sigue valiendo: es
+   almacén general. */
+var _AREAS_DE_INV = {
+    barra:  ['barra', 'almacen_barra'],
+    cocina: ['cocina', 'almacen_cocina'],
+    bodega: ['almacen_barra', 'almacen_cocina', 'almacen_general']
+};
 function _insumoEnAreaInv(ins) {
     if (!ins) return false;
-    var insA = (ins.area || '').toString().trim().toLowerCase();
-    if (!insA) return false;                       // sin área → nunca aparece
+    var crudo = (ins.area || '').toString().trim().toLowerCase();
+    if (!crudo) return false;                      // sin área → nunca aparece
     var invA = ((invActual && invActual.area) || '').toString().trim().toLowerCase();
     if (!invA || invA === 'general') return true;  // inventario general → todas las que tengan área
-    return insA === invA;                          // área del insumo == área del inventario
+    if (crudo === invA) return true;
+    var insA = (window.StaffArea && StaffArea.normIns) ? (StaffArea.normIns(crudo) || crudo) : crudo;
+    return (_AREAS_DE_INV[invA] || [invA]).indexOf(insA) >= 0;
 }
 
 // insumoIds con movimiento del QR (entrada/merma/salida) en el periodo+sucursal de
@@ -5190,6 +5208,15 @@ function cargarProductosCaptura() {
     const _movQR = _insumosConMovimientoQR();
     const insumos = _catalogoUnicoInv().filter(function(ins){
         var _cid = ins.origenId || ins.id; // id canónico (copia → maestro)
+        /* Una sub-receta a la que se le dijo «No» a «¿Usar como prebatch en el
+           inventario?» queda FUERA, no solo escondida: antes se colaba en las
+           cuentas del Resultado aunque no saliera en la lista de captura.
+           Salvo que este inventario ya la haya contado: lo capturado no se
+           tira por cambiar de opinión a medio inventario. */
+        if (ins.esSubReceta && ins.ocultoInventario) {
+            var _fg = _filaGuardadaDe(_cid);
+            return !!(_fg && _filaConDatos(_fg)) || !!_movQR[_cid];
+        }
         if (_insumoEnAreaInv(ins)) return true;
         if (_movQR[_cid]) return true; // tiene merma/entrada del QR en este periodo → incluir
         var f = _filaGuardadaDe(_cid);
@@ -5645,7 +5672,7 @@ function _avisoAreaHTML() {
     scope.forEach(function(x){
         var a = (x && x.area || '').toString().trim().toLowerCase();
         if (!a) sinArea++;
-        else if (invA && invA !== 'general' && a !== invA) otraArea++;
+        else if (invA && invA !== 'general' && !_insumoEnAreaInv(x)) otraArea++;   // la MISMA regla que decide quién entra
     });
     if (!sinArea && !otraArea) return '';
     var parts = [];

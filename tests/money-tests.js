@@ -7123,8 +7123,15 @@ console.log('\n══ BB5 · La sub-receta convertida a insumo ══');
         eq(rec.indexOf("localStorage.getItem(_sk('insumos'))"), -1, 'por el puente'));
     test('…ni se escribe con localStorage a pelo', () =>
         eq(rec.indexOf("localStorage.setItem(_sk('insumos')"), -1, 'por el puente'));
-    test('las escrituras refrescan la memoria del catálogo', () =>
-        eq((rec.match(/setCatalogoInsumosMem\(/g) || []).length >= 4, true, 'refresca'));
+    /* Cada función que ESCRIBE el catálogo refresca su memoria. Antes se
+       contaban las llamadas (≥ 4); el 17-nov dos escritores se volvieron uno
+       (_guardarInsumoSubReceta) y la cuenta bajaba sin que nada se rompiera. */
+    test('las escrituras refrescan la memoria del catálogo', () => {
+        const cuerpo = (n) => { const i = rec.indexOf('function ' + n + '('); return i < 0 ? '' : rec.slice(i, rec.indexOf('\nfunction ', i + 10)); };
+        const escritores = ['_guardarInsumoSubReceta', 'agregarSubRecetaComoInsumo']
+            .filter(n => /_skPut\(_sk\('insumos'\)/.test(cuerpo(n)));
+        return eq(escritores.length + '·' + escritores.every(n => /setCatalogoInsumosMem\(/.test(cuerpo(n))), '2·true', 'refresca');
+    });
     /* UNA sola regla para "¿esta sub-receta ya es insumo?": por recetaId si la
        receta está guardada, y por nombre si todavía no —que es justo como el
        guardado adopta a los huérfanos. Preguntar distinto era el bug del botón:
@@ -34966,6 +34973,52 @@ console.log('\n══ BH74 · El prebatch es consumo: Sprite y Squirt ══');
     montar();
     test('con el contenido capturado, ningún aviso de contenido', () =>
         eq(P._prebatchDiagnostico().filter(x => x.mal === 'sincontenido').length, 0));
+}
+
+/* ═══════════ BH75 · QUÉ ENTRA A CADA INVENTARIO ═══════════
+   Dos cosas del 17-nov:
+     · Las áreas de ALMACÉN (almacén barra / cocina / general) no coincidían con
+       ningún inventario salvo el general: un insumo o una sub-receta puesta en
+       «Almacén barra» desaparecía del de barra y del de bodega sin aviso.
+     · Una sub-receta a la que se le dijo «No» a «¿Usar como prebatch en el
+       inventario?» solo se escondía de la lista de captura, pero seguía en las
+       cuentas del Resultado. Ahora queda fuera de verdad.                    */
+console.log('\n══ BH75 · Qué entra a cada inventario ══');
+{
+    const R = crearContexto();
+    cargarJS(R, 'etaax-core.js'); cargarJS(R, 'insumo-label.js'); cargarJS(R, 'staff-area.js');
+    cargarJS(R, 'recetas/inventarios.js');
+    const entra = (invArea, insArea) => { setVar(R, 'invActual', { area: invArea }); return R._insumoEnAreaInv({ area: insArea }); };
+    const tabla = (invArea) => ['barra','almacen_barra','cocina','almacen_cocina','almacen_general','bodega','']
+        .map(a => entra(invArea, a) ? 1 : 0).join('');
+    test('inventario de BARRA: la barra y su almacén (barra, almacén barra)', () => eq(tabla('barra'), '1100000'));
+    test('inventario de COCINA: la cocina y su almacén', () => eq(tabla('cocina'), '0011000'));
+    test('inventario de BODEGA: todos los almacenes, y «bodega» de antes (= almacén general)', () => eq(tabla('bodega'), '0101110'));
+    test('inventario GENERAL: todo lo que tenga área; sin área, nada', () => eq(tabla('general'), '1111110'));
+
+    /* El constructor real de filas: una sub-receta con «No» no entra. */
+    const pre = (oculto) => ({ id:'preX', nombre:'Batch X', esSubReceta:true, recetaId:'srX', area:'barra',
+        familia:'Bebidas', activo:'1', ocultoInventario: oculto, sucursales:['s1'], presentaciones:[{ contNeto:1000, umContenido:'ML' }] });
+    const ron = { id:'ron', nombre:'Ron', familia:'Bebidas', categoria:'Destilados', area:'barra', activo:'1',
+        sucursales:['s1'], presentaciones:[{ contNeto:750, umContenido:'ML' }] };
+    const montar = (cat, filas) => {
+        R._storage.etaax_sucursal_activa = 's1';
+        setVar(R, '_cacheInsumosInv', JSON.parse(JSON.stringify(cat)));
+        setVar(R, '_cacheRecetasInv', [{ id:'srX', nombre:'Batch X', tipo:'sub-bebidas', ingredientes:[{ insumoId:'ron', cantidad:100, unidad:'ML' }] }]);
+        setVar(R, '_cacheInv', []); setVar(R, '_cacheEL', []);
+        setVar(R, 'invActual', { id:'inv', sucursalId:'s1', area:'barra', fecha:'2026-11-17', filas: filas || [], entradasLog:[], cancelaciones:[] });
+        setVar(R, 'filasCaptura', []);
+        R.cargarProductosCaptura();
+        return vm.runInContext('filasCaptura', R).map(f => f.insumoId).sort().join(',');
+    };
+    test('una sub-receta con «Sí» entra al inventario de su área', () => eq(montar([ron, pre(false)]), 'preX,ron'));
+    test('con «No» queda FUERA (antes se colaba en las cuentas del Resultado)', () => eq(montar([ron, pre(true)]), 'ron'));
+    test('…salvo que este inventario ya la haya contado: lo capturado no se tira', () =>
+        eq(montar([ron, pre(true)], [{ insumoId:'preX', tipo:'copa', copaML:50, contNeto:1000, cerradasBodega:2, cerradasBarra:0, pesos:[], entradas:[] }]), 'preX,ron'));
+    test('y con «No» tampoco se ofrece en la producción del Paso 3', () => {
+        montar([ron, pre(true)]);
+        return eq(R.prebatchesProducibles().length, 0);
+    });
 }
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner

@@ -15,7 +15,7 @@
     <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
     <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=03cadcf1">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
-    <link rel="preload" as="script" href="/recetas/recetas-ui.js?v=6a27913f">
+    <link rel="preload" as="script" href="/recetas/recetas-ui.js?v=91eddf64">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -313,21 +313,6 @@
                             + Agregar como insumo
                         </button>
                     </div>
-                    <label style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:9px;cursor:pointer">
-                        <input type="checkbox" id="chkIncluirInventario" style="width:16px;height:16px;accent-color:var(--green);flex-shrink:0" onchange="_toggleIncluirInv()">
-                        <span style="font-size:12px;color:var(--text)">📦 Incluir en el inventario <span style="color:var(--text-dim);font-size:11px">— aparece en la lista de captura (prebatches sí; bases de cocina normalmente no)</span></span>
-                    </label>
-                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-                        <label style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);display:block;margin-bottom:5px">📍 Área del inventario <span style="text-transform:none;letter-spacing:0">— sin área NO aparece en ningún inventario</span></label>
-                        <select id="selAreaSubReceta" onchange="_setAreaSubReceta()" style="width:100%;font-size:13px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 10px">
-                            <option value="">— Sin área (no aparece) —</option>
-                            <option value="barra">🍸 Barra</option>
-                            <option value="cocina">🍳 Cocina</option>
-                            <option value="almacen_barra">📦 Almacén barra</option>
-                            <option value="almacen_cocina">📦 Almacén cocina</option>
-                            <option value="almacen_general">🏷️ Almacén general</option>
-                        </select>
-                    </div>
                 </div>
             </div>
 
@@ -388,6 +373,33 @@
 
                     </div>
 
+                </div>
+            </div>
+
+            <!-- ¿USAR COMO PREBATCH EN EL INVENTARIO? — solo sub-recetas, hasta abajo.
+                 Una sola pregunta en vez de tres controles sueltos (agregar como
+                 insumo + casilla + área): al decir «Sí» se da de alta sola. -->
+            <div class="card" id="cardPrebatchInv" style="display:none">
+                <div class="card-body" style="padding:18px 20px">
+                    <div class="pbinv-titulo" style="font-size:15px;font-weight:700;margin-bottom:4px">🏭 ¿Usar como prebatch en el inventario?</div>
+                    <div style="font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:12px">
+                        Si dices que sí, aparece en el inventario que elijas: lo que se produzca en el Paso 3 se descuenta de sus ingredientes y el batch lleva su propia cuenta.
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        <button type="button" id="pbInvSi" class="pbinv-opc" onclick="_setPrebatchInv(true)">Sí, que aparezca</button>
+                        <button type="button" id="pbInvNo" class="pbinv-opc" onclick="_setPrebatchInv(false)">No</button>
+                    </div>
+                    <div id="pbInvArea" style="margin-top:14px;display:none">
+                        <label for="selAreaSubReceta" style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);display:block;margin-bottom:5px">📍 ¿En qué inventario aparece?</label>
+                        <select id="selAreaSubReceta" onchange="_setAreaSubReceta()" style="width:100%;font-size:14px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px">
+                            <option value="barra">🍸 Barra</option>
+                            <option value="almacen_barra">📦 Almacén barra</option>
+                            <option value="cocina">🍳 Cocina</option>
+                            <option value="almacen_cocina">📦 Almacén cocina</option>
+                            <option value="almacen_general">🏷️ Almacén general</option>
+                        </select>
+                    </div>
+                    <div id="pbInvEstado" style="margin-top:10px;font-size:12px;color:var(--text-dim);line-height:1.5"></div>
                 </div>
             </div>
 
@@ -1231,6 +1243,8 @@ function actualizarVistaCosteo(tipo) {
     if (cardRend)  cardRend.style.display  = esSub ? '' : 'none';
     var cardInsumo = document.getElementById('cardAgregarInsumo');
     if (cardInsumo) cardInsumo.style.display = esSub ? '' : 'none';
+    var cardPbInv = document.getElementById('cardPrebatchInv');
+    if (cardPbInv) cardPbInv.style.display = esSub ? '' : 'none';
     if (esSub) _actualizarBotonAgregarInsumo();
     if (barraRend) barraRend.style.display = esSub ? 'flex' : 'none';
     if (barraCosto) {
@@ -1797,56 +1811,100 @@ function _actualizarBotonAgregarInsumo() {
 // Misma regla que arriba: si aquí buscara distinto, el checkbox de inventario y
 // el selector de área escribirían sobre un insumo que el botón no reconoce.
 function _insumoDeSubReceta() { return _buscarInsumoSubReceta(); }
-// Estado del checkbox "Incluir en el inventario": del insumo convertido si existe;
-// si no, default por tipo (bebidas SÍ = prebatch; alimentos NO = base de cocina).
-function _setChkIncluirInv() {
-    var chk = document.getElementById('chkIncluirInventario');
-    var sel = document.getElementById('selAreaSubReceta');
-    var ins = _insumoDeSubReceta();
-    if (chk) {
-        if (ins) chk.checked = !ins.ocultoInventario;
-        else chk.checked = (recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas');
-    }
-    // Área por DEFAULT según el tipo: una sub-receta de alimentos es de cocina y una
-    // de bebidas (prebatch) es de barra. Antes nacían sin área — o sea invisibles en
-    // TODO inventario — y había que acordarse de asignarla a mano.
-    if (sel) sel.value = (ins && ins.area) || _areaDefaultSubReceta();
-}
+/* ══ ¿USAR COMO PREBATCH EN EL INVENTARIO? ════════════════════════════════
+   Antes eran tres controles sueltos —«Agregar como insumo», la casilla
+   «Incluir en el inventario» y el área— y la casilla no hacía nada si antes no
+   se había dado de alta. Ahora es UNA pregunta, hasta abajo:
+     · Sí  → se da de alta sola (si hace falta) y aparece en el inventario
+             elegido; lo producido en el Paso 3 se descuenta de sus insumos.
+     · No  → no aparece en ningún inventario (ni en sus cuentas).
+   La decisión es del dueño, sub-receta por sub-receta. El área sale por el
+   tipo: bebidas → barra; alimentos → cocina.
+
+   OJO: el alta (agregarSubRecetaComoInsumo) reescribe ocultoInventario y área
+   CADA VEZ que se guarda la receta, con lo que diga esta pantalla. Por eso el
+   estado arranca siempre de lo que el insumo ya tenía guardado: un guardado
+   cualquiera no puede cambiar la decisión. */
+var _pbInvElegido = null;            // true/false; null = sin decidir (= no aparece)
 function _areaDefaultSubReceta() {
     return (recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas') ? 'barra' : 'cocina';
 }
-// Área de la sub-receta: si ya está convertida a insumo, la actualiza en vivo (catálogo + nube).
-function _setAreaSubReceta() {
-    var sel = document.getElementById('selAreaSubReceta'); if (!sel) return;
+function _pbInvQuiere() { return _pbInvElegido === true; }
+// Lee la decisión del insumo ya dado de alta y la pinta. Se llama al abrir la receta.
+function _setChkIncluirInv() {
     var ins = _insumoDeSubReceta();
-    if (!ins) return; // aún sin convertir → se aplica al "Agregar como insumo"
-    ins.area = sel.value || '';
-    try {
-        var cat = getCatalogoInsumos();
-        _skPut(_sk('insumos'), JSON.stringify(cat));
-        setCatalogoInsumosMem(cat);
-        if (typeof sbUpsert === 'function') {
-            var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
-            if (negId) sbUpsert('insumos', ins, negId);
-        }
-    } catch(e) { console.warn('[area sub-receta]', e); }
+    var sel = document.getElementById('selAreaSubReceta');
+    _pbInvElegido = ins ? !ins.ocultoInventario : null;
+    if (sel) sel.value = (ins && ins.area) || _areaDefaultSubReceta();
+    _pintarPrebatchInv();
 }
-// Toggle en vivo: si ya está convertida, actualiza el insumo en el catálogo + nube.
-function _toggleIncluirInv() {
-    var chk = document.getElementById('chkIncluirInventario'); if (!chk) return;
-    var ins = _insumoDeSubReceta();
-    if (!ins) return; // aún sin convertir → se aplicará al "Agregar como insumo"
-    ins.ocultoInventario = !chk.checked;
+function _pintarPrebatchInv() {
+    var si = document.getElementById('pbInvSi'), no = document.getElementById('pbInvNo');
+    var bloque = document.getElementById('pbInvArea'), est = document.getElementById('pbInvEstado');
+    var sel = document.getElementById('selAreaSubReceta');
+    var quiere = _pbInvQuiere();
+    var marca = function (b, on) {
+        if (!b) return;
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.style.cssText = 'padding:10px 18px;border-radius:8px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;' +
+            (on ? 'background:var(--green);color:#0f0e0c;border:1px solid var(--green)'
+                : 'background:transparent;color:var(--text-muted);border:1px solid var(--border)');
+    };
+    marca(si, quiere); marca(no, _pbInvElegido === false);
+    if (bloque) bloque.style.display = quiere ? '' : 'none';
+    if (!est) return;
+    var opc = sel && sel.options && sel.options[sel.selectedIndex];
+    var nomArea = opc ? String(opc.textContent || '').replace(/^[^A-Za-zÁÉÍÓÚÑáéíóúñ]+/, '') : '';
+    est.textContent = quiere
+        ? 'Aparece en el inventario de ' + (nomArea || 'su área') + '.'
+        : (_pbInvElegido === false
+            ? 'No aparece en ningún inventario. Sigue disponible como ingrediente de otras recetas.'
+            : 'Todavía no se ha decidido: mientras tanto no aparece en ningún inventario.');
+}
+// Guarda el insumo de la sub-receta donde vive el catálogo: memoria + nube.
+function _guardarInsumoSubReceta(ins) {
     try {
         var cat = getCatalogoInsumos();
         _skPut(_sk('insumos'), JSON.stringify(cat));
         setCatalogoInsumosMem(cat);
         var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
+        /* A negocio_insumos, la tabla del catálogo. El área se mandaba con
+           sbUpsert('insumos', …): esa tabla vieja no tiene columna `id`, Supabase
+           la rechazaba, el cambio nunca llegaba a la nube y la cola acababa
+           descartándolo con el aviso rojo. */
         if (negId && typeof _supabase !== 'undefined') {
             _supabase.from('negocio_insumos').upsert({ insumo_id: ins.id, negocio_id: negId, datos: ins, updated_at: new Date().toISOString() })
                 .then(function(r){ if (r.error && typeof _sbToastError === 'function') _sbToastError('inventario: ' + r.error.message); });
         }
-    } catch(e) {}
+    } catch(e) { console.warn('[prebatch en inventario]', e); }
+}
+function _setPrebatchInv(si) {
+    var ins = _insumoDeSubReceta();
+    var sel = document.getElementById('selAreaSubReceta');
+    if (si && sel && !sel.value) sel.value = _areaDefaultSubReceta();
+    if (!ins) {
+        if (!si) { _pbInvElegido = false; _pintarPrebatchInv(); return; }
+        if (!recetaActualId) {
+            alert('💾 Guarda la sub receta primero.\nAl guardarla obtiene su identidad y ya se puede usar en el inventario sin duplicarse.');
+            return;
+        }
+        _pbInvElegido = true;              // el alta lee esta decisión
+        agregarSubRecetaComoInsumo(false);
+        _actualizarBotonAgregarInsumo();   // repinta con lo que quedó guardado
+        return;
+    }
+    _pbInvElegido = !!si;
+    ins.ocultoInventario = !si;
+    if (si && !ins.area) ins.area = (sel && sel.value) || _areaDefaultSubReceta();
+    _guardarInsumoSubReceta(ins);
+    _pintarPrebatchInv();
+}
+// Área: si ya está dada de alta, se actualiza en vivo (catálogo + nube).
+function _setAreaSubReceta() {
+    var sel = document.getElementById('selAreaSubReceta'); if (!sel) return;
+    var ins = _insumoDeSubReceta();
+    if (ins) { ins.area = sel.value || ''; _guardarInsumoSubReceta(ins); }
+    _pintarPrebatchInv();
 }
 
 function agregarSubRecetaComoInsumo(silent) {
@@ -2007,13 +2065,9 @@ function agregarSubRecetaComoInsumo(silent) {
         activo:        true,
         foto:          (typeof fotosReceta !== 'undefined' && fotosReceta.length) ? fotosReceta[0] : '',
         esSubReceta:   true,
-        // Visible en el inventario según el checkbox "Incluir en el inventario":
-        // bebidas (prebatch) sí por default, alimentos (bases de cocina) no.
-        ocultoInventario: (function(){
-            var chk = document.getElementById('chkIncluirInventario');
-            if (chk) return !chk.checked;
-            return !(recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas');
-        })(),
+        // Visible en el inventario SOLO si se contestó «Sí» a «¿Usar como prebatch
+        // en el inventario?». Es decisión del dueño: sin contestar, no aparece.
+        ocultoInventario: !_pbInvQuiere(),
         recetaId:      recetaActualId || null,
         // Área del inventario: sin área NO aparece en ningún inventario (misma regla que insumos).
         area:          (function(){ var el = document.getElementById('selAreaSubReceta'); return el ? el.value : _areaDefaultSubReceta(); })(),
@@ -2068,6 +2122,10 @@ function agregarSubRecetaComoInsumo(silent) {
                 var _cur = localStorage.getItem('etaax_sucursal_activa') || '';
                 if (!_memb.length && _cur) _memb.push(_cur);
                 var upd = Object.assign({}, prev, insumoNuevo, { id: prev.id, sucursalId: prev.sucursalId || _cur, sucursales: _memb });
+                /* Sin decisión en pantalla (la receta se abrió antes de que llegara
+                   el catálogo, por ejemplo) NO se toca lo que el insumo ya tenía:
+                   un guardado cualquiera no puede sacar un batch del inventario. */
+                if (_pbInvElegido === null) { upd.ocultoInventario = prev.ocultoInventario; if (prev.area) upd.area = prev.area; }
                 catalogo[idx] = upd;
                 actualizados.push(upd);
             });
@@ -4966,6 +5024,6 @@ window.addEventListener('load', function() {
 <script src="/etaax-header.js?v=15a5a6ef"></script>
 <script src="/etaax-modulos-ui.js?v=03cadcf1"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
-<script src="/recetas/recetas-ui.js?v=6a27913f"></script>
+<script src="/recetas/recetas-ui.js?v=91eddf64"></script>
 </body>
 </html>
