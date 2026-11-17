@@ -161,6 +161,7 @@ async function abrir(browser, reloj) {
     });
     await ctx.addInitScript(semilla(reloj));
     const page = await ctx.newPage();
+    page.setDefaultTimeout(10000);
     page.on('pageerror', e => console.log('  [pageerror]', e.message));
     await page.goto(ORIGEN + '/administrativo/diario.html');
     await page.waitForFunction(() => Array.isArray(window._cacheRecibos) && Array.isArray(window._cacheStaff) && _cacheStaff.length > 0);
@@ -191,7 +192,15 @@ async function entrarANominas(page) {
     assert.ok(av.some(t => /Autorizado por/.test(t)), 'no confirmó la autorización: ' + JSON.stringify(av));
     await page.waitForSelector('#dxOv_nominas.open');
 }
+/* Si la cola ya está a la vista (la app vuelve sola a ella después de pagar),
+   no se toca el botón de abajo: el clic caería en el fondo del modal y la app
+   —con razón— preguntaría si se quiere cerrar. */
 async function abrirCola(page) {
+    await leerAvisos(page);
+    if (await page.locator('#selPagoLista').isVisible().catch(() => false)) {
+        await page.evaluate(() => _nomPintarListas());
+        return;
+    }
     await page.click('#btnPagarNomina');
     await page.waitForSelector('#selPagoLista');
 }
@@ -245,7 +254,7 @@ async function caso(nombre, fn) {
             await page.click('#pnBtnConfirmar');
             const av = await leerAvisos(page);
             assert.deepEqual(av, []);
-            await page.waitForSelector('#modalPagoNom:not(.open)');
+            await page.waitForSelector('#modalPagoNom.open', { state:'detached' });
             const nube = await page.evaluate(() => __nube.leer());
             assert.equal((nube.nomina_recibos || []).length, 1, 'recibos en la nube');
             assert.equal((nube.gastos || []).length, 0, 'apareció un gasto sin pagar');
@@ -280,19 +289,18 @@ async function caso(nombre, fn) {
             assert.equal(r.gastoId, g[0].id, 'el recibo no apunta al gasto');
             assert.ok(r.pagadoEn, 'sin instante de pago');
         });
-        await caso('…y Ana pasa a PAGADAS en la cola', async () => {
+        /* La vista del panel arranca en el MES: una semana pagada es PARCIAL
+           (7 de 30 días) y se queda con los pendientes —falta el resto del mes—. */
+        await caso('…y en la vista del mes Ana queda PARCIAL, 7 de 30 días', async () => {
             await abrirCola(page);
-            const t = await page.locator('#selPagoLista').innerText();
-            assert.match(t, /Pagadas · 1/i);
-            assert.match(await textoFila(page, 'Ana Prueba'), /PAGADA/);
+            assert.match(await textoFila(page, 'Ana Prueba'), /PARCIAL\s*7 de 30 días/);
         });
-        await caso('…con el menú apagado para volver a generar o pagar', async () => {
+        await caso('…con «Generar gasto» apagado: esa semana ya se pagó', async () => {
             await (await fila(page, 'Ana Prueba')).locator('button[title^="Generar, editar"]').click();
-            const html = await page.locator('.cx-menu').innerHTML();
-            await page.mouse.click(5, 5);
-            const activo = (txt) => new RegExp('onclick="[^"]*"[^>]*>(?:(?!</div>).)*' + txt).test(html);
-            assert.equal(activo('Generar recibo'), false, 'deja generar otro recibo de un periodo pagado');
-            assert.equal(activo('Generar gasto'), false, 'deja pagar dos veces');
+            const vivos = await page.evaluate(() => Array.from(document.querySelectorAll('.cx-menu [onclick]'))
+                .map(e => e.getAttribute('onclick')));
+            await page.evaluate(() => _cerrarMenusCorte());
+            assert.equal(vivos.some(o => /generarGastoNomina/.test(o)), false, 'deja pagar dos veces');
         });
 
         /* ── B · cancelar el gasto no paga nada ─────────────────────────── */
@@ -301,7 +309,7 @@ async function caso(nombre, fn) {
             await (await menu(page, 'Beto Prueba', 'Generar recibo')).click();
             await page.waitForSelector('#modalPagoNom.open');
             await page.click('#pnBtnConfirmar');
-            await page.waitForSelector('#modalPagoNom:not(.open)');
+            await page.waitForSelector('#modalPagoNom.open', { state:'detached' });
             await (await menu(page, 'Beto Prueba', 'Generar gasto')).click();
             await page.waitForFunction(() => document.getElementById('gMonto') && document.getElementById('gMonto').offsetParent);
             await page.evaluate(() => gCerrarModal());
@@ -367,18 +375,50 @@ async function caso(nombre, fn) {
             await c.page.fill('#pnHasta', '2026-10-31'); await c.page.dispatchEvent('#pnHasta', 'change');
             assert.equal(await c.page.inputValue('#pnDias'), '16');
             await c.page.click('#pnBtnConfirmar');
-            await c.page.waitForSelector('#modalPagoNom:not(.open)');
+            await c.page.waitForSelector('#modalPagoNom.open', { state:'detached' });
         });
         await caso('…y después de guardarlo, se puede PAGAR desde la cola', async () => {
             await c.page.waitForSelector('#selPagoLista');
             const t = await textoFila(c.page, 'Beto Prueba');
             const it = await menu(c.page, 'Beto Prueba', 'Generar gasto');
-            const html = await it.evaluate(e => e.outerHTML);
-            await c.page.mouse.click(5, 5);
-            assert.ok(/Recibo listo/i.test(t) && /onclick/.test(html),
-                'el recibo recién guardado no aparece: renglón «' + t.replace(/\s+/g, ' ') + '», «Generar gasto» ' + (/onclick/.test(html) ? 'activo' : 'APAGADO'));
+            const vivo = await it.evaluate(e => !!e.closest('[onclick]'));
+            await c.page.evaluate(() => _cerrarMenusCorte());
+            assert.ok(/Recibo listo/i.test(t) && vivo,
+                'el recibo recién guardado no aparece: renglón «' + t.replace(/\s+/g, ' ') + '», «Generar gasto» ' + (vivo ? 'activo' : 'APAGADO'));
         });
         await c.ctx.close();
+
+        /* ── E · la misma semana, dos veces ───────────────────────────────
+           Con la vista en el mes, una semana pagada deja «Generar recibo»
+           encendido (falta el resto del mes) y el modal vuelve a proponer LA
+           SEMANA EN CURSO —la que ya se pagó—. Encontrado el 17-nov en este
+           arnés: se guardaba un segundo recibo (_2) y se pagaba otra vez. */
+        console.log('\n══ E · Volver a generar el recibo de una semana ya pagada ══');
+        const e = await abrir(browser, '2026-11-17T12:00:00-06:00');
+        await entrarANominas(e.page); await abrirCola(e.page);
+        const pagarAna = async () => {
+            await (await menu(e.page, 'Ana Prueba', 'Generar recibo')).click();
+            await e.page.waitForSelector('#modalPagoNom.open');
+            await e.page.click('#pnBtnConfirmar');
+            await leerAvisos(e.page);
+            await e.page.waitForTimeout(300);
+            const it = await menu(e.page, 'Ana Prueba', 'Generar gasto');
+            if (!(await it.evaluate(x => !!x.closest('[onclick]')))) { await e.page.evaluate(() => _cerrarMenusCorte()); return; }
+            await it.click();
+            await e.page.waitForTimeout(300);
+            if (await e.page.evaluate(() => !!(document.getElementById('gMonto') && gMonto.offsetParent))) {
+                await e.page.click('#btnGuardar'); await leerAvisos(e.page); await e.page.waitForTimeout(300);
+            }
+        };
+        await pagarAna();                       // la primera vez, legítima
+        await abrirCola(e.page);
+        await caso('pagar otra vez la misma semana NO deja dos gastos por el mismo periodo', async () => {
+            await pagarAna().catch(() => {});   // la segunda: lo que haría alguien con prisa
+            const g = await e.page.evaluate(() => _cacheGastos.filter(x => x.staffId === 's_ana' && x.nomina)
+                .map(x => x.nomina.desde + '→' + x.nomina.hasta + ' $' + x.monto));
+            assert.equal(g.length, 1, 'se pagó dos veces: ' + g.join(' · '));
+        });
+        await e.ctx.close();
     } finally {
         await browser.close();
     }
