@@ -346,7 +346,36 @@
        cada 20s. El dato NUNCA se pierde aunque guardes offline y cierres.
        Indicador discreto "Sincronizando… N pendientes" en vez del toast rojo.
        ════════════════════════════════════════════════════════════ */
-    var OUTBOX = 'etaax_outbox_v1';
+    var OUTBOX_COMUN = 'etaax_outbox_v1';
+    /* ══ UNA COLA POR PESTAÑA ═════════════════════════════════════════════
+       Había UNA cola para todo el navegador, y cada pestaña la cargaba en su
+       memoria al abrir y la guardaba ENTERA en cada cambio. Dos pestañas sin
+       red: A encola su gasto, B encola el suyo y al guardar escribe SU lista
+       —la que no conoce el de A— encima. A se cierra o se recarga, vuelve la
+       red… y el gasto de A no llega nunca. Reproducido en un navegador de
+       verdad el 17-nov (tests/probar-cola-navegador.cjs): «en la nube: gB1».
+
+       Ahora cada pestaña escribe SU cola, y mientras vive sostiene un candado
+       del navegador (Web Locks) con su nombre. Nadie pisa la cola de nadie y
+       cada quien sube solo lo suyo —nada se ejecuta dos veces—. Cuando una
+       pestaña muere su candado se suelta solo, y su cola queda huérfana: la
+       adopta la siguiente que intente subir (_obAdoptar).
+
+       Sin Web Locks (navegadores muy viejos) se sigue con la cola común de
+       siempre: no se puede saber si la otra pestaña vive, y adoptar a ciegas
+       sería subir dos veces lo mismo. */
+    var _PORTAB = !!(typeof navigator !== 'undefined' && navigator.locks && navigator.locks.request &&
+                     window.etaaxStore && etaaxStore.leerDisco);
+    var _TAB_ID = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    var _COLA_TAB = /^etaax_tab([a-z0-9]+)_outbox_v1$/;
+    var OUTBOX = _PORTAB ? ('etaax_tab' + _TAB_ID + '_outbox_v1') : OUTBOX_COMUN;
+    if (_PORTAB) {
+        try {
+            /* Se sostiene mientras viva la pestaña: la promesa no se resuelve nunca. */
+            navigator.locks.request('etaax-cola-' + _TAB_ID, function () { return new Promise(function () {}); })
+                .catch(function () {});
+        } catch (e) {}
+    }
     /* La cola vive en el almacenamiento GRANDE (IndexedDB vía etaax-store).
        Antes era localStorage y ahí estaba el bug del "313 cambios pendientes" que
        nunca bajaba: con inventarios encolados la cola pesa megas, el setItem
@@ -365,6 +394,10 @@
     function _obSave(q) {
         var txt;
         try { txt = JSON.stringify(q); } catch (e) { return; }
+        /* Una cola por pestaña vacía se BORRA en vez de guardarse como «[]»:
+           si no, cada pestaña que se abrió alguna vez dejaría su llave en el
+           disco para siempre. */
+        if (_PORTAB && !q.length) { etaaxStore.del(OUTBOX); return; }
         if (window.etaaxStore) { etaaxStore.set(OUTBOX, txt); return; }
         try { localStorage.setItem(OUTBOX, txt); }
         catch (e) {
@@ -536,6 +569,120 @@
         return _haySesionCache;
     }
 
+    /* ══ ADOPTAR LAS COLAS HUÉRFANAS ═══════════════════════════════════════
+       Una cola es huérfana si su pestaña ya no sostiene su candado (se cerró,
+       se recargó, el navegador la descartó) o si es la cola común de antes de
+       este cambio. Se adopta bajo un candado propio —dos pestañas adoptando la
+       misma subirían todo dos veces—, y en este orden, que es el que no pierde
+       nada si algo falla a medias:
+         1. se mezcla con la mía y se GUARDA la mía en disco;
+         2. solo si eso confirmó, se borra la huérfana.
+       Si (1) no confirma, la huérfana se queda y se vuelve a adoptar en la
+       siguiente vuelta; la mezcla es por uid, así que no se duplica.
+
+       Desde el flush se pide con `ifAvailable`: si otra pestaña está
+       adoptando en ese instante, esta vuelta no espera —el flush nunca se
+       queda colgado de un candado—. */
+    function _obT(it) { return (it && it.uid) ? String(it.uid).slice(0, 8) : ''; }   // el instante, en base36
+    /* LO QUE ESTA PESTAÑA YA SUBIÓ, por registro: el instante de lo último.
+       Sin esto, adoptar podía DESHACER: A edita el gasto X y se cierra sin red;
+       B lo edita después, vuelve la red, B sube su versión… y al morir A, B
+       adopta la de A —más vieja— y la sube encima. Lo adoptado que sea más
+       viejo que algo ya subido del mismo registro se descarta. */
+    var _obEnviado = {};
+    /* Y los uid que ya subió, uno por uno: si borrar una huérfana falla, en
+       la siguiente vuelta vuelve a aparecer con cosas que YA se subieron, y no
+       pueden subirse otra vez. */
+    var _obUidHecho = {};
+    function _obMarcarEnviado(it) {
+        var c = it.tabla + '\u0001' + it.k, t = _obT(it);
+        if (t && !(_obEnviado[c] >= t)) _obEnviado[c] = t;
+        if (it.uid) _obUidHecho[it.uid] = 1;
+    }
+    function _obMezclar(propia, ajena) {
+        var vistos = {};
+        propia.forEach(function (it) { if (it && it.uid) vistos[it.uid] = 1; });
+        var todo = propia.concat((ajena || []).filter(function (it) {
+            if (!it || (it.uid && (vistos[it.uid] || _obUidHecho[it.uid]))) return false;
+            var ya = _obEnviado[it.tabla + '\u0001' + it.k], t = _obT(it);
+            return !(ya && t && t < ya);
+        }));
+        /* Misma tabla + clave + operación: gana la MÁS NUEVA, venga de donde
+           venga. Es la regla de _obAddYa, cruzada entre pestañas. */
+        var llave = function (it) { return it.tabla + '\u0001' + it.k + '\u0001' + it.op; };
+        var gana = {};
+        todo.forEach(function (it) { var c = llave(it); if (!gana[c] || _obT(it) >= _obT(gana[c])) gana[c] = it; });
+        todo = todo.filter(function (it) { return gana[llave(it)] === it; });
+        /* Y en orden de tiempo: un borrado de A y una escritura posterior de B
+           sobre el mismo registro tienen que bajar en ese orden. */
+        return todo.map(function (it, i) { return [it, i]; })
+            .sort(function (a, b) { var x = _obT(a[0]), y = _obT(b[0]); return x < y ? -1 : x > y ? 1 : a[1] - b[1]; })
+            .map(function (p) { return p[0]; });
+    }
+    /* Formarse en la fila del candado de otra pestaña: el navegador lo
+       entrega SOLO cuando esa pestaña ya murió. Se suelta en el acto —quien lo
+       sostenga pasa por viva ante las demás— y se corre el flush, que adopta. */
+    var _vigiladas = {};
+    function _obVigilar(id) {
+        if (_vigiladas[id]) return;
+        _vigiladas[id] = 1;
+        try {
+            navigator.locks.request('etaax-cola-' + id, function () { /* murió: se suelta ya */ })
+                .then(function () { delete _vigiladas[id]; setTimeout(_obFlush, 0); },
+                      function () { delete _vigiladas[id]; });
+        } catch (e) { delete _vigiladas[id]; }
+    }
+    async function _obAdoptar(opc) {
+        if (!_PORTAB) return 0;
+        var adoptados = 0;
+        try {
+            await navigator.locks.request('etaax-cola-adopcion', (opc && opc.ifAvailable) ? { ifAvailable: true } : {},
+            async function (candado) {
+                if (!candado) return;                       // otra pestaña está adoptando ahora
+                var vivas = {};
+                var est = await navigator.locks.query();
+                ((est && est.held) || []).forEach(function (l) { vivas[l.name] = 1; });
+                var disco = await etaaxStore.leerDisco(function (k) { return k === OUTBOX_COMUN || _COLA_TAB.test(k); });
+                /* Las colas de pestañas VIVAS no se tocan, pero se vigilan: en
+                   cuanto su pestaña muera se adoptan, sin esperar la vuelta
+                   de 20 s. */
+                Object.keys(disco).forEach(function (k) {
+                    var m = k.match(_COLA_TAB);
+                    if (m && k !== OUTBOX && vivas['etaax-cola-' + m[1]]) _obVigilar(m[1]);
+                });
+                var huerfanas = Object.keys(disco).filter(function (k) {
+                    if (k === OUTBOX) return false;
+                    if (k === OUTBOX_COMUN) return true;
+                    return !vivas['etaax-cola-' + k.match(_COLA_TAB)[1]];
+                });
+                if (!huerfanas.length) return;
+                var q = _obLoad(), mios = {};
+                q.forEach(function (it) { if (it && it.uid) mios[it.uid] = 1; });
+                huerfanas.forEach(function (k) {
+                    var l = []; try { l = JSON.parse(disco[k]) || []; } catch (e) {}
+                    q = _obMezclar(q, Array.isArray(l) ? l : []);
+                });
+                var nuevos = {};
+                q.forEach(function (it) { if (it && it.uid && !mios[it.uid]) nuevos[it.uid] = 1; });
+                _obSave(q);
+                await etaaxStore.flush();
+                if (!etaaxStore.persistido(OUTBOX)) {
+                    /* Lo mío no llegó al disco: lo ajeno no se suelta. Y lo
+                       adoptado SALE de mi memoria —si se subiera desde aquí,
+                       la siguiente vuelta lo volvería a adoptar de la huérfana
+                       y se subiría dos veces—. Se queda solo allá, intacto. */
+                    _obSave(_obLoad().filter(function (it) { return !(it && nuevos[it.uid]); }));
+                    return;
+                }
+                huerfanas.forEach(function (k) { etaaxStore.del(k); });
+                await etaaxStore.flush();
+                adoptados = Object.keys(nuevos).length;
+            });
+        } catch (e) { console.warn('[outbox] no se pudieron adoptar colas huérfanas:', e && e.message); }
+        if (adoptados) { console.log('[outbox] ' + adoptados + ' pendiente(s) adoptado(s) de otra pestaña'); _obIndicador(); }
+        return adoptados;
+    }
+
     var _obFlushing = false, _obRepetir = false;
     async function _obFlush() {
         if (_obFlushing) { _obRepetir = true; return; } // algo entró en pleno flush → correr otra vuelta al terminar
@@ -553,6 +700,8 @@
                pisaba medio segundo después con la versión de disco. El contador se
                quedaba clavado y los mismos registros se re-subían en cada carga. */
             if (window.etaaxStore && etaaxStore.ready) { try { await etaaxStore.ready; } catch (e) {} }
+            /* Lo que dejaron las pestañas que ya no están se sube con lo mío. */
+            await _obAdoptar({ ifAvailable: true });
             var q = _obLoad(), hechos = {}, triesUpd = {}, muertos = {}, errUpd = {};
             var _sinSesion = false;
             // Items de una versión vieja sin uid: asignarles uno y PERSISTIRLO antes
@@ -580,7 +729,7 @@
             for (var i = 0; i < q.length; i++) {
                 var it = q[i], err = null;
                 try { err = await _obEjecutar(it); } catch (e) { err = e || new Error('network'); }
-                if (!err) { if (it.uid) hechos[it.uid] = 1; _sinSesionGlobal = false; }
+                if (!err) { if (it.uid) hechos[it.uid] = 1; _obMarcarEnviado(it); _sinSesionGlobal = false; }
                 else if (_esErrRed(err) || _esErrSesion(err)) {
                     /* Falta de red, o falta de SESIÓN: ninguna de las dos es culpa
                        del dato. NO cuenta como intento → no se descarta, se
@@ -817,6 +966,9 @@
             primeros_uid: enMem.slice(0, 5).map(function (x) { return x.uid; }),
             en_espejo_localStorage: crudo.length,
             en_almacen: idb === null ? '(sin etaaxStore)' : idb.length,
+            // Una cola por pestaña (con Web Locks) o la común de siempre.
+            llave: OUTBOX,
+            cola_por_pestana: _PORTAB,
             almacen_hidratado: (window.etaaxStore && etaaxStore.hidratado) ? etaaxStore.hidratado() : '(n/a)'
         };
         console.log('──── FORENSE DE LA COLA ────');

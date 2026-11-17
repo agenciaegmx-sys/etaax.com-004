@@ -466,10 +466,66 @@
         } catch (e) { /* navegador que no deja redefinir: se queda como antes */ }
     })();
 
+    /* ══ LO QUE HAY EN EL DISCO, NO EN MI MEMORIA ══════════════════════════
+       La memoria se hidrata UNA vez, al abrir. Lo que otra pestaña escriba
+       después no aparece en ella —y está bien: cada pestaña trabaja con lo
+       suyo—. Pero la cola de salida necesita ver las colas que dejaron las
+       pestañas que ya se cerraron, y esas solo están en el disco.
+
+       Se piden las CLAVES primero y solo se leen las que pasan el filtro: el
+       catálogo de insumos pesa megas y esto corre en cada vuelta del flush. */
+    function _leerDisco(filtro) {
+        var pasa = function (k) { try { return !!filtro(String(k)); } catch (e) { return false; } };
+        if (!db) {
+            /* Sin IndexedDB el disco ES localStorage (los respaldos). */
+            var out = {};
+            try {
+                for (var i = 0; i < localStorage.length; i++) {
+                    var k = localStorage.key(i);
+                    if (k && pasa(k)) { var v = _lsGet(k); if (v != null) out[k] = v; }
+                }
+            } catch (e) {}
+            return Promise.resolve(out);
+        }
+        return new Promise(function (resolve) {
+            var out = {};
+            try {
+                var st = db.transaction(TIENDA, 'readonly').objectStore(TIENDA);
+                var leer = function (claves) {
+                    claves = claves.filter(pasa);
+                    if (!claves.length) return resolve(out);
+                    var faltan = claves.length;
+                    claves.forEach(function (k) {
+                        var r = st.get(k);
+                        r.onsuccess = function () { if (r.result != null) out[k] = r.result; if (!--faltan) resolve(out); };
+                        r.onerror   = function () { if (!--faltan) resolve(out); };
+                    });
+                };
+                if (st.getAllKeys) {
+                    var rk = st.getAllKeys();
+                    rk.onsuccess = function () { leer((rk.result || []).map(String)); };
+                    rk.onerror   = function () { resolve(out); };
+                } else {
+                    var cur = st.openCursor();      // navegadores sin getAllKeys
+                    cur.onsuccess = function (ev) {
+                        var c = ev.target.result;
+                        if (!c) return resolve(out);
+                        if (pasa(c.key)) out[c.key] = c.value;
+                        c.continue();
+                    };
+                    cur.onerror = function () { resolve(out); };
+                }
+            } catch (e) { resolve(out); }
+        });
+    }
+
     window.etaaxStore = {
         ready: ready,
         esGrande: _esGrandeKey,
         hayIDB: function () { return hayIDB; },
+        leerDisco: _leerDisco,
+        /* ¿Lo último que se escribió en esta clave YA está en disco? */
+        persistido: function (k) { return !pendientes[k]; },
 
         hidratado: function () { return hidratado; },
 

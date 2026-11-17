@@ -85,6 +85,20 @@ function hacerDB(disco) {
                     disco[k] = v; setTimeout(() => tx.oncomplete && tx.oncomplete(), 0);
                 },
                 delete(k) { delete disco[k]; setTimeout(() => tx.oncomplete && tx.oncomplete(), 0); },
+                /* Lo que usa `leerDisco`: primero las claves, luego solo las que
+                   sirven. Se responde como IndexedDB: en `req.result`, después. */
+                getAllKeys() {
+                    const req = { result: null, onsuccess: null, onerror: null };
+                    setTimeout(() => { req.result = Object.keys(disco).filter(k => k.indexOf('__') !== 0);
+                                       req.onsuccess && req.onsuccess(); }, 0);
+                    return req;
+                },
+                get(k) {
+                    const req = { result: null, onsuccess: null, onerror: null };
+                    setTimeout(() => { req.result = Object.prototype.hasOwnProperty.call(disco, k) ? disco[k] : undefined;
+                                       req.onsuccess && req.onsuccess(); }, 0);
+                    return req;
+                },
                 openCursor() {
                     const req = { onsuccess: null, onerror: null };
                     const claves = Object.keys(disco);
@@ -162,14 +176,63 @@ function hacerDoc() {
     };
 }
 
+/* ── Web Locks de mentira ───────────────────────────────────────────────────
+   Un registro por NAVEGADOR, y una vista por pestaña (`para(dueño)`). Lo que
+   importa reproducir: un candado lo tiene uno solo; `ifAvailable` contesta
+   null en vez de esperar; quien pide uno ocupado se forma y lo recibe cuando
+   se suelta; y cuando una pestaña MUERE (`matar`) el navegador suelta todo lo
+   suyo y tira sus peticiones en fila. */
+function hacerLocks() {
+    const tenidos = {};          // nombre → dueño
+    const filas = {};            // nombre → [{ dueño, conceder }]
+    function soltar(nombre) {
+        delete tenidos[nombre];
+        const f = filas[nombre];
+        if (f && f.length) f.shift().conceder();
+    }
+    return {
+        tenidos,
+        para(dueño) {
+            return {
+                request(nombre, opc, cb) {
+                    if (typeof opc === 'function') { cb = opc; opc = {}; }
+                    return new Promise((res, rej) => {
+                        const conceder = () => {
+                            tenidos[nombre] = dueño;
+                            Promise.resolve().then(() => cb({ name: nombre })).then(
+                                v => { if (tenidos[nombre] === dueño) soltar(nombre); res(v); },
+                                e => { if (tenidos[nombre] === dueño) soltar(nombre); rej(e); });
+                        };
+                        if (!tenidos[nombre]) return conceder();
+                        if (opc && opc.ifAvailable) { Promise.resolve().then(() => cb(null)).then(res, rej); return; }
+                        (filas[nombre] = filas[nombre] || []).push({ dueño, conceder });
+                    });
+                },
+                query() {
+                    const pending = [];
+                    Object.keys(filas).forEach(n => filas[n].forEach(() => pending.push({ name: n })));
+                    return Promise.resolve({ held: Object.keys(tenidos).map(n => ({ name: n })), pending });
+                },
+            };
+        },
+        matar(dueño) {
+            Object.keys(filas).forEach(n => { filas[n] = filas[n].filter(x => x.dueño !== dueño); });
+            Object.keys(tenidos).forEach(n => { if (tenidos[n] === dueño) soltar(n); });
+        },
+    };
+}
+
 // Levanta etaax-store.js en un contexto propio y devuelve sus piezas.
 function montarStore({ enIDB = {}, enLS = {}, abrirDiferido = false, sinIDB = false,
                        lsLleno = false, fallaEscritura = false,
-                       retenerEscritura = false, lsRechaza = null, lsMaxLen = 0 } = {}) {
+                       retenerEscritura = false, lsRechaza = null, lsMaxLen = 0,
+                       idb = null, locks = null } = {}) {
     const localStorage = hacerLS(enLS, { lleno: lsLleno, rechazar: lsRechaza, maxLen: lsMaxLen });
     /* `sinIDB` tiene que valer ANTES de levantar el script: el almacén abre la base
        al cargarse, así que anular window.indexedDB después ya no prueba nada. */
-    const indexedDB    = sinIDB ? null : hacerIDB(enIDB, { abrirDiferido });
+    /* `idb`: un disco YA hecho, para que dos pestañas compartan el mismo
+       navegador. `locks`: el navigator.locks de esa pestaña (hacerLocks). */
+    const indexedDB    = idb || (sinIDB ? null : hacerIDB(enIDB, { abrirDiferido }));
     if (indexedDB && fallaEscritura) indexedDB._disco.__fallaEscritura = true;
     if (indexedDB && retenerEscritura) indexedDB._disco.__retener = true;
     const documento = hacerDoc();
@@ -178,7 +241,7 @@ function montarStore({ enIDB = {}, enLS = {}, abrirDiferido = false, sinIDB = fa
         setTimeout, clearTimeout, Promise, JSON, Object, String, Date, Math,
         localStorage, indexedDB,
         document: documento,
-        navigator: {},
+        navigator: locks ? { locks } : {},
     };
     ctx.window = ctx;
     ctx.window.addEventListener = () => {};
@@ -1018,6 +1081,193 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
             eq(veredicto([{ v: 'V1', aviso: false }, { v: 'V2', aviso: true }]).cartel, true));
         test('…y un aviso que sale TARDE lo apunta el observer', () =>
             eq(veredicto([{ v: 'V1', aviso: false, avisoTarde: true }]).cartel, true));
+    }
+
+    /* ══ DOS PESTAÑAS, UNA COLA CADA UNA ═══════════════════════════════════
+       El bug (17-nov): una sola cola para todo el navegador, cargada en la
+       memoria de cada pestaña al abrir y guardada ENTERA en cada cambio. Dos
+       pestañas sin red: la última en guardar pisaba la cola de la otra, y lo
+       de la primera no llegaba nunca a la nube.
+
+       Aquí: un mismo disco para las dos (un navegador) y un registro de Web
+       Locks de mentira, con el que se decide CUÁNDO muere una pestaña. Lo que
+       hace el navegador de verdad lo vigila tests/probar-cola-navegador.cjs. */
+    {
+        const RX_TAB = /^etaax_tab[a-z0-9]+_outbox_v1$/;
+        /* La nube: cada escritura que llega, en orden, con quién la subió. */
+        const armar = (enIDB) => {
+            const idb = hacerIDB(enIDB || {});
+            const L = hacerLocks();
+            const nube = [];
+            const red = { caida: true };
+            const pestana = (quien) => {
+                const m = montarDb({ idb, locks: L.para(quien) });
+                m.ctx._supabase = {
+                    auth: { getSession: async () => ({ data: { session: { user: { id: 'u1' } } } }) },
+                    from(t) { return {
+                        upsert(p) {
+                            if (red.caida) return Promise.reject(new Error('Failed to fetch'));
+                            nube.push({ t, id: p.id, quien, monto: (p.datos || {}).monto });
+                            return Promise.resolve({ error: null });
+                        },
+                        delete() { return { eq(_c, id) {
+                            if (red.caida) return Promise.reject(new Error('Failed to fetch'));
+                            nube.push({ t, id: '-' + id, quien });
+                            return Promise.resolve({ error: null });
+                        } }; },
+                    }; },
+                };
+                return m;
+            };
+            const colas = () => Object.keys(idb._disco).filter(k => RX_TAB.test(k) || k === OUTBOX).sort();
+            const subidas = (id) => nube.filter(x => x.id === id).length;
+            return { idb, L, nube, red, pestana, colas, subidas };
+        };
+        const diag = (m) => m.ctx.window._sbColaDiag();
+        const esperaMs = (ms) => new Promise(r => setTimeout(r, ms));
+
+        /* ── con Web Locks, una cola por pestaña ── */
+        {
+            const N = armar();
+            const A = N.pestana('A'), B = N.pestana('B');
+            await respirar();
+            test('con Web Locks, cada pestaña trabaja con SU cola', () =>
+                eq(RX_TAB.test(diag(A).llave) && RX_TAB.test(diag(B).llave) && diag(A).llave !== diag(B).llave, true));
+            A.ctx.window.sbUpsert('gastos', { id: 'gA1', monto: 1 });
+            B.ctx.window.sbUpsert('gastos', { id: 'gB1', monto: 2 });
+            await respirar();
+            /* EL BUG: aquí había UNA clave, con lo de la última que guardó. */
+            test('dos pestañas sin red: las DOS colas quedan en disco, ninguna pisa a la otra', () =>
+                eq(N.colas().length + '·' + N.colas().map(k => JSON.parse(N.idb._disco[k]).map(x => x.k).join()).sort().join('|'),
+                   '2·gA1|gB1'));
+
+            /* Las dos vivas: B sube lo suyo y NO lo de A. Si lo subiera, A lo
+               subiría también al volverle la red: dos veces. */
+            N.red.caida = false;
+            await B.ctx.window._sbFlush();
+            await respirar();
+            test('con A viva, B sube lo suyo y no toca la cola de A', () =>
+                eq(N.subidas('gB1') + '·' + N.subidas('gA1') + '·' + N.colas().length, '1·0·1'));
+            /* …pero se formó en la fila del candado de A: cuando A muera, se entera. */
+            const fila = await B.ctx.navigator.locks.query();
+            test('…y queda formada en la fila del candado de A', () =>
+                eq(fila.pending.some(l => /^etaax-cola-/.test(l.name)), true));
+
+            /* A muere. B se entera por la fila del candado y adopta SIN que
+               nadie le pida un flush. */
+            N.L.matar('A');
+            await respirar(800);
+            test('A muere → B adopta su cola y la sube, sin esperar su vuelta de 20 s', () =>
+                eq(N.subidas('gA1'), 1));
+            test('…una sola vez cada cosa', () => eq(N.subidas('gA1') + '·' + N.subidas('gB1'), '1·1'));
+            test('…y no quedan colas huérfanas en el disco', () => eq(N.colas().length, 0));
+        }
+
+        /* ── el mismo registro en las dos: gana el más nuevo ── */
+        {
+            const N = armar();
+            const A = N.pestana('A'), B = N.pestana('B');
+            await respirar();
+            /* Las dos en la cola a la vez: la mezcla se queda con el más nuevo. */
+            A.ctx.window.sbUpsert('gastos', { id: 'gY', monto: 100 });
+            await esperaMs(15);
+            B.ctx.window.sbUpsert('gastos', { id: 'gY', monto: 250 });
+            await respirar();
+            N.L.matar('A');
+            await respirar();
+            N.red.caida = false;
+            await B.ctx.window._sbFlush();
+            await respirar();
+            test('mismo registro en dos colas: se sube UNA vez, la versión más nueva', () =>
+                eq(N.nube.filter(x => x.id === 'gY').map(x => x.monto).join(), '250'));
+        }
+        {
+            /* Y lo de A más viejo que algo que B YA subió no se sube encima. */
+            const N = armar();
+            const A = N.pestana('A'), B = N.pestana('B');
+            await respirar();
+            A.ctx.window.sbUpsert('gastos', { id: 'gX', monto: 100 });
+            await esperaMs(15);
+            B.ctx.window.sbUpsert('gastos', { id: 'gX', monto: 250 });
+            await respirar();
+            N.red.caida = false;
+            await B.ctx.window._sbFlush();               // B sube la nueva ANTES de que A muera
+            await respirar();
+            N.L.matar('A');
+            await respirar(800);
+            test('lo adoptado más viejo que algo ya subido NO se sube encima (no se deshace)', () =>
+                eq(N.nube.filter(x => x.id === 'gX').map(x => x.monto).join(), '250'));
+            test('…y la cola de A igual se limpia del disco', () => eq(N.colas().length, 0));
+        }
+        {
+            /* Un borrado viejo y una escritura nueva del mismo registro bajan
+               en ese orden: al revés, el registro desaparecería. */
+            const N = armar();
+            const A = N.pestana('A'), B = N.pestana('B');
+            await respirar();
+            A.ctx.window.sbDelete('gastos', 'gZ');
+            await esperaMs(15);
+            B.ctx.window.sbUpsert('gastos', { id: 'gZ', monto: 5 });
+            await respirar();
+            N.L.matar('A');
+            await respirar();
+            N.red.caida = false;
+            await B.ctx.window._sbFlush();
+            await respirar();
+            test('borrado viejo de A + escritura nueva de B → bajan en ese orden', () =>
+                eq(N.nube.filter(x => /gZ$/.test(x.id)).map(x => x.id).join(), '-gZ,gZ'));
+        }
+
+        /* ── la cola común de la versión anterior ── */
+        {
+            const legado = JSON.stringify([{ op: 'upsert', tabla: 'gastos', k: 'gViejo', uid: Date.now().toString(36) + 'leg001',
+                payload: { id: 'gViejo', negocio_id: 'n1', datos: { id: 'gViejo' } }, opts: { onConflict: 'id' } }]);
+            const N = armar({ [OUTBOX]: legado });
+            const C = N.pestana('C');
+            await respirar();
+            N.red.caida = false;
+            await C.ctx.window._sbFlush();
+            await respirar();
+            test('la cola común que dejó la versión anterior se adopta y se sube una vez', () =>
+                eq(N.subidas('gViejo'), 1));
+            test('…y desaparece del disco', () => eq(N.colas().length, 0));
+        }
+
+        /* ── si lo mío no llega al disco, lo ajeno no se suelta ──
+           Orden que no pierde nada: primero se guarda mi cola con lo adoptado,
+           y SOLO después se borra la huérfana. Y lo adoptado sale de mi
+           memoria: si se subiera desde aquí, la siguiente vuelta lo volvería a
+           adoptar y saldría dos veces. */
+        {
+            const N = armar();
+            const A = N.pestana('A'), B = N.pestana('B');
+            await respirar();
+            A.ctx.window.sbUpsert('gastos', { id: 'gA1', monto: 1 });
+            await respirar();
+            N.L.matar('A');
+            await respirar();
+            const deA = N.colas()[0];
+            N.idb._disco.__fallaEscritura = true;
+            N.red.caida = false;
+            await B.ctx.window._sbFlush();
+            await respirar();
+            test('si mi cola no se pudo guardar, la huérfana se QUEDA en el disco', () =>
+                eq(Object.prototype.hasOwnProperty.call(N.idb._disco, deA), true));
+            test('…y lo adoptado no se sube desde aquí (saldría dos veces)', () => eq(N.subidas('gA1'), 0));
+            delete N.idb._disco.__fallaEscritura;
+            await B.ctx.window._sbFlush();
+            await respirar();
+            test('…al componerse el disco, se adopta y se sube UNA vez', () =>
+                eq(N.subidas('gA1') + '·' + Object.prototype.hasOwnProperty.call(N.idb._disco, deA), '1·false'));
+        }
+
+        /* ── sin Web Locks, la cola común de siempre ── */
+        {
+            const m = montarDb({ enIDB: { [OUTBOX]: '[]' } });
+            await respirar();
+            test('sin Web Locks no hay cómo saber si la otra vive: se usa la cola común', () =>
+                eq(diag(m).llave + '·' + diag(m).cola_por_pestana, OUTBOX + '·false'));
+        }
     }
 
     console.log('\n════════════════════════════════════');
