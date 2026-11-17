@@ -32774,14 +32774,54 @@ console.log('\n══ BH65 · Generar el recibo no es pagarlo ══');
         return eq((X._cacheGastos || []).length + '·' + /ya está pagada/.test(avisos.join(' ')),
                   antes + '·true', 'pagó dos veces');
     });
-    /* El comprobante de un pago que ya salió de la caja no se reescribe: una
-       segunda nómina del mismo periodo nace con id propio. */
-    test('una segunda nómina del mismo periodo no pisa la pagada', () => {
+    /* El comprobante de un pago que ya salió de la caja no se reescribe. Antes
+       eso se lograba dejando nacer un segundo recibo (_2)… que después se
+       PAGABA: la misma semana salía dos veces de la caja (encontrado el 17-nov
+       en el navegador, tests/probar-nomina-navegador.cjs, caso E). Ahora un
+       recibo que se encima con días pagados no se guarda, y se dice por qué. */
+    test('una segunda nómina del mismo periodo no se guarda ni pisa la pagada', () => {
+        avisos.length = 0;
         generar(ana, '2026-11-02', '2026-11-08', 2);
         const ids = (X._cacheRecibos || []).map(r => r.id);
         const pagada = (X._cacheRecibos || []).find(r => r.gastoId);
-        return eq(ids.length + '·' + (new Set(ids).size) + '·' + ((pagada.recibo || {}).total),
-                  '2·2·1500', 'le escribió encima al comprobante pagado');
+        return eq(ids.length + '·' + ((pagada.recibo || {}).total) + '·' + /ya tiene pagado/.test(avisos.join(' ')),
+                  '1·1500·true', 'se guardó un recibo encima de días pagados');
+    });
+    test('…tampoco si solo se encima UN día con lo pagado', () => {
+        avisos.length = 0;
+        generar(ana, '2026-11-08', '2026-11-14', 7);
+        return eq((X._cacheRecibos || []).length + '·' + /se encima/.test(avisos.join(' ')),
+                  '1·true', 'el día 8 se pagaría dos veces');
+    });
+    test('…pero el periodo siguiente, sin días pagados, sí se guarda', () => {
+        generar(ana, '2026-11-09', '2026-11-15', 7);
+        const r = (X._cacheRecibos || []).find(x => x.desde === '2026-11-09');
+        X._cacheRecibos = (X._cacheRecibos || []).filter(x => x !== r);   // deja la cola como estaba
+        return eq(!!r, true, 'bloqueó un periodo que nadie ha pagado');
+    });
+    /* El modal ya no PROPONE lo pagado: la semana en curso pagada → la que sigue. */
+    test('el periodo propuesto salta lo pagado: 2–8 nov pagada → 9–15 nov', () =>
+        eq(JSON.stringify(X._periodoSinPagar('semana', { desde:'2026-11-02', hasta:'2026-11-08' }, 's1')),
+           JSON.stringify({ desde:'2026-11-09', hasta:'2026-11-15' }), 'propone pagar otra vez'));
+    test('…y la quincena y el mes saltan con su propia forma', () =>
+        eq(JSON.stringify([X._periodoSiguiente('quincena', { desde:'2026-10-16', hasta:'2026-10-31' }),
+                           X._periodoSiguiente('quincena', { desde:'2026-11-01', hasta:'2026-11-15' }),
+                           X._periodoSiguiente('mes',      { desde:'2026-12-01', hasta:'2026-12-31' }),
+                           X._periodoSiguiente('semana',   { desde:'2026-12-28', hasta:'2027-01-03' })]),
+           JSON.stringify([{ desde:'2026-11-01', hasta:'2026-11-15' }, { desde:'2026-11-16', hasta:'2026-11-30' },
+                           { desde:'2027-01-01', hasta:'2027-01-31' }, { desde:'2027-01-04', hasta:'2027-01-10' }]),
+           'el periodo siguiente sale chueco'));
+    /* La quincena PASADA no se esconde: con la pantalla en noviembre, el recibo
+       del 16 al 31 de octubre se ve y se puede pagar (caso C del navegador). */
+    test('un recibo sin pagar de otro periodo se ve y se puede pagar', () => {
+        const fuera = { id:'nrOct', negocioId:'n1', sucursalId:'suc_principal', staffId:'s1',
+                        desde:'2026-10-16', hasta:'2026-10-31', recibo:{ total:900 }, gastoId:'', pagadoEn:'' };
+        X._cacheRecibos.push(fuera);
+        const rg = { from:'2026-11-01', to:'2026-11-30' };
+        const h = X._nomAcciones('s1', rg);
+        const vis = X._nomReciboVisible('s1', rg);
+        X._cacheRecibos = X._cacheRecibos.filter(x => x !== fuera);
+        return eq((vis && vis.id) + '·' + activa(h, 'Generar gasto'), 'nrOct·true', 'la quincena pasada se perdió de vista');
     });
 
     /* ── 4 · la cola de trabajo y las 24 h ─────────────────────────────── */

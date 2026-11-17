@@ -412,11 +412,26 @@ async function caso(nombre, fn) {
         };
         await pagarAna();                       // la primera vez, legítima
         await abrirCola(e.page);
-        await caso('pagar otra vez la misma semana NO deja dos gastos por el mismo periodo', async () => {
-            await pagarAna().catch(() => {});   // la segunda: lo que haría alguien con prisa
-            const g = await e.page.evaluate(() => _cacheGastos.filter(x => x.staffId === 's_ana' && x.nomina)
-                .map(x => x.nomina.desde + '→' + x.nomina.hasta + ' $' + x.monto));
-            assert.equal(g.length, 1, 'se pagó dos veces: ' + g.join(' · '));
+        await caso('«Generar recibo» ya no propone la semana pagada: propone la siguiente y lo dice', async () => {
+            await (await menu(e.page, 'Ana Prueba', 'Generar recibo')).click();
+            await e.page.waitForSelector('#modalPagoNom.open');
+            const v = await e.page.evaluate(() => ({ d:pnDesde.value, h:pnHasta.value,
+                aviso: pnCorrBanner.offsetParent ? pnCorrBanner.textContent : '' }));
+            assert.deepEqual([v.d, v.h], ['2026-11-23', '2026-11-29'], 'propuso ' + v.d + '→' + v.h);
+            assert.match(v.aviso, /ya está pagado/);
+        });
+        await caso('regresando a mano las fechas a la semana pagada, NO se guarda y dice por qué', async () => {
+            await e.page.fill('#pnDesde', '2026-11-16'); await e.page.dispatchEvent('#pnDesde', 'change');
+            await e.page.fill('#pnHasta', '2026-11-22'); await e.page.dispatchEvent('#pnHasta', 'change');
+            await e.page.click('#pnBtnConfirmar');
+            const av = await leerAvisos(e.page);
+            assert.ok(av.some(t => /ya tiene pagado del 16 nov al 22 nov/.test(t)), 'sin aviso: ' + JSON.stringify(av));
+            assert.equal(await e.page.evaluate(() => document.getElementById('modalPagoNom').classList.contains('open')),
+                         true, 'cerró el modal y perdió la captura');
+            const n = await e.page.evaluate(() => [_cacheRecibos.length,
+                _cacheGastos.filter(x => x.staffId === 's_ana' && x.nomina).length]);
+            assert.deepEqual(n, [1, 1], 'quedó un segundo recibo o un segundo pago');
+            await e.page.evaluate(() => _cerrarPagoNom());
         });
         await e.ctx.close();
     } finally {

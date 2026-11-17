@@ -7147,6 +7147,40 @@ function _nomReciboDe(staffId, rango){
        editar o convertir en gasto. */
     return ls.filter(function(r){ return !r.gastoId; })[0] || ls[0] || null;
 }
+/* ══ UN RECIBO SIN PAGAR NO SE ESCONDE POR EL PERIODO DE LA PANTALLA ══════
+   El 3 de noviembre se paga la segunda quincena de octubre: el recibo es del
+   16 al 31 de octubre y el panel está en noviembre. Buscándolo solo por
+   traslape con la pantalla, el recibo recién guardado DESAPARECÍA: el renglón
+   decía «por pagar» sin «recibo listo» y «Generar gasto» se apagaba
+   («primero genera el recibo»). Lo hecho se perdía de vista justo en el caso
+   más común de la nómina en México: pagar el periodo que acaba de terminar.
+
+   Así que un recibo listo y sin pagar se enseña SIEMPRE, sea del periodo que
+   sea. Primero manda el de la pantalla (si no está pagado); si no, el más
+   viejo de los que esperan fuera —se paga primero lo que se debe desde
+   antes—. Ojo: _nomReciboDe se queda acotado a propósito. Con él se decide
+   QUÉ recibo se edita al guardar uno nuevo, y si mirara fuera, generar la
+   semana de hoy pisaría el recibo pendiente de octubre.                    */
+function _nomReciboFuera(staffId, rango){
+    return _recibosScope().filter(function(r){
+        return r && r.staffId === staffId && !_reciboPagado(r) &&
+               !_traslapa(r.desde, r.hasta, rango.from, rango.to);
+    }).sort(function(a, b){ return String(a.desde).localeCompare(String(b.desde)); })[0] || null;
+}
+function _nomReciboVisible(staffId, rango){
+    var r = _nomReciboDe(staffId, rango);
+    if (r && !_reciboPagado(r)) return r;
+    return _nomReciboFuera(staffId, rango) || r;
+}
+/* ══ LOS PAGOS QUE YA CUBREN UNOS DÍAS ════════════════════════════════════
+   Pagados de verdad (el dinero salió), con su periodo. Es la pregunta que se
+   hace antes de guardar un recibo nuevo: ¿alguno de estos días ya se pagó? */
+function _nomPagosEncimados(staffId, desde, hasta){
+    return gLoad().filter(function(g){
+        return g.staffId === staffId && g.nomina && g.nomina.desde && g.nomina.hasta &&
+               EtaaxCore.gastoPagado(g) && _traslapa(g.nomina.desde, g.nomina.hasta, desde, hasta);
+    });
+}
 /* Cuándo se CONCLUYÓ el pago en el sistema —el instante, no la fecha que se
    tecleó en el gasto—: es el reloj de las 24 h del filtro «Pagadas». Solo lo
    tienen los recibos nacidos con la v85; los pagos de antes no guardaron ese
@@ -7202,7 +7236,7 @@ function _ic(nombre, tam){
    Así que lo que se agrega a este módulo va en texto pelón y su icono se
    registra allá, en el mapa `controles`. Un solo sitio decide cómo se ve. */
 function _nomAcciones(staffId, rango){
-    var rec = _nomReciboDe(staffId, rango);
+    var rec = _nomReciboVisible(staffId, rango);   // también el que espera fuera de la pantalla
     var pagado = _reciboPagado(rec);
     /* Enlazado a un gasto que todavía no se paga: lo que falta no es «generar
        el gasto» otra vez —sería un segundo egreso— sino terminar ese. */
@@ -7313,7 +7347,9 @@ function _nomPintarListas(){
     var buscando = !!q;
     var pend=[], pag=[];
     conEstado.forEach(function(x){
-        if (x.est.estado !== 'completo'){ pend.push(x); return; }
+        /* Un recibo listo de OTRO periodo (la quincena pasada) también es
+           trabajo pendiente, aunque el periodo en pantalla esté cubierto. */
+        if (x.est.estado !== 'completo' || _nomReciboFuera(x.s.id, _nomSel.rg)){ pend.push(x); return; }
         if (buscando || _nomRecienPagado(_nomPagadoEn(x.s.id, _nomSel.rg))) pag.push(x);
     });
     [['todos',conEstado.length],['pendientes',pend.length],['pagadas',pag.length]].forEach(function(par){
@@ -7333,12 +7369,17 @@ function _nomPintarListas(){
         /* Tres estados y no dos: «sin recibo» y «recibo listo» son trabajos
            distintos —uno hay que capturarlo, el otro solo pagarlo— y pintarlos
            igual obliga a abrir el menú para saber cuál es cuál. */
-        var _reg=_nomReciboDe(s.id, _nomSel.rg);
+        var _reg=_nomReciboVisible(s.id, _nomSel.rg);
+        /* Si el recibo es de otro periodo, se dice DE CUÁL: «recibo listo» a
+           secas en noviembre haría pensar que es el de noviembre. */
+        var _fuera=!!(_reg && !_traslapa(_reg.desde, _reg.hasta, _nomSel.rg.from, _nomSel.rg.to));
         sub+='<br>'+_nomBadge(x.est)+
-            ((_reg && !_reg.gastoId && x.est.estado!=='completo')
+            ((_reg && !_reg.gastoId && (x.est.estado!=='completo' || _fuera))
               ? '<span style="display:inline-block;margin-left:6px;font-size:9px;letter-spacing:.5px;text-transform:uppercase;'+
                 'color:#7ab8f5;background:rgba(120,184,245,.12);border:1px solid rgba(120,184,245,.35);'+
-                'border-radius:10px;padding:1px 8px;white-space:nowrap">Recibo listo</span>' : '');
+                'border-radius:10px;padding:1px 8px;white-space:nowrap">Recibo listo'+
+                (_fuera ? ' · '+_esc(_fmtFechaCortaDx(_reg.desde)+' – '+_fmtFechaCortaDx(_reg.hasta)) : '')+
+                '</span>' : '');
         /* EL SUELDO NO SE ENSEÑA EN EL CATÁLOGO. Esta lista se abre con gente
            alrededor y en una tablet que se pasa de mano en mano; lo que cada
            quien gana no tiene por qué leerse de reojo. El número vive donde se
@@ -7614,6 +7655,34 @@ function _periodoSugerido(tipo){
     if (tipo === 'mes') return { desde:_pnISO(new Date(y,m,1)), hasta:_pnISO(new Date(y,m+1,0)) };
     return null;   // personalizado: se respeta lo que haya
 }
+/* El periodo del calendario que sigue a uno dado, con la misma forma: la
+   semana de lunes a domingo, la quincena 1–15 / 16–fin, el mes completo. */
+function _periodoSiguiente(tipo, per){
+    var p = String(per.hasta).split('-');
+    var d = new Date(+p[0], +p[1]-1, +p[2] + 1);          // el día después del último
+    var y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+    if (tipo === 'semana'){
+        var fin = new Date(y, m, day + 6);
+        return { desde:_pnISO(d), hasta:_pnISO(fin) };
+    }
+    if (tipo === 'quincena'){
+        return day <= 15
+            ? { desde:_pnISO(new Date(y,m,1)),  hasta:_pnISO(new Date(y,m,15)) }
+            : { desde:_pnISO(new Date(y,m,16)), hasta:_pnISO(new Date(y,m+1,0)) };
+    }
+    return { desde:_pnISO(new Date(y,m,1)), hasta:_pnISO(new Date(y,m+1,0)) };
+}
+/* El primer periodo, desde el sugerido, que no tenga NINGÚN día pagado. Con
+   tope: si un año entero sale pagado, algo raro pasa y se devuelve el
+   sugerido para que el bloqueo al guardar lo explique. */
+function _periodoSinPagar(tipo, sug, staffId){
+    var per = sug;
+    for (var i = 0; i < 53; i++){
+        if (!_nomPagosEncimados(staffId, per.desde, per.hasta).length) return per;
+        per = _periodoSiguiente(tipo, per);
+    }
+    return sug;
+}
 
 function _ensurePagoNomModal(){
     if(document.getElementById('modalPagoNom'))return;
@@ -7797,6 +7866,19 @@ function _pnTipoChange(){
     // que casi nunca es el periodo que de verdad se paga.
     var tipo=document.getElementById('pnTipo').value;
     var sug=_periodoSugerido(tipo);
+    /* El periodo en curso puede estar YA PAGADO (la semana se pagó y la
+       pantalla está en el mes): proponerlo otra vez es invitar a pagarlo dos
+       veces. Se propone el siguiente que no tenga días pagados, y se dice. */
+    var _bn=document.getElementById('pnCorrBanner');
+    if(sug && _pagoNomStaff && !_pnEditandoGasto){
+        var _orig=sug;
+        sug=_periodoSinPagar(tipo, sug, _pagoNomStaff.id);
+        if(_bn && sug.desde!==_orig.desde){
+            _bn.style.display='block';
+            _bn.textContent='Del '+_fmtFechaCortaDx(_orig.desde)+' al '+_fmtFechaCortaDx(_orig.hasta)+
+                ' ya está pagado: se propone el siguiente periodo sin pagar. Las fechas se pueden cambiar.';
+        } else if(_bn && /ya está pagado/.test(_bn.textContent)){ _bn.style.display='none'; _bn.textContent=''; }
+    }
     if(sug){
         document.getElementById('pnDesde').value=sug.desde;
         document.getElementById('pnHasta').value=sug.hasta;
@@ -9136,7 +9218,7 @@ function _guardarReciboGenerado(s, rec, anterior){
 }
 function _staffDe(id){ return (_cacheStaff||[]).find(function(x){ return x.id===id; }); }
 function _reciboGeneradoDe(staffId){
-    return _nomReciboDe(staffId, (_nomSel && _nomSel.rg) || dxpRango('nom'));
+    return _nomReciboVisible(staffId, (_nomSel && _nomSel.rg) || dxpRango('nom'));
 }
 /* Editar = volver a abrir el MISMO modal con lo que se capturó. No es corregir
    un pago (eso es otra cosa, con su rastro): aquí todavía no ha salido dinero. */
@@ -9690,6 +9772,24 @@ function _confirmarPagoNom(){
     if(!_edit){
         var _recNuevo=_reciboNominaGuardable(_reciboNominaDatos());
         if(!_recNuevo){ alert('No se pudo armar el recibo.'); return; }
+        /* ══ UN DÍA PAGADO NO SE VUELVE A COBRAR ════════════════════════
+           Con la vista en el mes, una semana pagada deja «Generar recibo»
+           encendido (falta el resto del mes), y el modal proponía LA SEMANA
+           EN CURSO —la que ya se pagó—. Se guardaba un segundo recibo, se
+           pagaba, y la misma semana salía dos veces de la caja sin un solo
+           aviso. Si el periodo toca días ya pagados, no se guarda: se dice
+           cuáles y por cuánto, y el modal se queda abierto para corregir las
+           fechas. Si aquel pago estuvo mal, se corrige desde su renglón. */
+        var _yaPag=_nomPagosEncimados(s.id, _recNuevo.desde, _recNuevo.hasta);
+        if(_yaPag.length){
+            alert('No se guardó: '+s.nombre+' ya tiene pagado '+
+                _yaPag.map(function(g){ return 'del '+_fmtFechaCortaDx(g.nomina.desde)+' al '+
+                    _fmtFechaCortaDx(g.nomina.hasta)+' ('+fmtM(g.monto)+')'; }).join(', ')+'.\n\n'+
+                'Este recibo ('+_fmtFechaCortaDx(_recNuevo.desde)+' – '+_fmtFechaCortaDx(_recNuevo.hasta)+
+                ') se encima con esos días y se pagarían dos veces. Cambia el periodo a los días que faltan.\n\n'+
+                'Si aquel pago estuvo mal, corrígelo desde su renglón en el panel.');
+            return;
+        }
         var _antes=_nomReciboLibre(s.id, { from:_recNuevo.desde, to:_recNuevo.hasta });
         _guardarReciboGenerado(s, _recNuevo, _antes);
         _cerrarPagoNom();          // y al volver, el catálogo se repinta solo
