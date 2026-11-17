@@ -199,7 +199,11 @@ async function fila(page, nombre) {
     return page.locator('#selPagoLista > div', { hasText: nombre }).first();
 }
 async function textoFila(page, nombre) { return (await fila(page, nombre)).innerText(); }
+/* Lo que la app dijo y nadie leyó todavía: se anota para el reporte. */
+const avisosSueltos = [];
 async function menu(page, nombre, opcion) {
+    const av = await leerAvisos(page);
+    if (av.length) { avisosSueltos.push(...av); console.log('     (aviso en pantalla: ' + av.join(' | ') + ')'); }
     await (await fila(page, nombre)).locator('button[title^="Generar, editar"]').click();
     const it = page.locator('.cx-menu >> text=' + opcion).first();
     await it.waitFor();
@@ -209,7 +213,7 @@ async function menu(page, nombre, opcion) {
 const resultados = [];
 async function caso(nombre, fn) {
     try { await fn(); resultados.push([nombre, true]); console.log('  ✅ ' + nombre); }
-    catch (e) { resultados.push([nombre, false]); console.log('  💥 ' + nombre + '\n     ' + String(e.message).split('\n').join('\n     ')); }
+    catch (e) { resultados.push([nombre, false]); console.log('  💥 ' + nombre + '\n     ' + String(e.message).split('\n')[0]); }
 }
 
 (async () => {
