@@ -159,13 +159,13 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await page.evaluate(() => irAPaso(5));
             await page.waitForTimeout(900);
-            await caso('…y el Resultado lo dice en el renglón de la Sprite: «Uso en prebatch 1 pza»', async () => {
+            await caso('…y el Resultado lo dice abajo de las Ventas de la Sprite: «Coctelería 1 pza, incl. 1 pza usado en batches»', async () => {
                 const t = await page.evaluate(() => document.getElementById('step5Keep').textContent.replace(/\s+/g, ' '));
-                assert.match(t, /Sprite · 2 LTS[^]*?Uso en prebatch\s*1 pza se fue en producir batches/);
+                assert.match(t, /Sprite · 2 LTS[^]*?Coctelería\s*1 pza\s*incl\. 1 pza usado en batches/);
             });
             await caso('…y el batch tiene su renglón, con lo producido', async () => {
                 const t = await page.evaluate(() => document.getElementById('step5Keep').textContent.replace(/\s+/g, ' '));
-                assert.match(t, /Batch Paloma[^]*?Producido\s*\+/);
+                assert.match(t, /Batch Paloma[^]*?↳ \+[^]*?producido/);
             });
             await ctx.close();
         }

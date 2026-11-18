@@ -22333,10 +22333,12 @@ console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
        compuesto le pasa las suyas (_accComp, con el suyo). */
     test('el botón está en los renglones de copa, de pieza y de compuesto', () => {
         const cuerpo = (n) => { const i = src.indexOf(n); return i < 0 ? '' : src.slice(i, src.indexOf('\n    function ', i + 10)); };
-        const det = src.slice(src.indexOf('function _filaDetalleS5('), src.indexOf('function _equivBarraHTML('));
+        /* Desde el 18-nov el segundo renglón va por columnas y las acciones
+           viven en _s5Acciones (columna «Exist. anterior»). */
+        const det = src.slice(src.indexOf('function _s5Acciones('), src.indexOf('function _eqCopOz('));
         const ok = /_btnOcultoImpreso\(fila\.insumoId\)/.test(det) &&
-                   /_filaDetalleS5\(fila,/.test(cuerpo('function _rowCopa(')) &&
-                   /_filaDetalleS5\(fila,/.test(cuerpo('function _rowPza(')) &&
+                   /_s5Acciones\(fila\)/.test(cuerpo('function _rowCopa(')) &&
+                   /_s5Acciones\(fila\)/.test(cuerpo('function _rowPza(')) &&
                    /_btnOcultoImpreso\(vf\.compId\|\|vf\.insumoId\)/.test(cuerpo('function _rowComp('));
         return eq(ok, true, 'los tres tipos');
     });
@@ -35032,14 +35034,16 @@ console.log('\n══ BH75 · Qué entra a cada inventario ══');
     });
 }
 
-/* ═══════════ BH76 · EL RESULTADO EN DOS RENGLONES ═══════════
-   Pedido de Edwin (17-nov): «ahorita es un renglón súper alto con letras bien
-   pequeñas». La celda del producto apilaba nombre, stock, categoría,
-   contenido y tres botones, y las cifras cargaban sus equivalencias en 9 px.
-   Ahora, como el costeo de destilados: renglón 1 con el producto y sus
-   números; renglón 2 con el detalle, cada cosa con su nombre. Se corre el
-   constructor real (_step5TablasHTML) y se lee lo que deja.             */
-console.log('\n══ BH76 · El resultado en dos renglones ══');
+/* ═══════════ BH76 · EL RESULTADO EN DOS RENGLONES, POR COLUMNAS ═══════════
+   Pedido de Edwin (17 y 18-nov): cada producto en dos renglones que respetan
+   las COLUMNAS —«con sus títulos pero definidas por columnas»—, no un texto
+   corrido abajo:
+     Producto → stock · Exist. anterior → acciones · Entradas → en dinero ·
+     Ventas → coctelería (con lo usado en batches) · Mermas → cancelaciones ·
+     Cortesías · Teórico y Exist. actual → copas · onzas · Diferencia → % ·
+     Dif. $ → carta arriba, proveedor abajo.
+   Se corre el constructor real (_step5TablasHTML) y se lee CELDA por celda. */
+console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══');
 {
     const P = crearContexto();
     cargarJS(P, 'etaax-core.js'); cargarJS(P, 'insumo-label.js'); cargarJS(P, 'recetas/inventarios.js');
@@ -35050,43 +35054,61 @@ console.log('\n══ BH76 · El resultado en dos renglones ══');
           ingredientes:[{ insumoId:'squirt', cantidad:500, unidad:'ML' }] }]);
     setVar(P, '_cacheInsumosInv', [
         { id:'prePal', nombre:'Batch Paloma PR', esSubReceta:true, recetaId:'srPal', activo:'1' },
-        { id:'squirt', nombre:'Squirt 2 LTS', tipoInsumo:'refresco', activo:'1',
-          presentaciones:[{ contNeto:2, umContenido:'LT', costoPieza:36 }] }]);
+        { id:'squirt', nombre:'Squirt 2 LTS', tipoInsumo:'refresco', activo:'1', presentaciones:[{ contNeto:2, umContenido:'LT', costoPieza:36 }] },
+        { id:'sprite', nombre:'Sprite 2 LTS', tipoInsumo:'refresco', activo:'1', presentaciones:[{ contNeto:2, umContenido:'LT', costoPieza:38 }] }]);
     setVar(P, 'invActual', { id:'inv', area:'barra', entradasLog:[], ventasCompuesto:{}, cancelaciones:[],
         descuentos:[], filas:[], prebatchProducidos:{ prePal: 4 }, cocktailsVendidos:{} });
+    const pza = (id, nom, x) => Object.assign({ insumoId:id, nombre:nom, tipo:'pza', contNeto:2000, copaML:0, existenciaAnterior:10,
+        ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], pesos:[],
+        cerradasBodega:8, cerradasBarra:0, precioCarta:60 }, x);
     setVar(P, 'filasCaptura', [
-        { insumoId:'squirt', nombre:'Squirt 2 LTS', tipo:'pza', contNeto:2000, copaML:0, existenciaAnterior:10,
-          ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], pesos:[],
-          cerradasBodega:8, cerradasBarra:0, precioCarta:60, costoPieza:36 },          // usó 1, faltó 1
+        pza('squirt', 'Squirt 2 LTS', { costoPieza:36 }),                                  // usó 1 en batches, faltó 1
+        pza('sprite', 'Sprite 2 LTS', { costoPieza:38, entradas:['2'], cerradasBodega:10,  // +2, −1 merma, −1 cortesía
+            mermaCopas:1, mermaConcepto:'Botella rota', cortesiaCopas:1, cortesiaConcepto:'Cumpleaños mesa 4' }),
         { insumoId:'prePal', nombre:'Batch Paloma PR', tipo:'copa', contNeto:2000, copaML:250, rendimientoBatch:2000,
           existenciaAnterior:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0,
           entradas:[], pesos:['8'], pesoCristal:0, cerradasBodega:0, cerradasBarra:0 }]);
     vm.runInContext('_consumoDirty = true; _s5Abiertos = new Proxy({}, { get: () => true });', P);
     const h = P._step5TablasHTML();
-    const texto = (x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-    /* El par de renglones de un producto: el 1 que lo nombra y el 2 que le sigue. */
+    const texto = (x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    /* Las celdas de los dos renglones de un producto. */
+    const celdas = (tr) => (tr.match(/<td[^>]*>[\s\S]*?<\/td>/g) || []).map(texto);
     const par = (nombre) => {
         const i = h.indexOf('<div class="s5-nom">' + nombre);
         const r1 = h.lastIndexOf('<tr class="s5-r1">', i);
         const r2 = h.indexOf('<tr class="s5-r2">', i);
-        const fin = h.indexOf('</tr>', r2);
-        return { uno: h.slice(r1, r2), dos: h.slice(r2, fin) };
+        const fin = h.indexOf('</tr>', r2) + 5;
+        /* Columnas que cubre el renglón: una celda con colspan cuenta por las suyas. */
+        const ancho = (tr) => (tr.match(/<td[^>]*>/g) || []).reduce((t, td) => t + (parseInt((td.match(/colspan="(\d+)"/) || [])[1] || '1', 10)), 0);
+        return { uno: celdas(h.slice(r1, r2)), dos: celdas(h.slice(r2, fin)), anchoUno: ancho(h.slice(r1, r2)), anchoDos: ancho(h.slice(r2, fin)) };
     };
-    const sq = par('Squirt 2 LTS'), pb = par('Batch Paloma PR');
-    test('cada producto sale en DOS renglones: el suyo y su detalle', () =>
-        eq((h.match(/class="s5-r1"/g) || []).length + '·' + (h.match(/class="s5-r2"/g) || []).length, '2·2'));
-    test('el renglón 1 ya no apila el stock ni los botones', () =>
-        eq(/Stock |Marcar bateo|Nota/.test(texto(sq.uno)), false));
-    test('…y el 2 los trae, con el stock sin «STOCK Stock» repetido', () => {
-        const t = texto(sq.dos);
-        return eq(/Stock sin parámetros/.test(t) && /Marcar bateo/.test(t) && !/STOCK Stock|Stock\s+Stock/i.test(t), true);
-    });
-    test('el detalle dice cómo sale el resultado: teórico, físico y diferencia', () =>
-        eq(/Resultado teórico 9 pza · físico 8 pza · diferencia -1 pza/.test(texto(sq.dos).replace('−', '-')), true));
-    test('…lo que se fue en prebatch', () => eq(/Uso en prebatch 1 pza se fue en producir batches/.test(texto(sq.dos)), true));
-    test('…y la diferencia en dinero, a costo proveedor y a precio carta', () =>
-        eq(/a costo proveedor −\$36\.00 · a precio carta −\$60\.00/.test(texto(sq.dos)), true));
-    test('el renglón del batch dice lo producido', () => eq(/Producido \+32 cop en el Paso 3/.test(texto(pb.dos)), true));
+    const sq = par('Squirt 2 LTS'), sp = par('Sprite 2 LTS'), pb = par('Batch Paloma PR');
+    test('cada producto sale en DOS renglones', () =>
+        eq((h.match(/class="s5-r1"/g) || []).length + '·' + (h.match(/class="s5-r2"/g) || []).length, '3·3'));
+    test('…con las MISMAS columnas los dos (10 en piezas, 11 en copas)', () =>
+        eq([sq.anchoUno, sq.anchoDos, pb.anchoUno, pb.anchoDos].join(','), '10,10,11,11'));
+    test('Producto: el nombre arriba y SOLO su stock abajo', () =>
+        eq(/Squirt 2 LTS/.test(sq.uno[0]) && /^Stock sin parámetros/.test(sq.dos[0]) && !/Marcar bateo/.test(sq.dos[0]), true, sq.dos[0]));
+    test('Exist. anterior: abajo van las acciones (bateo, nota, impreso)', () =>
+        eq(/Marcar bateo/.test(sq.dos[1]) && !/Marcar bateo|Stock/.test(sq.uno.join(' ')), true, sq.dos[1]));
+    test('Entradas: abajo, cuánto representan en dinero (2 × $38)', () =>
+        eq(/\+2 pza/.test(sp.uno[2]) + '·' + /en dinero \$76\.00/.test(sp.dos[2]), 'true·true', sp.uno[2] + ' | ' + sp.dos[2]));
+    test('Ventas: abajo, la coctelería con lo usado en batches', () =>
+        eq(/Coctelería 1 pza incl\. 1 pza usado en batches/.test(sq.dos[3]), true, sq.dos[3]));
+    test('Mermas: la merma con su comentario arriba, las cancelaciones abajo', () =>
+        eq(/1 pza Botella rota/.test(sp.uno[4]) + '·' + /^Cancelac\./.test(sp.dos[4]), 'true·true', sp.uno[4] + ' | ' + sp.dos[4]));
+    test('Cortesías: en SU columna, con su comentario', () =>
+        eq(/1 pza Cumpleaños mesa 4/.test(sp.uno[5]), true, sp.uno[5]));
+    test('Teórico, Exist. actual y Diferencia, cada uno en su columna', () =>
+        eq([sq.uno[6], sq.uno[7], sq.uno[8]].join(' | '), '9 pza | 8 pza | -1 pza'));
+    test('…y abajo de la diferencia, su porcentaje', () => eq(/^% /.test(sq.dos[8]), true, sq.dos[8]));
+    test('Dif. $: a precio carta arriba, a proveedor abajo', () =>
+        eq(sq.uno[9] + ' | ' + sq.dos[9], '−$60.00 a carta | a proveedor −$36.00'));
+    test('en destilados y licores hay columna de Teórico, con copas · onzas abajo', () =>
+        eq(/bot$/.test(pb.uno[7]) + '·' + /^copas · onzas \d/.test(pb.dos[7]), 'true·true', pb.uno[7] + ' | ' + pb.dos[7]));
+    test('el renglón del batch dice lo producido, en Entradas', () => eq(/producido/.test(pb.uno[2]), true, pb.uno[2]));
+    test('el encabezado dice qué va en el segundo renglón de cada columna', () =>
+        eq(/abajo: coctelería/.test(h) && /carta · proveedor/.test(h) && /abajo: stock/.test(h), true));
     test('el estilo de los dos renglones va con la tabla', () => eq(h.indexOf('.s5-r1>td') > -1, true));
 }
 

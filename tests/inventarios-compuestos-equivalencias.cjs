@@ -23,7 +23,7 @@ module.exports=function({test,eq,crearContexto,cargarJS,setVar}){
     });
     test('la fila agrupada y ambas presentaciones muestran existencia y diferencia',()=>{
         preparar();const html=C._step5TablasHTML(),lineas=textos(html);
-        eq(lineas.length,6);
+        eq(lineas.length,7);   // + el teórico del compuesto, columna nueva del 18-nov
         for(const t of ['1.50 bot · 39.7 oz · 26.1 cp','0.50 bot · 16.1 oz · 10.6 cp','1.00 bot · 23.7 oz · 15.6 cp','+0.05 bot · +1.5 oz · +1.0 cp','0.00 bot · 0.0 oz · 0.0 cp']) eq(html.includes(t),true,t);
         eq(lineas.filter(t=>t.includes('+0.05 bot')).length,2,'total y presentación con diferencia');
     });

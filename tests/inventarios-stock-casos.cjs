@@ -107,7 +107,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
        RENGLÓN la use: un motor correcto que la pantalla no llama se ve igual de
        verde. Así que se corre `_rowCopa`, el constructor real de la fila de
        barra, y se lee lo que deja en el HTML. */
-    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch','_filaDetalleS5']);
+    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch','_s5c2','_s5sub','_s5dinero','_s5Acciones','_eqCopOz']);
     /* Lo que la fila pide del resto del módulo y no es asunto de esta prueba.
        Todo en cero para que los números que se afirman abajo sean los del
        fixture y no el resultado de otra cosa. */
@@ -128,16 +128,20 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
     c.calcExistencia=()=>25;                       // 25 copas = 1,500 ml
     c.calcExistenciaTeorica=()=>25+350/60;         // falta 350 ml contra el teórico
     c.window=c; const fila=c._rowCopa(fcopa);
-    test('el renglón de barra dice a cuántas botellas, onzas y copas equivale lo que hay',()=>{
-        eq(fila.html.includes('2.00 bot · 50.7 oz · 25.0 cp'),true,
-            'el físico no trae su equivalencia: '+(fila.html.match(/≈[^<]*/g)||[]).join(' // '));
+    /* Desde el 18-nov (pedido de Edwin): la existencia va en BOTELLAS en el
+       primer renglón y en copas · onzas en el segundo, en su misma columna. */
+    test('el renglón de barra dice la existencia en botellas, y abajo en copas y onzas',()=>{
+        eq(fila.html.includes('2.00 bot'),true,'sin botellas');
+        eq(fila.html.includes('25.0 cp · 50.7 oz'),true,'el físico no trae copas y onzas');
     });
     test('…y la diferencia conserva el signo en las tres lecturas',()=>{
         eq(fila.html.includes('-0.47 bot · -11.8 oz · -5.8 cp'),true,
             'la diferencia no trae su equivalencia con signo: '+(fila.html.match(/≈[^<]*/g)||[]).join(' // '));
     });
-    test('…y las dos equivalencias van en el renglón, una por cifra',()=>
-        eq((fila.html.match(/≈ /g)||[]).length,2,'van '+(fila.html.match(/≈ /g)||[]).length));
+    test('…teórico y existencia dicen copas · onzas, y la diferencia trae su desglose completo',()=>{
+        eq((fila.html.match(/\d cp · [-+]?\d/g)||[]).length,2,'copas · onzas de teórico y existencia');
+        return eq((fila.html.match(/≈ /g)||[]).length,1,'el desglose de la diferencia');
+    });
     /* Un sobrante no puede salir con el signo de un faltante. */
     test('un sobrante sale en positivo',()=>{
         c.calcExistenciaTeorica=()=>25-350/60;
