@@ -296,6 +296,54 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await caso('…y sessionStorage no pasa por el almacén', async () => assert.equal(r.sesion, 'de sesión'));
             await ctx.close();
         }
+
+        /* ── G · producción propia sin rastrear: pasarla con un toque ────────
+           La tablet de Edwin: «8 producciones propias sin rastrear». Sus
+           insumos de producción propia se habían BORRADO (limpieza de
+           duplicados de la sub-receta) y el inventario seguía apuntando a los
+           borrados: sus batches no descontaban nada. Aquí el inventario trae un
+           renglón contado de un insumo que ya no existe, con 4 batches, y el
+           catálogo trae el vigente de la misma sub-receta. */
+        console.log('\n══ G · Producción propia sin rastrear: «Pasarlo a» ══');
+        {
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV,
+                { nube: { negocio_insumos: filasNube([SPRITE, SQUIRT, BATCH]), recetas: [{ id: SUB.id, negocio_id: 'n1', datos: SUB }] } }));
+            await nuevoInv(page);
+            await page.waitForFunction(() => filasCaptura.some(f => f.insumoId === 'prePal'), null, { polling: 100, timeout: 8000 });
+            page.on('dialog', d => d.accept());
+            await page.evaluate(() => {
+                const muerto = { insumoId: 'prod_borrado1', nombre: 'Batch Paloma', tipo: 'copa', contNeto: 2000, copaML: 250,
+                    existenciaAnterior: 0, entradas: [], pesos: [], cerradasBodega: 0, cerradasBarra: 2, registrado: true };
+                invActual.filas = filasCaptura.map(f => Object.assign({}, f)).concat([muerto]);
+                invActual.prebatchProducidos = { prod_borrado1: 4 };
+                cargarProductosCaptura();
+                _consumoDirty = true; window._step5Dirty = true; window._step5Force = true;
+                irAPaso(5);
+            });
+            await page.waitForTimeout(1200);
+            const texto = () => page.evaluate(() => document.getElementById('step5Keep').textContent.replace(/\s+/g, ' '));
+            await caso('el aviso dice que su insumo ya no está, y el bloque de batches dice el NOMBRE', async () => {
+                const t = await texto();
+                assert.match(t, /1 producción propia sin rastrear/);
+                assert.match(t, /Batch Paloma — su insumo ya no está en el catálogo/);
+                assert.ok(!/prod_borrado1/.test(t), 'enseña el id del insumo borrado');
+            });
+            await caso('…y sus 4 batches todavía no descuentan Sprite', async () =>
+                assert.equal(await page.evaluate(() => _consumoBaseProd(filasCaptura.find(f => f.insumoId === 'sprite'))), 0));
+            await caso('el botón «Pasarlo a «Batch Paloma»» lo arregla desde ahí', async () => {
+                await page.evaluate(() => [...document.querySelectorAll('#step5Keep button')].find(b => /Pasarlo a/.test(b.textContent)).click());
+                await page.waitForTimeout(1200);
+                const r = await page.evaluate(() => ({
+                    viejo: filasCaptura.some(f => f.insumoId === 'prod_borrado1'),
+                    nuevo: (filasCaptura.find(f => f.insumoId === 'prePal') || {}).cerradasBarra,
+                    prod: JSON.stringify(invActual.prebatchProducidos) }));
+                assert.deepEqual(r, { viejo: false, nuevo: 2, prod: '{"prePal":4}' });
+            });
+            await caso('…y AHORA sí descuentan: 4 batches × 500 ml = 1 Sprite', async () =>
+                assert.equal(Math.round(await page.evaluate(() => _consumoBaseProd(filasCaptura.find(f => f.insumoId === 'sprite'))) * 1000) / 1000, 1));
+            await caso('…y el aviso desaparece', async () => assert.ok(!/sin rastrear/.test(await texto())));
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }

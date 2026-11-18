@@ -768,8 +768,13 @@ function _refFilaInsumo(insumoId) {
     }
     return null;
 }
-function getExistenciaAnterior(insumoId) {
-    const fila = _refFilaInsumo(insumoId);
+function getExistenciaAnterior(insumoId, alias) {
+    /* `alias`: el id VIEJO de un renglón que se pasó de un insumo que ya no
+       está en el catálogo a su reemplazo (_pasarRenglonPrebatch). El
+       inventario anterior lo contó con el id viejo: sin buscarlo ahí, el
+       batch arrancaría en cero y su faltante saldría inventado. */
+    let fila = _refFilaInsumo(insumoId);
+    if (!fila && alias) fila = _refFilaInsumo(alias);
     if (!fila) return 0;
     const ea = fila.existenciaFisica !== undefined ? fila.existenciaFisica : calcExistencia(fila);
     // Las copas dependen del tamaño de copa. Si la copa del insumo cambió desde el
@@ -802,7 +807,7 @@ function _sanearRefInv() {
 function onCambiarRefInv(id) {
     if (!invActual) return;
     invActual.refInventarioId = id || '';
-    filasCaptura.forEach(function(f){ f.existenciaAnterior = getExistenciaAnterior(f.insumoId); });
+    filasCaptura.forEach(function(f){ f.existenciaAnterior = getExistenciaAnterior(f.insumoId, f.aliasDe); });
     _setFechaUltimo();
     if (typeof _autoGuardar === 'function') _autoGuardar();
 }
@@ -1476,10 +1481,27 @@ function _prebatchDiagnostico() {
             /* Se compara también quitando el sufijo que pone la conversión
                («Mix Negroni PR» ← «Mix Negroni»): es como quedan nombrados. */
             var base = nom.replace(/\s*(pr|prebatch|batch)\s*$/, '');
-            if (porNombre[nom] || porNombre[base])
-                out.push({ fila: f.nombre, mal: 'nolink',
-                    txt: 'se llama como la sub-receta «' + (porNombre[nom] || porNombre[base]).nombre +
-                         '» pero no está marcado como producción propia' });
+            var sr0 = porNombre[nom] || porNombre[base];
+            if (!sr0) return;
+            /* Dos casos que antes decían lo mismo y se arreglan distinto:
+               · el insumo EXISTE pero no está marcado → se marca y se liga;
+               · el insumo YA NO ESTÁ en el catálogo (se borró al limpiar
+                 duplicados de la sub-receta) → el renglón se PASA al insumo
+                 de producción propia que sí existe, con lo contado y sus
+                 batches. Antes los dos decían «no está marcado», y el
+                 segundo no se arreglaba marcando nada. */
+            if (ins) {
+                out.push({ fila: f.nombre, mal: 'nolink', insumoId: f.insumoId, recetaId: sr0.id,
+                    txt: 'se llama como la sub-receta «' + sr0.nombre + '» pero no está marcado como producción propia' });
+                return;
+            }
+            var dest = _insumoPrebatchDeReceta(sr0.id);
+            out.push({ fila: f.nombre, mal: 'muerto', insumoId: f.insumoId, recetaId: sr0.id, destino: dest,
+                txt: dest
+                    ? 'su insumo ya no está en el catálogo (se borró o se reemplazó); el de producción propia de «' +
+                      sr0.nombre + '» hoy es «' + dest.nombre + '»'
+                    : 'su insumo ya no está en el catálogo y «' + sr0.nombre + '» no tiene insumo de producción propia: ' +
+                      'en Recetas ábrela y contesta «Sí» a «¿Usar como prebatch en el inventario?»; al volver aquí sale el botón para pasarlo' });
             return;
         }
         if (!ins.recetaId) {
@@ -1626,6 +1648,89 @@ function _ingredientesSinContenido(sr) {
     return out;
 }
 
+/* El insumo de producción propia que HOY representa a una sub-receta, de
+   preferencia el de la sucursal del inventario. Con el id canónico, que es
+   como se llavean los renglones. */
+function _insumoPrebatchDeReceta(recetaId) {
+    if (!recetaId) return null;
+    var cands = (getInsumos() || []).filter(function (x) {
+        return x && x.id && x.esSubReceta && x.recetaId === recetaId && x.activo !== false && String(x.activo) !== '0';
+    });
+    if (!cands.length) return null;
+    var suc = _sucursalInventario() || 'suc_principal';
+    var c = (typeof window._insumoEnSuc === 'function' &&
+             cands.find(function (x) { return window._insumoEnSuc(x, suc); })) || cands[0];
+    return { id: c.origenId || c.id, nombre: c.nombre + (c.variedad ? ' ' + c.variedad : '') };
+}
+/* El nombre con el que este inventario conoce a un id, aunque el catálogo ya
+   no lo tenga: para no enseñar «prod_mrbf2w05» donde había un batch. */
+function _nombreEnInventario(id) {
+    var buscar = function (arr) { var f = (arr || []).find(function (x) { return x && x.insumoId === id; }); return f && f.nombre; };
+    return buscar(filasCaptura) || buscar(invActual && invActual.filas) ||
+           buscar(invActual && invActual.respaldoIdentidad && invActual.respaldoIdentidad.filas) || '';
+}
+/* Pasa TODO lo que el inventario guarda de un insumo a otro: su renglón (con
+   lo contado y la marca del id viejo, para su existencia anterior), los
+   batches capturados, la nota, lo de fuera del impreso, las entradas y las
+   cancelaciones. Solo datos: no pinta ni guarda. */
+function _reapuntarInsumoEnInv(inv, viejo, nuevo) {
+    if (!inv || !viejo || !nuevo || viejo === nuevo) return false;
+    var filas = inv.filas || [];
+    filas.forEach(function (f) {
+        if (f && f.insumoId === viejo) { f.insumoId = nuevo; if (!f.aliasDe) f.aliasDe = viejo; }
+    });
+    // El renglón VACÍO que el insumo nuevo ya tenía sobra: el bueno es el contado.
+    inv.filas = filas.filter(function (f) { return !(f && f.insumoId === nuevo && !f.aliasDe && !_filaConDatos(f)); });
+    var pp = inv.prebatchProducidos;
+    if (pp && pp[viejo] != null) {
+        pp[nuevo] = (parseFloat(pp[nuevo]) || 0) + (parseFloat(pp[viejo]) || 0);
+        delete pp[viejo];
+    }
+    ['notasInsumo', 'ocultosReporte'].forEach(function (k) {
+        var m = inv[k];
+        if (m && m[viejo] != null) { if (m[nuevo] == null) m[nuevo] = m[viejo]; delete m[viejo]; }
+    });
+    ['entradasLog', 'cancelaciones'].forEach(function (k) {
+        (inv[k] || []).forEach(function (e) { if (e && e.insumoId === viejo) e.insumoId = nuevo; });
+    });
+    return true;
+}
+function _pasarRenglonPrebatch(viejo, nuevo) {
+    if (!invActual) return;
+    var dest = (typeof window._insumoResolver === 'function') ? window._insumoResolver(nuevo) : null;
+    var fv = (filasCaptura || []).find(function (f) { return f.insumoId === viejo; });
+    if (!dest || !fv) { alert('No se encontró el renglón o el insumo de producción propia.'); return; }
+    var nomD = dest.nombre + (dest.variedad ? ' ' + dest.variedad : '');
+    /* Si el nuevo YA tiene su propio conteo, no se juntan solos: juntar dos
+       conteos es decidir cuál vale, y eso no lo adivina el sistema. */
+    var conDatos = (filasCaptura || []).concat(invActual.filas || []).some(function (f) {
+        return f && f.insumoId === nuevo && !f.aliasDe && _filaConDatos(f);
+    });
+    if (conDatos) {
+        alert('«' + nomD + '» ya tiene su propio renglón con conteo en este inventario.' + String.fromCharCode(10, 10) +
+              'No los junto solo para no perder ninguno de los dos: revisa cuál es el bueno y deja el otro en cero.');
+        return;
+    }
+    if (!confirm('«' + fv.nombre + '» apunta a un insumo que ya no está en el catálogo.' + String.fromCharCode(10, 10) +
+                 'Se va a pasar a «' + nomD + '», el insumo de producción propia de su sub-receta: lo que contaste, ' +
+                 'su existencia anterior y los batches capturados se van con él, y lo que esos batches usaron se ' +
+                 'descuenta de sus ingredientes.' + String.fromCharCode(10, 10) + '¿Lo pasamos?')) return;
+    // Lo tecleado antes del autoguardado no se puede perder en el rearmado.
+    invActual.filas = filasCaptura.map(function (f) { return Object.assign({}, f); });
+    _reapuntarInsumoEnInv(invActual, viejo, nuevo);
+    try {   // la marca de bateo vive aparte, por negocio y sucursal
+        var b = getBateo(), i = b.indexOf(viejo);
+        if (i >= 0) { b.splice(i, 1); if (b.indexOf(nuevo) < 0) b.push(nuevo); localStorage.setItem(_bateoKey(), JSON.stringify(b)); }
+    } catch (e) {}
+    try { cargarProductosCaptura(); } catch (e) { console.warn('[inv] pasar renglón:', e); }
+    if (typeof _consumoIdxCache !== 'undefined') _consumoIdxCache = null;
+    _consumoDirty = true;
+    window._step5Dirty = true; window._step5Force = true;
+    if (typeof _autoGuardar === 'function') _autoGuardar();
+    if (typeof renderStepContent === 'function') renderStepContent();
+}
+window._pasarRenglonPrebatch = _pasarRenglonPrebatch;
+
 /* ══ ARREGLAR LA LIGA DESDE DONDE SE VE EL PROBLEMA ═══════════════════════
    Un diagnóstico que no se puede atender no sirve de nada. Mandar a alguien a
    otro módulo a buscar un insumo entre tres que se llaman casi igual, para
@@ -1640,15 +1745,23 @@ async function _religarPrebatch(insumoId, recetaId) {
     var nueva = getRecetas().find(function (r) { return r.id === recetaId; });
     if (!ins || !nueva) { alert('No se encontró el insumo o la sub-receta.'); return; }
     var vieja = getRecetas().find(function (r) { return r.id === ins.recetaId; });
-    if (!confirm('«' + (ins.nombre || '') + '» va a producir «' + (nueva.nombre || '') + '»' +
-                 (vieja ? ', en vez de «' + vieja.nombre + '»' : '') + '.' +
-                 String.fromCharCode(10, 10) +
-                 'Los batches que ya capturaste van a descontar OTROS insumos: ' +
-                 'revisa el Resultado después de hacerlo.' +
-                 String.fromCharCode(10, 10) + '¿Lo ligamos?')) return;
+    /* Un insumo que se llama como su sub-receta pero NUNCA se marcó como
+       producción propia: ligarlo es también marcarlo. */
+    var marcar = !ins.esSubReceta;
+    if (!confirm(marcar
+            ? '«' + (ins.nombre || '') + '» se va a marcar como producción propia de «' + (nueva.nombre || '') + '».' +
+              String.fromCharCode(10, 10) + 'Los batches que captures en él van a descontar los ingredientes de esa sub-receta.' +
+              String.fromCharCode(10, 10) + '¿Lo ligamos?'
+            : '«' + (ins.nombre || '') + '» va a producir «' + (nueva.nombre || '') + '»' +
+              (vieja ? ', en vez de «' + vieja.nombre + '»' : '') + '.' +
+              String.fromCharCode(10, 10) +
+              'Los batches que ya capturaste van a descontar OTROS insumos: ' +
+              'revisa el Resultado después de hacerlo.' +
+              String.fromCharCode(10, 10) + '¿Lo ligamos?')) return;
 
-    var antes = ins.recetaId;
+    var antes = ins.recetaId, antesSub = ins.esSubReceta;
     ins.recetaId = recetaId;
+    if (marcar) ins.esSubReceta = true;
     var negId = getNegocioActivo();
     try {
         if (typeof _supabase !== 'undefined' && negId) {
@@ -1670,6 +1783,7 @@ async function _religarPrebatch(insumoId, recetaId) {
            peor de las dos opciones: se ve arreglado, se cierra el inventario,
            y al volver está igual que antes sin que nadie sepa por qué. */
         ins.recetaId = antes;
+        if (marcar) ins.esSubReceta = antesSub;
         alert('No se pudo guardar el cambio, así que NO se hizo.' +
               String.fromCharCode(10, 10) + ((e && e.message) || e) +
               String.fromCharCode(10, 10) +
@@ -1833,8 +1947,12 @@ function _prebatchDesglose() {
         var n = parseFloat(prod[pid]) || 0;
         if (!n) return;
         var pre = (typeof window._insumoResolver === 'function') ? window._insumoResolver(pid) : null;
-        var nom = (pre && pre.nombre) || pid;
-        if (!pre || !pre.esSubReceta || !pre.recetaId) {
+        var nom = (pre && pre.nombre) || _nombreEnInventario(pid) || pid;
+        if (!pre) {
+            out.push({ nombre: nom, batches: n, mal: 'Su insumo ya no está en el catálogo: pásalo a su reemplazo con 🔗 en el aviso de arriba', ings: [] });
+            return;
+        }
+        if (!pre.esSubReceta || !pre.recetaId) {
             out.push({ nombre: nom, batches: n, mal: 'El insumo donde se capturó no es producción propia', ings: [] });
             return;
         }
@@ -2018,8 +2136,7 @@ function _prebatchAvisoHTML() {
     return '<div style="margin:0 16px 14px;background:rgba(245,200,66,.08);' +
         'border:1px solid rgba(245,200,66,.45);border-radius:12px;padding:13px 15px">' +
         '<div style="font-size:12.5px;font-weight:700;color:var(--accent);margin-bottom:7px">' +
-        '⚠️ ' + p.length + ' producción' + (p.length === 1 ? '' : 'es') + ' propia' +
-        (p.length === 1 ? '' : 's') + ' sin rastrear</div>' +
+        '⚠️ ' + p.length + (p.length === 1 ? ' producción propia' : ' producciones propias') + ' sin rastrear</div>' +
         '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.6">' +
         'Lo que estos batches se llevaron <b style="color:var(--text)">no se le está ' +
         'descontando a sus insumos</b>, así que su faltante va a salir aquí como una ' +
@@ -2036,17 +2153,22 @@ function _prebatchAvisoHTML() {
                     'style="margin-left:6px;font-size:10.5px;padding:2px 9px;border-radius:5px;cursor:pointer;' +
                     'background:transparent;border:1px solid var(--green);color:var(--green)">' +
                     '✂️ Separarlas</button></li>';
-            var btn = (x.mal === 'ligacruzada' && x.insumoId && x.recetaId)
-                ? ' <button onclick="_religarPrebatch(\'' + x.insumoId + '\',\'' + x.recetaId + '\')" ' +
-                  'style="margin-left:6px;font-size:10.5px;padding:2px 9px;border-radius:5px;cursor:pointer;' +
-                  'background:transparent;border:1px solid var(--green);color:var(--green)">' +
-                  '🔗 Ligarlo al correcto</button>'
-                : '';
+            var _b = function (fn, txt) {
+                return ' <button onclick="' + fn + '" style="margin-left:6px;font-size:10.5px;padding:2px 9px;border-radius:5px;' +
+                    'cursor:pointer;background:transparent;border:1px solid var(--green);color:var(--green)">' + txt + '</button>';
+            };
+            var btn = '';
+            if (x.mal === 'ligacruzada' && x.insumoId && x.recetaId)
+                btn = _b("_religarPrebatch('" + x.insumoId + "','" + x.recetaId + "')", '🔗 Ligarlo al correcto');
+            else if (x.mal === 'nolink' && x.insumoId && x.recetaId)
+                btn = _b("_religarPrebatch('" + x.insumoId + "','" + x.recetaId + "')", '🔗 Marcarlo y ligarlo');
+            else if (x.mal === 'muerto' && x.destino)
+                btn = _b("_pasarRenglonPrebatch('" + x.insumoId + "','" + x.destino.id + "')", '🔗 Pasarlo a «' + etx(x.destino.nombre) + '»');
             return '<li><b style="color:var(--text)">' + etx(x.fila) + '</b> — ' + etx(x.txt) + btn + '</li>';
         }).join('') +
         '</ul><div style="font-size:11px;color:var(--text-dim);margin-top:9px;line-height:1.6">' +
-        'Se arregla en Recetas → Insumos, volviendo a «Cargar como insumo» la sub-receta, ' +
-        'o dándole su renglón en el Paso 1.</div></div>';
+        'Con 🔗 se arregla aquí mismo. Donde no hay botón, se arregla en Recetas: abre la sub-receta y ' +
+        'contesta «Sí» a «¿Usar como prebatch en el inventario?».</div></div>';
 }
 function _esPrebatchRepartido(id) { return !!(_PREBATCH_REPARTE && _repCache && _repCache.esPB[id]); }
 
@@ -5362,7 +5484,7 @@ function cargarProductosCaptura() {
             }
             // Refrescar la "existencia anterior" desde el inventario de referencia actual:
             // si editaste el inventario anterior / primer levantamiento, se actualiza aquí.
-            existe.existenciaAnterior = getExistenciaAnterior(_cid);
+            existe.existenciaAnterior = getExistenciaAnterior(_cid, existe.aliasDe);
             // Reexpresar las botellas capturadas si cambió contenido/copa del
             // catálogo. El aporte anterior se quita antes de sumar el nuevo.
             ['cortesiaCopas','mermaCopas'].forEach(function(campo) {

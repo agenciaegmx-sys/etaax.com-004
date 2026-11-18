@@ -35131,6 +35131,137 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     test('% sin diferencia: 0%, no «—»', () => eq(P._s5Pct(0, 0, 0).html, '0%'));
 }
 
+/* ═══════════ BH77 · LAS PRODUCCIONES PROPIAS SIN RASTREAR, LIGADAS CON UN TOQUE ═══════════
+   La tablet de Edwin (18-nov): «8 producciones propias sin rastrear» y el
+   bloque de batches enseñando «prod_mrbf2w05» en vez de nombres. Sus insumos
+   de producción propia se habían BORRADO al limpiar duplicados de la
+   sub-receta; el inventario seguía apuntando a los borrados, así que lo que
+   esos batches usaron no se descontaba a nadie. El aviso decía «no está
+   marcado como producción propia» —falso— y mandaba a otro módulo.
+   Ahora distingue los dos casos y los arregla desde ahí:
+     · el insumo existe pero no está marcado → «Marcarlo y ligarlo»;
+     · el insumo ya no está → «Pasarlo a» su reemplazo, con lo contado, su
+       existencia anterior y los batches. */
+async function suiteLigarSinRastrear() {
+console.log('\n══ BH77 · Producciones propias sin rastrear: ligarlas con un toque ══');
+    const B = crearContexto();
+    cargarJS(B, 'etaax-core.js'); cargarJS(B, 'insumo-label.js'); cargarJS(B, 'recetas/inventarios.js');
+    B._storage['etaax_negocio_activo'] = 'negT';
+    B._storage['etaax_sucursal_activa'] = 'suc_principal';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){} function renderStepContent(){}', B);
+    const RECS = [
+        { id:'srMix', nombre:'Mix Negroni', tipo:'sub-bebidas', status:'activa',
+          camposExtra:{ rendimientoFinal:'1000', unidadRendimientoFinal:'ML' },
+          ingredientes:[{ insumoId:'campari', cantidad:500, unidad:'ML' }] },
+        { id:'srGin', nombre:'Mix Gin', tipo:'sub-bebidas', status:'activa',
+          ingredientes:[{ insumoId:'campari', cantidad:100, unidad:'ML' }] }];
+    const base = { familia:'Bebidas', area:'barra', activo:'1', sucursales:['suc_principal'] };
+    const CAT = [
+        Object.assign({ id:'prodNuevo', nombre:'Mix Negroni PR', categoria:'Producción propia', esSubReceta:true, recetaId:'srMix',
+            presentaciones:[{ contNeto:1000, umContenido:'ML', rendimiento:1000 }] }, base),
+        Object.assign({ id:'campari', nombre:'Campari', tipoInsumo:'licor', categoria:'Licores',
+            presentaciones:[{ contNeto:750, umContenido:'ML', costoUnitario:400 }] }, base),
+        Object.assign({ id:'ginVivo', nombre:'Mix Gin PR', categoria:'Licores',
+            presentaciones:[{ contNeto:1000, umContenido:'ML' }] }, base)];
+    const fila = (id, nom, x) => Object.assign({ insumoId:id, nombre:nom, tipo:'copa', contNeto:1000, copaML:50,
+        existenciaAnterior:0, entradas:[], pesos:[], cerradasBodega:0, cerradasBarra:0 }, x);
+    const montar = (extraFilas) => {
+        setVar(B, '_cacheRecetasInv', JSON.parse(JSON.stringify(RECS)));
+        setVar(B, '_cacheInsumosInv', JSON.parse(JSON.stringify(CAT)));
+        setVar(B, '_cacheInv', []); setVar(B, '_cacheEL', []);
+        const filas = [
+            fila('prodViejo', 'Mix Negroni PR', { existenciaAnterior:20, cerradasBarra:1, registrado:true }),   // el BORRADO, contado
+            fila('campari', 'Campari', { existenciaAnterior:30, cerradasBarra:1 }),
+            fila('ginVivo', 'Mix Gin PR', { cerradasBarra:1 })].concat(extraFilas || []);
+        setVar(B, 'invActual', { id:'invT', area:'barra', sucursalId:'suc_principal', fecha:'2026-11-17', entradasLog:[{ insumoId:'prodViejo', cantidad:1 }],
+            ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas: JSON.parse(JSON.stringify(filas)),
+            prebatchProducidos:{ prodViejo: 3 }, cocktailsVendidos:{}, notasInsumo:{ prodViejo:'Lo hizo Xaneque' } });
+        setVar(B, 'filasCaptura', JSON.parse(JSON.stringify(filas)));
+        vm.runInContext('_consumoDirty = true;', B);
+    };
+    montar();
+    const diag = B._prebatchDiagnostico();
+    const de = (n) => diag.find(x => x.fila === n) || {};
+    test('el insumo BORRADO ya no se confunde con «no está marcado»', () =>
+        eq(de('Mix Negroni PR').mal + ' · ' + (de('Mix Negroni PR').destino || {}).id, 'muerto · prodNuevo'));
+    test('…y el que existe sin marcar se reconoce como tal', () =>
+        eq(de('Mix Gin PR').mal + ' · ' + de('Mix Gin PR').insumoId + ' · ' + de('Mix Gin PR').recetaId, 'nolink · ginVivo · srGin'));
+    const aviso = B._prebatchAvisoHTML();
+    test('el aviso ofrece PASAR el borrado a su reemplazo, con su nombre', () =>
+        eq(aviso.indexOf("_pasarRenglonPrebatch('prodViejo','prodNuevo')") > -1 && aviso.indexOf('Pasarlo a «Mix Negroni PR»') > -1, true));
+    test('…y MARCAR el que existe sin marca', () =>
+        eq(aviso.indexOf("_religarPrebatch('ginVivo','srGin')") > -1 && aviso.indexOf('Marcarlo y ligarlo') > -1, true));
+    test('«producciones», no «producciónes»', () =>
+        eq(/producciones propias sin rastrear/.test(aviso) && !/producciónes/.test(aviso), true));
+    test('el bloque de batches dice el NOMBRE, no el id del insumo borrado', () => {
+        const d = B._prebatchDesglose().find(x => x.batches === 3) || {};
+        return eq(d.nombre + ' · ' + /ya no está en el catálogo/.test(d.mal), 'Mix Negroni PR · true');
+    });
+    test('ANTES de ligarlo, sus 3 batches no le descuentan nada al Campari', () =>
+        eq(B.consumoBasesPorProduccion('campari'), 0));
+
+    /* ── pasarlo ── */
+    B.confirm = () => true; B.alert = () => {};
+    B._pasarRenglonPrebatch('prodViejo', 'prodNuevo');
+    const filasD = () => vm.runInContext('filasCaptura', B);
+    const nuevo = () => filasD().find(f => f.insumoId === 'prodNuevo') || {};
+    test('el renglón contado se pasa al insumo vigente (uno solo, con lo contado)', () =>
+        eq(filasD().filter(f => f.insumoId === 'prodNuevo').length + ' · ' + nuevo().cerradasBarra + ' · ' + nuevo().aliasDe +
+           ' · ' + filasD().some(f => f.insumoId === 'prodViejo'), '1 · 1 · prodViejo · false'));
+    test('…con sus 3 batches, su nota y sus entradas', () => {
+        const inv = vm.runInContext('invActual', B);
+        return eq(JSON.stringify(inv.prebatchProducidos) + ' · ' + inv.notasInsumo.prodNuevo + ' · ' + inv.entradasLog[0].insumoId,
+                  '{"prodNuevo":3} · Lo hizo Xaneque · prodNuevo');
+    });
+    test('…y AHORA sí descuentan: 3 batches × 500 ml de Campari', () =>
+        eq(B.consumoBasesPorProduccion('campari'), 1500));
+    test('…y el aviso ya no lo cuenta como sin rastrear', () =>
+        eq(B._prebatchDiagnostico().some(x => x.fila === 'Mix Negroni PR'), false));
+    /* De punta a punta: el inventario anterior (cerrado) contó el insumo VIEJO
+       con 40; al pasarlo, el renglón vigente arranca en 40, no en cero. */
+    montar();
+    /* Con la MISMA copa que el insumo vigente: si fuera otra, las copas se
+       re-expresan (regla de siempre de getExistenciaAnterior). */
+    const copaV = B._copaMLInsumo(B.getInsumos().find(x => x.id === 'prodNuevo'));
+    vm.runInContext("_cacheInv = [{ id:'invAnt', area:'barra', sucursalId:'suc_principal', fecha:'2026-11-10', cerrado:true, " +
+        "filas:[{ insumoId:'prodViejo', nombre:'Mix Negroni PR', tipo:'copa', contNeto:1000, copaML:" + copaV + ", existenciaFisica:40 }] }];", B);
+    B.confirm = () => true; B.alert = () => {};
+    B._pasarRenglonPrebatch('prodViejo', 'prodNuevo');
+    test('…y su existencia anterior se va con él (40, no cero)', () => eq(nuevo().existenciaAnterior, 40));
+    test('la existencia anterior se busca con el id VIEJO si el nuevo no tiene', () => {
+        const antes = B._refFilaInsumo;
+        B._refFilaInsumo = (id) => id === 'prodViejo' ? { tipo:'pza', existenciaFisica:7 } : null;
+        const r = B.getExistenciaAnterior('prodNuevo', 'prodViejo') + ' · ' + B.getExistenciaAnterior('prodNuevo');
+        B._refFilaInsumo = antes;
+        return eq(r, '7 · 0');
+    });
+
+    /* ── no se juntan dos conteos ── */
+    montar([fila('prodNuevo', 'Mix Negroni PR', { cerradasBarra:2 })]);
+    let dicho = '';
+    B.confirm = () => true; B.alert = (t) => { dicho = t; };
+    B._pasarRenglonPrebatch('prodViejo', 'prodNuevo');
+    test('si el vigente YA tiene su conteo, no se juntan solos: lo dice y no toca nada', () =>
+        eq(/ya tiene su propio renglón con conteo/.test(dicho) + ' · ' + filasD().some(f => f.insumoId === 'prodViejo'), 'true · true'));
+
+    /* ── marcar el que existe ── */
+    montar();
+    B.confirm = () => true; B.alert = () => {};
+    B._supabase = { from: () => ({ upsert: () => Promise.resolve({ error:null }) }) };
+    await testA('«Marcarlo y ligarlo» lo vuelve producción propia de SU sub-receta', async () => {
+        await B._religarPrebatch('ginVivo', 'srGin');
+        const ins = B.getInsumos().find(x => x.id === 'ginVivo');
+        return eq(ins.esSubReceta + ' · ' + ins.recetaId, 'true · srGin');
+    });
+    montar();
+    B._supabase = { from: () => ({ upsert: () => Promise.resolve({ error:{ message:'sin red' } }) }) };
+    await testA('…y si no se guarda, se deshace también la marca', async () => {
+        await B._religarPrebatch('ginVivo', 'srGin');
+        const ins = B.getInsumos().find(x => x.id === 'ginVivo');
+        return eq(!!ins.esSubReceta + ' · ' + (ins.recetaId || ''), 'false · ');
+    });
+}
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
@@ -35138,6 +35269,6 @@ suiteResumenFinanciero20261013();
 suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
-    .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
+    .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteLigarSinRastrear).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
     .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(suiteInsumosSucursales).then(suiteCorregirQR).then(suiteCfgEnLaNube).then(resumen);
