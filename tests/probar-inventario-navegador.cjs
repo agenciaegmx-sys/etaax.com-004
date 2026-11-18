@@ -72,48 +72,58 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             }
         }
 
-        /* ── B · lo pegajoso no queda debajo de la barra de contexto ──────── */
-        console.log('\n══ B · La barra de pasos se ve al bajar ══');
+        /* ── B · un solo encabezado fijo, con los pasos en un botón ──────────
+           Edwin (18-nov): la barra de pasos se escondía detrás del encabezado o
+           dejaba un hueco enorme, y el encabezado se compactaba al bajar. Ahora
+           no hay barra de pasos: un botón «③ Ventas ▾» del encabezado despliega
+           los cinco, y el encabezado queda FIJO en todos los pasos, sin
+           animaciones. */
+        console.log('\n══ B · Encabezado fijo y los pasos en un botón ══');
         {
             const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV,
                 { nube: { negocio_insumos: filasNube(destilados(60)) }, viewport: { width: 1280, height: 800 } }));
             await nuevoInv(page);
-            await page.evaluate(() => irAPaso(5));
-            await page.waitForTimeout(900);
-            /* En el Paso 5 son TRES encabezados fijos (Edwin, 18-nov): la barra de
-               contexto, el de Recalcular y los reportes, y los pasos. Antes el del
-               medio se iba con la página y, arriba del todo, la barra de pasos
-               quedaba DEBAJO de él: desaparecía. */
             const pos = () => page.evaluate(() => {
-                const caja = (s) => { const e = document.querySelector(s), b = e.getBoundingClientRect();
-                    const x = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);   // al centro: a la izquierda está el menú lateral
-                    return { top: b.top, bottom: b.bottom, visible: !!(x && e.contains(x)) }; };
+                const caja = (s) => { const e = document.querySelector(s); if (!e || !e.getClientRects().length) return null; const b = e.getBoundingClientRect();
+                    const x = document.elementFromPoint(b.left + b.width / 2, b.top + Math.min(b.height / 2, 20));   // al centro: a la izquierda está el menú lateral
+                    return { top: Math.round(b.top), bottom: Math.round(b.bottom), visible: !!(x && e.contains(x)) }; };
+                const h = document.querySelector('#vistaCaptura .inv-wizard-header');
                 return { ctx: caja('#ctxBar'), hdr: caja('#vistaCaptura .inv-wizard-header'), pasos: caja('#invSteps'),
-                         compacto: document.querySelector('#vistaCaptura .inv-wizard-header').classList.contains('inv-hdr-compacto') };
+                         compacto: h.classList.contains('inv-hdr-compacto'), boton: document.getElementById('btnPasoMenu').textContent.replace(/\s+/g, '') };
             });
-            await page.evaluate(() => window.scrollTo(0, 60));
-            await page.waitForTimeout(500);
-            await caso('Paso 5 arriba: la barra de pasos se ve, no queda debajo del encabezado', async () => {
-                const r = await pos();
-                assert.ok(r.pasos.visible && r.hdr.visible, JSON.stringify(r));
-                assert.ok(Math.abs(r.pasos.top - r.hdr.bottom) < 2, 'pasos fuera de su lugar: ' + JSON.stringify(r));
+            await caso('ya no hay barra de pasos', async () => assert.equal((await pos()).pasos, null));
+            for (const paso of [1, 3, 5]) {
+                await page.evaluate(p => irAPaso(p), paso);
+                await page.waitForTimeout(paso === 5 ? 1200 : 500);
+                await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(250);
+                const arriba = await pos();
+                await page.evaluate(() => window.scrollTo(0, 2000)); await page.waitForTimeout(250);
+                const abajo = await pos();
+                await caso('Paso ' + paso + ': el botón dice el paso, y el encabezado se ve arriba y al bajar, sin cambiar de alto', async () => {
+                    assert.equal(arriba.boton, paso + ['', 'Existencias', 'Entradas', 'Ventas', 'Cancelaciones', 'Resultado'][paso] + '▾');
+                    assert.ok(arriba.hdr.visible && abajo.hdr.visible, 'tapado: ' + JSON.stringify({ arriba, abajo }));
+                    assert.equal(abajo.hdr.bottom - abajo.hdr.top, arriba.hdr.bottom - arriba.hdr.top, 'cambió de alto al bajar');
+                    assert.ok(!abajo.compacto, 'se compactó');
+                    assert.ok(Math.abs(abajo.hdr.top - abajo.ctx.bottom) < 2, 'no quedó pegado bajo la barra de contexto: ' + JSON.stringify(abajo));
+                });
+            }
+            await caso('…y no se come la pantalla: dos renglones como mucho (≤ 125 px)', async () => {
+                const r = await pos(); assert.ok(r.hdr.bottom - r.hdr.top <= 125, JSON.stringify(r));
             });
-            await page.evaluate(() => window.scrollTo(0, 900));
-            await page.waitForTimeout(600);
-            await caso('al bajar, los tres quedan fijos y en fila: contexto → encabezado → pasos, sin huecos', async () => {
-                const r = await pos();
-                assert.ok(r.ctx.visible && r.hdr.visible && r.pasos.visible, 'alguno quedó tapado: ' + JSON.stringify(r));
-                assert.ok(Math.abs(r.hdr.top - r.ctx.bottom) < 2 && Math.abs(r.pasos.top - r.hdr.bottom) < 2, 'quedó un hueco: ' + JSON.stringify(r));
+            await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(250);
+            await caso('el botón despliega los cinco pasos y marca dónde estás', async () => {
+                await page.click('#btnPasoMenu'); await page.waitForTimeout(200);
+                assert.equal(await page.evaluate(() => document.getElementById('pasoMenuPop').innerText.replace(/\s+/g, ' ').trim()),
+                    '✓ Existencias ✓ Entradas ✓ Ventas ✓ Cancelaciones 5 Resultado estás aquí');
             });
-            await caso('…y el encabezado se compacta a una línea para no tapar media tablet', async () => {
-                const r = await pos();
-                assert.ok(r.compacto && r.hdr.bottom - r.hdr.top < 60, JSON.stringify(r));
+            await caso('…elegir uno te lleva y cierra el menú', async () => {
+                await page.evaluate(() => [...document.querySelectorAll('#pasoMenuPop button')][1].click()); await page.waitForTimeout(400);
+                assert.deepEqual(await page.evaluate(() => [pasoActual, document.getElementById('pasoMenuPop').hidden]), [2, true]);
             });
-            await page.evaluate(() => window.scrollTo(0, 0));
-            await page.waitForTimeout(600);
-            await caso('de vuelta arriba, el encabezado vuelve a su tamaño y los pasos siguen a la vista', async () => {
-                const r = await pos();
-                assert.ok(!r.compacto && r.pasos.visible && Math.abs(r.pasos.top - r.hdr.bottom) < 2, JSON.stringify(r));
+            await caso('…y tocar fuera lo cierra sin moverte', async () => {
+                await page.click('#btnPasoMenu'); await page.waitForTimeout(150);
+                await page.mouse.click(700, 700); await page.waitForTimeout(150);
+                assert.deepEqual(await page.evaluate(() => [pasoActual, document.getElementById('pasoMenuPop').hidden]), [2, true]);
             });
             await ctx.close();
         }
@@ -257,10 +267,19 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await caso('…ni se ofrecen en la producción del Paso 3', async () => {
                 const p = await page.evaluate(() => prebatchesProducibles().map(x => x.id));
                 assert.deepEqual(p, ['prePal']);
-                await page.evaluate(() => irAPaso(3));
+                await page.evaluate(() => { irAPaso(3); setVistaVentas('prebatch'); });
                 await page.waitForTimeout(400);
-                const t = await page.evaluate(() => document.getElementById('stepContent').textContent);
-                assert.ok(!/Jarabe Oculto|Salsa de Cocina/.test(t), 'aparecen en el Paso 3');
+                /* En la lista de producción solo la de «Sí». La de «No» se menciona
+                   plegada («marcados con No»), por si se quiere cambiar; la de
+                   cocina, ni eso: este inventario es de barra. */
+                const r = await page.evaluate(() => ({
+                    lista: [...document.querySelectorAll('#stepContent .step3-lista .s3-nom')].map(e => e.textContent),
+                    plegada: (document.querySelector('#stepContent details.s3-no') || {}).textContent || '',
+                    abierta: document.querySelector('#stepContent details.s3-no') ? document.querySelector('#stepContent details.s3-no').open : false,
+                    todo: document.getElementById('stepContent').textContent }));
+                assert.deepEqual(r.lista, ['Batch Paloma']);
+                assert.ok(/Jarabe Oculto/.test(r.plegada) && !r.abierta, 'la de «No» debe ir plegada');
+                assert.ok(!/Salsa de Cocina/.test(r.todo), 'aparece la de cocina en el Paso 3 de barra');
             });
             await caso('…ni en el Resultado', async () => {
                 await page.evaluate(() => irAPaso(5));
@@ -342,6 +361,92 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await caso('…y AHORA sí descuentan: 4 batches × 500 ml = 1 Sprite', async () =>
                 assert.equal(Math.round(await page.evaluate(() => _consumoBaseProd(filasCaptura.find(f => f.insumoId === 'sprite'))) * 1000) / 1000, 1));
             await caso('…y el aviso desaparece', async () => assert.ok(!/sin rastrear/.test(await texto())));
+            await ctx.close();
+        }
+
+        /* ── H · el Paso 3 en cuatro vistas y 3 Mix Negroni ──────────────────
+           Edwin: «hice 3 mix negroni: que se descuente de cada insumo que lleva
+           y que aparezca en su fila». Y el Paso 3 en LISTA: insumos (primero),
+           cocteles y prebatch, con una búsqueda que encuentre los tres. Más un
+           prebatch sin área —los cargados antes del selector de área— que no
+           salía en ningún lado. */
+        console.log('\n══ H · Paso 3 en cuatro vistas y el uso del prebatch ══');
+        {
+            const lic = (id, nombre) => base(id, { nombre, tipoInsumo: 'licor', categoria: 'Licores',
+                presentaciones: [{ contNeto: 750, umContenido: 'ML', costoUnitario: 400, precioCarta: 120 }] });
+            const MIX = base('prMix', { nombre: 'Mix Negroni PR', categoria: 'Producción propia', esSubReceta: true, recetaId: 'srMix',
+                ocultoInventario: false, presentaciones: [{ contNeto: 1000, umContenido: 'ML', rendimiento: 900 }] });
+            const SINAREA = base('prVen', { nombre: 'Venecia Spritz PR', area: '', categoria: 'Producción propia', esSubReceta: true,
+                recetaId: 'srVen', presentaciones: [{ contNeto: 1000, umContenido: 'ML' }] });
+            const sub = (id, nombre, ings) => ({ id, nombre, tipo: 'sub-bebidas', status: 'activa', sucursalId: 'suc_principal',
+                camposExtra: { rendimientoFinal: '900', unidadRendimientoFinal: 'ML' }, ingredientes: ings });
+            const RECS = [
+                sub('srMix', 'Mix Negroni', [{ insumoId: 'gin', cantidad: 300, unidad: 'ML' }, { insumoId: 'campari', cantidad: 300, unidad: 'ML' },
+                                             { insumoId: 'vermut', cantidad: 300, unidad: 'ML' }]),
+                sub('srVen', 'Venecia Spritz', [{ insumoId: 'campari', cantidad: 200, unidad: 'ML' }]),
+                { id: 'rNeg', nombre: 'Negroni', tipo: 'bebidas', status: 'activa', sucursalId: 'suc_principal', precioEnCarta: 160,
+                  ingredientes: [{ insumoId: 'prMix', cantidad: 90, unidad: 'ML' }] }];
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: {
+                negocio_insumos: filasNube([lic('gin', 'Gin Tanqueray'), lic('campari', 'Campari'), lic('vermut', 'Vermouth Rosso'), MIX, SINAREA]),
+                recetas: RECS.map(r => ({ id: r.id, negocio_id: 'n1', datos: r })) } }));
+            page.on('dialog', d => d.accept());
+            await nuevoInv(page);
+            await page.waitForFunction(() => filasCaptura.some(f => f.insumoId === 'prMix'), null, { polling: 100, timeout: 8000 });
+            await page.evaluate(() => irAPaso(3)); await page.waitForTimeout(400);
+            const contenido = () => page.evaluate(() => document.getElementById('stepContent').innerText.replace(/\s+/g, ' '));
+            await caso('el Paso 3 abre en Insumos, con las cuatro vistas', async () => {
+                assert.equal(await page.evaluate(() => vistaVentas), 'lista');
+                assert.match(await contenido(), /^🧴 Insumos 🍹 Cocteles 🏭 Prebatch 1 🔍 Búsqueda rápida/);
+            });
+            await page.evaluate(() => setVistaVentas('prebatch')); await page.waitForTimeout(300);
+            await caso('Prebatch: el Mix Negroni en LISTA, y dice qué lleva', async () => {
+                const r = await page.evaluate(() => ({ lista: !!document.querySelector('#stepContent .step3-lista'),
+                    txt: document.querySelector('#stepContent .step3-lista').innerText.replace(/\s+/g, ' ') }));
+                assert.ok(r.lista);
+                assert.match(r.txt, /Mix Negroni PR.*hace: Mix Negroni.*Gin Tanqueray, Campari, Vermouth Rosso/);
+            });
+            await caso('…y el que no tiene área dice por qué no sale, con el botón para arreglarlo', async () =>
+                assert.match(await contenido(), /Venecia Spritz PR — no tiene área asignada 📍 Ponerlo en Barra/));
+            await page.evaluate(() => { const i = document.getElementById('prod-prMix'); i.value = '3'; i.dispatchEvent(new Event('blur')); });
+            await page.waitForTimeout(300);
+            await caso('3 Mix Negroni descuentan 900 ml de CADA insumo que lleva', async () => {
+                const r = await page.evaluate(() => ['gin', 'campari', 'vermut'].map(id => consumoBasesPorProduccion(id)));
+                assert.deepEqual(r, [900, 900, 900]);
+            });
+            await page.evaluate(() => setVistaVentas('lista')); await page.waitForTimeout(300);
+            await caso('Insumos: cada uno dice su uso en prebatch, en copas y en ml', async () => {
+                const t = await contenido();
+                for (const n of ['Gin Tanqueray', 'Campari', 'Vermouth Rosso'])
+                    assert.match(t, new RegExp(n + '[^]*?Uso en prebatch [\\d.]+ cop · 900 ml'), n);
+            });
+            await page.evaluate(() => setVistaVentas('menu')); await page.waitForTimeout(300);
+            await caso('Cocteles: en LISTA, con su contador', async () => {
+                assert.ok(await page.evaluate(() => !!document.querySelector('#stepContent .step3-lista #cnt-rNeg')));
+            });
+            await page.evaluate(() => setVistaVentas('busqueda')); await page.waitForTimeout(300);
+            await page.fill('#ventasBuscador', 'negroni'); await page.waitForTimeout(300);
+            await caso('Búsqueda rápida: «negroni» encuentra el insumo, el coctel y el prebatch', async () => {
+                const t = await page.evaluate(() => document.getElementById('ventasChips').innerText.replace(/\s+/g, ' '));
+                assert.match(t, /INSUMOS Mix Negroni PR.*COCTELES Negroni.*PREBATCH Mix Negroni PR/);
+                assert.ok(await page.evaluate(() => !!document.querySelector('#ventasChips #cnt-rNeg') && !!document.querySelector('#ventasChips #prod-prMix')),
+                    'sin contadores en los resultados');
+            });
+            await page.evaluate(() => setVistaVentas('prebatch')); await page.waitForTimeout(300);
+            await caso('«Ponerlo en Barra» lo arregla: sale para anotarle batches y tiene su renglón', async () => {
+                await page.evaluate(() => [...document.querySelectorAll('.s3-arreglar')].find(b => /Venecia/.test(b.parentElement.textContent)).click());
+                await page.waitForTimeout(800);
+                const r = await page.evaluate(() => ({ prod: prebatchesProducibles().map(p => p.id).sort().join(','),
+                    fila: filasCaptura.some(f => f.insumoId === 'prVen'), guardado: (getInsumos().find(x => x.id === 'prVen') || {}).area }));
+                assert.deepEqual(r, { prod: 'prMix,prVen', fila: true, guardado: 'barra' });
+            });
+            await page.evaluate(() => { _consumoDirty = true; window._step5Dirty = true; window._step5Force = true; irAPaso(5); });
+            await page.waitForTimeout(1300);
+            await caso('Resultado: el renglón de cada insumo dice su uso en prebatch', async () => {
+                const r = await page.evaluate(() => [...document.querySelectorAll('#step5Tablas tr.s5-r1')].map(tr => {
+                    const m = tr.nextElementSibling.textContent.replace(/\s+/g, ' ').match(/Uso en prebatch\s*([\d.]+ cop)\s*900 ml/);
+                    return tr.querySelector('.s5-nom').textContent + (m ? ': ' + m[1] : ''); }).filter(x => /:/.test(x)).sort());
+                assert.equal(r.length, 3, JSON.stringify(r));
+            });
             await ctx.close();
         }
     } finally {

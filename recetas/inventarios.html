@@ -268,11 +268,20 @@ document.addEventListener('DOMContentLoaded', function(){
                 <div style="display:flex;align-items:center;gap:12px">
                     <div>
                         <span class="brand-label" id="stepLabel">Paso 1 — Existencias físicas</span>
-                        <div class="brand-title" style="font-size:22px;line-height:1" id="captTitulo">Nuevo inventario</div>
+                        <div class="brand-title" style="font-size:21px;line-height:1" id="captTitulo">Nuevo inventario</div>
+                        <!-- Bajo el título, no entre los botones: así los botones caben en un renglón. -->
+                        <span id="autoGuardarInd" style="font-size:11px;color:var(--green);display:inline-flex;align-items:center;gap:4px;margin-top:4px">✓ Todos los cambios guardados</span>
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
-                    <span id="autoGuardarInd" style="font-size:12px;color:var(--green);display:inline-flex;align-items:center;gap:4px">✓ Todos los cambios guardados</span>
+                    <!-- Los pasos del inventario: un botón que dice en cuál estás y despliega los cinco
+                         (antes era una barra entera debajo del encabezado). -->
+                    <div class="inv-paso-menu" id="pasoMenuWrap">
+                        <button class="btn-vista" id="btnPasoMenu" onclick="_togglePasoMenu(event)" aria-haspopup="true" aria-expanded="false" title="Cambiar de paso">
+                            <span class="inv-paso-num" id="pasoMenuNum">1</span><span id="pasoMenuTxt">Existencias</span><span class="inv-paso-flecha">▾</span>
+                        </button>
+                        <div id="pasoMenuPop" class="inv-paso-pop" role="menu" hidden></div>
+                    </div>
                     <button class="btn-vista" onclick="abrirInfoGeneral()" id="btnInfoGeneral" title="Editar la configuración del inventario">ℹ️ Info general</button>
                     <button class="btn-vista" onclick="verPreviewActual()" id="btnPreviewActual" title="Reporte de existencias del inventario en curso">📊 Existencias</button>
                     <!-- Acciones del RESULTADO (Paso 5): fijas en el header, solo visibles en el paso 5 -->
@@ -348,7 +357,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=90cdf076"></script>
+<script src="/recetas/inventarios.js?v=ec73ee0d"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -445,21 +454,38 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
 .inv-wizard-header > div { flex-wrap: wrap; min-width: 0; }
 .inv-wizard-header > div:last-child { justify-content: flex-end; }
 #step5HeaderBtns { flex-wrap: wrap; }
-/* Paso 5, ya abajo en la página: el encabezado fijo se vuelve UNA línea —el
-   título chico y los botones en una fila que se desliza con el dedo— y la
-   barra de pasos se adelgaza. Los tres encabezados quedan fijos sin tapar
-   media pantalla de la tablet. */
-.inv-wizard-header.inv-hdr-compacto { padding: 6px 16px; min-height: 0; flex-wrap: nowrap; gap: 10px; }
-.inv-hdr-compacto .brand-label { display: none; }
-.inv-hdr-compacto #captTitulo { font-size: 16px !important; white-space: nowrap; }
-.inv-hdr-compacto > div:first-child { flex-shrink: 0; }
-.inv-hdr-compacto > div:last-child { flex: 1 1 auto; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; }
-.inv-hdr-compacto > div:last-child::-webkit-scrollbar { display: none; }
-.inv-hdr-compacto > div:last-child > :first-child { margin-left: auto; }
-.inv-hdr-compacto #step5HeaderBtns { flex-wrap: nowrap; }
-.inv-hdr-compacto .btn-vista { padding: 5px 10px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
-.inv-hdr-compacto #autoGuardarInd { font-size: 11px; white-space: nowrap; flex-shrink: 0; }
-.inv-hdr-compacto + .inv-steps .inv-step { padding-top: 5px; padding-bottom: 5px; }
+/* ══ UN SOLO ENCABEZADO FIJO, SIN BARRA DE PASOS (Edwin, 18-nov) ═══════════
+   La barra de pasos ocupaba su propio renglón fijo y, con la tarjeta del
+   negocio tan alta, dejaba un hueco enorme o se escondía detrás del
+   encabezado. Ahora los pasos viven en un botón del encabezado («③ Ventas ▾»)
+   que despliega los cinco. El encabezado queda FIJO en todos los pasos, sin
+   animaciones al bajar. */
+#invSteps { display: none !important; }
+.inv-wizard-header { padding: 8px 18px; }
+/* Título y botones en UN mismo acomodo: el título a la izquierda y los
+   botones a su lado, partiéndose solo cuando ya no caben. Antes el título
+   ocupaba su propio renglón y los botones otros dos o tres. */
+#vistaCaptura .inv-wizard-header { justify-content: flex-end; align-items: center; gap: 8px; }
+#vistaCaptura .inv-wizard-header > div:first-child { margin-right: auto; }
+#vistaCaptura .inv-wizard-header > div:last-child { display: contents !important; }
+.inv-wizard-header .btn-vista { padding: 8px 13px; font-size: 13px; white-space: nowrap; }
+.inv-paso-menu { position: relative; display: inline-flex; }
+#btnPasoMenu { display: inline-flex; align-items: center; gap: 7px; border-color: var(--accent); color: var(--text); font-weight: 600; }
+.inv-paso-num { display: inline-flex; align-items: center; justify-content: center; width: 21px; height: 21px; border-radius: 50%;
+    border: 1.5px solid var(--accent); color: var(--accent); font-size: 11px; font-weight: 700; }
+.inv-paso-flecha { font-size: 10px; color: var(--text-dim); }
+.inv-paso-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 300; min-width: 250px; padding: 6px;
+    background: var(--surface); border: 1px solid var(--border2); border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,.28); }
+.inv-paso-pop[hidden] { display: none; }
+.inv-paso-pop button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px;
+    background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.inv-paso-pop button:hover { background: var(--surface2); }
+.inv-paso-pop .n { display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; border-radius: 50%;
+    border: 1.5px solid var(--border2); color: var(--text-dim); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.inv-paso-pop .hecho .n { border-color: var(--green); color: var(--green); }
+.inv-paso-pop .actual { background: color-mix(in srgb, var(--accent) 13%, transparent); font-weight: 600; }
+.inv-paso-pop .actual .n { border-color: var(--accent); color: var(--accent); }
+.inv-paso-pop small { margin-left: auto; font-size: 11px; color: var(--text-dim); font-weight: 400; }
 
 /* ── Step bar ────────────────────────────────────────────────── */
 .inv-steps {
@@ -828,6 +854,31 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
    como están: ahí el nombre cabe en uno. */
 .step3-menu-item.pb { align-items:flex-start; }
 .step3-menu-item.pb .step3-counter { margin-top:1px; }
+/* ── Paso 3 en LISTA (cocteles y prebatch) ───────────────────────────── */
+.step3-lista { display:flex; flex-direction:column; gap:0; border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--surface); }
+.step3-lista .step3-menu-item { border:0; border-radius:0; border-bottom:1px solid var(--border); background:transparent; padding:10px 14px; }
+.step3-lista .step3-menu-item:last-child { border-bottom:0; }
+.step3-lista .step3-menu-item.has-cnt { background:rgba(61,190,122,0.07); }
+.s3-nom { flex:0 1 auto; min-width:0; font-weight:600; font-size:14px; color:var(--text); line-height:1.3; }
+.s3-ficha { background:none; border:none; cursor:pointer; color:var(--text-dim); font-size:13px; padding:0; flex-shrink:0; }
+.s3-precio { font-size:12px; color:var(--green); font-weight:600; margin-left:4px; }
+.s3-sub { font-size:11px; color:var(--text-dim); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.s3-titulo { font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:1.5px; color:var(--accent); padding:12px 0 4px; border-bottom:1px solid var(--border); margin-bottom:4px; }
+.s3-buscar { width:100%; box-sizing:border-box; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:11px 14px; border-radius:10px; font-family:inherit; font-size:14px; outline:none; margin:0 0 10px; }
+.s3-vacio { padding:14px; border:1px dashed var(--border); border-radius:10px; font-size:12.5px; color:var(--text-dim); }
+.s3-cuenta { display:inline-block; min-width:18px; padding:0 5px; margin-left:4px; border-radius:9px; background:var(--green); color:#fff; font-size:11px; font-weight:700; line-height:18px; text-align:center; }
+.s3-vistas { flex-wrap:wrap; }
+.s3-uso { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:7px; font-size:11.5px; color:var(--text-muted); }
+.s3-uso b { color:var(--viol); font-weight:600; }
+.s3-fuera { margin-top:14px; padding:12px 14px; border:1px solid rgba(245,200,66,.4); background:rgba(245,200,66,.07); border-radius:10px; font-size:12px; color:var(--text-muted); line-height:1.7; }
+.s3-fuera-tit { font-weight:700; color:var(--accent); margin-bottom:4px; }
+.s3-fuera-r b { color:var(--text); }
+.s3-arreglar { margin-left:6px; font-size:11px; padding:2px 9px; border-radius:6px; cursor:pointer; background:transparent; border:1px solid var(--green); color:var(--green); font-family:inherit; }
+.s3-sinins { margin-top:8px; }
+.s3-sinins summary { cursor:pointer; color:var(--text); }
+.s3-nota { font-size:11px; color:var(--text-dim); margin-top:4px; }
+.s3-res-grupo { margin:10px 0 4px; }
+.s3-res-tit { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-dim); font-weight:600; margin-bottom:6px; }
 .step3-counter { display:flex; align-items:center; gap:0; border:1px solid var(--border);
     border-radius:8px; overflow:hidden; flex-shrink:0; }
 .step3-counter button { background:var(--bg); border:none; cursor:pointer; color:var(--text-muted);

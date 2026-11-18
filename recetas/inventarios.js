@@ -615,7 +615,7 @@ let _existInsumoId    = null;
 let vistaEntradas2 = 'busqueda'; // 'busqueda' | 'lista'
 
 // Vista ventas paso 3 — default: menú
-let vistaVentas    = 'menu';     // 'menu' | 'lista' | 'busqueda'
+let vistaVentas    = 'lista';    // 'lista' (insumos, la primera) | 'menu' (cocteles) | 'prebatch' | 'busqueda'
 let _ventasBusqueda = '';
 let _ventasInsumoId = null;
 
@@ -5581,6 +5581,7 @@ function pasoAnterior()  { if (pasoActual > 1) irAPaso(pasoActual-1); }
 
 function actualizarStepBar() {
     document.getElementById('stepLabel').textContent = `Paso ${pasoActual} — ${PASO_LABELS[pasoActual]}`;
+    _pintarPasoMenu();
     document.querySelectorAll('#invSteps .inv-step').forEach(el => {
         const n = parseInt(el.dataset.step);
         el.classList.toggle('active', n === pasoActual);
@@ -5603,6 +5604,7 @@ function actualizarNavBtns() {
         if (btnFin) btnFin.style.display = 'none'; // primer_lev usa su propio botón
         if (btnLev) { btnLev.style.display = 'inline-flex'; btnLev.disabled = cerr; btnLev.textContent = cerr ? '✅ Guardado' : '✅ Guardar levantamiento'; }
         if (steps)  steps.style.display = 'none';
+        _pintarPasoMenu();
         const lbl = document.getElementById('stepLabel');
         if (lbl) lbl.textContent = 'Primer Levantamiento — Captura de existencias';
     } else {
@@ -5614,7 +5616,9 @@ function actualizarNavBtns() {
     }
     // Acciones del Resultado (Recalcular / reportes): fijas en el header, solo en el Paso 5.
     var s5b = document.getElementById('step5HeaderBtns');
-    if (s5b) s5b.style.display = (!esLev && pasoActual === 5) ? 'inline-flex' : 'none';
+    /* `contents`: sus botones fluyen con los demás del encabezado en vez de
+       formar un bloque aparte que se iba a su propio renglón. */
+    if (s5b) s5b.style.display = (!esLev && pasoActual === 5) ? 'contents' : 'none';
     if (typeof _ajustarStickyInv === 'function') setTimeout(_ajustarStickyInv, 0); // el header pudo crecer/encoger
 }
 // Finalizar el inventario actual desde el wizard (cierra: ABIERTO → CERRADO).
@@ -5738,61 +5742,66 @@ function _ajustarStickyInv() {
                Paso 5 ocupa dos líneas de botones) dejaba 420 px tapados en una
                tablet de 800: media pantalla. Ahí el encabezado se va con la página
                y solo se queda fija la barra de pasos. */
-            /* En el RESULTADO (Paso 5) los tres se quedan fijos —barra de
-               contexto, encabezado con Recalcular y los reportes, y los pasos—:
-               lo pidió Edwin, porque con el encabezado yéndose con la página la
-               barra de pasos quedaba DEBAJO de él y desaparecía arriba del todo.
-               Para no tapar media tablet, al bajar el encabezado se compacta a
-               una sola línea (_hdrCompactoInv). */
-            var _p5 = vid === 'vistaCaptura' && typeof pasoActual !== 'undefined' && pasoActual === 5;
-            var _alta = base > 120 && !_p5;
-            if (hdr && !_p5 && hdr.classList.contains('inv-hdr-compacto')) { hdr.classList.remove('inv-hdr-compacto'); hdr.style.marginBottom = ''; }
-            if (hdr) { hdr.style.position = _alta ? 'relative' : ''; hdr.style.top = _alta ? '' : base + 'px'; }
-            var hH = (hdr && !_alta) ? hdr.offsetHeight : 0;
+            /* El encabezado queda FIJO en todos los pasos, justo debajo de la barra
+               de contexto. Ya no hay barra de pasos (vive en el botón «Paso» del
+               encabezado) ni modo compacto: nada aparece ni desaparece al bajar. */
+            if (hdr) { hdr.style.position = ''; hdr.style.top = base + 'px'; hdr.style.marginBottom = ''; hdr.classList.remove('inv-hdr-compacto'); }
+            var hH = hdr ? hdr.offsetHeight : 0;
             var topSteps = base + hH;
             if (steps) steps.style.top = topSteps + 'px';
-            var sH = steps ? steps.offsetHeight : 0;
+            var sH = (steps && steps.offsetParent) ? steps.offsetHeight : 0;
             var topTool = topSteps + sH;
             v.querySelectorAll('.step-toolbar').forEach(function(tb){ tb.style.top = topTool + 'px'; });
         });
     } catch(e) {}
 }
-window.addEventListener('resize', function(){
-    var h = document.querySelector('#vistaCaptura .inv-wizard-header.inv-hdr-compacto');
-    if (h) { h.classList.remove('inv-hdr-compacto'); h.style.marginBottom = ''; }
-    if (typeof _ajustarStickyInv === 'function') _ajustarStickyInv();
-    _hdrCompactoInv();
-});
-/* ══ EL ENCABEZADO DEL PASO 5, COMPACTO AL BAJAR ═══════════════════════════
-   Fijo y con sus dos líneas de botones, el encabezado se comía 150 px de una
-   tablet de 800. Al bajar se vuelve una línea: título chico y los botones en
-   una fila que se desliza. La altura que pierde se le pone de margen, para
-   que la página no brinque. Con histéresis (compacta pasando 150 px, vuelve
-   abajo de 20) para que no parpadee en el borde. */
-function _hdrCompactoInv() {
-    var v = document.getElementById('vistaCaptura');
-    if (!v || v.style.display === 'none') return;
-    var hdr = v.querySelector('.inv-wizard-header'); if (!hdr) return;
-    var y = window.scrollY || document.documentElement.scrollTop || 0;
-    var ya = hdr.classList.contains('inv-hdr-compacto');
-    var quiere = pasoActual === 5 && (ya ? y > 20 : y > 150);
-    if (quiere === ya) return;
-    if (quiere) {
-        var h0 = hdr.offsetHeight;
-        hdr.classList.add('inv-hdr-compacto');
-        var _margen = function () { if (hdr.classList.contains('inv-hdr-compacto')) hdr.style.marginBottom = Math.max(0, h0 - hdr.offsetHeight) + 'px'; };
-        _margen();
-        /* Los botones encogen con una transición: medido al instante, el
-           encabezado aún no tiene su altura final y quedaba un hueco de 10 px
-           bajo él. Se vuelve a medir cuando la transición termina. */
-        setTimeout(function () { _margen(); _ajustarStickyInv(); }, 320);
-    } else {
-        hdr.classList.remove('inv-hdr-compacto'); hdr.style.marginBottom = '';
-        setTimeout(_ajustarStickyInv, 320);
-    }
-    _ajustarStickyInv();
+window.addEventListener('resize', function(){ if (typeof _ajustarStickyInv === 'function') _ajustarStickyInv(); });
+
+/* ══ LOS PASOS, EN UN BOTÓN DEL ENCABEZADO ═════════════════════════════════
+   «③ Ventas ▾» dice en qué paso estás y despliega los cinco. Sustituye a la
+   barra de pasos, que se comía un renglón fijo entero. */
+const PASO_CORTO = ['', 'Existencias', 'Entradas', 'Ventas', 'Cancelaciones', 'Resultado'];
+function _pintarPasoMenu() {
+    var esLev = invActual && invActual.tipoInv === 'primer_lev';
+    var w = document.getElementById('pasoMenuWrap'); if (w) w.style.display = esLev ? 'none' : '';
+    var n = document.getElementById('pasoMenuNum'), t = document.getElementById('pasoMenuTxt');
+    if (n) n.textContent = pasoActual;
+    if (t) t.textContent = PASO_CORTO[pasoActual] || '';
+    var pop = document.getElementById('pasoMenuPop');
+    if (pop && !pop.hidden) pop.innerHTML = _pasoMenuItemsHTML();
 }
-window.addEventListener('scroll', function () { try { _hdrCompactoInv(); } catch (e) {} }, { passive: true });
+function _pasoMenuItemsHTML() {
+    var h = '';
+    for (var k = 1; k <= 5; k++) {
+        var cls = k === pasoActual ? 'actual' : (k < pasoActual ? 'hecho' : '');
+        h += '<button role="menuitem" class="' + cls + '" onclick="_irPasoMenu(' + k + ')">' +
+             '<span class="n">' + (k < pasoActual ? '✓' : k) + '</span>' + PASO_CORTO[k] +
+             (k === pasoActual ? '<small>estás aquí</small>' : '') + '</button>';
+    }
+    return h;
+}
+function _cerrarPasoMenu() {
+    var pop = document.getElementById('pasoMenuPop'); if (pop) pop.hidden = true;
+    var b = document.getElementById('btnPasoMenu'); if (b) b.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', _cerrarPasoMenu, true);
+}
+function _togglePasoMenu(ev) {
+    if (ev) ev.stopPropagation();
+    var pop = document.getElementById('pasoMenuPop'); if (!pop) return;
+    if (!pop.hidden) { _cerrarPasoMenu(); return; }
+    pop.innerHTML = _pasoMenuItemsHTML();
+    pop.hidden = false;
+    var b = document.getElementById('btnPasoMenu'); if (b) b.setAttribute('aria-expanded', 'true');
+    setTimeout(function () {
+        document.addEventListener('click', function cerrar(e) {
+            if (pop.contains(e.target)) return;
+            document.removeEventListener('click', cerrar, true);
+            _cerrarPasoMenu();
+        }, true);
+    }, 0);
+}
+function _irPasoMenu(n) { _cerrarPasoMenu(); if (n !== pasoActual) irAPaso(n); }
+window._togglePasoMenu = _togglePasoMenu; window._irPasoMenu = _irPasoMenu;
 
 // ── Toolbar para steps 1 y 2 ──────────────────────────────────
 function buildFiltroRegistroBar() {
@@ -7034,17 +7043,28 @@ function setVistaVentas(v) {
     renderStepContent();
 }
 
+/* ══ EL PASO 3 EN CUATRO VISTAS, TODAS EN LISTA (Edwin, 18-nov) ═══════════
+   Antes: «Menú» (tarjetas de cocteles), «Lista completa» y «Búsqueda rápida»,
+   con la producción de prebatch repetida arriba de las tres —y si no había
+   prebatch producibles, solo un texto—. Ahora:
+     🧴 Insumos (la primera): todos en lista, con su buscador y con lo que se
+        usó de cada uno en coctelería y en prebatch.
+     🍹 Cocteles: las recetas en LISTA, no en tarjetas.
+     🏭 Prebatch: los batches hechos, en lista, y por qué falta el que no sale.
+     🔍 Búsqueda rápida: busca insumos, cocteles y prebatch a la vez. */
 function renderStep3() {
-    const switcher = `<div class="exist-vista-switcher">
-        <button class="exist-vista-btn ${vistaVentas==='menu'?'active':''}"    onclick="setVistaVentas('menu')">📋 Menú</button>
-        <button class="exist-vista-btn ${vistaVentas==='lista'?'active':''}"   onclick="setVistaVentas('lista')">≡ Lista completa</button>
-        <button class="exist-vista-btn ${vistaVentas==='busqueda'?'active':''}" onclick="setVistaVentas('busqueda')">🔍 Búsqueda rápida</button>
+    const nPb = prebatchesProducibles().length;
+    const b = (v, txt) => `<button class="exist-vista-btn ${vistaVentas===v?'active':''}" onclick="setVistaVentas('${v}')">${txt}</button>`;
+    const switcher = `<div class="exist-vista-switcher s3-vistas">
+        ${b('lista', '🧴 Insumos')}
+        ${b('menu', '🍹 Cocteles')}
+        ${b('prebatch', '🏭 Prebatch' + (nPb ? ' <span class="s3-cuenta">' + nPb + '</span>' : ''))}
+        ${b('busqueda', '🔍 Búsqueda rápida')}
     </div>`;
-    // La sección de PREBATCH (batches hechos) va en las TRES vistas del Paso 3:
-    // antes solo salía en "Menú" y parecía que la función no existía.
-    if (vistaVentas === 'lista')    return switcher + _renderProduccionPrebatch() + renderStep3Insumos();
-    if (vistaVentas === 'busqueda') return switcher + _renderProduccionPrebatch() + renderStep3BusquedaScaffold();
-    return switcher + _renderProduccionPrebatch() + renderStep3Menu();
+    if (vistaVentas === 'menu')     return switcher + renderStep3Menu();
+    if (vistaVentas === 'prebatch') return switcher + _renderProduccionPrebatch();
+    if (vistaVentas === 'busqueda') return switcher + renderStep3BusquedaScaffold();
+    return switcher + renderStep3Insumos();
 }
 
 function renderStep3Insumos() {
@@ -7085,6 +7105,7 @@ function _step3VentasInner() {
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                     ${esComp ? '' : `<button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>`}
                 </div>
+                ${esComp ? '' : _usoFilaPaso3HTML(fila)}
                 ${esComp ? '' : `<div style="margin-top:10px;max-width:360px"><label for="venta-comentario-lista-${idx}" style="font-size:11px;color:var(--text-dim)">Comentarios de venta</label>
                     <input id="venta-comentario-lista-${idx}" type="text" class="inv-num-input inv-comment-input" style="height:40px;margin-top:4px"
                         value="${etx(fila.ventasComentario||'')}" placeholder="Comentario opcional…"
@@ -7297,92 +7318,213 @@ function _refrescarAvisoPrebatches() {
 
 function _renderProduccionPrebatch() {
     const pres = prebatchesProducibles();
-    if (!pres.length) {
-        // Estado vacío INFORMATIVO (antes devolvía '' y la función parecía no existir).
-        // Diagnóstico: insumos de producción propia SIN liga a su sub-receta.
-        const rotos = _scopeSucInsumos(getInsumos()).filter(x => x.esSubReceta && !x.recetaId);
-        return `<div style="margin:0 16px 14px;padding:10px 14px;border:1px dashed var(--border);border-radius:10px;font-size:12px;color:var(--text-dim);line-height:1.6">
-            🍸 <strong style="color:var(--text-muted)">Producción de prebatch:</strong> convierte una sub-receta a insumo
-            (botón <strong style="color:var(--text-muted)">"Cargar como insumo"</strong> en el editor de la sub-receta) y aparecerá aquí
-            para registrar los batches hechos — suma existencia al prebatch y descuenta sus insumos base automáticamente.
-            ${rotos.length ? `<br>⚠️ <strong style="color:var(--accent)">${etx(rotos.map(x=>x.nombre).slice(0,4).join(', '))}</strong> ${rotos.length===1?'es producción propia pero no tiene':'son producción propia pero no tienen'} liga a su sub-receta — ábrela y vuelve a usar "Cargar como insumo" para ligarla.` : ''}
-        </div>`;
-    }
     const prod = invActual?.prebatchProducidos || {};
-    const items = pres.map(p => {
-        const n  = parseFloat(prod[p.id]) || 0;
-        const sr = (window._recetaResolver ? window._recetaResolver(p.recetaId) : getRecetas().find(r => r.id === p.recetaId));
-        /* Por el resolver, no por un .find de id crudo: si el ingrediente apunta
-           a la copia por sucursal, el find no lo encuentra y la lista de bases
-           salía como «Vino, ?, ?». Los signos de interrogación no eran datos
-           que faltaran: era el buscador equivocado. */
-        const bases = sr ? (sr.ingredientes||[]).map(ing => {
-            const ins = (typeof window._insumoResolver === 'function')
-                ? window._insumoResolver(ing.insumoId) : null;
-            return ins ? String(ins.nombre || '').split(' ')[0] : '?';
-        }).slice(0,3).join(', ') : '';
-        return `<div class="step3-menu-item pb ${n>0?'has-cnt':''}">
-            <div style="flex:1;min-width:0">
-                <div style="display:flex;align-items:flex-start;gap:6px">
-                    <!-- El nombre en DOS renglones, no cortado. «Limoncello SB 1»
-                         y «Limoncello SB Bot.» se veían los dos como
-                         «Limoncello S…»: imposible saber en cuál se captura. -->
-                    <div style="flex:1;min-width:0;font-weight:600;font-size:14px;color:var(--text);
-                        line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;
-                        -webkit-box-orient:vertical;overflow:hidden"
-                        title="${etx(p.nombre)}">${etx(p.nombre)}</div>
-                    ${p.recetaId ? `<button onclick="verFichaReceta('${p.recetaId}')"
-                        title="Ver la sub-receta" style="background:none;border:none;cursor:pointer;
-                        color:var(--text-dim);font-size:13px;padding:0;flex-shrink:0;line-height:1.2">📋</button>` : ''}
-                </div>
-                ${(function(){
-                    /* ══ QUÉ RECETA VA A CONSUMIR ESTA TARJETA ═══════════════
-                       El nombre grande es el del INSUMO; lo que se descuenta al
-                       capturar un batch son los ingredientes de SU SUB-RECETA.
-                       Normalmente se llaman igual —la conversión «Cargar como
-                       insumo» les pone el mismo nombre— y no hay nada que
-                       decir. Pero si la liga quedó apuntando a otra, capturar
-                       aquí descuenta OTROS insumos, y hasta ahora la única
-                       pista era la lista de bases: un «↓ Limoncello» donde se
-                       esperaba «↓ Limón, Azúcar, Vodka».
-
-                       Por eso la tarjeta dice SIEMPRE qué sub-receta va a
-                       consumir: lo que se descuenta deja de ser una suposición
-                       basada en que los dos nombres se parecen. */
-                    return (sr
-                        ? `<div style="font-size:10px;color:var(--text-dim);margin-top:3px;
-                             white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
-                             title="Capturar aquí descuenta los ingredientes de «${etx(sr.nombre)}»">
-                             hace: ${etx(sr.nombre)}</div>`
-                        : '') +
-                    (bases ? `<div style="font-size:10px;color:var(--text-dim);margin-top:3px;
-                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis">↓ ${etx(bases)}</div>` : '');
-                })()}
-            </div>
-            <div class="step3-counter">
-                <button onclick="updProduccionPrebatch('${p.id}',-1)">−</button>
-                <input id="prod-${p.id}" type="text" inputmode="decimal"
-                    class="step3-cnt-val ${n>0?'active':''}" value="${n>0?n:''}" placeholder="—"
-                    title="Cuántos batches hiciste. Acepta medios (1.5) y operaciones: 2+1"
-                    onkeydown="_celdaKey(event,this)"
-                    onblur="_celdaCalc(this,function(v){ setProduccionPrebatch('${p.id}', v); }); if(!(+this.value>0)) this.value='';"
-                    style="width:46px;text-align:center;background:transparent;border:none;outline:none;font-family:inherit">
-                <button onclick="updProduccionPrebatch('${p.id}',1)">+</button>
-            </div>
-        </div>`;
-    }).join('');
-    return `<div style="padding:0 16px 16px">
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;
-            color:var(--accent);padding:12px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px">
-            🍸 Producción de prebatch — batches hechos
-        </div>
-        <div style="font-size:11px;color:var(--text-dim);padding:0 0 10px">
-            Anota cuántos batches hiciste: descuenta los insumos base por receta y le suma la producción al prebatch.
-        </div>
+    const lista = pres.length ? `
+        <input type="text" placeholder="🔍 Buscar prebatch…" value="${etx(_menuBusquedaVentas||'')}" oninput="_filtrarMenuVentas(this.value)"
+            class="s3-buscar">
         ${_avisoPrebatches(pres)}
-        <div class="step3-menu-grid">${items}</div>
+        <div class="step3-menu-grid step3-lista" data-menu-grupo>${pres.map(p => _step3PrebatchItemHTML(p, prod)).join('')}</div>`
+        : `<div class="s3-vacio">🍸 Todavía no hay ningún prebatch para anotar en este inventario.</div>`;
+    return `<div style="padding:0 16px 16px">
+        <div class="s3-titulo">🏭 Producción de prebatch — batches hechos</div>
+        <div style="font-size:11.5px;color:var(--text-dim);padding:0 0 10px">
+            Anota cuántos batches hiciste: descuenta de cada insumo lo que lleva la sub-receta y le suma la producción al prebatch.
+        </div>
+        ${lista}
+        ${_prebatchFueraHTML()}
     </div>`;
 }
+/* Un renglón de la lista de prebatch (vista Prebatch y Búsqueda rápida). */
+function _step3PrebatchItemHTML(p, prod) {
+    const n  = parseFloat((prod || {})[p.id]) || 0;
+    const sr = (window._recetaResolver ? window._recetaResolver(p.recetaId) : getRecetas().find(r => r.id === p.recetaId));
+    /* Por el resolver, no por un .find de id crudo: si el ingrediente apunta
+       a la copia por sucursal, el find no lo encuentra y la lista de bases
+       salía como «Vino, ?, ?». */
+    const bases = sr ? (sr.ingredientes||[]).map(ing => {
+        const ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing.insumoId) : null;
+        return ins ? String(ins.nombre || '') : (ing.nombre || '?');
+    }).slice(0, 6).join(', ') : '';
+    /* Dice SIEMPRE qué sub-receta va a consumir: capturar aquí descuenta SUS
+       ingredientes, y si la liga quedó apuntando a otra se tiene que ver. */
+    return `<div class="step3-menu-item pb ${n>0?'has-cnt':''}" data-menu-nom="${etx(String(p.nombre||'').toLowerCase())}">
+        <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:flex-start;gap:6px">
+                <div class="s3-nom" title="${etx(p.nombre)}">${etx(p.nombre)}</div>
+                ${p.recetaId ? `<button onclick="verFichaReceta('${p.recetaId}')" title="Ver la sub-receta" class="s3-ficha">📋</button>` : ''}
+            </div>
+            ${sr ? `<div class="s3-sub" title="Capturar aquí descuenta los ingredientes de «${etx(sr.nombre)}»">hace: ${etx(sr.nombre)}</div>` : ''}
+            ${bases ? `<div class="s3-sub">↓ ${etx(bases)}</div>` : ''}
+        </div>
+        <div class="step3-counter">
+            <button onclick="updProduccionPrebatch('${p.id}',-1)">−</button>
+            <input id="prod-${p.id}" type="text" inputmode="decimal"
+                class="step3-cnt-val ${n>0?'active':''}" value="${n>0?n:''}" placeholder="—"
+                title="Cuántos batches hiciste. Acepta medios (1.5) y operaciones: 2+1"
+                onkeydown="_celdaKey(event,this)"
+                onblur="_celdaCalc(this,function(v){ setProduccionPrebatch('${p.id}', v); }); if(!(+this.value>0)) this.value='';"
+                style="width:46px;text-align:center;background:transparent;border:none;outline:none;font-family:inherit">
+            <button onclick="updProduccionPrebatch('${p.id}',1)">+</button>
+        </div>
+    </div>`;
+}
+/* Un renglón de la lista de cocteles (vista Cocteles y Búsqueda rápida). */
+function _step3RecetaItemHTML(r, vendidos) {
+    const p   = parseFloat(r.precioEnCarta) || 0;
+    const cnt = parseFloat((vendidos || {})[r.id]) || 0;
+    // Los ingredientes por su nombre, en canónico —igual que el consumo—; si el
+    // insumo no está en este inventario, con su nombre del catálogo.
+    const ingStr = (r.ingredientes||[]).map(ing => {
+        const f = _filaDeMiembro(ing.insumoId);
+        if (f && f.nombre) return f.nombre;
+        const ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing.insumoId) : null;
+        if (ins && ins.nombre) return ins.nombre;
+        return ing.nombre ? String(ing.nombre) : '?';
+    }).slice(0, 6).join(', ');
+    return `<div class="step3-menu-item ${cnt>0?'has-cnt':''}" data-menu-nom="${etx((r.nombre||'').toLowerCase())}">
+        <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;min-width:0">
+                <div class="s3-nom">${etx(r.nombre)}</div>
+                <button onclick="verFichaReceta('${r.id}')" title="Ficha técnica" class="s3-ficha">📋</button>
+                ${p>0?`<span class="s3-precio">$${p.toFixed(0)}</span>`:''}
+            </div>
+            ${ingStr?`<div class="s3-sub">${etx(ingStr)}</div>`:''}
+        </div>
+        <div class="step3-counter">
+            <button onclick="updCntMenu('${r.id}',-1)">−</button>
+            <input id="cnt-${r.id}" type="text" inputmode="decimal"
+                class="step3-cnt-val ${cnt>0?'active':''}" value="${cnt>0?cnt:''}" placeholder="—"
+                title="Puedes escribir operaciones: 6+4"
+                onkeydown="_celdaKey(event,this)"
+                onblur="_celdaCalc(this,function(v){ setCntMenu('${r.id}', v); }); if(!(+this.value>0)) this.value='';"
+                style="width:42px;text-align:center;background:transparent;border:none;outline:none;font-family:inherit">
+            <button onclick="updCntMenu('${r.id}',1)">+</button>
+        </div>
+    </div>`;
+}
+/* Lo que se usó de un insumo, debajo de su nombre en la lista del Paso 3:
+   coctelería (recetas que lo llevan directo) y prebatch (batches producidos
+   que lo llevan). Es lo mismo que el Resultado le va a descontar. */
+function _usoFilaPaso3HTML(fila) {
+    var coct = 0, pb = 0;
+    try { coct = consumoRecetasFila(fila) || 0; } catch (e) {}
+    try { pb = _consumoBaseProd(fila) || 0; } catch (e) {}
+    if (!(coct > 0.0001) && !(pb > 0.0001)) return '';
+    var copa = fila.tipo === 'copa' && parseFloat(fila.copaML) > 0;
+    var fmt = fila.tipo === 'copa' ? function (v) { return _fmtCop(v, fila) + (copa ? ' · ' + _mlTxt(v * parseFloat(fila.copaML)) : ''); }
+        : function (v) { return _fmtEquivalenteBatch(v, fila.tipo === 'pza' ? 'PZA' : (fila.baseUnit || 'G')); };
+    return '<div class="s3-uso">' +
+        (coct > 0.0001 ? '<span>🍹 Uso en coctelería <b>' + fmt(coct) + '</b></span>' : '') +
+        (pb > 0.0001 ? '<span>🏭 Uso en prebatch <b>' + fmt(pb) + '</b></span>' : '') + '</div>';
+}
+
+/* ══ EL PREBATCH QUE NO SALE, Y POR QUÉ ═════════════════════════════════════
+   «No aparecen los prebatch en el Paso 3». Para salir aquí un insumo de
+   producción propia necesita: su liga a la sub-receta, NO estar marcado con
+   «No» y el ÁREA de este inventario. Los que se cargaron antes de que hubiera
+   selector de área no tienen ninguna, y quedaban fuera sin que nada lo dijera.
+   Aquí se listan, con el motivo y el botón que lo arregla ahí mismo. */
+var _AREA_NOMBRE = { barra:'Barra', cocina:'Cocina', almacen_barra:'Almacén de barra', almacen_cocina:'Almacén de cocina', almacen_general:'Almacén general' };
+function _areaInsDelInv() {
+    var a = String((invActual && invActual.area) || '').toLowerCase();
+    return (typeof _AREAS_DE_INV !== 'undefined' && _AREAS_DE_INV[a]) ? _AREAS_DE_INV[a][0] : a;
+}
+// Solo los de ESTE tipo de inventario: en barra no se listan los de cocina.
+function _prebatchDeEsteTipo(x) {
+    var a = String((invActual && invActual.area) || '').toLowerCase(), fam = String(x.familia || '').toLowerCase();
+    if (a === 'barra' || a === 'almacen_barra') return !fam || fam.indexOf('bebida') === 0;
+    if (a === 'cocina' || a === 'almacen_cocina') return !fam || fam.indexOf('aliment') === 0;
+    return true;
+}
+function _prebatchesFuera() {
+    var dentro = {}; prebatchesProducibles().forEach(function (p) { dentro[p.id] = 1; });
+    var recs = getRecetas() || [];
+    var porNom = {}; recs.forEach(function (r) { if (r && String(r.tipo || '').indexOf('sub') === 0 && r.nombre) porNom[String(r.nombre).trim().toLowerCase()] = r; });
+    var out = [];
+    _scopeSucInsumos(getInsumos()).forEach(function (x) {
+        if (!x || !x.esSubReceta || dentro[x.id] || !_prebatchDeEsteTipo(x)) return;
+        var nom = String(x.nombre || '').trim().toLowerCase(), sr0 = porNom[nom] || porNom[nom.replace(/\s*(pr|prebatch|batch)\s*$/, '')];
+        if (!x.recetaId) out.push({ ins: x, motivo: 'no está ligado a su sub-receta', accion: sr0 ? 'ligar' : '', recetaId: sr0 && sr0.id, srNom: sr0 && sr0.nombre });
+        else if (x.ocultoInventario) out.push({ ins: x, motivo: 'se le contestó «No» a «¿Usar como prebatch en el inventario?»', accion: 'usar' });
+        else if (!x.area) out.push({ ins: x, motivo: 'no tiene área asignada', accion: 'area' });
+        else out.push({ ins: x, motivo: 'es del área ' + (_AREA_NOMBRE[x.area] || x.area), accion: 'area' });
+    });
+    return out;
+}
+function _prebatchFueraHTML() {
+    var f = [];
+    try { f = _prebatchesFuera(); } catch (e) { return ''; }
+    // Sub-recetas de este tipo que ni siquiera se han cargado como insumo.
+    var conIns = {}; (getInsumos() || []).forEach(function (x) { if (x && x.esSubReceta && x.recetaId) conIns[x.recetaId] = 1; });
+    var a = String((invActual && invActual.area) || '').toLowerCase();
+    var tipoSub = (a === 'cocina' || a === 'almacen_cocina') ? 'sub-alimentos' : 'sub-bebidas';
+    var sinIns = (getRecetas() || []).filter(function (r) { return r && r.tipo === tipoSub && r.status !== 'inactiva' && !conIns[r.id]; });
+    if (!f.length && !sinIns.length) return '';
+    var nomArea = _AREA_NOMBRE[_areaInsDelInv()] || (invActual && invActual.area) || 'esta área';
+    var btn = function (fn, txt) { return '<button onclick="' + fn + '" class="s3-arreglar">' + txt + '</button>'; };
+    var renglon = function (x) {
+        var b = x.accion === 'ligar' ? btn("_religarPrebatch('" + x.ins.id + "','" + x.recetaId + "')", '🔗 Ligarlo a «' + etx(x.srNom) + '»')
+              : x.accion === 'usar' ? btn("_ajustarPrebatchInv('" + x.ins.id + "','usar')", '✓ Usarlo en el inventario')
+              : x.accion === 'area' ? btn("_ajustarPrebatchInv('" + x.ins.id + "','area')", '📍 Ponerlo en ' + etx(nomArea)) : '';
+        return '<div class="s3-fuera-r"><b>' + etx(x.ins.nombre || '') + '</b> — ' + etx(x.motivo) + ' ' + b + '</div>';
+    };
+    /* Los que se marcaron con «No» fue a propósito: no se gritan, van
+       plegados, por si se quiere cambiar de opinión. */
+    var no = f.filter(function (x) { return x.accion === 'usar'; }), si = f.filter(function (x) { return x.accion !== 'usar'; });
+    return '<div class="s3-fuera">' +
+        (si.length ? '<div class="s3-fuera-tit">¿No sale un prebatch? ' + si.length + (si.length === 1 ? ' se queda fuera' : ' se quedan fuera') + ' de este inventario:</div>' +
+            si.map(renglon).join('') : '') +
+        (no.length ? '<details class="s3-sinins s3-no"><summary>' + no.length + ' marcado' + (no.length === 1 ? '' : 's') +
+            ' con «No» en «¿Usar como prebatch en el inventario?»</summary>' + no.map(renglon).join('') + '</details>' : '') +
+        (sinIns.length ? '<details class="s3-sinins"><summary>' + sinIns.length + ' sub-receta' + (sinIns.length === 1 ? '' : 's') +
+            ' de ' + (tipoSub === 'sub-bebidas' ? 'bebidas' : 'alimentos') + ' todavía sin cargar como insumo</summary>' +
+            '<div>' + sinIns.map(function (r) { return etx(r.nombre || ''); }).join(' · ') + '</div>' +
+            '<div class="s3-nota">Para anotar sus batches: en Recetas abre la sub-receta y contesta «Sí» a «¿Usar como prebatch en el inventario?».</div></details>' : '') +
+        '</div>';
+}
+/* Arregla desde aquí por qué un prebatch no sale: le pone el área de este
+   inventario, o lo vuelve a «usar en el inventario». Se guarda en el
+   catálogo (y en su espejo local); si no se guarda, se deshace. */
+async function _ajustarPrebatchInv(insumoId, accion) {
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(insumoId) : null;
+    if (!ins || !invActual) { alert('No se encontró ese insumo.'); return; }
+    var areaNueva = _areaInsDelInv(), nomArea = _AREA_NOMBRE[areaNueva] || areaNueva;
+    var antes = { area: ins.area, ocultoInventario: ins.ocultoInventario };
+    var msg;
+    if (accion === 'usar') {
+        msg = '«' + (ins.nombre || '') + '» se va a usar en el inventario: sale en la lista, se le anotan sus batches y lleva su propio conteo.';
+        ins.ocultoInventario = false;
+        if (!ins.area) { ins.area = areaNueva; msg += ' Como no tenía área, queda en ' + nomArea + '.'; }
+    } else {
+        msg = '«' + (ins.nombre || '') + '» va a quedar en el área ' + nomArea + (ins.area ? ' (antes: ' + (_AREA_NOMBRE[ins.area] || ins.area) + ')' : '') + '.';
+        ins.area = areaNueva;
+    }
+    if (!confirm(msg + String.fromCharCode(10, 10) + '¿Lo hacemos?')) { ins.area = antes.area; ins.ocultoInventario = antes.ocultoInventario; return; }
+    var negId = getNegocioActivo();
+    try {
+        if (typeof _supabase !== 'undefined' && negId) {
+            var r = await _supabase.from('negocio_insumos')
+                .upsert({ negocio_id: negId, insumo_id: ins.id, datos: ins }, { onConflict: 'negocio_id,insumo_id' });
+            if (r.error) throw r.error;
+        }
+        try {   // el espejo local, sin fotos (la cuota de localStorage)
+            _skPut(_sk('insumos'), JSON.stringify((getInsumos() || []).map(function (x) {
+                var c = Object.assign({}, x); c.foto = ''; c.fotoUrl = ''; return c;
+            })));
+        } catch (e2) {}
+    } catch (e) {
+        ins.area = antes.area; ins.ocultoInventario = antes.ocultoInventario;
+        alert('No se pudo guardar el cambio, así que NO se hizo.' + String.fromCharCode(10, 10) + ((e && e.message) || e));
+        return;
+    }
+    // Ya es de este inventario: se rearma para que tenga su renglón.
+    if (filasCaptura.length) invActual.filas = filasCaptura.map(function (f) { return Object.assign({}, f); });
+    try { cargarProductosCaptura(); } catch (e3) { console.warn('[inv] ajustar prebatch:', e3); }
+    _consumoDirty = true; window._step5Dirty = true;
+    if (typeof _autoGuardar === 'function') _autoGuardar();
+    if (typeof renderStepContent === 'function') renderStepContent();
+}
+window._ajustarPrebatchInv = _ajustarPrebatchInv;
 
 // Buscador de cocteles/recetas en la vista Menú del Paso 3 (filtra sin re-render → no pierde foco).
 var _menuBusquedaVentas = '';
@@ -7555,44 +7697,8 @@ function renderStep3Menu() {
                 color:var(--text-muted);padding:12px 0 8px;border-bottom:1px solid var(--border);margin-bottom:10px">
                 ${grp}
             </div>
-            <div class="step3-menu-grid">
-                ${items.map(r => {
-                    const p   = parseFloat(r.precioEnCarta) || 0;
-                    const cnt = parseFloat(vendidos[r.id]) || 0;
-                    // Los "?" de estas pistas eran una búsqueda ESTRICTA de id: la receta
-                    // guarda el id de la copia por sucursal y la fila el del maestro. Se
-                    // resuelve en canónico —igual que el consumo— y si el insumo no está
-                    // en este inventario, se usa su nombre del catálogo.
-                    const ingStr = (r.ingredientes||[]).map(ing => {
-                        const f = _filaDeMiembro(ing.insumoId);
-                        if (f && f.nombre) return f.nombre.split(' ')[0];
-                        const ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing.insumoId) : null;
-                        if (ins && ins.nombre) return ins.nombre.split(' ')[0];
-                        return ing.nombre ? String(ing.nombre).split(' ')[0] : '?';
-                    }).slice(0,3).join(', ');
-                    return `<div class="step3-menu-item ${cnt>0?'has-cnt':''}" data-menu-nom="${etx((r.nombre||'').toLowerCase())}">
-                        <div style="flex:1;min-width:0">
-                            <div style="display:flex;align-items:center;gap:6px;min-width:0">
-                                <div style="font-weight:600;font-size:14px;color:var(--text);
-                                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(r.nombre)}</div>
-                                <button onclick="verFichaReceta('${r.id}')" title="Ficha técnica" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:13px;padding:0;flex-shrink:0">📋</button>
-                            </div>
-                            ${ingStr?`<div style="font-size:10px;color:var(--text-dim);margin-top:2px;
-                                white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ingStr}</div>`:''}
-                            ${p>0?`<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:2px">$${p.toFixed(0)}</div>`:''}
-                        </div>
-                        <div class="step3-counter">
-                            <button onclick="updCntMenu('${r.id}',-1)">−</button>
-                            <input id="cnt-${r.id}" type="text" inputmode="decimal"
-                                class="step3-cnt-val ${cnt>0?'active':''}" value="${cnt>0?cnt:''}" placeholder="—"
-                                title="Puedes escribir operaciones: 6+4"
-                                onkeydown="_celdaKey(event,this)"
-                                onblur="_celdaCalc(this,function(v){ setCntMenu('${r.id}', v); }); if(!(+this.value>0)) this.value='';"
-                                style="width:42px;text-align:center;background:transparent;border:none;outline:none;font-family:inherit">
-                            <button onclick="updCntMenu('${r.id}',1)">+</button>
-                        </div>
-                    </div>`;
-                }).join('')}
+            <div class="step3-menu-grid step3-lista">
+                ${items.map(r => _step3RecetaItemHTML(r, vendidos)).join('')}
             </div>
         </div>`).join('');
     return resumenHtml + gruposHtml;
@@ -7722,9 +7828,9 @@ function renderStep3BusquedaScaffold() {
     ).length;
     return `<div class="ent-rapida-wrap">
         <div>
-            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar insumo, coctel o prebatch</div>
             <input type="text" id="ventasBuscador" class="ent-buscador"
-                placeholder="Escribe el nombre del producto…"
+                placeholder="Escribe el nombre: un insumo, un coctel o un prebatch…"
                 oninput="buscarInsumoVentas(this.value)" autocomplete="off">
             <div id="ventasChips" class="ent-chips"></div>
         </div>
@@ -7761,11 +7867,27 @@ function renderChipsVentas() {
     if (!q) { cont.innerHTML = ''; return; }
     // Cada presentación se vende como fila normal (el compuesto es solo consolidación en el reporte).
     const matches = filasCaptura.filter(f => f.nombre.toLowerCase().includes(q));
-    if (!matches.length) {
+    /* También cocteles y prebatch, cada uno con su contador ahí mismo: buscar
+       «negroni» encuentra el insumo, el coctel y el batch. */
+    const recs = _recetasMenuPaso3().filter(r => String(r.nombre || '').toLowerCase().includes(q));
+    const pbs  = prebatchesProducibles().filter(p => String(p.nombre || '').toLowerCase().includes(q));
+    if (!matches.length && !recs.length && !pbs.length) {
         cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Sin resultados para "${etx(_ventasBusqueda)}"</div>`;
         return;
     }
-    cont.innerHTML = matches.map(f => {
+    const _grp = (tit, html) => html ? `<div class="s3-res-grupo"><div class="s3-res-tit">${tit}</div>${html}</div>` : '';
+    cont.innerHTML = _grp('🧴 Insumos', matches.length ? '<div class="ent-chips" style="margin:0">' + _chipsInsumosVentas(matches) + '</div>' : '') +
+        _grp('🍹 Cocteles', recs.length ? '<div class="step3-menu-grid step3-lista">' + recs.map(r => _step3RecetaItemHTML(r, (invActual && invActual.cocktailsVendidos) || {})).join('') + '</div>' : '') +
+        _grp('🏭 Prebatch', pbs.length ? '<div class="step3-menu-grid step3-lista">' + pbs.map(p => _step3PrebatchItemHTML(p, (invActual && invActual.prebatchProducidos) || {})).join('') + '</div>' : '');
+}
+/* Las recetas que el menú del Paso 3 ofrece (las activas en esta sucursal). */
+function _recetasMenuPaso3() {
+    const suc = localStorage.getItem('etaax_sucursal_activa') || '';
+    return getRecetas().filter(r => (r.tipo === 'alimentos' || r.tipo === 'bebidas') &&
+        ((suc && typeof window._recetaActivaEnSuc === 'function') ? window._recetaActivaEnSuc(r, suc) : r.status !== 'inactiva'));
+}
+function _chipsInsumosVentas(matches) {
+    return matches.map(f => {
         const esComp = !!f.esCompuesto;
         const tieneVentas = (f.ventasCopasDirectas||0)>0 || (!esComp && (f.ventasBotella||0)>0) || (f.cortesiaCopas||0)>0 || (f.mermaCopas||0)>0;
         return `<button class="ent-chip ${_ventasInsumoId===f.insumoId?'active':''}"
@@ -10084,10 +10206,16 @@ function _s5Pct(dif, uso, teorico) {
 /* Abajo de las ventas: el USO en coctelería y, en el mismo lugar, el uso en
    prebatch. Separados: el cóctel vendido y el batch producido son dos usos
    distintos del insumo, y sumados no se sabía cuánto era de cada uno. */
-function _s5Uso(coct, prebatch, fmt) {
+function _s5Uso(coct, prebatch, fmt, mlDe) {
     var v = function (x) { return '<b style="color:var(--viol)">' + fmt(x) + '</b>'; };
     return '<div class="s5-uso">' + _s5c2('Uso en coctelería', coct > 0.0001 ? v(coct) : '—') +
-        (prebatch > 0.0001 ? _s5c2('Uso en prebatch', v(prebatch)) : '') + '</div>';
+        (prebatch > 0.0001 ? _s5c2('Uso en prebatch', v(prebatch) + (mlDe ? _s5sub(mlDe(prebatch)) : '')) : '') + '</div>';
+}
+/* Mililitros para leer el uso en prebatch contra la receta del batch, que
+   está en ml: «30.4 cop» sola no dice que fueron 900 ml. */
+function _mlTxt(ml) {
+    ml = parseFloat(ml) || 0;
+    return Math.abs(ml) >= 1000 ? (Math.round(ml / 10) / 100) + ' L' : Math.round(ml) + ' ml';
 }
 /* Copas y onzas de una cantidad en copas. Si falta el contenido o la copa,
    se enseña la equivalencia de siempre, que dice QUÉ falta capturar. */
@@ -10439,7 +10567,7 @@ function _step5TablasHTML() {
                 <td>${_s5Menu(fila.insumoId, true)}</td>
                 <td>${_s5Stock(fila)}</td>
                 <td style="text-align:center">${_s5c2('Costo', entDinero > 0 ? '<b>' + _s5dinero(entDinero).replace('+', '') + '</b>' : '—')}</td>
-                <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc)}${_comentarioVentaHTML(fila)}</td>
+                <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}${_comentarioVentaHTML(fila)}</td>
                 <td style="text-align:center">${_s5c2('Cortesías', (cortesia > 0 ? '<b style="color:var(--viol)">' + _fc(cortesia) + '</b>' : '—') + _s5sub(etx(fila.cortesiaConcepto || '')))}</td>
                 <td></td>
                 <td style="text-align:center">${_s5c2('Copas · onzas', _eqCopOz(teorico, fila))}</td>

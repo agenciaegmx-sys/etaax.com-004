@@ -21002,12 +21002,14 @@ console.log('\n══ BH31 · El id que cambiaba según dónde estabas ══');
        con esa información es cuestión de tiempo. */
     const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
     const html = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
-    test('el nombre del prebatch cabe en dos renglones, no se corta', () => {
+    /* Desde el 18-nov el Paso 3 va en LISTA: el nombre tiene todo el ancho y
+       se parte en los renglones que haga falta (.s3-nom), nunca se corta. */
+    test('el nombre del prebatch no se corta', () => {
         const i = src.indexOf('class="step3-menu-item pb');
         const card = src.slice(i, i + 900);
-        return eq(card.indexOf('-webkit-line-clamp:2') > -1 &&
-                  card.indexOf('white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(p.nombre)}') === -1,
-                  true, 'dos renglones');
+        const css = (html.match(/\.s3-nom \{[^}]*\}/) || [''])[0];
+        return eq(card.indexOf('class="s3-nom"') > -1 && css !== '' && !/nowrap|ellipsis|line-clamp/.test(css),
+                  true, 'completo');
     });
     test('…y con el nombre completo al pasar el ratón', () => {
         const i = src.indexOf('class="step3-menu-item pb');
@@ -35262,6 +35264,120 @@ console.log('\n══ BH77 · Producciones propias sin rastrear: ligarlas con un
     });
 }
 
+/* ═══════════ BH78 · EL PASO 3 EN CUATRO VISTAS, LOS PASOS EN UN BOTÓN Y EL PREBATCH QUE NO SALÍA ═══════════
+   Edwin (18-nov): la barra de pasos se escondía o dejaba un hueco enorme →
+   los pasos van en un botón del encabezado. El Paso 3 pasa a cuatro vistas en
+   lista (Insumos primero, Cocteles, Prebatch, Búsqueda rápida), y «no
+   aparecen los prebatch»: los que no tienen área, los marcados con «No» o
+   sin liga quedaban fuera sin decirlo. Ahora se dice por qué, con el botón
+   que lo arregla. Y «si hice 3 mix negroni»: el uso se ve en cada insumo. */
+async function suitePaso3Prebatch() {
+console.log('\n══ BH78 · Paso 3 en cuatro vistas, pasos en un botón y el prebatch que no salía ══');
+    const B = crearContexto();
+    cargarJS(B, 'etaax-core.js'); cargarJS(B, 'insumo-label.js'); cargarJS(B, 'recetas/inventarios.js');
+    B._storage['etaax_negocio_activo'] = 'negT';
+    B._storage['etaax_sucursal_activa'] = 'suc_principal';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){} function renderStepContent(){}', B);
+    const base = { familia:'Bebidas', area:'barra', activo:'1', sucursales:['suc_principal'] };
+    const lic = (id, nombre) => Object.assign({ id, nombre, tipoInsumo:'licor', categoria:'Licores',
+        presentaciones:[{ contNeto:750, umContenido:'ML', costoUnitario:400 }] }, base);
+    const pr = (id, nombre, recetaId, x) => Object.assign({ id, nombre, categoria:'Producción propia', esSubReceta:true, recetaId,
+        presentaciones:[{ contNeto:1000, umContenido:'ML', rendimiento:900 }] }, base, x || {});
+    const CAT = [lic('gin', 'Gin'), lic('campari', 'Campari'), lic('vermut', 'Vermouth'),
+        pr('prMix', 'Mix Negroni PR', 'srMix'),
+        pr('prVen', 'Venecia Spritz PR', 'srVen', { area:'' }),
+        pr('prLong', 'Long Island PR', 'srLong', { ocultoInventario:true }),
+        pr('prCant', 'Cantera Rosa PR', 'srCant', { area:'cocina' }),
+        pr('prSalsa', 'Salsa PR', 'srSalsa', { familia:'Alimentos', area:'cocina' }),
+        pr('prSinLiga', 'Mr. Sanchez PR', null)];
+    const sub = (id, nombre, ings) => ({ id, nombre, tipo:'sub-bebidas', status:'activa', ingredientes: ings || [] });
+    const RECS = [
+        sub('srMix', 'Mix Negroni', [{ insumoId:'gin', cantidad:300, unidad:'ML' }, { insumoId:'campari', cantidad:300, unidad:'ML' }, { insumoId:'vermut', cantidad:300, unidad:'ML' }]),
+        sub('srVen', 'Venecia Spritz'), sub('srLong', 'Long Island'), sub('srCant', 'Cantera Rosa'),
+        sub('srSanchez', 'Mr. Sanchez'), sub('srNada', 'Jarabe sin cargar'),
+        { id:'srSalsa', nombre:'Salsa', tipo:'sub-alimentos', status:'activa', ingredientes:[] }];
+    const montar = () => {
+        setVar(B, '_cacheRecetasInv', JSON.parse(JSON.stringify(RECS)));
+        setVar(B, '_cacheInsumosInv', JSON.parse(JSON.stringify(CAT)));
+        setVar(B, '_cacheInv', []); setVar(B, '_cacheEL', []);
+        setVar(B, 'invActual', { id:'invT', area:'barra', sucursalId:'suc_principal', fecha:'2026-11-18', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{ prMix: 3 }, cocktailsVendidos:{} });
+        const f = (id, nom) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:750, copaML:30, existenciaAnterior:50, entradas:[], pesos:[], cerradasBodega:1, cerradasBarra:0 });
+        setVar(B, 'filasCaptura', [f('gin', 'Gin'), f('campari', 'Campari'), f('vermut', 'Vermouth'), f('prMix', 'Mix Negroni PR')]);
+        vm.runInContext('_consumoDirty = true; pasoActual = 3; vistaVentas = "lista";', B);
+    };
+    montar();
+
+    /* ── los pasos en un botón ── */
+    test('el menú de pasos marca los hechos, el actual y los que faltan', () => {
+        const h = B._pasoMenuItemsHTML();
+        return eq((h.match(/class="hecho"/g) || []).length + '·' + (h.match(/class="actual"/g) || []).length + '·' + /Ventas<small>estás aquí<\/small>/.test(h), '2·1·true');
+    });
+    test('el encabezado ya no lleva barra de pasos ni modo compacto', () => {
+        const html = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+        const js = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        return eq(/#invSteps \{ display: none !important; \}/.test(html) && /id="btnPasoMenu"/.test(html) &&
+                  js.indexOf('_hdrCompactoInv') === -1 && !/inv-hdr-compacto \{/.test(html), true);
+    });
+
+    /* ── el Paso 3 ── */
+    test('el Paso 3 abre en Insumos y ofrece las cuatro vistas', () => {
+        const h = B.renderStep3();
+        const vistas = (h.match(/setVistaVentas\('(\w+)'\)/g) || []).map(x => x.match(/'(\w+)'/)[1]).join(',');
+        return eq(vistas + ' · ' + /class="exist-vista-btn active" onclick="setVistaVentas\('lista'\)"/.test(h), 'lista,menu,prebatch,busqueda · true');
+    });
+    test('Prebatch: en LISTA, solo los que se pueden anotar', () => {
+        vm.runInContext('vistaVentas = "prebatch";', B);
+        const h = B.renderStep3();
+        const lista = h.slice(h.indexOf('step3-lista'), h.indexOf('s3-fuera') > -1 ? h.indexOf('s3-fuera') : undefined);
+        return eq((lista.match(/data-menu-nom="([^"]+)"/g) || []).join(','), 'data-menu-nom="mix negroni pr"');
+    });
+    const fuera = () => B._prebatchesFuera().map(x => x.ins.id + ':' + x.accion).sort().join(' ');
+    test('dice POR QUÉ se queda fuera cada uno, con su arreglo', () =>
+        eq(fuera(), 'prCant:area prLong:usar prSinLiga:ligar prVen:area'));
+    test('…pero no lista los de cocina en un inventario de barra', () => eq(/prSalsa/.test(fuera()), false));
+    test('…y el de «No» va PLEGADO: fue a propósito', () => {
+        const h = B._prebatchFueraHTML();
+        return eq(/<details class="s3-sinins s3-no"><summary>1 marcado con «No»/.test(h) && h.indexOf('Long Island PR') > h.indexOf('s3-no'), true);
+    });
+    test('…y nombra las sub-recetas que ni siquiera se han cargado como insumo', () =>
+        eq(/sub-recetas? de bebidas todavía sin cargar como insumo/.test(B._prebatchFueraHTML()) && /Jarabe sin cargar/.test(B._prebatchFueraHTML()), true));
+    test('3 Mix Negroni descuentan 900 ml de cada insumo que lleva', () =>
+        eq(['gin', 'campari', 'vermut'].map(id => B.consumoBasesPorProduccion(id)).join(','), '900,900,900'));
+    test('…y la lista de insumos lo dice en el renglón de cada uno, en copas y en ml', () => {
+        const fs_ = vm.runInContext('filasCaptura', B);
+        return eq(B._usoFilaPaso3HTML(fs_[0]).replace(/<[^>]+>/g, ''), '🏭 Uso en prebatch 30 cop · 900 ml');
+    });
+    test('…y un insumo sin uso no pinta nada', () => {
+        vm.runInContext('invActual.prebatchProducidos = {};', B);
+        const r = B._usoFilaPaso3HTML(vm.runInContext('filasCaptura', B)[0]);
+        vm.runInContext('invActual.prebatchProducidos = { prMix: 3 };', B);
+        return eq(r, '');
+    });
+    test('el Resultado da también los ml del uso en prebatch', () =>
+        eq(B._s5Uso(0, 30, v => v + ' cop', x => B._mlTxt(x * 30)).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+           'Uso en coctelería — Uso en prebatch 30 cop 900 ml'));
+
+    /* ── el arreglo se guarda, y si no, se deshace ── */
+    B.confirm = () => true; B.alert = () => {};
+    B._supabase = { from: () => ({ upsert: () => Promise.resolve({ error:null }) }) };
+    await testA('«Ponerlo en Barra» le pone el área y ya se puede anotar', async () => {
+        await B._ajustarPrebatchInv('prVen', 'area');
+        const ins = B.getInsumos().find(x => x.id === 'prVen');
+        return eq(ins.area + ' · ' + B.prebatchesProducibles().some(p => p.id === 'prVen'), 'barra · true');
+    });
+    await testA('«Usarlo en el inventario» quita el «No»', async () => {
+        await B._ajustarPrebatchInv('prLong', 'usar');
+        return eq(B.prebatchesProducibles().some(p => p.id === 'prLong'), true);
+    });
+    montar();
+    B._supabase = { from: () => ({ upsert: () => Promise.resolve({ error:{ message:'sin red' } }) }) };
+    await testA('…y si no se guarda, se deshace', async () => {
+        await B._ajustarPrebatchInv('prVen', 'area');
+        return eq(B.getInsumos().find(x => x.id === 'prVen').area, '');
+    });
+}
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
@@ -35269,6 +35385,6 @@ suiteResumenFinanciero20261013();
 suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
-    .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteLigarSinRastrear).then(suiteSinRenglon)
+    .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteLigarSinRastrear).then(suitePaso3Prebatch).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
     .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(suiteInsumosSucursales).then(suiteCorregirQR).then(suiteCfgEnLaNube).then(resumen);
