@@ -67,6 +67,41 @@
     var _lsSet = localStorage.setItem.bind(localStorage);
     var _lsDel = localStorage.removeItem.bind(localStorage);
 
+    /* ══ EL PARCHE DE ANTES NO FUNCIONABA EN CHROMIUM (18-nov-2026) ═════════
+       Se definía `getItem` encima del objeto localStorage. En Chromium eso NO
+       reemplaza el método: crea un DATO llamado «getItem» (lo mismo setItem y
+       removeItem), y el método sigue siendo el nativo. Las páginas que leen y
+       escriben sus llaves grandes por localStorage —staff, horarios,
+       checklists— escribían en el localStorage de siempre sin que el almacén
+       se enterara; y en la carga siguiente la migración BORRABA esa copia
+       creyéndola un espejo viejo, cuando era la más nueva. La página la
+       buscaba, no estaba, y quedaba a merced de la nube: «los horarios se
+       borran a los días».
+
+       Ese dato basura delata que en ESTE navegador el parche viejo falló. Se
+       anota antes de limpiarlo: decide qué hacer con lo que quedó en el disco. */
+    var _basura = ['getItem', 'setItem', 'removeItem'].filter(function (n) {
+        var v = null; try { v = _lsGet(n); } catch (e) {}
+        return typeof v === 'string' && /^\s*function\b/.test(v);
+    });
+    var _parcheViejoRoto = _basura.length > 0;
+    _basura.forEach(function (n) { try { _lsDel(n); } catch (e) {} });
+    var _parcheOk = false;                 // ¿el parche de ahora sí quedó puesto? (_parcharLocalStorage)
+    /* Las llaves grandes que las páginas escriben por localStorage DIRECTO:
+       todos sus escritores van por ahí, así que su copia cruda —si existe—
+       es siempre la más nueva, y la del almacén solo es la foto de la
+       primera migración. */
+    var CRUDAS = ['staff', 'horarios', 'checklists', 'checklist_runs'];
+    function _esCruda(k) {
+        for (var i = 0; i < CRUDAS.length; i++) {
+            var suf = '_' + CRUDAS[i];
+            if (k.length > suf.length && k.slice(-suf.length) === suf) return true;
+        }
+        return false;
+    }
+    var TRANSICION = 'etaax__ls_parche_v2';   // clave chica: ya se hizo la transición aquí
+    var adoptadas = {};                       // crudas adoptadas en esta carga: no se borran hasta bajar
+
     function _esGrandeKey(k) {
         // k llega completa: "etaax_{negocio}_{clave}" o "etaax_{clave}"
         for (var i = 0; i < GRANDES.length; i++) {
@@ -355,6 +390,10 @@
                esté a salvo: es lo único que tiene la versión nueva, y se
                borrará solo cuando su bajada a IndexedDB confirme. */
             if (marcadas[k]) return Promise.resolve();
+            /* Una cruda adoptada en esta carga se borra cuando su bajada
+               confirme, no aquí. Y si el parche de ahora no quedó puesto, las
+               páginas siguen escribiendo ahí: borrarla sería borrarles lo suyo. */
+            if (_esCruda(k) && (adoptadas[k] || !_parcheOk)) return Promise.resolve();
             if (desdeIDB[k]) {
                 // Ya estaba a salvo en IndexedDB desde antes de esta carga.
                 bytes += v.length;
@@ -404,6 +443,31 @@
                 mem[k] = v;
                 pendientes[k] = 1;
             });
+            /* ══ LAS LLAVES QUE LAS PÁGINAS ESCRIBEN POR localStorage ══════════
+               Si hay copia cruda, ES la buena: se adopta y se baja al disco. No
+               se borra en esta carga; se borra sola cuando su bajada confirme.
+               Si NO la hay y en este navegador el parche viejo estaba roto, lo
+               del disco es la foto de la primera migración —semanas atrás—: se
+               descarta UNA vez, para que la página la pida a la nube como hasta
+               hoy en vez de enseñar datos viejos como si fueran de ahora. */
+            if (_parcheOk) {
+                var _crudas = [];
+                for (var _i = 0; _i < localStorage.length; _i++) _crudas.push(localStorage.key(_i));
+                _crudas.forEach(function (k) {
+                    if (!k || !_esGrandeKey(k) || !_esCruda(k) || escritasEnSesion[k] || marcadas[k]) return;
+                    var v = _lsGet(k); if (v == null) return;
+                    if (mem[k] !== v) { mem[k] = v; _nuevaVersion(k); pendientes[k] = 1; }
+                    adoptadas[k] = 1;
+                });
+                var _primera = false; try { _primera = !_lsGet(TRANSICION); } catch (e) {}
+                if (_primera && _parcheViejoRoto) {
+                    Object.keys(todo).forEach(function (k) {
+                        if (!_esCruda(k) || adoptadas[k] || escritasEnSesion[k] || marcadas[k]) return;
+                        mem[k] = null; _nuevaVersion(k); pendientes[k] = 1;   // la bajada la borra del disco
+                    });
+                }
+                if (_primera) { try { _lsSet(TRANSICION, '1'); } catch (e) {} }
+            }
             hidratado = true;
             if (Object.keys(pendientes).length) _programarBajada();
             return _migrarDesdeLocal();
@@ -433,37 +497,60 @@
     (function _parcharLocalStorage() {
         var ls = window.localStorage; if (!ls) return;
         var _get = ls.getItem.bind(ls), _set = ls.setItem.bind(ls), _del = ls.removeItem.bind(ls);
-        try {
-            Object.defineProperty(ls, 'getItem', { configurable: true, value: function (k) {
-                if (_esGrandeKey(String(k))) {
-                    // Espejo en memoria; si aún no hidrata, el localStorage viejo
-                    // sirve de puente para no arrancar en blanco.
-                    if (mem[k] != null) return mem[k];
-                    return _get(k);
-                }
+        function getP(k) {
+            if (_esGrandeKey(String(k))) {
+                // Espejo en memoria; si aún no hidrata, el localStorage viejo
+                // sirve de puente para no arrancar en blanco.
+                if (mem[k] != null) return mem[k];
                 return _get(k);
-            }});
-            Object.defineProperty(ls, 'setItem', { configurable: true, value: function (k, v) {
-                if (_esGrandeKey(String(k))) {
-                    /* También por aquí sube la versión: si no, una escritura
-                       hecha por el parche sería invisible para el control de
-                       carreras y una bajada vieja la daría por suya. */
-                    mem[k] = String(v); _nuevaVersion(k);
-                    pendientes[k] = 1; escritasEnSesion[k] = 1;
-                    _programarBajada();
-                    return;   // NO se escribe en localStorage: para eso está IndexedDB
-                }
-                return _set(k, v);
-            }});
-            Object.defineProperty(ls, 'removeItem', { configurable: true, value: function (k) {
-                if (_esGrandeKey(String(k))) {
-                    mem[k] = null; _nuevaVersion(k);
-                    pendientes[k] = 1; escritasEnSesion[k] = 1;
-                    _programarBajada();
-                }
-                return _del(k);
-            }});
+            }
+            return _get(k);
+        }
+        function setP(k, v) {
+            if (_esGrandeKey(String(k))) {
+                /* También por aquí sube la versión: si no, una escritura
+                   hecha por el parche sería invisible para el control de
+                   carreras y una bajada vieja la daría por suya. */
+                mem[k] = String(v); _nuevaVersion(k);
+                pendientes[k] = 1; escritasEnSesion[k] = 1;
+                _programarBajada();
+                return;   // NO se escribe en localStorage: para eso está IndexedDB
+            }
+            return _set(k, v);
+        }
+        function delP(k) {
+            if (_esGrandeKey(String(k))) {
+                mem[k] = null; _nuevaVersion(k);
+                pendientes[k] = 1; escritasEnSesion[k] = 1;
+                _programarBajada();
+            }
+            return _del(k);
+        }
+        /* En un navegador de verdad el método vive en Storage.prototype, y SOLO
+           ahí se puede reemplazar (sobre el objeto, Chromium lo guarda como un
+           dato). Se filtra por `this`: sessionStorage comparte el prototipo y
+           no tiene nada que ver con esto. Donde no hay un Storage de verdad
+           —las pruebas— se parcha el objeto, como antes. */
+        try {
+            var proto = Object.getPrototypeOf(ls);
+            if (typeof Storage !== 'undefined' && proto === Storage.prototype) {
+                var pg = proto.getItem, ps = proto.setItem, pd = proto.removeItem;
+                var g = function getItem(k) { return this === ls ? getP(k) : pg.call(this, k); };
+                var st = function setItem(k, v) { return this === ls ? setP(k, v) : ps.call(this, k, v); };
+                var rm = function removeItem(k) { return this === ls ? delP(k) : pd.call(this, k); };
+                g.__etaax = st.__etaax = rm.__etaax = true;
+                proto.getItem = g; proto.setItem = st; proto.removeItem = rm;
+            } else {
+                getP.__etaax = setP.__etaax = delP.__etaax = true;
+                Object.defineProperty(ls, 'getItem',    { configurable: true, value: getP });
+                Object.defineProperty(ls, 'setItem',    { configurable: true, value: setP });
+                Object.defineProperty(ls, 'removeItem', { configurable: true, value: delP });
+            }
         } catch (e) { /* navegador que no deja redefinir: se queda como antes */ }
+        /* Se comprueba que de verdad quedó: el parche viejo «quedaba» sin que
+           nada lo comprobara, y por eso falló años sin que nadie lo supiera. */
+        _parcheOk = !!(ls.getItem && ls.getItem.__etaax && ls.setItem && ls.setItem.__etaax);
+        if (!_parcheOk) try { console.warn('[etaax-store] no se pudo atender localStorage: las llaves grandes van por localStorage tal cual'); } catch (e) {}
     })();
 
     /* ══ LO QUE HAY EN EL DISCO, NO EN MI MEMORIA ══════════════════════════

@@ -222,12 +222,41 @@ function hacerLocks() {
     };
 }
 
+/* ── Un localStorage COMO EL DE CHROMIUM ─────────────────────────────────────
+   El de arriba es un objeto suelto: definirle `getItem` encima lo reemplaza, y
+   por eso el parche viejo del almacén pasaba aquí y fallaba en el navegador.
+   Este imita lo que hace Chromium de verdad:
+     · los métodos viven en Storage.prototype;
+     · `Object.defineProperty(localStorage, 'getItem', …)` NO reemplaza nada:
+       guarda un DATO llamado «getItem» (comprobado el 18-nov en Chromium real).
+   `Storage` se pone en el contexto para que el almacén lo reconozca. */
+function hacerStorageChromium(inicial) {
+    class Storage {
+        constructor(m) { Object.defineProperty(this, '_m', { value: m, enumerable: false }); }
+        get length() { return Object.keys(this._m).length; }
+        key(i) { return Object.keys(this._m)[i]; }
+        getItem(k) { return Object.prototype.hasOwnProperty.call(this._m, k) ? this._m[k] : null; }
+        setItem(k, v) { this._m[k] = String(v); }
+        removeItem(k) { delete this._m[k]; }
+    }
+    const nuevo = (ini) => new Proxy(new Storage(Object.assign({}, ini)), {
+        defineProperty(t, p, d) {
+            if (p === '_m') return Reflect.defineProperty(t, p, d);
+            t._m[p] = String(d.value);                    // lo que hace Chromium: un DATO
+            return true;
+        },
+    });
+    return { Storage, ls: nuevo(inicial), session: nuevo({}) };
+}
+
 // Levanta etaax-store.js en un contexto propio y devuelve sus piezas.
 function montarStore({ enIDB = {}, enLS = {}, abrirDiferido = false, sinIDB = false,
                        lsLleno = false, fallaEscritura = false,
                        retenerEscritura = false, lsRechaza = null, lsMaxLen = 0,
-                       idb = null, locks = null } = {}) {
-    const localStorage = hacerLS(enLS, { lleno: lsLleno, rechazar: lsRechaza, maxLen: lsMaxLen });
+                       idb = null, locks = null, chromium = false } = {}) {
+    /* `chromium`: un localStorage como el del navegador de verdad (ver arriba). */
+    const ch = chromium ? hacerStorageChromium(enLS) : null;
+    const localStorage = ch ? ch.ls : hacerLS(enLS, { lleno: lsLleno, rechazar: lsRechaza, maxLen: lsMaxLen });
     /* `sinIDB` tiene que valer ANTES de levantar el script: el almacén abre la base
        al cargarse, así que anular window.indexedDB después ya no prueba nada. */
     /* `idb`: un disco YA hecho, para que dos pestañas compartan el mismo
@@ -240,6 +269,7 @@ function montarStore({ enIDB = {}, enLS = {}, abrirDiferido = false, sinIDB = fa
         console: { log() {}, warn() {}, error() {} },
         setTimeout, clearTimeout, Promise, JSON, Object, String, Date, Math,
         localStorage, indexedDB,
+        ...(ch ? { Storage: ch.Storage, sessionStorage: ch.session } : {}),
         document: documento,
         navigator: locks ? { locks } : {},
     };
@@ -1267,6 +1297,85 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
             await respirar();
             test('sin Web Locks no hay cómo saber si la otra vive: se usa la cola común', () =>
                 eq(diag(m).llave + '·' + diag(m).cola_por_pestana, OUTBOX + '·false'));
+        }
+    }
+
+    /* ══ EL PARCHE EN UN localStorage COMO EL DE CHROMIUM (18-nov-2026) ══════
+       El parche viejo definía `getItem` encima del objeto: aquí pasaba, en el
+       navegador creaba un dato «getItem» y el método seguía siendo el nativo.
+       Staff, horarios y checklists —que se escriben por localStorage directo—
+       nunca llegaban al almacén, y la migración borraba en la carga siguiente
+       su copia más nueva. */
+    {
+        const disco = (m, k) => Object.prototype.hasOwnProperty.call(m.indexedDB._disco, k) ? m.indexedDB._disco[k] : undefined;
+        const H = 'etaax_n1_horarios';
+        {
+            const m = montarStore({ chromium: true });
+            await respirar();
+            m.localStorage.setItem(H, '{"semana":"47"}');             // como lo hacen horarios.html y compañía
+            test('lo que una página escribe por localStorage LLEGA al almacén', () => eq(m.store.get(H), '{"semana":"47"}'));
+            test('…y se lee por localStorage desde el almacén', () => eq(m.localStorage.getItem(H), '{"semana":"47"}'));
+            await respirar();
+            test('…y baja a IndexedDB, que es lo que sobrevive', () => eq(disco(m, H), '{"semana":"47"}'));
+            test('el parche ya no deja datos basura («getItem») en localStorage', () =>
+                eq(['getItem', 'setItem', 'removeItem'].some(n => m.localStorage._m[n] !== undefined), false));
+            m.localStorage.setItem('etaax_negocio_activo', 'n9');
+            test('una llave chica sigue en localStorage, como siempre', () => eq(m.localStorage._m['etaax_negocio_activo'], 'n9'));
+            m.ctx.sessionStorage.setItem(H, 'de sesión');
+            test('sessionStorage comparte el prototipo pero NO pasa por el almacén', () =>
+                eq(m.ctx.sessionStorage._m[H] + '·' + m.store.get(H), 'de sesión·{"semana":"47"}'));
+        }
+        /* LA TRANSICIÓN. Un navegador que traía el parche roto: tiene el dato
+           basura, la foto vieja de la primera migración en IndexedDB y —si la
+           página escribió desde la última carga— la copia NUEVA en localStorage. */
+        const basura = { getItem: 'function (k) { /* parche viejo */ }', setItem: 'function (k, v) {}' };
+        {
+            const S = 'etaax_n1_staff';
+            const m = montarStore({ chromium: true, enIDB: { [S]: '[{"id":"viejo"}]' },
+                                    enLS: Object.assign({ [S]: '[{"id":"nuevo"}]' }, basura) });
+            await respirar();
+            test('transición: la copia de la página en localStorage (la nueva) gana a la foto vieja', () =>
+                eq(m.store.get(S), '[{"id":"nuevo"}]'));
+            await respirar();
+            test('…se baja a IndexedDB y SOLO ENTONCES se libera de localStorage', () =>
+                eq(disco(m, S) + '·' + (m.localStorage._m[S] === undefined), '[{"id":"nuevo"}]·true'));
+            test('…y los datos basura del parche viejo se limpian', () =>
+                eq(m.localStorage._m.getItem === undefined && m.localStorage._m.setItem === undefined, true));
+        }
+        {
+            /* Sin copia en localStorage (la migración vieja ya la había borrado),
+               lo del disco es la foto de hace semanas: se descarta UNA vez y la
+               página la pide a la nube, como hasta hoy. */
+            const m = montarStore({ chromium: true, enIDB: { [H]: '{"semana":"30"}' }, enLS: Object.assign({}, basura) });
+            await respirar();
+            test('transición: sin copia nueva, la foto vieja de una llave de página se descarta (no se enseña como actual)', () =>
+                eq(m.store.get(H), null));
+            await respirar();
+            test('…también del disco', () => eq(disco(m, H), undefined));
+            test('…y la transición queda anotada para no repetirse', () => eq(m.localStorage._m['etaax__ls_parche_v2'], '1'));
+        }
+        {
+            /* Donde el parche viejo SÍ funcionaba (no hay basura), lo del disco
+               estaba al día: no se toca. */
+            const m = montarStore({ chromium: true, enIDB: { [H]: '{"semana":"47"}' } });
+            await respirar();
+            test('sin rastro del parche roto, lo del disco se respeta', () => eq(m.store.get(H), '{"semana":"47"}'));
+        }
+        {
+            /* Ya hecha la transición, una carga normal no descarta nada. */
+            const m = montarStore({ chromium: true, enIDB: { [H]: '{"semana":"48"}' },
+                                    enLS: Object.assign({ etaax__ls_parche_v2: '1' }, basura) });
+            await respirar();
+            test('ya hecha la transición, la siguiente carga no descarta nada', () => eq(m.store.get(H), '{"semana":"48"}'));
+        }
+        {
+            /* Las llaves que NO escriben las páginas (el catálogo va por el
+               almacén) no cambian de regla: una copia vieja en localStorage no le
+               gana al disco. */
+            const I = 'etaax_n1_insumos';
+            const m = montarStore({ chromium: true, enIDB: { [I]: '[230]' }, enLS: Object.assign({ [I]: '[190]' }, basura) });
+            await respirar();
+            test('una copia vieja del catálogo en localStorage NO le gana al almacén', () => eq(m.store.get(I), '[230]'));
         }
     }
 

@@ -214,6 +214,32 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await ctx.close();
         }
+
+        /* ── F · el almacén atiende localStorage EN CHROMIUM ─────────────────
+           El parche viejo definía `getItem` sobre el objeto localStorage: en
+           Chromium eso crea un DATO «getItem» y el método sigue siendo el
+           nativo. Staff, horarios y checklists —que se escriben por
+           localStorage directo— nunca llegaban al almacén. */
+        console.log('\n══ F · El almacén atiende localStorage en Chromium ══');
+        {
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: {} }));
+            const r = await page.evaluate(() => {
+                const k = 'etaax_n1_horarios';
+                localStorage.setItem(k, '{"semana":"47"}');          // como lo hacen horarios.html y staff.html
+                sessionStorage.setItem(k, 'de sesión');
+                return { almacen: etaaxStore.get(k), lectura: localStorage.getItem(k),
+                         crudo: Object.keys(localStorage).includes(k), basura: Object.keys(localStorage).includes('getItem'),
+                         sesion: sessionStorage.getItem(k) };
+            });
+            await caso('lo que una página escribe por localStorage llega al almacén, y se lee de ahí', async () => {
+                assert.equal(r.almacen, '{"semana":"47"}'); assert.equal(r.lectura, '{"semana":"47"}');
+            });
+            await caso('…sin copia cruda ni datos basura («getItem») en localStorage', async () => {
+                assert.equal(r.crudo, false); assert.equal(r.basura, false);
+            });
+            await caso('…y sessionStorage no pasa por el almacén', async () => assert.equal(r.sesion, 'de sesión'));
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }
