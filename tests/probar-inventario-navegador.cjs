@@ -169,6 +169,51 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await ctx.close();
         }
+
+        /* ── E · una sub-receta con «No» no se cuela por ningún lado ─────────
+           Edwin: «revisar que no se cuelen si no está marcado que aparezca en
+           el inventario». Tres sub-recetas en el catálogo: una de barra con
+           «Sí», una de barra con «No» y una de cocina con «Sí». En el
+           inventario de BARRA solo puede estar la primera: ni en la lista, ni
+           en la producción del Paso 3, ni en el Resultado. */
+        console.log('\n══ E · Sub-receta con «No»: no aparece en el inventario ══');
+        {
+            const OCULTO = base('preOculto', { nombre: 'Jarabe Oculto', categoria: 'Producción propia', esSubReceta: true,
+                recetaId: 'srOculto', ocultoInventario: true, presentaciones: [{ contNeto: 1, umContenido: 'LT' }] });
+            const COCINA = base('preCocina', { nombre: 'Salsa de Cocina', familia: 'Alimentos', area: 'cocina', categoria: 'Producción propia',
+                esSubReceta: true, recetaId: 'srCocina', ocultoInventario: false, presentaciones: [{ contNeto: 1, umContenido: 'KG' }] });
+            const subOculto = { id: 'srOculto', nombre: 'Jarabe Oculto', tipo: 'sub-bebidas', status: 'activa', sucursalId: 'suc_principal',
+                camposExtra: { rendimientoFinal: '1000', unidadRendimientoFinal: 'ML' }, ingredientes: [{ insumoId: 'sprite', cantidad: 100, unidad: 'ML' }] };
+            const subCocina = { id: 'srCocina', nombre: 'Salsa de Cocina', tipo: 'sub-alimentos', status: 'activa', sucursalId: 'suc_principal',
+                camposExtra: { rendimientoFinal: '1000', unidadRendimientoFinal: 'G' }, ingredientes: [] };
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: {
+                negocio_insumos: filasNube(destilados(10).concat([SPRITE, SQUIRT, BATCH, OCULTO, COCINA])),
+                recetas: [SUB, subOculto, subCocina].map(r => ({ id: r.id, negocio_id: 'n1', datos: r })) } }));
+            await nuevoInv(page);
+            await page.waitForTimeout(800);
+            const ids = () => page.evaluate(() => filasCaptura.map(f => f.insumoId));
+            await caso('la de «Sí» de barra entra; la de «No» y la de cocina NO están en la lista', async () => {
+                const l = await ids();
+                assert.ok(l.includes('prePal'), 'falta la de «Sí»');
+                assert.ok(!l.includes('preOculto'), 'se coló la de «No»');
+                assert.ok(!l.includes('preCocina'), 'se coló la de cocina en el inventario de barra');
+            });
+            await caso('…ni se ofrecen en la producción del Paso 3', async () => {
+                const p = await page.evaluate(() => prebatchesProducibles().map(x => x.id));
+                assert.deepEqual(p, ['prePal']);
+                await page.evaluate(() => irAPaso(3));
+                await page.waitForTimeout(400);
+                const t = await page.evaluate(() => document.getElementById('stepContent').textContent);
+                assert.ok(!/Jarabe Oculto|Salsa de Cocina/.test(t), 'aparecen en el Paso 3');
+            });
+            await caso('…ni en el Resultado', async () => {
+                await page.evaluate(() => irAPaso(5));
+                await page.waitForTimeout(900);
+                const t = await page.evaluate(() => document.getElementById('step5Keep').textContent);
+                assert.ok(!/Jarabe Oculto|Salsa de Cocina/.test(t), 'aparecen en el Resultado');
+            });
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }
