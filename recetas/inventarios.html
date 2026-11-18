@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=917ce3bb"></script>
+<script src="/recetas/inventarios.js?v=799adbe8"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -445,6 +445,21 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
 .inv-wizard-header > div { flex-wrap: wrap; min-width: 0; }
 .inv-wizard-header > div:last-child { justify-content: flex-end; }
 #step5HeaderBtns { flex-wrap: wrap; }
+/* Paso 5, ya abajo en la página: el encabezado fijo se vuelve UNA línea —el
+   título chico y los botones en una fila que se desliza con el dedo— y la
+   barra de pasos se adelgaza. Los tres encabezados quedan fijos sin tapar
+   media pantalla de la tablet. */
+.inv-wizard-header.inv-hdr-compacto { padding: 6px 16px; min-height: 0; flex-wrap: nowrap; gap: 10px; }
+.inv-hdr-compacto .brand-label { display: none; }
+.inv-hdr-compacto #captTitulo { font-size: 16px !important; white-space: nowrap; }
+.inv-hdr-compacto > div:first-child { flex-shrink: 0; }
+.inv-hdr-compacto > div:last-child { flex: 1 1 auto; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; }
+.inv-hdr-compacto > div:last-child::-webkit-scrollbar { display: none; }
+.inv-hdr-compacto > div:last-child > :first-child { margin-left: auto; }
+.inv-hdr-compacto #step5HeaderBtns { flex-wrap: nowrap; }
+.inv-hdr-compacto .btn-vista { padding: 5px 10px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+.inv-hdr-compacto #autoGuardarInd { font-size: 11px; white-space: nowrap; flex-shrink: 0; }
+.inv-hdr-compacto + .inv-steps .inv-step { padding-top: 5px; padding-bottom: 5px; }
 
 /* ── Step bar ────────────────────────────────────────────────── */
 .inv-steps {

@@ -80,13 +80,40 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await nuevoInv(page);
             await page.evaluate(() => irAPaso(5));
             await page.waitForTimeout(900);
+            /* En el Paso 5 son TRES encabezados fijos (Edwin, 18-nov): la barra de
+               contexto, el de Recalcular y los reportes, y los pasos. Antes el del
+               medio se iba con la página y, arriba del todo, la barra de pasos
+               quedaba DEBAJO de él: desaparecía. */
+            const pos = () => page.evaluate(() => {
+                const caja = (s) => { const e = document.querySelector(s), b = e.getBoundingClientRect();
+                    const x = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);   // al centro: a la izquierda está el menú lateral
+                    return { top: b.top, bottom: b.bottom, visible: !!(x && e.contains(x)) }; };
+                return { ctx: caja('#ctxBar'), hdr: caja('#vistaCaptura .inv-wizard-header'), pasos: caja('#invSteps'),
+                         compacto: document.querySelector('#vistaCaptura .inv-wizard-header').classList.contains('inv-hdr-compacto') };
+            });
+            await page.evaluate(() => window.scrollTo(0, 60));
+            await page.waitForTimeout(500);
+            await caso('Paso 5 arriba: la barra de pasos se ve, no queda debajo del encabezado', async () => {
+                const r = await pos();
+                assert.ok(r.pasos.visible && r.hdr.visible, JSON.stringify(r));
+                assert.ok(Math.abs(r.pasos.top - r.hdr.bottom) < 2, 'pasos fuera de su lugar: ' + JSON.stringify(r));
+            });
             await page.evaluate(() => window.scrollTo(0, 900));
-            await page.waitForTimeout(400);
-            await caso('al bajar, la barra de pasos queda justo debajo de la barra de contexto, sin taparse', async () => {
-                const r = await page.evaluate(() => ({ ctx: document.getElementById('ctxBar').getBoundingClientRect().bottom,
-                                                       pasos: document.getElementById('invSteps').getBoundingClientRect().top }));
-                assert.ok(r.pasos >= r.ctx - 1, 'la barra de pasos queda tapada: ' + JSON.stringify(r));
-                assert.ok(r.pasos - r.ctx < 4, 'quedó un hueco: ' + JSON.stringify(r));
+            await page.waitForTimeout(600);
+            await caso('al bajar, los tres quedan fijos y en fila: contexto → encabezado → pasos, sin huecos', async () => {
+                const r = await pos();
+                assert.ok(r.ctx.visible && r.hdr.visible && r.pasos.visible, 'alguno quedó tapado: ' + JSON.stringify(r));
+                assert.ok(Math.abs(r.hdr.top - r.ctx.bottom) < 2 && Math.abs(r.pasos.top - r.hdr.bottom) < 2, 'quedó un hueco: ' + JSON.stringify(r));
+            });
+            await caso('…y el encabezado se compacta a una línea para no tapar media tablet', async () => {
+                const r = await pos();
+                assert.ok(r.compacto && r.hdr.bottom - r.hdr.top < 60, JSON.stringify(r));
+            });
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.waitForTimeout(600);
+            await caso('de vuelta arriba, el encabezado vuelve a su tamaño y los pasos siguen a la vista', async () => {
+                const r = await pos();
+                assert.ok(!r.compacto && r.pasos.visible && Math.abs(r.pasos.top - r.hdr.bottom) < 2, JSON.stringify(r));
             });
             await ctx.close();
         }
@@ -159,13 +186,42 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await page.evaluate(() => irAPaso(5));
             await page.waitForTimeout(900);
-            await caso('…y el Resultado lo dice abajo de las Ventas de la Sprite: «Coctelería 1 pza, incl. 1 pza usado en batches»', async () => {
+            await caso('…y el Resultado lo dice abajo de las Ventas de la Sprite: «Uso en prebatch 1 pza»', async () => {
                 const t = await page.evaluate(() => document.getElementById('step5Keep').textContent.replace(/\s+/g, ' '));
-                assert.match(t, /Sprite · 2 LTS[^]*?Coctelería\s*1 pza\s*incl\. 1 pza usado en batches/);
+                assert.match(t, /Sprite · 2 LTS[^]*?Uso en coctelería\s*—\s*Uso en prebatch\s*1 pza/);
             });
             await caso('…y el batch tiene su renglón, con lo producido', async () => {
                 const t = await page.evaluate(() => document.getElementById('step5Keep').textContent.replace(/\s+/g, ' '));
                 assert.match(t, /Batch Paloma[^]*?↳ \+[^]*?producido/);
+            });
+            /* El ⋯ del renglón de la Sprite: bateo, nota e impreso en un menú. */
+            const abrirMenu = () => page.evaluate(() => {
+                const nom = [...document.querySelectorAll('#step5Tablas .s5-nom')].find(n => /Sprite/.test(n.textContent));
+                nom.closest('tr').nextElementSibling.querySelector('.s5-dots').click();
+                const m = document.getElementById('s5Pop'); return m ? m.innerText.replace(/\s+/g, ' ').trim() : '';
+            });
+            const estadoSprite = () => page.evaluate(() => { const e = document.getElementById('s5est-sprite'); return e ? e.textContent.replace(/\s+/g, ' ').trim() : 'SIN ESTADO'; });
+            await caso('el ⋯ abre las tres opciones: bateo, nota e impreso', async () => {
+                assert.equal(await abrirMenu(), '🏏 Marcar de bateo 📝 Agregar nota 🚫 Quitarlo del impreso');
+            });
+            await caso('«Quitarlo del impreso» lo marca a la vista, sin repintar toda la tabla', async () => {
+                await page.evaluate(() => { document.querySelector('#step5Tablas table').__marca = 1; });
+                await page.evaluate(() => [...document.querySelectorAll('#s5Pop button')].find(b => /impreso/.test(b.textContent)).click());
+                assert.equal(await page.evaluate(() => !document.getElementById('s5Pop') && document.querySelector('#step5Tablas table').__marca === 1), true);
+                assert.equal(await estadoSprite(), '🚫 Fuera del impreso');
+            });
+            await caso('la nota se escribe desde el ⋯ y se lee debajo de él', async () => {
+                await abrirMenu();
+                await page.evaluate(() => [...document.querySelectorAll('#s5Pop button')].find(b => /nota/.test(b.textContent)).click());
+                await page.evaluate(() => { document.getElementById('notaInsInput').value = 'Una se rompió al surtir'; _guardarNotaInsumo(); });
+                assert.equal(await estadoSprite(), '🚫 Fuera del impreso📝 Una se rompió al surtir');
+            });
+            await caso('«Marcar de bateo» lo marca, y el menú ya ofrece quitarlo', async () => {
+                await abrirMenu();
+                await page.evaluate(() => [...document.querySelectorAll('#s5Pop button')].find(b => /bateo/.test(b.textContent)).click());
+                await page.waitForTimeout(300);
+                assert.match(await estadoSprite(), /^🏏 De bateo/);
+                assert.match(await abrirMenu(), /Quitar de bateo[^]*Editar la nota[^]*Volver a sacarlo en el impreso/);
             });
             await ctx.close();
         }

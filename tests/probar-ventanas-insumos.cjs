@@ -495,7 +495,7 @@ async function probarStockCosteo(base,dir) {
         await until(p.sid,"document.querySelector('#step5Tablas [data-stock=bajo]')");
         await check(width+' resultado incluye bajo, intermedio, ideal y referencias por insumo',async()=>{
             const text=await evalPage(p.sid,"document.getElementById('step5Tablas').textContent");
-            for(const t of ['Stock bajo','Stock intermedio','Stock ideal','Ideal/máx. 6 bot','Ideal/máx. 4 unid. de compra'])assert.ok(text.includes(t),t);
+            /* Desde el 18-nov el Resultado dice solo cómo está el stock y sus límites (sin repetir la existencia). */for(const t of ['StockBajo','StockMedio','StockIdeal','Máx. 6 bot','Máx. 4 unid. de compra'])assert.ok(text.includes(t),t);assert.ok(!text.includes('Disponible'),'repite la existencia');
             await evalPage(p.sid,"invActual.cerrado=true;_cacheInv=[invActual];abrirReporteFinal()");
             const rows=await evalPage(p.sid,"_datosReporteExistencias('todas').map(r=>({id:r.insumoId,total:r.total,estado:r.stock.estado}))");
             assert.equal(rows.find(r=>r.id==='cerveza').total,0);assert.equal(rows.find(r=>r.id==='cerveza').estado,'bajo');

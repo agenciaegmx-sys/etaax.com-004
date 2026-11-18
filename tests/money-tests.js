@@ -21214,10 +21214,11 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
     });
     /* El compuesto conserva la suya: son dos notas distintas —una del conjunto
        y otra de cada presentación— y ninguna reemplaza a la otra. */
-    /* Desde el 17-nov la nota del compuesto vive en su SEGUNDO renglón, con
-       sus demás acciones (_accComp); sigue siendo la del conjunto. */
+    /* Desde el 18-nov la nota del compuesto se edita desde su ⋯ y se lee
+       debajo de él (_s5Menu → _s5Estado); sigue siendo la del conjunto. */
     test('…y el compuesto conserva la suya', () =>
-        eq(inv.indexOf('_btnNotaInsumo(vf.compId||vf.insumoId)') > -1, true, 'las dos'));
+        eq(inv.indexOf('_s5Menu(vf.compId||vf.insumoId') > -1 &&
+           /function _s5Estado\(id\)[^]*?_notaInsumo\(id\)/.test(inv), true, 'las dos'));
     /* No hacía falta inventar almacenamiento: ya eran por insumoId. */
     test('…sin inventar dónde guardarlas: ya eran por insumo', () =>
         eq(/function _notaInsumo\(id\) \{ return \(invActual && invActual\.notasInsumo/.test(inv),
@@ -22056,7 +22057,8 @@ console.log('\n══ BH38 · Decir en qué unidad, y de dónde sale ══');
         eq(_dentroSrc.indexOf("' bot'") > -1 && _dentroSrc.indexOf("' L'") > -1,
            true, 'las dos'));
     test('…y se pinta junto a la anterior Y junto al físico', () => {
-        return eq((src.match(/\$\{_dentroBat\(adj\.(ea|fis)\)\}/g) || []).length, 2,
+        /* Desde el 18-nov va dentro de la celda con su título: _s5c2(…, x + _dentroBat(adj.ea)). */
+        return eq((src.match(/_dentroBat\(adj\.(ea|fis)\)/g) || []).length, 2,
                   'las dos cifras que no cuadran con el Paso 1');
     });
     /* Sin reparto no se pinta: la inmensa mayoría de los renglones no tiene
@@ -22333,13 +22335,13 @@ console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
        compuesto le pasa las suyas (_accComp, con el suyo). */
     test('el botón está en los renglones de copa, de pieza y de compuesto', () => {
         const cuerpo = (n) => { const i = src.indexOf(n); return i < 0 ? '' : src.slice(i, src.indexOf('\n    function ', i + 10)); };
-        /* Desde el 18-nov el segundo renglón va por columnas y las acciones
-           viven en _s5Acciones (columna «Exist. anterior»). */
-        const det = src.slice(src.indexOf('function _s5Acciones('), src.indexOf('function _eqCopOz('));
-        const ok = /_btnOcultoImpreso\(fila\.insumoId\)/.test(det) &&
-                   /_s5Acciones\(fila\)/.test(cuerpo('function _rowCopa(')) &&
-                   /_s5Acciones\(fila\)/.test(cuerpo('function _rowPza(')) &&
-                   /_btnOcultoImpreso\(vf\.compId\|\|vf\.insumoId\)/.test(cuerpo('function _rowComp('));
+        /* Desde el 18-nov bateo, nota e impreso van en el ⋯ de cada producto
+           (_s5Menu, abajo del nombre), y el ⋯ abre _s5AbrirMenu. */
+        const menu = src.slice(src.indexOf('function _s5AbrirMenu('), src.indexOf('window._s5AbrirMenu'));
+        const ok = /op\('toggleOcultoImpreso'/.test(menu) &&
+                   /_s5Menu\(fila\.insumoId, true\)/.test(cuerpo('function _rowCopa(')) &&
+                   /_s5Menu\(fila\.insumoId, true\)/.test(cuerpo('function _rowPza(')) &&
+                   /_s5Menu\(vf\.compId\|\|vf\.insumoId/.test(cuerpo('function _rowComp('));
         return eq(ok, true, 'los tres tipos');
     });
     test('…y marcarlo no invalida el resumen', () => {
@@ -35036,12 +35038,16 @@ console.log('\n══ BH75 · Qué entra a cada inventario ══');
 
 /* ═══════════ BH76 · EL RESULTADO EN DOS RENGLONES, POR COLUMNAS ═══════════
    Pedido de Edwin (17 y 18-nov): cada producto en dos renglones que respetan
-   las COLUMNAS —«con sus títulos pero definidas por columnas»—, no un texto
-   corrido abajo:
-     Producto → stock · Exist. anterior → acciones · Entradas → en dinero ·
-     Ventas → coctelería (con lo usado en batches) · Mermas → cancelaciones ·
-     Cortesías · Teórico y Exist. actual → copas · onzas · Diferencia → % ·
-     Dif. $ → carta arriba, proveedor abajo.
+   las COLUMNAS, y CADA celda —de los dos renglones— con su título:
+     Producto        nombre e info            │ ⋯ (bateo, nota, impreso) y lo marcado
+     Exist. anterior botellas                 │ stock: ideal/medio/bajo y sus límites
+     Entradas        lo que entró             │ costo
+     Ventas          botella · copa           │ uso en coctelería y uso en prebatch
+     Mermas          merma y su comentario    │ cortesías y su comentario
+     Cancelaciones   informativo              │
+     Teórico / Exist. actual                  │ copas · onzas
+     Diferencia      con su desglose          │ % contra el uso (o el teórico)
+     Dif. $          a precio carta           │ a proveedor
    Se corre el constructor real (_step5TablasHTML) y se lee CELDA por celda. */
 console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══');
 {
@@ -35057,12 +35063,13 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         { id:'squirt', nombre:'Squirt 2 LTS', tipoInsumo:'refresco', activo:'1', presentaciones:[{ contNeto:2, umContenido:'LT', costoPieza:36 }] },
         { id:'sprite', nombre:'Sprite 2 LTS', tipoInsumo:'refresco', activo:'1', presentaciones:[{ contNeto:2, umContenido:'LT', costoPieza:38 }] }]);
     setVar(P, 'invActual', { id:'inv', area:'barra', entradasLog:[], ventasCompuesto:{}, cancelaciones:[],
-        descuentos:[], filas:[], prebatchProducidos:{ prePal: 4 }, cocktailsVendidos:{} });
+        descuentos:[], filas:[], prebatchProducidos:{ prePal: 4 }, cocktailsVendidos:{},
+        notasInsumo:{ sprite:'Una se rompió al surtir' }, ocultosReporte:{ sprite:1 } });
     const pza = (id, nom, x) => Object.assign({ insumoId:id, nombre:nom, tipo:'pza', contNeto:2000, copaML:0, existenciaAnterior:10,
         ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], pesos:[],
         cerradasBodega:8, cerradasBarra:0, precioCarta:60 }, x);
     setVar(P, 'filasCaptura', [
-        pza('squirt', 'Squirt 2 LTS', { costoPieza:36 }),                                  // usó 1 en batches, faltó 1
+        pza('squirt', 'Squirt 2 LTS', { costoPieza:36, stockMin:2, stockMax:10 }),        // usó 1 en batches, faltó 1
         pza('sprite', 'Sprite 2 LTS', { costoPieza:38, entradas:['2'], cerradasBodega:10,  // +2, −1 merma, −1 cortesía
             mermaCopas:1, mermaConcepto:'Botella rota', cortesiaCopas:1, cortesiaConcepto:'Cumpleaños mesa 4' }),
         { insumoId:'prePal', nombre:'Batch Paloma PR', tipo:'copa', contNeto:2000, copaML:250, rendimientoBatch:2000,
@@ -35080,36 +35087,48 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         const fin = h.indexOf('</tr>', r2) + 5;
         /* Columnas que cubre el renglón: una celda con colspan cuenta por las suyas. */
         const ancho = (tr) => (tr.match(/<td[^>]*>/g) || []).reduce((t, td) => t + (parseInt((td.match(/colspan="(\d+)"/) || [])[1] || '1', 10)), 0);
-        return { uno: celdas(h.slice(r1, r2)), dos: celdas(h.slice(r2, fin)), anchoUno: ancho(h.slice(r1, r2)), anchoDos: ancho(h.slice(r2, fin)) };
+        return { uno: celdas(h.slice(r1, r2)), dos: celdas(h.slice(r2, fin)), html2: h.slice(r2, fin),
+                 anchoUno: ancho(h.slice(r1, r2)), anchoDos: ancho(h.slice(r2, fin)) };
     };
     const sq = par('Squirt 2 LTS'), sp = par('Sprite 2 LTS'), pb = par('Batch Paloma PR');
     test('cada producto sale en DOS renglones', () =>
         eq((h.match(/class="s5-r1"/g) || []).length + '·' + (h.match(/class="s5-r2"/g) || []).length, '3·3'));
     test('…con las MISMAS columnas los dos (10 en piezas, 11 en copas)', () =>
         eq([sq.anchoUno, sq.anchoDos, pb.anchoUno, pb.anchoDos].join(','), '10,10,11,11'));
-    test('Producto: el nombre arriba y SOLO su stock abajo', () =>
-        eq(/Squirt 2 LTS/.test(sq.uno[0]) && /^Stock sin parámetros/.test(sq.dos[0]) && !/Marcar bateo/.test(sq.dos[0]), true, sq.dos[0]));
-    test('Exist. anterior: abajo van las acciones (bateo, nota, impreso)', () =>
-        eq(/Marcar bateo/.test(sq.dos[1]) && !/Marcar bateo|Stock/.test(sq.uno.join(' ')), true, sq.dos[1]));
-    test('Entradas: abajo, cuánto representan en dinero (2 × $38)', () =>
-        eq(/\+2 pza/.test(sp.uno[2]) + '·' + /en dinero \$76\.00/.test(sp.dos[2]), 'true·true', sp.uno[2] + ' | ' + sp.dos[2]));
-    test('Ventas: abajo, la coctelería con lo usado en batches', () =>
-        eq(/Coctelería 1 pza incl\. 1 pza usado en batches/.test(sq.dos[3]), true, sq.dos[3]));
-    test('Mermas: la merma con su comentario arriba, las cancelaciones abajo', () =>
-        eq(/1 pza Botella rota/.test(sp.uno[4]) + '·' + /^Cancelac\./.test(sp.dos[4]), 'true·true', sp.uno[4] + ' | ' + sp.dos[4]));
-    test('Cortesías: en SU columna, con su comentario', () =>
-        eq(/1 pza Cumpleaños mesa 4/.test(sp.uno[5]), true, sp.uno[5]));
+    test('cada celda del PRIMER renglón trae su título (pieza)', () =>
+        eq(sq.uno.slice(1).map(t => t.split(' ').slice(0, t.indexOf('Exist.') === 0 || t.indexOf('A carta') === 0 ? 2 : 1).join(' ')).join(' | '),
+           'Exist. anterior | Entradas | Ventas | Mermas | Cancelaciones | Teórico | Exist. actual | Diferencia | A carta'));
+    test('…y en copas, venta en botella y venta en copa por separado', () =>
+        eq(/^Venta botella/.test(pb.uno[3]) + '·' + /^Venta copa/.test(pb.uno[4]) + '·' + /^Teórico .* bot$/.test(pb.uno[7]), 'true·true·true', pb.uno[3] + ' | ' + pb.uno[4] + ' | ' + pb.uno[7]));
+    test('Producto: abajo del nombre, el botón ⋯ (sin los tres botones de antes)', () =>
+        eq(/class="s5-dots"/.test(sq.html2) && !/Marcar bateo|En el impreso|Fuera del impreso<\/button>/.test(h), true, sq.dos[0]));
+    test('…y lo ya marcado se queda a la vista: la nota y «fuera del impreso»', () =>
+        eq(/Fuera del impreso/.test(sp.dos[0]) + '·' + /Una se rompió al surtir/.test(sp.dos[0]), 'true·true', sp.dos[0]));
+    test('Exist. anterior: abajo el stock, SOLO cómo está y sus límites', () =>
+        eq(sq.dos[1], 'Stock Medio Mín. 2 · Máx. 10 pza'));
+    test('…sin repetir la existencia', () => eq(/Disponible/.test(sq.dos[1] + sp.dos[1]), false));
+    test('Entradas: abajo, su COSTO (2 × $38)', () =>
+        eq(sp.uno[2] + ' | ' + sp.dos[2], 'Entradas +2 pza | Costo $76.00'));
+    test('Ventas: abajo el uso en coctelería y, en el mismo lugar, el uso en prebatch', () =>
+        eq(sq.dos[3], 'Uso en coctelería — Uso en prebatch 1 pza'));
+    test('Mermas arriba con su comentario y, al lado, las cancelaciones', () =>
+        eq(sp.uno[4] + ' | ' + /^Cancelaciones/.test(sp.uno[5]), 'Mermas 1 pza Botella rota | true'));
+    test('…y las cortesías abajo de las mermas, con su comentario', () =>
+        eq(sp.dos[4], 'Cortesías 1 pza Cumpleaños mesa 4'));
     test('Teórico, Exist. actual y Diferencia, cada uno en su columna', () =>
-        eq([sq.uno[6], sq.uno[7], sq.uno[8]].join(' | '), '9 pza | 8 pza | -1 pza'));
-    test('…y abajo de la diferencia, su porcentaje', () => eq(/^% /.test(sq.dos[8]), true, sq.dos[8]));
+        eq([sq.uno[6], sq.uno[7], sq.uno[8]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza | Diferencia -1 pza'));
+    test('…y abajo de la diferencia, su % contra el uso (−1 de 1 usada)', () => eq(sq.dos[8], '% del uso -100.0%'));
     test('Dif. $: a precio carta arriba, a proveedor abajo', () =>
-        eq(sq.uno[9] + ' | ' + sq.dos[9], '−$60.00 a carta | a proveedor −$36.00'));
-    test('en destilados y licores hay columna de Teórico, con copas · onzas abajo', () =>
-        eq(/bot$/.test(pb.uno[7]) + '·' + /^copas · onzas \d/.test(pb.dos[7]), 'true·true', pb.uno[7] + ' | ' + pb.dos[7]));
+        eq(sq.uno[9] + ' | ' + sq.dos[9], 'A carta −$60.00 | A proveedor −$36.00'));
+    test('teórico y existencia en copas: abajo copas · onzas', () =>
+        eq(/^Copas · onzas \d/.test(pb.dos[6]) + '·' + /^Copas · onzas \d/.test(pb.dos[7]), 'true·true', pb.dos[6] + ' | ' + pb.dos[7]));
     test('el renglón del batch dice lo producido, en Entradas', () => eq(/producido/.test(pb.uno[2]), true, pb.uno[2]));
-    test('el encabezado dice qué va en el segundo renglón de cada columna', () =>
-        eq(/abajo: coctelería/.test(h) && /carta · proveedor/.test(h) && /abajo: stock/.test(h), true));
-    test('el estilo de los dos renglones va con la tabla', () => eq(h.indexOf('.s5-r1>td') > -1, true));
+    test('una línea gruesa cierra cada producto', () => eq(h.indexOf('.s5-r2>td{border-bottom:3px solid') > -1, true));
+    /* El % es contra el USO; sin uso no hay contra qué dividir y se mide
+       contra el teórico, diciéndolo (antes salía «—»). */
+    test('% con uso: diferencia ÷ uso', () => { const r = P._s5Pct(-2.6, 13, 20); return eq(r.lbl + ' ' + r.html, '% del uso -20.0%'); });
+    test('% sin uso: contra el teórico, y lo dice', () => { const r = P._s5Pct(-2.5, 0, 4.6); return eq(r.lbl + ' ' + texto(r.html), '% del teórico -54.3% sin venta ni uso'); });
+    test('% sin diferencia: 0%, no «—»', () => eq(P._s5Pct(0, 0, 0).html, '0%'));
 }
 
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner

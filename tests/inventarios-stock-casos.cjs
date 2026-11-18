@@ -107,7 +107,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
        RENGLÓN la use: un motor correcto que la pantalla no llama se ve igual de
        verde. Así que se corre `_rowCopa`, el constructor real de la fila de
        barra, y se lee lo que deja en el HTML. */
-    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch','_s5c2','_s5sub','_s5dinero','_s5Acciones','_eqCopOz']);
+    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch','_s5c2','_s5sub','_s5dinero','_s5Pct','_s5Uso','_eqCopOz']);
     /* Lo que la fila pide del resto del módulo y no es asunto de esta prueba.
        Todo en cero para que los números que se afirman abajo sean los del
        fixture y no el resultado de otra cosa. */
@@ -117,7 +117,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         consumoRecetasFila:()=>0, _prodPBVisible:()=>0, _consumoBaseProd:()=>0, _prodPrebatchUnidades:()=>0, costoCopa:()=>0,
         _stockFilaHTML:()=>'', _comentarioVentaHTML:()=>'', _dentroBat:()=>'',
         _tituloCoct:()=>'', _lineaProd:()=>'', _unidadCompra:()=>'bot',
-        esBateo:()=>false, _btnNotaInsumo:()=>'', _btnOcultoImpreso:()=>'',
+        esBateo:()=>false, _btnNotaInsumo:()=>'', _btnOcultoImpreso:()=>'', _s5Menu:()=>'', _s5Stock:()=>'',
         _nb:v=>String(v), toggleBateo:()=>{}, insumoTitulo:x=>x.nombre||'',
     });
     /* Botella de 750 con copa de 60: 25 copas de físico y un faltante de 350 ml
