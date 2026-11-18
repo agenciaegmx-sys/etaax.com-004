@@ -25,7 +25,7 @@
    presentación, el avisito vuelve a ser el de siempre.
    ============================================================ */
 (function () {
-    var FECHA = '2026-11-17';          /* ETAAX_DEPLOY — la estampa el hook */
+    var FECHA = '2026-11-18';          /* ETAAX_DEPLOY — la estampa el hook */
 
     /* DOS marcas, a propósito:
 

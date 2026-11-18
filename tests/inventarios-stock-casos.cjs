@@ -107,14 +107,14 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
        RENGLÓN la use: un motor correcto que la pantalla no llama se ve igual de
        verde. Así que se corre `_rowCopa`, el constructor real de la fila de
        barra, y se lee lo que deja en el HTML. */
-    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch']);
+    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch','_filaDetalleS5']);
     /* Lo que la fila pide del resto del módulo y no es asunto de esta prueba.
        Todo en cero para que los números que se afirman abajo sean los del
        fixture y no el resultado de otra cosa. */
     Object.assign(c, {
         _repartoDe:()=>({ea:0,ent:0,vco:0,cm:0,can:0,teo:0,fis:0}),
         getEntradasBottles:()=>0, getEntradasCopas:()=>0, getCancelacionesCopas:()=>0,
-        consumoRecetasFila:()=>0, _prodPBVisible:()=>0, _consumoBaseProd:()=>0, _prodPrebatchUnidades:()=>0,
+        consumoRecetasFila:()=>0, _prodPBVisible:()=>0, _consumoBaseProd:()=>0, _prodPrebatchUnidades:()=>0, costoCopa:()=>0,
         _stockFilaHTML:()=>'', _comentarioVentaHTML:()=>'', _dentroBat:()=>'',
         _tituloCoct:()=>'', _lineaProd:()=>'', _unidadCompra:()=>'bot',
         esBateo:()=>false, _btnNotaInsumo:()=>'', _btnOcultoImpreso:()=>'',
