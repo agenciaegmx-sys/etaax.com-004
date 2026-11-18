@@ -33,13 +33,22 @@ function _sk(key) {
     var id = getNegocioActivo();
     return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key);
 }
+/* ══ SE LEE DE DONDE SE ESCRIBE ═══════════════════════════════════════════
+   _skPut escribe en el almacén (etaax-store), pero esto leía el localStorage
+   CRUDO, confiando en que el almacén parchaba `localStorage.getItem`. En
+   Chromium ese parche no surte efecto —definir `getItem` sobre localStorage
+   crea un DATO llamado «getItem», no reemplaza el método—, así que aquí se
+   leía una copia vieja que quedaba en localStorage, o nada: el inventario
+   arrancaba con el catálogo de hace días (Edwin: «190 de 230»), o vacío,
+   hasta que llegaba la nube. Ahora se lee por el almacén, igual que se
+   escribe. */
 function _skGet(key) {
-    var k = _sk(key), raw = localStorage.getItem(k);
-    if (raw !== null) return raw;
+    var k = _sk(key), raw = _skRaw(k);
+    if (raw !== null && raw !== undefined) return raw;
     var id = getNegocioActivo();
     if (!id) return null;
-    var legacy = localStorage.getItem('etaax_' + key);
-    if (legacy && legacy !== 'null') { localStorage.setItem(k, legacy); return legacy; }
+    var legacy = _skRaw('etaax_' + key);
+    if (legacy && legacy !== 'null') { _skPut(k, legacy); return legacy; }
     return null;
 }
 
@@ -53,9 +62,23 @@ var _cacheInsumosInv = null; // insumos para uso interno de este módulo
 // era null, cada llamada hacía un JSON.parse nuevo → el índice de _insumoResolver
 // (compara la referencia del array) se reconstruía en CADA resolve → con 179 filas
 // el reporte se CONGELABA. Memoizamos el parse en el propio caché.
+/* ══ UNA LECTURA DE ANTES DE HIDRATAR ES PROVISIONAL ══════════════════════
+   El catálogo local vive en IndexedDB y tarda un momento en cargar. Leído
+   antes, el puente devuelve la copia vieja de localStorage o NADA, y esta
+   función se quedaba con eso para siempre: el inventario arrancaba con el
+   catálogo en cero (o viejo) aunque el dispositivo sí tuviera el bueno. Se
+   memoriza igual —misma referencia, por el índice del resolver— pero en
+   cuanto el almacén termina de hidratar se vuelve a leer una vez. Lo que
+   llega de la nube nunca es provisional. */
+var _catProvisional = false;
+function _almacenHidratado() {
+    return !(window.etaaxStore && typeof etaaxStore.hidratado === 'function') || etaaxStore.hidratado();
+}
 function getInsumos() {
-    if (_cacheInsumosInv) return _cacheInsumosInv;
+    if (_cacheInsumosInv && !(_catProvisional && _almacenHidratado())) return _cacheInsumosInv;
+    var prov = !_almacenHidratado();
     try { _cacheInsumosInv = JSON.parse(_skGet('insumos')) || []; } catch (e) { _cacheInsumosInv = []; }
+    _catProvisional = prov;
     return _cacheInsumosInv;
 }
 // Resolver id→insumo con la fábrica compartida (insumo-label.js): misma lógica que
@@ -218,6 +241,7 @@ async function _sbInitInv() {
     await _pullInvAjustes(negId); // compuestos + bateo desde la nube → localStorage
     if (!r[3].error) {
         _cacheInsumosInv = (r[3].data || []).map(function(x){ return x.datos; }).filter(Boolean);
+        _catProvisional = false;
         // actualizar localStorage para compatibilidad con insumos.js
         try { _skPut(_sk('insumos'), JSON.stringify(_cacheInsumosInv.map(function(ins){ var c=Object.assign({},ins); c.foto=''; c.fotoUrl=''; return c; }))); } catch(e) {}
         /* Entrar al negocio e ir DIRECTO a editar un inventario ganaba la carrera
@@ -250,6 +274,7 @@ async function _sbInitInv() {
        No se repinta a ciegas: si hay un inventario abierto con captura a medias,
        rearmarlo le movería el piso a quien está contando. */
     _INV_CARGADO = true;
+    if (!_refrescandoInv && typeof _quitarAvisoCatalogo === 'function') _quitarAvisoCatalogo();   // ya llegó la nube
     try {
         var _ve = document.getElementById('vistaEntradas');
         if (_ve && _ve.style.display !== 'none') renderVistaEntradas();
@@ -4514,54 +4539,97 @@ window._toggleRdShare = _toggleRdShare;
 window._rdShareClose = _rdShareClose;
 window._compartirPDF = _compartirPDF;
 
+/* ══ CATÁLOGO Y RECETAS FRESCOS ═══════════════════════════════════════════
+   La página cargaba el catálogo y las recetas UNA vez, al abrir. Con la
+   pestaña abierta un rato —lo normal en la tablet de la barra— lo que se
+   agregaba en otra pestaña o en otro equipo no existía aquí:
+     · un inventario nuevo salía con insumos de menos (Edwin: «190 de 230»);
+     · una sub-receta creada después no tenía receta para el inventario: su
+       batch podía tener renglón, pero sus ingredientes NO se descontaban;
+     · Recalcular releía el catálogo de la copia local de ESTA pestaña (que
+       no ve lo de las otras), armaba con eso y luego otra vez con la nube, y
+       las recetas no las volvía a pedir nunca: solo refrescar arreglaba.
+   Ahora, al abrir un inventario y al Recalcular, se piden los dos a la nube.
+   Una sola petición a la vez: si ya va una, se espera esa. */
+var _refrescandoInv = null;
+function _refrescarDatosInv() {
+    if (_refrescandoInv) return _refrescandoInv;
+    if (typeof _supabase === 'undefined') return Promise.resolve(false);
+    var negId = getNegocioActivo(); if (!negId) return Promise.resolve(false);
+    _refrescandoInv = Promise.all([
+        _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('insumo_id', {ascending: true}),
+        _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true})
+    ]).then(function (r) {
+        if (getNegocioActivo() !== negId) return false;           // se cambió de negocio a medio viaje
+        var llego = false;
+        if (r[0] && !r[0].error) {
+            var lista = (r[0].data || []).map(function (x) { return x.datos; }).filter(Boolean);
+            if (lista.length) {
+                _cacheInsumosInv = lista; _catProvisional = false; llego = true;
+                try { _skPut(_sk('insumos'), JSON.stringify(lista.map(function (ins) { var c = Object.assign({}, ins); c.foto = ''; c.fotoUrl = ''; return c; }))); } catch (e) {}
+            }
+        }
+        if (r[1] && !r[1].error) { _cacheRecetasInv = (r[1].data || []).map(function (x) { return x.datos; }).filter(Boolean); llego = true; }
+        if (llego) {
+            if (typeof _consumoIdxCache !== 'undefined') _consumoIdxCache = null;
+            _consumoDirty = true; _repCache = null;
+        }
+        return llego;
+    }, function () { return false; }).then(function (v) { _refrescandoInv = null; return v; },
+                                            function () { _refrescandoInv = null; return false; });
+    return _refrescandoInv;
+}
+/* Rearma el inventario abierto con lo fresco, SIN perder lo tecleado mientras
+   viajaba la petición. El Resultado se marca para recalcular siempre; el paso
+   en pantalla se repinta solo si es el 5 o si cambió la lista (para no mover
+   la captura de quien está contando). */
+function _rearmarConDatosFrescos(inv) {
+    /* Si la carga INICIAL todavía va en camino, ella misma rearma el inventario
+       abierto al llegar (catálogo y recetas incluidos): pedir otra vez sería
+       bajar lo mismo dos veces por la misma red lenta. */
+    if (!_INV_CARGADO) return Promise.resolve(false);
+    return _refrescarDatosInv().then(function (llego) {
+        _quitarAvisoCatalogo();
+        if (!llego || !invActual || invActual !== inv) return llego;
+        var antes = (filasCaptura || []).map(function (f) { return f.insumoId; }).join('|');
+        if (filasCaptura.length) invActual.filas = filasCaptura.map(function (f) { return Object.assign({}, f); });
+        try { cargarProductosCaptura(); } catch (e) { console.warn('[inv] rearmar con datos frescos:', e); return llego; }
+        window._step5Dirty = true;
+        var despues = (filasCaptura || []).map(function (f) { return f.insumoId; }).join('|');
+        if (typeof renderStepContent === 'function' && (pasoActual === 5 || antes !== despues)) renderStepContent();
+        return llego;
+    });
+}
+
 // Fuerza un render nuevo del Paso 5 (estilo "renderizar" de Premiere) — por si
 // el usuario editó pasos anteriores y quiere refrescar el resultado a mano.
 function recalcularResultado() {
-    var inventarioRecalculado = invActual;
-    // Reconciliar desde lo que está en pantalla, incluso antes del debounce
-    // de guardado: una recarga del catálogo no puede restaurar el conteo viejo.
-    if (invActual && filasCaptura.length) invActual.filas = filasCaptura.map(function(f){ return Object.assign({}, f); });
-    /* Antes solo re-pintaba: los parámetros del insumo (tamaño de copa, peso de
-       la botella, contenido, costos) se quedaban como estaban cuando se creó la
-       fila, y solo se refrescaban al CERRAR y volver a abrir el inventario. Por
-       eso cambiar la copa de un vino a 1 L y darle Recalcular no movía nada: el
-       consumo se seguía dividiendo entre la copa vieja. El botón dice "recalcula
-       con los últimos cambios", así que ahora sí relee el catálogo.
-
-       OJO: soltar el catálogo de memoria y releerlo de localStorage NO es seguro.
-       Ese espejo se escribe dentro de un try/catch y la cuota lo tumba en silencio
-       con catálogos grandes; al quedarse sin insumos, cargarProductosCaptura dejaba
-       CERO filas y el reporte entero aparecía en ceros. Si la relectura local no
-       trae nada, se conserva el catálogo que ya estaba, y el fresco se pide a la
-       nube (que es la verdad) para rearmar en cuanto llegue. */
-    var _prevCat = (_cacheInsumosInv && _cacheInsumosInv.length) ? _cacheInsumosInv : null;
-    _cacheInsumosInv = null;                       // relee insumos (los pudo editar otra pantalla)
-    if (!getInsumos().length && _prevCat) _cacheInsumosInv = _prevCat;   // nunca quedarse sin catálogo
-    if (typeof _consumoIdxCache !== 'undefined') { _consumoIdxCache = null; _consumoDirty = true; }
-    try {
-        if (invActual && typeof cargarProductosCaptura === 'function') {
-            var _antes = (filasCaptura || []).length;
-            cargarProductosCaptura();
-            // Si el rearmado se quedó sin filas teniendo catálogo, algo salió mal:
-            // se deja lo que había en vez de enseñar un reporte en ceros.
-            if (_antes && !(filasCaptura || []).length && getInsumos().length) {
-                console.warn('[inv] recalcular dejó 0 filas con catálogo presente; se conserva lo anterior');
-            }
-        }
-    } catch (e) { console.warn('[inv] recalcular: no se pudo re-sincronizar con el catálogo', e); }
-    window._step5Dirty = true;
-    window._step5Force = true; // fuerza el recálculo aunque haya caché (el botón SÍ hace algo)
-    if (typeof _marcarStep5Stale === 'function') _marcarStep5Stale(false);
-    if (typeof renderStepContent === 'function') renderStepContent();
-    // Y traer lo ÚLTIMO de la nube: es lo que promete el botón. Si llegó algo nuevo,
-    // se rearman las filas y se vuelve a pintar.
-    _asegurarCatalogoInv(true).then(function (llego) {
-        if (!llego || !invActual || invActual !== inventarioRecalculado) return;
+    var inv = invActual;
+    if (!inv) return;
+    // Lo tecleado antes del autoguardado no se puede perder en el rearmado.
+    if (filasCaptura.length) invActual.filas = filasCaptura.map(function(f){ return Object.assign({}, f); });
+    var btn = document.getElementById('btnRecalc5'), txt = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Recalculando…'; }
+    var fin = function () {
+        if (btn) { btn.disabled = false; btn.textContent = txt || '🔄 Recalcular'; }
+        if (!invActual || invActual !== inv) return;
+        /* UN rearmado, con lo más fresco que haya: lo de la nube si llegó, y si
+           no (sin red), lo que ya estaba en memoria —nunca la copia local de
+           esta pestaña, que no ve lo que se cambió en otra—. */
         if (filasCaptura.length) invActual.filas = filasCaptura.map(function(f){ return Object.assign({}, f); });
-        try { cargarProductosCaptura(); } catch (e) { return; }
-        window._step5Dirty = true; window._step5Force = true;
+        var _antes = (filasCaptura || []).length;
+        try { cargarProductosCaptura(); }
+        catch (e) { console.warn('[inv] recalcular: no se pudo re-sincronizar con el catálogo', e); }
+        if (_antes && !(filasCaptura || []).length && getInsumos().length)
+            console.warn('[inv] recalcular dejó 0 filas con catálogo presente');
+        if (typeof _consumoIdxCache !== 'undefined') _consumoIdxCache = null;
+        _consumoDirty = true;
+        window._step5Dirty = true;
+        window._step5Force = true;           // fuerza el recálculo aunque haya caché
+        if (typeof _marcarStep5Stale === 'function') _marcarStep5Stale(false);
         if (typeof renderStepContent === 'function') renderStepContent();
-    });
+    };
+    _refrescarDatosInv().then(fin, fin);
 }
 window.recalcularResultado = recalcularResultado;
 // Avisa en el Paso 5 que los datos cambiaron y hay que recalcular (badge + botón resaltado).
@@ -4659,6 +4727,7 @@ function abrirInventario(id) {
     actualizarStepBar();
     actualizarNavBtns();
     renderStepContent();
+    _rearmarConDatosFrescos(invActual);   // catálogo y recetas de la nube: lo de otras pestañas también
 }
 
 function _getNegocioNombre() {
@@ -4895,6 +4964,7 @@ function iniciarInventario() {
     actualizarStepBar();
     actualizarNavBtns();
     renderStepContent();
+    _rearmarConDatosFrescos(invActual);   // catálogo y recetas de la nube: lo de otras pestañas también
 }
 
 // ── Cargar productos ──────────────────────────────────────────
@@ -5118,6 +5188,7 @@ async function _asegurarCatalogoInv(forzar) {
         var lista = (r.data || []).map(function (x) { return x.datos; }).filter(Boolean);
         if (!lista.length) return false;
         _cacheInsumosInv = lista;
+        _catProvisional = false;
         // Espejo en localStorage, igual que _sbInitInv (sin fotos, por la cuota).
         try {
             _skPut(_sk('insumos'), JSON.stringify(lista.map(function (ins) {
@@ -5518,6 +5589,15 @@ function renderStepContent() {
 function _ajustarStickyInv() {
     try {
         var base = document.body.classList.contains('has-ctx') ? 96 : 48;
+        /* Con la interfaz nueva la barra de contexto es más alta que esos 96 px
+           (la tarjeta de la sucursal): el encabezado del inventario se pegaba
+           DEBAJO de ella y quedaba tapado más de la mitad. Se mide la barra de
+           verdad y el encabezado se pega justo donde ella termina. */
+        var _bar = document.getElementById('ctxBar');
+        if (_bar && _bar.getClientRects().length) {
+            var _pos = getComputedStyle(_bar).position;
+            if (_pos === 'fixed' || _pos === 'sticky') base = Math.max(base, Math.round(_bar.getBoundingClientRect().bottom));
+        }
         // Header y pasos de la VISTA visible (captura o entradas).
         var vistas = ['vistaCaptura', 'vistaEntradas'];
         vistas.forEach(function(vid){
@@ -5525,7 +5605,13 @@ function _ajustarStickyInv() {
             if (!v || v.style.display === 'none') return;
             var hdr = v.querySelector('.inv-wizard-header');
             var steps = v.querySelector('.inv-steps');
-            var hH = hdr ? hdr.offsetHeight : 60;
+            /* Con la barra de contexto alta, fijar TAMBIÉN el encabezado (que en el
+               Paso 5 ocupa dos líneas de botones) dejaba 420 px tapados en una
+               tablet de 800: media pantalla. Ahí el encabezado se va con la página
+               y solo se queda fija la barra de pasos. */
+            var _alta = base > 120;
+            if (hdr) { hdr.style.position = _alta ? 'relative' : ''; hdr.style.top = _alta ? '' : base + 'px'; }
+            var hH = (hdr && !_alta) ? hdr.offsetHeight : 0;
             var topSteps = base + hH;
             if (steps) steps.style.top = topSteps + 'px';
             var sH = steps ? steps.offsetHeight : 0;
@@ -5665,6 +5751,20 @@ function setVistaExist(modo) {
 
 // Aviso: cuántos insumos no aparecen por no tener área (o ser de otra área).
 // Guía al usuario a asignarles su área en el catálogo para incluirlos.
+/* Mientras llega el catálogo de la nube, la lista sale de la copia de este
+   dispositivo y puede crecer en unos segundos. Se dice, en vez de que la
+   lista cambie sola sin explicación. El contenedor siempre está, para poder
+   quitar el aviso sin repintar el paso. */
+function _avisoCatalogoHTML() {
+    var cargando = !_INV_CARGADO || !!_refrescandoInv;
+    return '<div id="avisoCatInv">' + (cargando ? _avisoCatalogoTexto() : '') + '</div>';
+}
+function _avisoCatalogoTexto() {
+    return '<div class="wrap" style="padding-top:0"><div style="padding:8px 14px;border:1px solid var(--border);' +
+        'border-left:3px solid #7ab8f5;border-radius:8px;background:var(--surface);font-size:12.5px;color:var(--text-dim)">' +
+        '⏳ Actualizando el catálogo desde la nube: la lista puede crecer en unos segundos.</div></div>';
+}
+function _quitarAvisoCatalogo() { var el = document.getElementById('avisoCatInv'); if (el) el.innerHTML = ''; }
 function _avisoAreaHTML() {
     var invA = ((invActual && invActual.area) || '').toString().trim().toLowerCase();
     var scope = _scopeSucInsumos(getInsumos());
@@ -5688,7 +5788,7 @@ function renderStep1() {
         const nPend = filasCaptura.length - nReg;
         const placeholder = filtroRegistroActivo === 'registrados'
             ? 'Buscar en registrados…' : 'Buscar producto pendiente…';
-        return buildVistaSwitcherExist() + _avisoAreaHTML() + bannerConteosQR() + buildFiltroRegistroBar() + `
+        return buildVistaSwitcherExist() + _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() + buildFiltroRegistroBar() + `
             <div class="ent-rapida-wrap">
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
@@ -5729,7 +5829,7 @@ function renderStep1() {
 
     // La lista va en su propio contenedor → la búsqueda actualiza SOLO esto (no el
     // input del toolbar) para no perder el foco al escribir.
-    return buildVistaSwitcherExist() + _avisoAreaHTML() + bannerConteosQR() + buildFiltroRegistroBar() + buildToolbar(true) +
+    return buildVistaSwitcherExist() + _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() + buildFiltroRegistroBar() + buildToolbar(true) +
         '<div id="step1ListaCont">' + _step1ListaInner() + '</div>';
 }
 
@@ -11921,6 +12021,7 @@ function editarInventario(id) {
         actualizarStepBar();
         actualizarNavBtns();
         renderStepContent();
+    _rearmarConDatosFrescos(invActual);   // catálogo y recetas de la nube: lo de otras pestañas también
     });
 }
 

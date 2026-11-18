@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=1fe532fc"></script>
+<script src="/recetas/inventarios.js?v=9b836043"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -436,6 +436,15 @@ function toggleNav() {
     min-height: 60px;
 }
 body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): solo top-bar */
+/* ══ EL ENCABEZADO NO PUEDE EMPUJAR LA PÁGINA ═════════════════════════════
+   En el Paso 5 el grupo de la derecha suma Recalcular y tres reportes. Sin
+   poder partirse en dos líneas se salía por la derecha (a 1280 px la página
+   medía 1542), y una tablet, para que quepa todo, ALEJA la página entera: el
+   contenido —calculado para 1280— quedaba en el 83 % de la pantalla, con una
+   franja vacía a la derecha. Que se acomode en dos líneas antes que eso. */
+.inv-wizard-header > div { flex-wrap: wrap; min-width: 0; }
+.inv-wizard-header > div:last-child { justify-content: flex-end; }
+#step5HeaderBtns { flex-wrap: wrap; }
 
 /* ── Step bar ────────────────────────────────────────────────── */
 .inv-steps {

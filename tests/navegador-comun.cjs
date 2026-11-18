@@ -71,7 +71,13 @@ function sdkFalso() {
                 data = JSON.parse(JSON.stringify(filas.filter(pasa)));
                 if (single) data = data[0] || null;
             }
-            return Promise.resolve({ data: data, error: error, count: Array.isArray(data) ? data.length : 0 }).then(res, rej);
+            var resp = { data: data, error: error, count: Array.isArray(data) ? data.length : 0 };
+            /* Red lenta a voluntad: `__demora` (ms) en localStorage retrasa las
+               LECTURAS. Una tablet con mala señal es donde se cruzan la copia
+               local del catálogo y la que llega de la nube. */
+            var demora = modo === 'select' ? (Number(localStorage.getItem('__demora')) || 0) : 0;
+            if (!demora) return Promise.resolve(resp).then(res, rej);
+            return new Promise(function (r) { setTimeout(function () { r(resp); }, demora); }).then(res, rej);
         };
         return q;
     }
@@ -101,7 +107,9 @@ const STAFF = [
     { id:'s_beto', nombre:'Beto Prueba', puesto:'Cocinero', sucursalId:'suc_principal', estado:'Activo',
       esquemaSueldo:'diario', sueldoDiario:400, periodicidad:'quincenal', multaRetardo:25, bonos:[] }
 ];
-function semilla(reloj) {
+/* `nube`: tablas EXTRA para la nube de mentira ({ tabla: [{id, negocio_id, datos}] }),
+   para los arneses que no son de nómina (inventarios lleva su catálogo). */
+function semilla(reloj, nube) {
     return `(() => {
       /* Reloj falso: Date sin argumentos devuelve el instante elegido. */
       const T0 = ${JSON.stringify(reloj)};
@@ -139,15 +147,19 @@ function semilla(reloj) {
         localStorage.setItem('etaax_novedades_vista', JSON.stringify({}));
         localStorage.setItem('__nube', JSON.stringify({
           negocios: [{ id:'n1', negocio_id:'n1', datos:{ id:'n1', usuarioId:'u1', nombre:'Café de prueba', tipo:'cafe' } }],
-          staff: ${JSON.stringify(STAFF.map(s => ({ id:s.id, negocio_id:'n1', datos:s })))}
+          staff: ${JSON.stringify(STAFF.map(s => ({ id:s.id, negocio_id:'n1', datos:s })))},
+          ...${JSON.stringify(nube || {})}
         }));
         localStorage.setItem('__sembrado', '1');
       }
     })();`;
 }
 
-async function abrir(browser, reloj) {
-    const ctx = await browser.newContext({ viewport:{ width:1280, height:900 }, deviceScaleFactor:1 });
+/* `opc` (opcional): { ruta, listo, nube, viewport, dpr }. Sin nada, es la
+   nómina de siempre: administrativo/diario.html. */
+async function abrir(browser, reloj, opc) {
+    opc = opc || {};
+    const ctx = await browser.newContext({ viewport: opc.viewport || { width:1280, height:900 }, deviceScaleFactor: opc.dpr || 1 });
     const fuera = [];
     await ctx.route('**/*', async (route) => {
         const url = new URL(route.request().url());
@@ -165,18 +177,20 @@ async function abrir(browser, reloj) {
         fuera.push(url.href);
         return route.abort();
     });
-    await ctx.addInitScript(semilla(reloj));
-    const page = await pestana(ctx);
+    await ctx.addInitScript(semilla(reloj, opc.nube));
+    const page = await pestana(ctx, opc);
     return { ctx, page, fuera };
 }
 /* Otra pestaña del MISMO navegador: misma nube, mismo reloj, su propia
    memoria —lo que cargó al abrir, y nada más—. */
-async function pestana(ctx) {
+async function pestana(ctx, opc) {
+    opc = opc || {};
     const page = await ctx.newPage();
     page.setDefaultTimeout(10000);
     page.on('pageerror', e => console.log('  [pageerror]', e.message));
-    await page.goto(ORIGEN + '/administrativo/diario.html');
-    await page.waitForFunction(() => Array.isArray(window._cacheRecibos) && Array.isArray(window._cacheStaff) && _cacheStaff.length > 0);
+    await page.goto(ORIGEN + (opc.ruta || '/administrativo/diario.html'));
+    if (opc.listo) await page.waitForFunction(opc.listo, null, { polling: 100, timeout: 20000 });
+    else await page.waitForFunction(() => Array.isArray(window._cacheRecibos) && Array.isArray(window._cacheStaff) && _cacheStaff.length > 0);
     return page;
 }
 
