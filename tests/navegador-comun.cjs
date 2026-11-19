@@ -36,7 +36,15 @@ function sdkFalso() {
     var user = { id:'u1', email:'duena@fixture.invalid', user_metadata:{ nombre:'Dueña de prueba' } };
     function query(tabla){
         var f = [], q = {}, modo = 'select', valor = null, opc = {}, single = false;
-        ['select','order','limit','range','gt','gte','lt','lte','neq','or','not','ilike','like','filter','contains'].forEach(function(k){ q[k] = function(){ return q; }; });
+        /* Como Supabase: ordena, avanza por cursor (gt), corta con limit y —lo
+           que importa— NUNCA entrega más de `__maxRows` renglones por consulta
+           (1000 por omisión), sin error ni aviso. Así se cortaba el catálogo. */
+        var orden = null, desc = false, mayorQue = null, limite = null, cuenta = false;
+        ['range','gte','lt','lte','neq','or','not','ilike','like','filter','contains'].forEach(function(k){ q[k] = function(){ return q; }; });
+        q.select = function(cols, o){ cuenta = !!(o && o.count === 'exact'); return q; };
+        q.order = function(c, o){ orden = c; desc = !!(o && o.ascending === false); return q; };
+        q.gt = function(c, v){ mayorQue = [c, v]; return q; };
+        q.limit = function(n){ limite = n; return q; };
         q.eq = function(k, v){ f.push([k, v]); return q; };
         q.in = function(k, v){ f.push([k, v, 'in']); return q; };
         q.maybeSingle = function(){ single = 'maybe'; return q; };
@@ -47,16 +55,19 @@ function sdkFalso() {
         q.delete = function(){ modo = 'delete'; return q; };
         q.then = function(res, rej){
             var db = nube(), filas = db[tabla] || [], data = null, error = null;
+            var col = function(r, k){ return k === 'id' ? r.id : k === 'negocio_id' ? r.negocio_id :
+                k === 'insumo_id' ? (r.insumo_id || r.id) : (r.datos || {})[k]; };
             var pasa = function(r){ return f.every(function(c){
-                var val = c[0] === 'id' ? r.id : c[0] === 'negocio_id' ? r.negocio_id : (r.datos || {})[c[0]];
+                var val = col(r, c[0]);
                 return c[2] === 'in' ? c[1].indexOf(val) > -1 : val === c[1]; }); };
             if (modo !== 'select' && window.__nube.caida) {
                 error = { message: 'Failed to fetch' };
             } else if (modo === 'upsert') {
                 (Array.isArray(valor) ? valor : [valor]).forEach(function(v){
-                    var clave = opc.onConflict === 'negocio_id' ? 'negocio_id' : 'id';
-                    var i = filas.findIndex(function(r){ return r[clave] === v[clave]; });
-                    var fila = { id: v.id || v.negocio_id, negocio_id: v.negocio_id, datos: v.datos };
+                    var clave = opc.onConflict === 'negocio_id' ? 'negocio_id' : (v.insumo_id ? 'insumo_id' : 'id');
+                    var i = filas.findIndex(function(r){ return col(r, clave) === v[clave]; });
+                    var fila = { id: v.id || v.insumo_id || v.negocio_id, negocio_id: v.negocio_id, datos: v.datos };
+                    if (v.insumo_id) fila.insumo_id = v.insumo_id;
                     if (i > -1) filas[i] = fila; else filas.push(fila);
                     window.__nube.escrituras.push({ tabla: tabla, id: fila.id });
                     var l = log(); l.push(tabla + ':' + fila.id); localStorage.setItem('__nube_log', JSON.stringify(l));
@@ -69,9 +80,15 @@ function sdkFalso() {
                 db[tabla] = filas.filter(function(r){ return !pasa(r); }); guarda(db);
             } else {
                 data = JSON.parse(JSON.stringify(filas.filter(pasa)));
+                var total = data.length;
+                if (orden) data.sort(function(a, b){ var x = String(col(a, orden)), y = String(col(b, orden)); return (x < y ? -1 : x > y ? 1 : 0) * (desc ? -1 : 1); });
+                if (mayorQue) data = data.filter(function(r){ return String(col(r, mayorQue[0])) > String(mayorQue[1]); });
+                var tope = Number(localStorage.getItem('__maxRows')) || 1000;
+                data = data.slice(0, Math.min(limite || tope, tope));
+                data.forEach(function(r){ if (tabla === 'negocio_insumos' && !r.insumo_id) r.insumo_id = r.id; });
                 if (single) data = data[0] || null;
             }
-            var resp = { data: data, error: error, count: Array.isArray(data) ? data.length : 0 };
+            var resp = { data: data, error: error, count: (modo === 'select' && cuenta) ? total : (Array.isArray(data) ? data.length : 0) };
             /* Red lenta a voluntad: `__demora` (ms) en localStorage retrasa las
                LECTURAS. Una tablet con mala señal es donde se cruzan la copia
                local del catálogo y la que llega de la nube. */

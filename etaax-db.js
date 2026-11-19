@@ -1325,6 +1325,10 @@
          diga. Lo que NO se hace nunca es devolver una lista corta en silencio.
 
        Devuelve: { filas, completa, total, leidas, motivo }
+
+       `opc.idCol`: la columna única por la que se avanza (por defecto `id`).
+       `negocio_insumos` no tiene `id` —su llave es (negocio_id, insumo_id)—,
+       así que el catálogo se lee con { idCol: 'insumo_id' }.
        ══════════════════════════════════════════════════════════════════════ */
     var _PAGINA = 500;        // filas por viaje
     var _MAX_VIAJES = 200;    // 100 mil filas; más que eso es que algo gira mal
@@ -1332,6 +1336,7 @@
     window.etaaxLeerTodo = async function (tabla, negId, opc) {
         opc = opc || {};
         var limite = opc.pagina || _PAGINA;
+        var col = opc.idCol || 'id';
         var cli = opc.cliente || (typeof _supabase !== 'undefined' ? _supabase : null);
         var res = { filas: [], completa: false, total: null, leidas: 0, motivo: '' };
         if (!cli)   { res.motivo = 'sin cliente de Supabase'; return res; }
@@ -1344,11 +1349,11 @@
                 res.completa = false; res.motivo = 'demasiados viajes'; break;
             }
             var q = cli.from(tabla)
-                .select('id,datos', res.total === null ? { count: 'exact' } : undefined)
+                .select(col + ',datos', res.total === null ? { count: 'exact' } : undefined)
                 .eq('negocio_id', negId)
-                .order('id', { ascending: true })
+                .order(col, { ascending: true })
                 .limit(limite);
-            if (cursor !== null) q = q.gt('id', cursor);
+            if (cursor !== null) q = q.gt(col, cursor);
 
             var r;
             try { r = await q; } catch (e) { r = { error: { message: String((e && e.message) || e) } }; }
@@ -1365,10 +1370,11 @@
             var nuevas = 0, ultimo = null;
             for (var i = 0; i < lote.length; i++) {
                 var f = lote[i];
-                if (!f || f.id === null || f.id === undefined) continue;
-                ultimo = f.id;
-                if (vistos[f.id]) continue;             // repetida: no se cuenta dos veces
-                vistos[f.id] = 1;
+                var fid = f ? f[col] : null;
+                if (fid === null || fid === undefined) continue;
+                ultimo = fid;
+                if (vistos[fid]) continue;              // repetida: no se cuenta dos veces
+                vistos[fid] = 1;
                 nuevas++;
                 if (f.datos) res.filas.push(f.datos);
             }

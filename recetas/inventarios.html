@@ -26,7 +26,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="/etaax-store.js?v=3bbcc75c"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
 <script src="../supabase-config.js"></script>
-<script src="/etaax-db.js?v=39b5f19c"></script>
+<script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="/insumo-label.js?v=789551ec"></script>
 <script src="/staff-area.js?v=f7366b4c"></script><!-- vocabulario de áreas: barra, cocina y sus almacenes -->
 <script>
@@ -273,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function(){
                         <span id="autoGuardarInd" style="font-size:11px;color:var(--green);display:inline-flex;align-items:center;gap:4px;margin-top:4px">✓ Todos los cambios guardados</span>
                     </div>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center">
+                <div id="hdrBtns" style="display:flex;gap:8px;align-items:center">
                     <!-- Los pasos del inventario: un botón que dice en cuál estás y despliega los cinco
                          (antes era una barra entera debajo del encabezado). -->
                     <div class="inv-paso-menu" id="pasoMenuWrap">
@@ -298,6 +298,8 @@ document.addEventListener('DOMContentLoaded', function(){
                     <button class="btn-vista" style="color:var(--green);border-color:var(--green)" id="btnFinalizarInv" onclick="finalizarInventarioActual()">✅ Finalizar inventario</button>
                     <button class="btn-vista" style="color:var(--green);border-color:var(--green);display:none" id="btnFinalizarLev" onclick="finalizarPrimerLev()">✅ Guardar levantamiento</button>
                 </div>
+                <!-- La barra del PASO: buscador y filtros de lo que se está viendo, fija con el encabezado. -->
+                <div id="pasoHerr" class="paso-herr"></div>
             </div>
 
             <!-- Step bar -->
@@ -357,7 +359,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=ec73ee0d"></script>
+<script src="/recetas/inventarios.js?v=dac1e0a8"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -467,7 +469,28 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
    ocupaba su propio renglón y los botones otros dos o tres. */
 #vistaCaptura .inv-wizard-header { justify-content: flex-end; align-items: center; gap: 8px; }
 #vistaCaptura .inv-wizard-header > div:first-child { margin-right: auto; }
-#vistaCaptura .inv-wizard-header > div:last-child { display: contents !important; }
+#hdrBtns { display: contents !important; }
+/* ══ LA BARRA DEL PASO (Edwin, 19-nov) ══════════════════════════════════════
+   Buscador y filtros FIJOS en el encabezado, que se adaptan al paso y a la
+   vista visibles: existencias (rápida/lista, pendientes/registrados), entradas
+   (registrar y lo registrado), ventas (las cuatro vistas y un solo buscador),
+   cancelaciones/descuentos y el Resultado. */
+.paso-herr { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding-top: 8px; margin-top: 2px; border-top: 1px solid var(--border); }
+.paso-herr:empty { display: none; }
+.ph-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; flex-shrink: 0; }
+.ph-seg button { background: transparent; border: 0; border-right: 1px solid var(--border); color: var(--text-muted);
+    padding: 7px 11px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.ph-seg button:last-child { border-right: 0; }
+.ph-seg button.on { background: var(--accent); color: var(--bg); font-weight: 600; }
+.ph-n { display: inline-block; min-width: 16px; padding: 0 5px; margin-left: 3px; border-radius: 8px; font-size: 10.5px;
+    line-height: 16px; text-align: center; background: color-mix(in srgb, currentColor 18%, transparent); }
+.ph-buscar { flex: 1 1 110px; min-width: 110px; max-width: 360px; box-sizing: border-box; background: var(--surface2);
+    border: 1px solid var(--border); color: var(--text); border-radius: 9px; padding: 8px 12px; font: inherit; font-size: 13px; outline: none; }
+.ph-buscar:focus { border-color: var(--accent); }
+.paso-herr .filtro-select { font-size: 11.5px; padding: 7px 4px; max-width: 132px; }
+.paso-herr .vista-toggle { margin-left: auto; }
+.ph-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .inv-wizard-header .btn-vista { padding: 8px 13px; font-size: 13px; white-space: nowrap; }
 .inv-paso-menu { position: relative; display: inline-flex; }
 #btnPasoMenu { display: inline-flex; align-items: center; gap: 7px; border-color: var(--accent); color: var(--text); font-weight: 600; }
@@ -1187,7 +1210,7 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
 <script src="/nav-pref.js?v=b697c829"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
-<script src="/novedades.js?v=10636112"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=55c3471c"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>

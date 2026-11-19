@@ -17413,8 +17413,10 @@ console.log('\n══ BH16 · Buscar en el historial de entradas ══');
         eq(dI('_filtroTipoHTML').indexOf("value=\"' + etx(_entBusca) + '\"") > -1, true, 'con valor'));
     /* El historial de afuera y el Paso 2 del inventario enseñan la misma lista:
        si cada uno armara su propio buscador, un día filtrarían distinto. */
+    /* Desde el 19-nov el del Paso 2 vive en la barra fija del encabezado,
+       pero sale del MISMO bloque (versión compacta). */
     test('las dos pantallas usan el MISMO bloque de filtro', () =>
-        eq((inv.match(/_filtroTipoHTML\(\)/g) || []).length >= 3, true, 'uno solo'));
+        eq(inv.indexOf('const filtroTipo = _filtroTipoHTML();') > -1 && dI('_herrPasoHTML').indexOf('_filtroTipoHTML(true)') > -1, true, 'uno solo'));
 
     /* ── EL PASO 2, con todo lo del periodo ── */
     /* Las mermas y cortesías del QR vivían SOLO en el panel rojo de arriba:
@@ -35321,10 +35323,11 @@ console.log('\n══ BH78 · Paso 3 en cuatro vistas, pasos en un botón y el p
     });
 
     /* ── el Paso 3 ── */
-    test('el Paso 3 abre en Insumos y ofrece las cuatro vistas', () => {
-        const h = B.renderStep3();
+    /* Desde el 19-nov las vistas van en la barra fija del encabezado. */
+    test('el Paso 3 abre en Insumos y ofrece las cuatro vistas (en la barra del encabezado)', () => {
+        const h = B._herrPasoHTML();
         const vistas = (h.match(/setVistaVentas\('(\w+)'\)/g) || []).map(x => x.match(/'(\w+)'/)[1]).join(',');
-        return eq(vistas + ' · ' + /class="exist-vista-btn active" onclick="setVistaVentas\('lista'\)"/.test(h), 'lista,menu,prebatch,busqueda · true');
+        return eq(vistas + ' · ' + /class="on" onclick="setVistaVentas\('lista'\)"/.test(h) + ' · ' + /setVistaVentas/.test(B.renderStep3()), 'lista,menu,prebatch,busqueda · true · false');
     });
     test('Prebatch: en LISTA, solo los que se pueden anotar', () => {
         vm.runInContext('vistaVentas = "prebatch";', B);
@@ -35378,6 +35381,111 @@ console.log('\n══ BH78 · Paso 3 en cuatro vistas, pasos en un botón y el p
     });
 }
 
+/* ═══════════ BH79 · EL CATÁLOGO COMPLETO Y LA BARRA DEL PASO ═══════════
+   «Aún no aparecen los prebatch en el Paso 3» (19-nov), con Recetas diciendo
+   «✓ Agregado a insumos». El inventario leía el catálogo de UN jalón y
+   Supabase entrega como mucho 1000 renglones: con más insumos se quedaba con
+   los primeros mil por orden de id, y los `prod_…` (producción propia) caen
+   al final. Ahora se lee por cursor (etaaxLeerTodo con idCol 'insumo_id').
+   Y el buscador y los filtros de cada paso pasan a una barra fija del
+   encabezado que se adapta al paso y a la vista. */
+async function suiteCatalogoYBarra() {
+console.log('\n══ BH79 · El catálogo completo y la barra del paso ══');
+    /* Un servidor que se porta como Supabase con negocio_insumos: llave
+       insumo_id (no hay `id`), techo de 1000 por consulta, sin aviso. */
+    function servidorInsumos(filas) {
+        const viajes = [];
+        return { viajes, from() {
+            const q = { _gt: null, _limit: null, _orden: null, _count: false, _col: null };
+            q.select = (cols, o) => { q._count = !!(o && o.count === 'exact'); q._cols = cols; return q; };
+            q.eq = () => q;
+            q.order = (c) => { q._orden = c; return q; };
+            q.limit = (n) => { q._limit = n; return q; };
+            q.gt = (c, v) => { q._col = c; q._gt = v; return q; };
+            q.then = (res) => {
+                viajes.push({ orden: q._orden, cols: q._cols, gtCol: q._col });
+                let c = filas.slice().sort((a, b) => a.insumo_id < b.insumo_id ? -1 : 1);
+                if (q._gt !== null) c = c.filter(f => f.insumo_id > q._gt);
+                const r = { data: c.slice(0, Math.min(q._limit || 1e9, 1000)).map(f => ({ insumo_id: f.insumo_id, datos: f.datos })), error: null };
+                if (q._count) r.count = filas.length;
+                return Promise.resolve(r).then(res);
+            };
+            return q;
+        } };
+    }
+    const filas = Array.from({ length: 1150 }, (_, i) => ({ insumo_id: 'ins_' + String(i).padStart(4, '0'), datos: { id: 'ins_' + String(i).padStart(4, '0'), nombre: 'Insumo ' + i } }))
+        .concat([{ insumo_id: 'prod_mix', datos: { id: 'prod_mix', nombre: 'Mix Negroni PR', esSubReceta: true, recetaId: 'srMix' } }]);
+    const D = crearContexto();
+    cargarJS(D, 'etaax-db.js');
+    const sv = servidorInsumos(filas);
+    const r = await D.window.etaaxLeerTodo('negocio_insumos', 'n1', { cliente: sv, idCol: 'insumo_id' });
+    test('etaaxLeerTodo lee una tabla SIN `id` avanzando por la columna que se le diga', () =>
+        eq(r.filas.length + ' · ' + r.completa + ' · ' + sv.viajes[0].orden + ' · ' + sv.viajes[0].cols + ' · ' + sv.viajes[1].gtCol,
+           '1151 · true · insumo_id · insumo_id,datos · insumo_id'));
+    test('…y trae el `prod_…` que una sola consulta dejaba fuera (el renglón 1151)', () =>
+        eq(r.filas.some(x => x.id === 'prod_mix'), true));
+
+    /* El inventario lee con ese lector, y un catálogo cortado no pisa a uno completo. */
+    const B = crearContexto();
+    cargarJS(B, 'etaax-core.js'); cargarJS(B, 'insumo-label.js'); cargarJS(B, 'etaax-db.js'); cargarJS(B, 'recetas/inventarios.js');
+    B._storage['etaax_negocio_activo'] = 'n1';
+    B._supabase = servidorInsumos(filas);
+    const rc = await B._leerCatalogoInv('n1');
+    test('el inventario lee el catálogo COMPLETO (1151, no 1000)', () => eq(rc.data.length + ' · ' + !!rc.error, '1151 · false'));
+    test('…y nada del inventario vuelve a leer insumos, recetas o entradas de un solo jalón', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const fuera = src.slice(0, src.indexOf('window._invDiag')) + src.slice(src.indexOf('function _sbUpInv('));
+        return eq((fuera.match(/from\('(negocio_insumos|recetas|entradas_log|inventarios)'\)\.select/g) || []).length, 0);
+    });
+    setVar(B, '_cacheInsumosInv', filas.map(f => f.datos));
+    test('un catálogo cortado a medio camino NO reemplaza a uno más completo', () =>
+        eq(B._catalogoSirve({ data: new Array(900).fill({ datos: {} }), error: null, parcial: true }) + ' · ' +
+           B._catalogoSirve({ data: new Array(1151).fill({ datos: {} }), error: null, parcial: false }), 'false · true'));
+
+    /* ── la barra del paso ── */
+    setVar(B, '_cacheInsumosInv', [{ id:'gin', nombre:'Gin', familia:'Bebidas', categoria:'Destilados', area:'barra', activo:'1' }]);
+    setVar(B, 'invActual', { id:'inv', area:'barra', filas:[], entradasLog:[], cancelaciones:[{ id:1 }, { id:2 }], descuentos:[{ monto:150 }],
+        prebatchProducidos:{}, cocktailsVendidos:{} });
+    setVar(B, 'filasCaptura', [{ insumoId:'gin', nombre:'Gin', familia:'Bebidas', categoria:'Destilados', tipo:'copa', registrado:true },
+                               { insumoId:'ron', nombre:'Ron', familia:'Bebidas', categoria:'Destilados', tipo:'copa' }]);
+    const barra = (paso, extra) => { vm.runInContext('pasoActual = ' + paso + ';' + (extra || ''), B); return B._herrPasoHTML(); };
+    const txt = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    test('Paso 1: rápida/lista, pendientes/registrados (con cuántos) y el buscador', () => {
+        const h = barra(1, 'vistaCapturaExist = "busqueda"; filtroRegistroActivo = "pendientes";');
+        return eq(txt(h) + ' · ' + /id="existBuscador"/.test(h), '🔍 Rápida ≡ Lista Pendientes 1 ✅ Registrados 1 · true');
+    });
+    test('…y en Lista completa, también familia, categoría y Lista/Galería', () => {
+        const h = barra(1, 'vistaCapturaExist = "lista";');
+        return eq(/id="phBuscar"/.test(h) && /id="filtroFamStep"/.test(h) && /id="filtroCatStep"/.test(h) && /setModoCaptura\('galeria'\)/.test(h), true);
+    });
+    test('Paso 2: el buscador para registrar y el de lo registrado con sus pestañas', () => {
+        const h = barra(2, 'vistaEntradas2 = "busqueda";');
+        return eq(/id="entBuscador"/.test(h) && /id="entBuscar"/.test(h) && /id="entTipoChips"/.test(h), true);
+    });
+    test('Paso 3: el buscador se adapta a la vista visible', () => {
+        const de = (v) => (barra(3, 'vistaVentas = "' + v + '";').match(/oninput="(\w+)\(/) || [])[1];
+        return eq(['lista', 'menu', 'prebatch', 'busqueda'].map(de).join(','), 'onBusqueda,_filtrarMenuVentas,_filtrarMenuVentas,buscarInsumoVentas');
+    });
+    test('Paso 4: las pestañas de cancelaciones y descuentos, con cuántos', () =>
+        eq(txt(barra(4, '_paso4Tab = "cancelaciones";')), '🚫 Cancelaciones 2 💸 Descuentos $150'));
+    test('Paso 5: buscador, categoría, faltantes/sobrantes, imprimir y Lista/Galería', () => {
+        const h = barra(5);
+        return eq(/onBusqStep5/.test(h) && /setSubcatStep5/.test(h) && /setDifStep5/.test(h) && /abrirImprimirS5/.test(h) && /setStep5Modo/.test(h), true);
+    });
+    test('…y los pasos ya no pintan su propia barra dentro del contenido', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const cuerpo = (n) => { const i = src.indexOf('function ' + n + '('); return src.slice(i, src.indexOf('\nfunction ', i + 10)); };
+        return eq(/buildToolbar\(|buildFiltroRegistroBar\(\)|buildVistaSwitcherExist\(\)/.test(cuerpo('renderStep1')) +
+                  '·' + /buildToolbar\(|buildVistaSwitcherEnt\(\)|id="entBuscador"/.test(cuerpo('renderStep2')) +
+                  '·' + /return tabBar \+/.test(cuerpo('renderStep4')) + '·' + /searchBar5 \+/.test(cuerpo('renderStep5')), 'false·false·false·false');
+    });
+    test('lo tecleado no repinta la barra (no se pierde el foco)', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const i = src.indexOf('function _pintarHerrPaso(');
+        return eq(src.slice(i, i + 900).indexOf("html.replace(/ value=\"[^\"]*\"/g, '')") > -1, true);
+    });
+}
+
 /* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
    que espera de verdad. */
 async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
@@ -35385,6 +35493,6 @@ suiteResumenFinanciero20261013();
 suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
-    .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteLigarSinRastrear).then(suitePaso3Prebatch).then(suiteSinRenglon)
+    .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteLigarSinRastrear).then(suitePaso3Prebatch).then(suiteCatalogoYBarra).then(suiteSinRenglon)
     .then(suiteCartaGuardado).then(suiteBajaColaborador)
     .then(suiteFrenoNip).then(suiteLeerTodo).then(suiteConciliar).then(suiteIconos).then(suiteOrgYGiro).then(suiteHeader).then(suiteNovedades).then(suiteCacheUnaVersion).then(suiteCambiarModulo).then(suiteVentasFiabilidad).then(suiteInsumosSucursales).then(suiteCorregirQR).then(suiteCfgEnLaNube).then(resumen);

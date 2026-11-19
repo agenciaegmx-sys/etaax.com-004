@@ -107,8 +107,10 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                     assert.ok(Math.abs(abajo.hdr.top - abajo.ctx.bottom) < 2, 'no quedó pegado bajo la barra de contexto: ' + JSON.stringify(abajo));
                 });
             }
-            await caso('…y no se come la pantalla: dos renglones como mucho (≤ 125 px)', async () => {
-                const r = await pos(); assert.ok(r.hdr.bottom - r.hdr.top <= 125, JSON.stringify(r));
+            /* Título y botones en dos renglones como mucho, más la barra del paso
+               (buscador y filtros fijos, 19-nov): tres renglones. */
+            await caso('…y no se come la pantalla: tres renglones como mucho (≤ 180 px) con la barra del paso', async () => {
+                const r = await pos(); assert.ok(r.hdr.bottom - r.hdr.top <= 180, JSON.stringify(r));
             });
             await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(250);
             await caso('el botón despliega los cinco pasos y marca dónde estás', async () => {
@@ -394,9 +396,10 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await page.waitForFunction(() => filasCaptura.some(f => f.insumoId === 'prMix'), null, { polling: 100, timeout: 8000 });
             await page.evaluate(() => irAPaso(3)); await page.waitForTimeout(400);
             const contenido = () => page.evaluate(() => document.getElementById('stepContent').innerText.replace(/\s+/g, ' '));
-            await caso('el Paso 3 abre en Insumos, con las cuatro vistas', async () => {
+            await caso('el Paso 3 abre en Insumos, con las cuatro vistas en la barra fija del encabezado', async () => {
                 assert.equal(await page.evaluate(() => vistaVentas), 'lista');
-                assert.match(await contenido(), /^🧴 Insumos 🍹 Cocteles 🏭 Prebatch 1 🔍 Búsqueda rápida/);
+                assert.match(await page.evaluate(() => document.getElementById('pasoHerr').innerText.replace(/\s+/g, ' ').trim()),
+                    /^🧴 Insumos 🍹 Cocteles 🏭 Prebatch 1 🔍 Búsqueda rápida/);
             });
             await page.evaluate(() => setVistaVentas('prebatch')); await page.waitForTimeout(300);
             await caso('Prebatch: el Mix Negroni en LISTA, y dice qué lleva', async () => {
@@ -446,6 +449,105 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                     const m = tr.nextElementSibling.textContent.replace(/\s+/g, ' ').match(/Uso en prebatch\s*([\d.]+ cop)\s*900 ml/);
                     return tr.querySelector('.s5-nom').textContent + (m ? ': ' + m[1] : ''); }).filter(x => /:/.test(x)).sort());
                 assert.equal(r.length, 3, JSON.stringify(r));
+            });
+            await ctx.close();
+        }
+
+        /* ── I · más de mil insumos: el catálogo llega COMPLETO ──────────────
+           Supabase entrega como mucho 1000 renglones por consulta, sin aviso.
+           El inventario leía el catálogo de un jalón y se quedaba con los
+           primeros mil por orden de id: los `prod_…` (producción propia) caen
+           al final, y por eso los prebatch no salían aunque Recetas dijera
+           «✓ Agregado a insumos». La nube falsa corta igual que la real. */
+        console.log('\n══ I · Más de 1000 insumos: el catálogo llega completo ══');
+        {
+            const muchos = Array.from({ length: 1150 }, (_, i) => base('ins_' + String(i).padStart(4, '0'), {
+                nombre: 'Insumo ' + i, tipoInsumo: 'destilado', categoria: 'Destilados',
+                presentaciones: [{ contNeto: 750, umContenido: 'ML', costoUnitario: 300 }] }));
+            const MIXP = base('prod_mix', { nombre: 'Mix Negroni PR', categoria: 'Producción propia', esSubReceta: true, recetaId: 'srMixI',
+                ocultoInventario: false, presentaciones: [{ contNeto: 1000, umContenido: 'ML', rendimiento: 900 }] });
+            const SUBI = { id: 'srMixI', nombre: 'Mix Negroni', tipo: 'sub-bebidas', status: 'activa', sucursalId: 'suc_principal',
+                camposExtra: { rendimientoFinal: '900', unidadRendimientoFinal: 'ML' }, ingredientes: [{ insumoId: 'ins_0001', cantidad: 300, unidad: 'ML' }] };
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: {
+                negocio_insumos: muchos.concat([MIXP]).map(x => ({ id: x.id, insumo_id: x.id, negocio_id: 'n1', datos: x })),
+                recetas: [{ id: SUBI.id, negocio_id: 'n1', datos: SUBI }] } }));
+            await nuevoInv(page);
+            await page.waitForFunction(() => getInsumos().length > 1000, null, { polling: 100, timeout: 15000 }).catch(() => {});
+            await caso('el catálogo del inventario trae los 1151, no los primeros 1000', async () =>
+                assert.equal(await page.evaluate(() => getInsumos().length), 1151));
+            await caso('…y el prebatch (prod_…, después del corte) sale para anotarle batches', async () => {
+                await page.evaluate(() => { irAPaso(3); setVistaVentas('prebatch'); }); await page.waitForTimeout(400);
+                assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#stepContent .step3-lista .s3-nom')].map(e => e.textContent)), ['Mix Negroni PR']);
+            });
+            await caso('…y la copia local del catálogo no queda pisada con una lista cortada', async () =>
+                assert.equal(await page.evaluate(() => JSON.parse(_skGet('insumos') || '[]').length), 1151));
+            await ctx.close();
+        }
+
+        /* ── J · la barra del paso: buscador y filtros fijos en el encabezado ──
+           Edwin (19-nov): un buscador fijo en el encabezado que se adapte a la
+           página visible, con los filtros de cada paso. Se escribe con el
+           teclado de verdad: el foco no se puede perder a media palabra. */
+        console.log('\n══ J · Buscador y filtros del paso, fijos en el encabezado ══');
+        {
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV,
+                { nube: { negocio_insumos: filasNube(destilados(30).concat([SPRITE, SQUIRT])) }, viewport: { width: 1280, height: 800 } }));
+            await nuevoInv(page);
+            await page.waitForTimeout(600);
+            const barra = () => page.evaluate(() => document.getElementById('pasoHerr').innerText.replace(/\s+/g, ' ').trim());
+            const escribir = async (sel, txt) => { await page.click(sel); await page.keyboard.type(txt, { delay: 15 }); await page.waitForTimeout(350); };
+            const foco = () => page.evaluate(() => (document.activeElement || {}).id || '');
+            await page.evaluate(() => { irAPaso(1); setVistaExist('busqueda'); }); await page.waitForTimeout(300);
+            await caso('Paso 1: rápida/lista, pendientes/registrados y el buscador, en la barra', async () =>
+                assert.match(await barra(), /Rápida ≡ Lista Pendientes \d+ ✅ Registrados \d+/));
+            await escribir('#existBuscador', 'Destilado 1');
+            await caso('…escribir busca en el contenido y el foco se queda en el buscador', async () => {
+                assert.equal(await foco(), 'existBuscador');
+                assert.ok(await page.evaluate(() => document.querySelectorAll('#existChips .ent-chip').length) > 0, 'sin resultados');
+            });
+            await page.evaluate(() => setVistaExist('lista')); await page.waitForTimeout(300);
+            const nAntes = await page.evaluate(() => document.querySelectorAll('#step1ListaCont tr.inv-row, #step1ListaCont .inv-row').length);
+            await escribir('#phBuscar', 'Sprite');
+            await caso('…en Lista completa el buscador filtra la lista y no pierde el foco', async () => {
+                assert.equal(await foco(), 'phBuscar');
+                const n = await page.evaluate(() => document.querySelectorAll('#step1ListaCont tr.inv-row, #step1ListaCont .inv-row').length);
+                assert.ok(n < nAntes, 'no filtró: ' + n + ' de ' + nAntes);
+            });
+            await page.evaluate(() => { irAPaso(2); }); await page.waitForTimeout(400);
+            await caso('Paso 2: buscar para registrar, y el buscador y las pestañas de lo registrado', async () => {
+                assert.ok(await page.evaluate(() => !!document.querySelector('#pasoHerr #entBuscador') && !!document.querySelector('#pasoHerr #entBuscar') &&
+                    document.querySelector('#pasoHerr #entTipoChips').children.length > 0), 'faltan piezas');
+            });
+            await escribir('#entBuscador', 'Squ');
+            await caso('…y buscar para registrar encuentra sin perder el foco', async () => {
+                assert.equal(await foco(), 'entBuscador');
+                assert.match(await page.evaluate(() => document.getElementById('entChips').innerText), /Squirt/);
+            });
+            await page.evaluate(() => { irAPaso(4); }); await page.waitForTimeout(300);
+            await caso('Paso 4: Cancelaciones y Descuentos fijos en la barra', async () => {
+                assert.match(await barra(), /🚫 Cancelaciones 0 💸 Descuentos/);
+                await page.evaluate(() => [...document.querySelectorAll('#pasoHerr button')].find(b => /Descuentos/.test(b.textContent)).click());
+                await page.waitForTimeout(250);
+                assert.equal(await page.evaluate(() => _paso4Tab), 'descuentos');
+            });
+            await page.evaluate(() => { irAPaso(5); }); await page.waitForTimeout(1300);
+            await escribir('#phBuscar', 'Sprite');
+            await caso('Paso 5: el buscador del Resultado vive en la barra y filtra las tablas', async () => {
+                assert.equal(await foco(), 'phBuscar');
+                await page.waitForTimeout(300);
+                const nombres = await page.evaluate(() => [...document.querySelectorAll('#step5Tablas .s5-nom')].map(e => e.textContent));
+                assert.ok(nombres.length > 0 && nombres.every(n => /Sprite/.test(n)), JSON.stringify(nombres));
+                assert.equal(await page.evaluate(() => document.querySelectorAll('[placeholder="Buscar producto en el resultado…"]').length), 1);
+            });
+            await page.evaluate(() => window.scrollTo(0, 3000)); await page.waitForTimeout(300);
+            await caso('…y al bajar la barra sigue a la vista, pegada al encabezado', async () => {
+                const r = await page.evaluate(() => { const b = document.getElementById('pasoHerr').getBoundingClientRect(); const x = document.elementFromPoint(b.left + 60, b.top + b.height / 2); return { top: b.top, visible: !!(x && document.getElementById('pasoHerr').contains(x)) }; });
+                assert.ok(r.visible && r.top > 0 && r.top < 450, JSON.stringify(r));
+            });
+            await caso('ningún id de buscador está repetido en la página', async () => {
+                const rep = await page.evaluate(() => ['existBuscador', 'entBuscador', 'entBuscar', 'entTipoChips', 'ventasBuscador', 'phBuscar', 'filtroFamStep']
+                    .filter(id => document.querySelectorAll('#' + id).length > 1));
+                assert.deepEqual(rep, []);
             });
             await ctx.close();
         }

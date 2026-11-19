@@ -191,6 +191,40 @@ window._invDiag = async function () {
     return out;
 };
 
+/* ══ LEER LAS TABLAS ENTERAS (19-nov-2026) ═══════════════════════════════
+   Todo esto se leía con UNA consulta —select('datos').eq('negocio_id', …)—,
+   y Supabase entrega como mucho 1000 renglones por consulta, sin error y sin
+   aviso. Con más de mil insumos (las copias por sucursal suman rápido), el
+   catálogo del inventario se CORTABA por orden de id: los `prod_…` —los
+   insumos de producción propia— caen al final y eran justo los que faltaban.
+   Por eso «no aparecen los prebatch en el Paso 3» aunque Recetas dijera
+   «✓ Agregado a insumos», y por eso renglones de batches que parecían
+   borrados. Peor: la lista cortada se guardaba ENCIMA de la copia local
+   completa que dejaba el módulo de Insumos.
+   Ahora se lee por cursor con etaaxLeerTodo (etaax-db.js), que sigue hasta el
+   final y dice si quedó incompleto. Devuelve la forma de supabase-js
+   ({ data:[{datos}], error }) para que los que lo usan no cambien, más
+   `parcial` cuando un fallo cortó la lectura a medio camino. */
+function _leerTablaInv(tabla, negId, opc) {
+    opc = opc || {};
+    if (typeof window.etaaxLeerTodo !== 'function') {          // respaldo: como antes
+        return Promise.resolve(_supabase.from(tabla).select('datos').eq('negocio_id', negId))
+            .then(function (r) { return { data: (r && r.data) || [], error: (r && r.error) || null, parcial: false }; });
+    }
+    return window.etaaxLeerTodo(tabla, negId, { idCol: opc.idCol, pagina: opc.pagina }).then(function (res) {
+        var data = (res.filas || []).map(function (d) { return { datos: d }; });
+        if (!res.completa) console.warn('[inv] ' + tabla + ' quedó incompleta (' + data.length + '): ' + res.motivo);
+        return { data: data, error: (!res.completa && !data.length) ? { message: res.motivo || 'sin respuesta' } : null,
+                 parcial: !res.completa, motivo: res.motivo };
+    }, function (e) { return { data: [], error: { message: String((e && e.message) || e) }, parcial: true }; });
+}
+function _leerCatalogoInv(negId) { return _leerTablaInv('negocio_insumos', negId, { idCol: 'insumo_id' }); }
+/* Un catálogo cortado por un fallo NO reemplaza a uno más completo. */
+function _catalogoSirve(r) {
+    return !!r && !r.error && (r.data || []).length > 0 &&
+        !(r.parcial && (_cacheInsumosInv || []).length > r.data.length);
+}
+
 function _sbUpInv(inv) {
     var negId = getNegocioActivo(); if (!negId || typeof _supabase === 'undefined') return;
     sbUpsert('inventarios', inv, negId);
@@ -215,16 +249,16 @@ async function _sbInitInv() {
     var negId = getNegocioActivo();
     if (!negId || typeof _supabase === 'undefined') return;
     var r = await Promise.all([
-        _supabase.from('inventarios').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
-        _supabase.from('entradas_log').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
-        _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
+        _leerTablaInv('inventarios', negId, { pagina: 50 }),     // cada inventario trae todos sus renglones: páginas chicas
+        _leerTablaInv('entradas_log', negId),
+        _leerTablaInv('recetas', negId),
         /* Ordenado por insumo_id, NO por created_at: `negocio_insumos` no tiene esa
            columna y PostgREST devolvía 400. La carga del catálogo del inventario
            llevaba fallando en silencio (el error solo se veía en Network) y solo
            funcionaba de rebote, por la copia que dejaba en localStorage la página
            de Insumos — de ahí el "inventario sin insumos si no pasas antes por el
            catálogo". app.js ya ordenaba bien por insumo_id. */
-        _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('insumo_id', {ascending: true}),
+        _leerCatalogoInv(negId),
     ]);
     // .filter(Boolean): si una fila viene con datos:null NO debe entrar al cache —
     // un null en _cacheEL reventaba el render del historial de entradas (TypeError).
@@ -239,7 +273,7 @@ async function _sbInitInv() {
     _mergeELLocal(true); // ya se sabe qué hay en la nube: aquí SÍ se re-sube lo que falte
     if (!r[2].error) _cacheRecetasInv = (r[2].data || []).map(function(x){ return x.datos; }).filter(Boolean);
     await _pullInvAjustes(negId); // compuestos + bateo desde la nube → localStorage
-    if (!r[3].error) {
+    if (_catalogoSirve(r[3])) {
         _cacheInsumosInv = (r[3].data || []).map(function(x){ return x.datos; }).filter(Boolean);
         _catProvisional = false;
         // actualizar localStorage para compatibilidad con insumos.js
@@ -324,7 +358,7 @@ function _miCambioGana(tabla, remotos, locales) {
 async function _reloadEntradasRT() {
     var negId = getNegocioActivo();
     if (!negId || _elRtNeg !== negId || typeof _supabase === 'undefined') return;
-    var r = await _supabase.from('entradas_log').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true});
+    var r = await _leerTablaInv('entradas_log', negId);
     if (r.error) return;
     var frescas = (r.data || []).map(function(x){ return x.datos; }).filter(Boolean);
     frescas = _miCambioGana('entradas_log', frescas, _cacheEL);
@@ -380,7 +414,7 @@ var _invRtCh = null, _invRtNeg = null;
 async function _reloadInvRT() {
     var negId = getNegocioActivo();
     if (!negId || typeof _supabase === 'undefined') return;
-    var r = await _supabase.from('inventarios').select('datos').eq('negocio_id', negId).order('created_at', { ascending: true });
+    var r = await _leerTablaInv('inventarios', negId, { pagina: 50 });
     if (r.error) return;
     var remote = (r.data || []).map(function(x){ return x.datos; }).filter(Boolean);
     remote = _miCambioGana('inventarios', remote, _cacheInv);
@@ -3035,6 +3069,7 @@ function mostrarVista(id) {
         const el = document.getElementById(v);
         if (el) el.style.display = v === id ? 'block' : 'none';
     });
+    if (id !== 'vistaCaptura') _vaciarHerrPaso();
     // Al volver a la LISTA, ningún inventario está activo. Blindaje anti-"reabrir el
     // primero": no importa por qué ruta se salga (finalizar, salir, cerrar tour, etc.),
     // aquí se garantiza que no quede un invActual/filasCaptura/soloVista colgando que el
@@ -4685,19 +4720,19 @@ function _refrescarDatosInv() {
     if (typeof _supabase === 'undefined') return Promise.resolve(false);
     var negId = getNegocioActivo(); if (!negId) return Promise.resolve(false);
     _refrescandoInv = Promise.all([
-        _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('insumo_id', {ascending: true}),
-        _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true})
+        _leerCatalogoInv(negId),
+        _leerTablaInv('recetas', negId)
     ]).then(function (r) {
         if (getNegocioActivo() !== negId) return false;           // se cambió de negocio a medio viaje
         var llego = false;
-        if (r[0] && !r[0].error) {
+        if (_catalogoSirve(r[0])) {
             var lista = (r[0].data || []).map(function (x) { return x.datos; }).filter(Boolean);
             if (lista.length) {
                 _cacheInsumosInv = lista; _catProvisional = false; llego = true;
                 try { _skPut(_sk('insumos'), JSON.stringify(lista.map(function (ins) { var c = Object.assign({}, ins); c.foto = ''; c.fotoUrl = ''; return c; }))); } catch (e) {}
             }
         }
-        if (r[1] && !r[1].error) { _cacheRecetasInv = (r[1].data || []).map(function (x) { return x.datos; }).filter(Boolean); llego = true; }
+        if (r[1] && !r[1].error && !(r[1].parcial && (_cacheRecetasInv || []).length > r[1].data.length)) { _cacheRecetasInv = (r[1].data || []).map(function (x) { return x.datos; }).filter(Boolean); llego = true; }
         if (llego) {
             if (typeof _consumoIdxCache !== 'undefined') _consumoIdxCache = null;
             _consumoDirty = true; _repCache = null;
@@ -5311,8 +5346,8 @@ async function _asegurarCatalogoInv(forzar) {
     var negId = getNegocioActivo(); if (!negId) return false;
     _catInvPidiendo = true;
     try {
-        var r = await _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId);
-        if (r.error) return false;
+        var r = await _leerCatalogoInv(negId);
+        if (!_catalogoSirve(r)) return false;
         var lista = (r.data || []).map(function (x) { return x.datos; }).filter(Boolean);
         if (!lista.length) return false;
         _cacheInsumosInv = lista;
@@ -5633,6 +5668,7 @@ function finalizarInventarioActual() {
 function renderStepContent() {
     const cont = document.getElementById('stepContent');
     if (!cont) return;
+    _pintarHerrPaso();   // buscador y filtros del paso, fijos en el encabezado
     // Primer levantamiento solo captura existencias
     const paso = (invActual && invActual.tipoInv === 'primer_lev') ? 1 : pasoActual;
     const renders = [null, renderStep1, renderStep2, renderStep3, renderStep4, renderStep5];
@@ -5711,6 +5747,7 @@ function renderStepContent() {
     if (paso === 2 && vistaEntradas2 === 'busqueda') initEntradaRapidaUI();
     if (paso === 1 && vistaCapturaExist === 'busqueda') initExistBusquedaUI();
     if (paso === 3 && vistaVentas === 'busqueda') initVentasBusquedaUI();
+    if (paso === 3 && (vistaVentas === 'menu' || vistaVentas === 'prebatch') && _menuBusquedaVentas) _filtrarMenuVentas(_menuBusquedaVentas);
     if (paso === 4) _initPaso4Tables();
     _ajustarStickyInv(); // recolocar pasos + toolbar bajo el header (altura real)
     if (window._soloVistaInv) _aplicarSoloVista(); // reaplica solo-lectura (actualizarNavBtns re-muestra botones)
@@ -5823,6 +5860,119 @@ function buildFiltroRegistroBar() {
         </button>
     </div>`;
 }
+
+/* ══ LA BARRA DEL PASO, FIJA EN EL ENCABEZADO (Edwin, 19-nov) ═════════════
+   Cada paso tenía su buscador y sus filtros dentro del contenido, y al bajar
+   se iban. Ahora viven en una franja del encabezado fijo y cambian con el paso
+   y la vista. Los manejadores son los de siempre (solo repintan la lista, no
+   el buscador), así que escribir no pierde el foco; y la franja solo se vuelve
+   a pintar cuando cambia algo más que lo tecleado. */
+function _herrSeg(pares, activo, fn) {
+    return '<div class="ph-seg">' + pares.map(function (p) {
+        return '<button class="' + (p[0] === activo ? 'on' : '') + '" onclick="' + fn + '(\'' + p[0] + '\')">' + p[1] + '</button>';
+    }).join('') + '</div>';
+}
+function _herrBuscar(id, val, ph, fn) {
+    return '<input type="search" class="ph-buscar" id="' + id + '" value="' + etx(val || '') + '" placeholder="' + etx(ph) +
+        '" oninput="' + fn + '(this.value)" autocomplete="off">';
+}
+// Buscador + familia/categoría/subcategoría (+ Lista/Galería) de las listas de captura.
+function _herrFiltrosCapt(conModo) {
+    const pool = filasCaptura
+        .filter(f => !filtroFamActivo || f.familia === filtroFamActivo)
+        .filter(f => !filtroCatActiva || f.categoria === filtroCatActiva);
+    const fams    = [...new Set(filasCaptura.map(f=>f.familia).filter(Boolean))].sort();
+    const cats    = [...new Set(filasCaptura.map(f=>f.categoria).filter(Boolean))].sort();
+    const subcats = [...new Set(pool.map(f=>f.subcategoria).filter(Boolean))].sort();
+    return _herrBuscar('phBuscar', busquedaCapt, 'Buscar…', 'onBusqueda') + `
+        <select class="filtro-select" id="filtroFamStep" onchange="onFiltroFam(this.value)">
+            <option value="">Todas las familias</option>
+            ${fams.map(f=>`<option value="${etx(f)}" ${filtroFamActivo===f?'selected':''}>${etx(f)}</option>`).join('')}
+        </select>
+        <select class="filtro-select" id="filtroCatStep" onchange="onFiltroCat(this.value)">
+            <option value="">Todas las categorías</option>
+            ${cats.map(c=>`<option value="${etx(c)}" ${filtroCatActiva===c?'selected':''}>${etx(c)}</option>`).join('')}
+        </select>
+        ${subcats.length ? `<select class="filtro-select" id="filtroSubcatStep" onchange="onFiltroSubcat(this.value)">
+            <option value="">Todas las sub.</option>
+            ${subcats.map(x=>`<option value="${etx(x)}" ${filtroSubcatActiva===x?'selected':''}>${etx(x)}</option>`).join('')}
+        </select>` : ''}
+        ${conModo ? `<div class="vista-toggle" title="Ver en lista o en galería">
+            <button class="${modoListaCapt==='lista'?'active':''}" onclick="setModoCaptura('lista')" title="Lista">≡</button>
+            <button class="${modoListaCapt==='galeria'?'active':''}" onclick="setModoCaptura('galeria')" title="Galería">⊞</button>
+        </div>` : ''}`;
+}
+function _herrPasoHTML() {
+    if (!invActual) return '';
+    const paso = invActual.tipoInv === 'primer_lev' ? 1 : pasoActual;
+    if (paso === 1) {
+        const nReg = filasCaptura.filter(_esRegistrado).length, nPend = filasCaptura.length - nReg;
+        return _herrSeg([['busqueda', '🔍 Rápida'], ['lista', '≡ Lista']], vistaCapturaExist, 'setVistaExist') +
+            _herrSeg([['pendientes', 'Pendientes <span class="ph-n">' + nPend + '</span>'], ['registrados', '✅ Registrados <span class="ph-n">' + nReg + '</span>']],
+                     filtroRegistroActivo, 'setFiltroRegistro') +
+            (vistaCapturaExist === 'busqueda'
+                ? _herrBuscar('existBuscador', _existBusqueda, filtroRegistroActivo === 'registrados' ? 'Buscar en registrados…' : 'Buscar producto pendiente…', 'buscarInsumoExist')
+                : _herrFiltrosCapt(true));
+    }
+    if (paso === 2) {
+        return _herrSeg([['busqueda', '🔍 Rápida'], ['lista', '≡ Lista']], vistaEntradas2, 'setVistaEntradas2') +
+            (vistaEntradas2 === 'busqueda'
+                ? _herrBuscar('entBuscador', _entRapidaBusqueda, '🔍 Producto para registrar…', 'buscarInsumoEntrada') +
+                  _filtroTipoHTML(true)
+                : _herrFiltrosCapt(true));
+    }
+    if (paso === 3) {
+        const nPb = prebatchesProducibles().length;
+        const vistas = _herrSeg([['lista', '🧴 Insumos'], ['menu', '🍹 Cocteles'],
+            ['prebatch', '🏭 Prebatch' + (nPb ? ' <span class="ph-n">' + nPb + '</span>' : '')], ['busqueda', '🔍 Búsqueda rápida']], vistaVentas, 'setVistaVentas');
+        if (vistaVentas === 'lista')    return vistas + _herrFiltrosCapt(false);
+        if (vistaVentas === 'menu')     return vistas + _herrBuscar('phBuscar', _menuBusquedaVentas, 'Buscar coctel o receta…', '_filtrarMenuVentas');
+        if (vistaVentas === 'prebatch') return vistas + _herrBuscar('phBuscar', _menuBusquedaVentas, 'Buscar prebatch…', '_filtrarMenuVentas');
+        return vistas + _herrBuscar('ventasBuscador', _ventasBusqueda, 'Buscar insumo, coctel o prebatch…', 'buscarInsumoVentas');
+    }
+    if (paso === 4) {
+        const c = (invActual.cancelaciones || []).length, d = invActual.descuentos || [];
+        const td = d.reduce((t, x) => t + (parseFloat(x.monto) || 0), 0);
+        return _herrSeg([['cancelaciones', '🚫 Cancelaciones <span class="ph-n">' + c + '</span>'],
+                         ['descuentos', '💸 Descuentos' + (d.length ? ' <span class="ph-n">$' + td.toFixed(0) + '</span>' : '')]], _paso4Tab, 'setPaso4Tab');
+    }
+    if (paso === 5) {
+        const subs = [...new Set(filasCaptura.map(f => f.subcategoria || f.categoria).filter(Boolean))].sort();
+        return _herrBuscar('phBuscar', _busqStep5, 'Buscar producto en el resultado…', 'onBusqStep5') + `
+            <select class="filtro-select" onchange="setSubcatStep5(this.value)">
+                <option value="">Todas las categorías</option>
+                ${subs.map(x => `<option value="${etx(x)}" ${_subcatStep5===x?'selected':''}>${etx(x)}</option>`).join('')}
+            </select>
+            <select class="filtro-select" onchange="setDifStep5(this.value)" title="Deja en la pantalla solo lo que faltó o solo lo que sobró">
+                <option value="" ${_difStep5===''?'selected':''}>Faltantes y sobrantes</option>
+                <option value="falta" ${_difStep5==='falta'?'selected':''}>Solo faltantes</option>
+                <option value="sobra" ${_difStep5==='sobra'?'selected':''}>Solo sobrantes</option>
+            </select>
+            <button class="btn-vista" onclick="abrirImprimirS5()" title="Imprime exactamente lo que está en pantalla, eligiendo qué grupos van en la hoja">🖨️ Imprimir lo filtrado</button>
+            <div class="vista-toggle">
+                <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">≡ Lista</button>
+                <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
+            </div>`;
+    }
+    return '';
+}
+var _herrUltimo = null;
+function _pintarHerrPaso() {
+    var el = document.getElementById('pasoHerr'); if (!el) return;
+    var html = '';
+    try { html = _herrPasoHTML(); } catch (e) { console.warn('[inv] barra del paso:', e); }
+    /* Lo tecleado no cuenta: si solo cambió eso, la franja NO se repinta y el
+       campo conserva el foco y el cursor. */
+    var llave = html.replace(/ value="[^"]*"/g, '');
+    if (llave === _herrUltimo) return;
+    var act = document.activeElement, fid = (act && el.contains(act) && act.id) ? act.id : '', s0 = null, s1 = null;
+    if (fid) { try { s0 = act.selectionStart; s1 = act.selectionEnd; } catch (e) {} }
+    el.innerHTML = html; _herrUltimo = llave;
+    if (fid) { var n = document.getElementById(fid); if (n) { n.focus(); try { if (s0 !== null) n.setSelectionRange(s0, s1); } catch (e) {} } }
+    if (typeof _ajustarStickyInv === 'function') _ajustarStickyInv();
+}
+// Fuera del wizard la franja se vacía: el registro de entradas usa los mismos ids.
+function _vaciarHerrPaso() { var el = document.getElementById('pasoHerr'); if (el) el.innerHTML = ''; _herrUltimo = null; }
 
 function buildToolbar(conModo = true) {
     const pool = filasCaptura
@@ -5969,13 +6119,10 @@ function renderStep1() {
         const nPend = filasCaptura.length - nReg;
         const placeholder = filtroRegistroActivo === 'registrados'
             ? 'Buscar en registrados…' : 'Buscar producto pendiente…';
-        return buildVistaSwitcherExist() + _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() + buildFiltroRegistroBar() + `
+        // Las vistas, Pendientes/Registrados y el buscador van en la barra del paso (encabezado).
+        return _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() + `
             <div class="ent-rapida-wrap">
                 <div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
-                    <input type="text" id="existBuscador" class="ent-buscador"
-                        placeholder="${placeholder}"
-                        oninput="buscarInsumoExist(this.value)" autocomplete="off">
                     <div id="existChips" class="ent-chips"></div>
                 </div>
                 <div id="existCardWrap"></div>
@@ -6010,7 +6157,7 @@ function renderStep1() {
 
     // La lista va en su propio contenedor → la búsqueda actualiza SOLO esto (no el
     // input del toolbar) para no perder el foco al escribir.
-    return buildVistaSwitcherExist() + _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() + buildFiltroRegistroBar() + buildToolbar(true) +
+    return _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() +
         '<div id="step1ListaCont">' + _step1ListaInner() + '</div>';
 }
 
@@ -6706,30 +6853,25 @@ function bannerMovsQR() {
 }
 
 function renderStep2() {
-    const switcher = buildVistaSwitcherEnt() + bannerMovsQR();
+    // Las vistas, los buscadores y las pestañas de lo registrado van en la barra del paso.
+    const switcher = '<div style="padding-top:14px"></div>' + bannerMovsQR();
     if (vistaEntradas2 === 'lista') {
         const filas  = getFilasFiltradas();
         const noData = !filasCaptura.length
             ? `<div class="empty-state" style="padding:60px"><div class="empty-icon">📥</div><div class="empty-title">Sin insumos</div></div>` : null;
-        return switcher + buildToolbar(true) + (noData || renderStep2Lista(filas));
+        return switcher + (noData || renderStep2Lista(filas));
     }
     // vista búsqueda (default)
     const logCount = (invActual?.entradasLog || []).length;
     return switcher + `
         <div class="ent-rapida-wrap">
             <div>
-                <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
-                <input type="text" id="entBuscador" class="ent-buscador"
-                    placeholder="Escribe el nombre del producto…"
-                    oninput="buscarInsumoEntrada(this.value)" autocomplete="off">
                 <div id="entChips" class="ent-chips"></div>
             </div>
             <div id="entFormCard"></div>
             <div>
-                <!-- El mismo buscador y las mismas pestañas que el historial de
-                     afuera: aquí la lista junta entradas, mermas y cortesías del
-                     periodo, y revolverlas es lo que estorba al revisar. -->
-                ${_filtroTipoHTML()}
+                <!-- El buscador y las pestañas de lo registrado (entradas, mermas,
+                     cortesías) viven en la barra del paso, fijos arriba. -->
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
                     <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Movimientos del período</span>
                     <span id="entLogCount" style="font-size:13px;font-weight:700;color:var(--text)">${logCount} registro${logCount !== 1 ? 's' : ''}</span>
@@ -7061,15 +7203,17 @@ function renderStep3() {
         ${b('prebatch', '🏭 Prebatch' + (nPb ? ' <span class="s3-cuenta">' + nPb + '</span>' : ''))}
         ${b('busqueda', '🔍 Búsqueda rápida')}
     </div>`;
-    if (vistaVentas === 'menu')     return switcher + renderStep3Menu();
-    if (vistaVentas === 'prebatch') return switcher + _renderProduccionPrebatch();
-    if (vistaVentas === 'busqueda') return switcher + renderStep3BusquedaScaffold();
-    return switcher + renderStep3Insumos();
+    // Las cuatro vistas y el buscador van en la barra del paso (encabezado fijo).
+    void switcher;
+    if (vistaVentas === 'menu')     return renderStep3Menu();
+    if (vistaVentas === 'prebatch') return _renderProduccionPrebatch();
+    if (vistaVentas === 'busqueda') return renderStep3BusquedaScaffold();
+    return renderStep3Insumos();
 }
 
 function renderStep3Insumos() {
     // El buscador actualiza SOLO esta lista (no el toolbar) → no se pierde el foco al escribir.
-    return buildToolbar(true) + '<div id="step3VentasListaCont">' + _step3VentasInner() + '</div>';
+    return '<div id="step3VentasListaCont" style="padding-top:12px">' + _step3VentasInner() + '</div>';
 }
 function _step3VentasInner() {
     const b        = busquedaCapt.toLowerCase();
@@ -7320,8 +7464,6 @@ function _renderProduccionPrebatch() {
     const pres = prebatchesProducibles();
     const prod = invActual?.prebatchProducidos || {};
     const lista = pres.length ? `
-        <input type="text" placeholder="🔍 Buscar prebatch…" value="${etx(_menuBusquedaVentas||'')}" oninput="_filtrarMenuVentas(this.value)"
-            class="s3-buscar">
         ${_avisoPrebatches(pres)}
         <div class="step3-menu-grid step3-lista" data-menu-grupo>${pres.map(p => _step3PrebatchItemHTML(p, prod)).join('')}</div>`
         : `<div class="s3-vacio">🍸 Todavía no hay ningún prebatch para anotar en este inventario.</div>`;
@@ -7685,12 +7827,7 @@ function renderStep3Menu() {
         <button onclick="toggleMenuVerTodas()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit">${_menuVerTodas ? 'Ver solo las de esta área' : 'Ver todas'}</button>
     </div>` : ''}
     ${_avisoSinArea(recetas.concat(_ocultas))}
-    <div style="padding:4px 16px 10px">
-        <input type="text" id="menuBuscarCoctel" placeholder="🔍 Buscar coctel o receta…"
-            value="${etx(_menuBusquedaVentas||'')}" oninput="_filtrarMenuVentas(this.value)"
-            style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:10px;font-family:inherit;font-size:14px;outline:none;box-sizing:border-box"
-            onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
-    </div>`;
+    `;
     const gruposHtml = Object.entries(grupos).map(([grp, items]) => `
         <div style="padding:0 16px 16px" data-menu-grupo>
             <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;
@@ -7828,10 +7965,7 @@ function renderStep3BusquedaScaffold() {
     ).length;
     return `<div class="ent-rapida-wrap">
         <div>
-            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar insumo, coctel o prebatch</div>
-            <input type="text" id="ventasBuscador" class="ent-buscador"
-                placeholder="Escribe el nombre: un insumo, un coctel o un prebatch…"
-                oninput="buscarInsumoVentas(this.value)" autocomplete="off">
+            <!-- El buscador (insumos, cocteles y prebatch) va en la barra del paso. -->
             <div id="ventasChips" class="ent-chips"></div>
         </div>
         <div id="ventasCardWrap"></div>
@@ -8148,7 +8282,8 @@ function renderStep4() {
         </button>
     </div>`;
 
-    return tabBar + (_paso4Tab === 'cancelaciones'
+    void tabBar;   // las pestañas van en la barra del paso (encabezado fijo)
+    return '<div style="padding-top:4px"></div>' + (_paso4Tab === 'cancelaciones'
         ? _renderCancelacionesTab(cancelaciones)
         : _renderDescuentosTab(descuentos, totalDesc));
 }
@@ -9272,7 +9407,8 @@ function renderStep5() {
             <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
         </div>
     </div></div>`;
-    return kpis + _prebatchAvisoHTML() + _prebatchDesgloseHTML() + _resumenEjecutivo() + searchBar5 +
+    void searchBar5;   // el buscador y los filtros van en la barra del paso (encabezado fijo)
+    return kpis + _prebatchAvisoHTML() + _prebatchDesgloseHTML() + _resumenEjecutivo() +
            `<div id="step5Tablas">${_step5TablasHTML()}</div>`;
 }
 
@@ -12927,7 +13063,11 @@ function _entRepintar() {
 /* EL BUSCADOR Y LAS PESTAÑAS, en un solo lugar: el historial de afuera y el
    Paso 2 del inventario enseñan la misma lista y tienen que filtrarla igual.
    Copiarlo en los dos armados es cómo se separan. */
-function _filtroTipoHTML() {
+function _filtroTipoHTML(enBarra) {
+    /* En la barra fija del Paso 2 va el MISMO filtro (mismo texto buscado,
+       mismo manejador, mismas pestañas), solo que compacto. */
+    if (enBarra) return _herrBuscar('entBuscar', _entBusca, 'Buscar en lo registrado: producto, quién, motivo…', 'setEntBusca') +
+        '<div id="entTipoChips" class="ph-chips"></div>';
     return '' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">' +
             '<div style="position:relative;flex:1;min-width:200px;max-width:380px">' +
