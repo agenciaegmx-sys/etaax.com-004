@@ -7975,7 +7975,7 @@ function verFichaReceta(recetaId, editar) {
             '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+etx(r.grupo||(r.tipo==='alimentos'?'Alimentos':'Bebidas'))+'</div></div>'+
             '<div style="display:flex;gap:6px">'+
                 (ed ? '<button class="btn-vista" style="color:var(--green);border-color:var(--green)" onclick="guardarFichaReceta()">💾 Guardar</button>'
-                    : '<button class="btn-vista" onclick="verFichaReceta(\''+recetaId+'\',true)">✏️ Editar</button>')+
+                    : '<button class="btn-vista" title="Abre el escandallo de Recetas (pide contraseña)" onclick="_invEditarReceta(\''+recetaId+'\')">'+_icInv('rec-editar')+'Editar</button>')+
                 '<button class="btn-vista" onclick="document.getElementById(\'modalFichaReceta\').style.display=\'none\'">✕</button>'+
             '</div></div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'+
@@ -13881,6 +13881,86 @@ function guardarEntradas() {
 // ═══════════════════════════════════════════════════════════════
 // FICHA TÉCNICA — modal ver / editar insumo
 // ═══════════════════════════════════════════════════════════════
+/* ══ EDITAR ES EDITAR DE VERDAD (Edwin, 19-nov) ═══════════════════════════
+   «Editar» en una ficha abría un editor recortado del propio inventario (el
+   del insumo cambiaba unos campos; el de la receta, precio y cantidades).
+   Ahora pide la contraseña general y abre el editor REAL en una ventana
+   flotante: el de Insumos (insumos.html?solo=1&id=…) o el escandallo de
+   Recetas (index.html?embed=1&r=…) —el mismo que usa Recetas—. Al guardar,
+   el editor avisa (insumoGuardado / recetaGuardada) y el inventario toma el
+   cambio en ese momento, sin recargar. */
+var _invEdDirty = false;
+function _invAbrirEditor(url, titulo) {
+    _invCerrarEditor(true);
+    var ov = document.createElement('div');
+    ov.id = 'invEditorOv'; ov.className = 'inv-editor-ov';
+    ov.innerHTML = '<div class="inv-editor-caja"><div class="inv-editor-hd"><span>' + _icInv('rec-editar', 18) + etx(titulo || 'Editar') + '</span>' +
+        '<button onclick="_invCerrarEditor()" title="Cerrar">' + _icInv('adm-cerrar', 18) + '</button></div>' +
+        '<iframe src="' + url + '" title="' + etx(titulo || 'Editor') + '"></iframe></div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) _invCerrarEditor(); });
+    document.body.appendChild(ov);
+}
+function _invCerrarEditor(forzar) {
+    var ov = document.getElementById('invEditorOv');
+    if (!ov) return;
+    if (!forzar && _invEdDirty && !confirm('Tienes cambios sin guardar en la receta. ¿Cerrar sin guardar?')) return;
+    _invEdDirty = false;
+    ov.remove();
+}
+function _invEditarInsumo(insumoId) {
+    var ins = (typeof window._insumoResolver === 'function' && window._insumoResolver(insumoId)) || getInsumos().find(function (x) { return x.id === insumoId; });
+    if (!ins) { alert('No se encontró el insumo en el catálogo.'); return; }
+    var nom = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
+    _pedirClaveAdmin('Editar ' + (ins.esSubReceta ? 'la receta de ' : '') + nom, function () {
+        if (ins.esSubReceta && ins.recetaId) _invAbrirEditor('/recetas/index.html?embed=1&r=' + encodeURIComponent(ins.recetaId), 'Escandallo · ' + nom);
+        else _invAbrirEditor('/recetas/insumos.html?solo=1&id=' + encodeURIComponent(ins.id), 'Editar insumo · ' + nom);
+    }, 'Confirmar');
+}
+function _invEditarReceta(recetaId) {
+    var r = (window._recetaResolver ? window._recetaResolver(recetaId) : null) || getRecetas().find(function (x) { return x.id === recetaId; });
+    if (!r) { alert('No se encontró la receta.'); return; }
+    _pedirClaveAdmin('Editar la receta ' + (r.nombre || ''), function () {
+        _invAbrirEditor('/recetas/index.html?embed=1&r=' + encodeURIComponent(r.id), 'Escandallo · ' + (r.nombre || ''));
+    }, 'Confirmar');
+}
+window._invEditarInsumo = _invEditarInsumo; window._invEditarReceta = _invEditarReceta; window._invCerrarEditor = _invCerrarEditor;
+/* El cambio llega en el momento: lo que manda el editor se injerta en el
+   catálogo de aquí, se repinta lo que está en pantalla y, por detrás, se
+   pide lo fresco a la nube (recetas incluidas) para que todo cuadre. */
+function _invTomarCambio(insumos) {
+    if (insumos && insumos.length) {
+        var cat = getInsumos();
+        insumos.forEach(function (n) {
+            if (!n || !n.id) return;
+            var i = cat.findIndex(function (x) { return x && x.id === n.id; });
+            if (i > -1) cat[i] = Object.assign({}, cat[i], n); else cat.push(n);
+        });
+        if (typeof _consumoIdxCache !== 'undefined') _consumoIdxCache = null;
+    }
+    _consumoDirty = true; window._step5Dirty = true;
+    var repintar = function () {
+        if (!invActual) return;
+        if (filasCaptura.length) invActual.filas = filasCaptura.map(function (f) { return Object.assign({}, f); });
+        try { cargarProductosCaptura(); } catch (e) {}
+        if (typeof renderStepContent === 'function') renderStepContent();
+        var ft = document.getElementById('modalFichaTecnica');
+        if (ft && ft.style.display !== 'none' && _ftInsumoId) { var ins = getInsumos().find(function (x) { return x.id === _ftInsumoId; }); if (ins) _ftRenderVer(ins); }
+        var fr = document.getElementById('modalFichaReceta');
+        if (fr && fr.style.display !== 'none' && _frRecetaId) verFichaReceta(_frRecetaId);
+    };
+    repintar();
+    if (typeof _refrescarDatosInv === 'function') _refrescarDatosInv().then(function (llego) { if (llego) repintar(); });
+}
+window.addEventListener('message', function (e) {
+    if (!e.data || !e.data.type || e.origin !== location.origin && e.origin !== 'null') return;
+    if (!document.getElementById('invEditorOv') && e.data.type !== 'insumosCambiaron') return;
+    if (e.data.type === 'insumoGuardado') { _invTomarCambio(e.data.insumos); _invCerrarEditor(true); }
+    else if (e.data.type === 'insumosCambiaron') _invTomarCambio(e.data.insumos);
+    else if (e.data.type === 'recetaGuardada') { _invTomarCambio(null); _invCerrarEditor(true); }
+    else if (e.data.type === 'cerrarEditor') _invCerrarEditor(true);
+    else if (e.data.type === 'escDirty') _invEdDirty = !!e.data.dirty;
+});
+
 let _ftModo = 'ver'; // 'ver' | 'editar'
 
 function _ftSetFooter(modo) {
@@ -13891,8 +13971,8 @@ function _ftSetFooter(modo) {
         if (lbl) lbl.textContent = 'Ficha técnica';
         footer.innerHTML = `
             <button onclick="cerrarFichaTecnica()" class="btn-vista">Cerrar</button>
-            <button onclick="abrirFichaEditar()" class="btn-vista"
-                style="color:var(--accent);border-color:var(--accent)">✏️ Editar</button>`;
+            <button onclick="_invEditarInsumo(_ftInsumoId)" class="btn-vista" title="Abre el editor de Insumos (pide contraseña)"
+                style="color:var(--accent);border-color:var(--accent)">${_icInv('rec-editar')}Editar</button>`;
     } else {
         if (lbl) lbl.textContent = 'Editando insumo';
         footer.innerHTML = `

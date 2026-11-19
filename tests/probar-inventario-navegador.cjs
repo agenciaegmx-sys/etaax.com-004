@@ -758,6 +758,101 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await ctx.close();
         }
+
+        /* ── N · Ver y Editar abren lo de verdad (19-nov) ────────────────────
+           «Ver» abre la ficha técnica ENCIMA de lo que esté abierto (el modal
+           del Paso 1 incluido). «Editar» pide la contraseña general y abre el
+           editor REAL —Insumos o el escandallo de Recetas— en una ventana
+           flotante; al guardar ahí, el inventario toma el cambio en el momento
+           (catálogo, fila de captura, ficha) sin recargar. Y en cocteles lo
+           capturado lleva un puntito verde, no fondo verde. */
+        console.log('\n══ N · Ver y Editar abren lo de verdad ══');
+        {
+            const RECS = [{ id: 'rn0', nombre: 'Negroni', tipo: 'bebidas', status: 'activa', sucursalId: 'suc_principal', precioEnCarta: 160,
+                            ingredientes: [{ insumoId: 'd000', cantidad: 30, unidad: 'ML' }] },
+                          { id: 'rn1', nombre: 'Boulevardier', tipo: 'bebidas', status: 'activa', sucursalId: 'suc_principal', precioEnCarta: 170,
+                            ingredientes: [{ insumoId: 'd001', cantidad: 30, unidad: 'ML' }] }];
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: { negocio_insumos: filasNube(destilados(4).concat([SPRITE, SQUIRT, BATCH])),
+                recetas: RECS.concat([SUB]).map(r => ({ id: r.id, negocio_id: 'n1', datos: r })) }, viewport: { width: 1280, height: 800 } }));
+            page.on('dialog', d => d.accept());
+            await nuevoInv(page);
+            await page.waitForTimeout(600);
+            const marco = async (re) => { for (let k = 0; k < 80; k++) { const f = page.frames().find(x => re.test(x.url())); if (f) return f; await page.waitForTimeout(250); } throw new Error('no abrió el editor'); };
+            const srcEditor = () => page.evaluate(() => { const f = document.querySelector('#invEditorOv iframe'); return f ? f.getAttribute('src') : null; });
+
+            await page.evaluate(() => { invActual.cocktailsVendidos = { rn0: 3 }; irAPaso(3); setVistaVentas('menu'); });
+            await page.waitForTimeout(400);
+            await caso('cocteles: lo capturado lleva un puntito verde y el mismo fondo que lo demás', async () => {
+                const r = await page.evaluate(() => { const si = document.querySelector('.step3-lista .step3-menu-item.has-cnt'), no = document.querySelector('.step3-lista .step3-menu-item:not(.has-cnt)');
+                    return { fondo: getComputedStyle(si).backgroundColor, fondoOtro: getComputedStyle(no).backgroundColor, punto: getComputedStyle(si, '::after').backgroundColor,
+                             puntoOtro: getComputedStyle(no, '::after').content }; });
+                assert.equal(r.fondo, r.fondoOtro, 'la capturada trae otro fondo');
+                assert.match(r.punto, /^rgb\(\d+, 1[2-9]\d, \d+\)$/, 'sin puntito verde: ' + r.punto);
+                assert.equal(r.puntoOtro, 'none');
+            });
+            await page.evaluate(() => setVistaVentas('lista')); await page.waitForTimeout(300);
+            await caso('lista de insumos: los seis campos de venta, cortesía y merma a la MISMA altura', async () => {
+                const r = await page.evaluate(() => { const tr = document.querySelector('#step3VentasListaCont tr.s3i-row');
+                    const top = (sel) => [...tr.querySelectorAll(sel)].map(i => Math.round(i.getBoundingClientRect().top));
+                    return { campos: top('.s3i-par .inv-num-input'), coment: top('.s3i-coment') }; });
+                assert.equal(r.campos.length, 6);
+                assert.equal(new Set(r.campos).size, 1, 'desalineados: ' + r.campos);
+                assert.equal(new Set(r.coment).size, 1, 'comentarios desalineados: ' + r.coment);
+            });
+
+            await page.evaluate(() => irAPaso(1)); await page.waitForTimeout(300);
+            await page.click('#p1Pend .p12-item'); await page.waitForTimeout(300);
+            await page.evaluate(() => document.querySelector('#existCardWrap .btn-ver-prod').click()); await page.waitForTimeout(300);
+            await caso('«Ver» desde el modal del Paso 1: la ficha técnica queda ENCIMA, no detrás', async () =>
+                assert.ok(await page.evaluate(() => { const f = document.getElementById('modalFichaTecnica'), r = f.querySelector('div').getBoundingClientRect();
+                    return f.style.display !== 'none' && f.contains(document.elementFromPoint(r.left + r.width / 2, r.top + 20)); })));
+            const editarFicha = () => page.evaluate(() => [...document.querySelectorAll('#ftFooter button')].find(b => /Editar/.test(b.textContent)).click());
+            await caso('«Editar» pide la contraseña general; sin ella no se abre nada', async () => {
+                await page.evaluate(() => { window.__pidio = null; window._pedirClaveAdmin = (accion) => { window.__pidio = accion; }; });
+                await editarFicha(); await page.waitForTimeout(300);
+                assert.equal(await page.evaluate(() => window.__pidio), 'Editar Destilado 0');
+                assert.equal(await srcEditor(), null);
+            });
+            await page.evaluate(() => { window._pedirClaveAdmin = (accion, cb) => cb(); });
+            await editarFicha();
+            await caso('…con la contraseña abre el editor REAL de Insumos, con ese insumo', async () => {
+                assert.equal(await srcEditor(), '/recetas/insumos.html?solo=1&id=d000');
+                const fr = await marco(/insumos\.html\?solo=1/);
+                await fr.waitForFunction(() => { const i = document.getElementById('ins-nombre'); return i && i.value === 'Destilado 0'; }, null, { timeout: 20000 });
+            });
+            await caso('…al guardar ahí, el inventario toma el cambio en el momento y la ventana se cierra', async () => {
+                const fr = await marco(/insumos\.html\?solo=1/);
+                await fr.fill('#ins-nombre', 'Destilado Cero');
+                await fr.evaluate(() => guardarInsumo());
+                await page.waitForFunction(() => !document.getElementById('invEditorOv'), null, { timeout: 15000 });
+                await page.waitForTimeout(500);
+                const r = await page.evaluate(() => ({ cat: getInsumos().find(x => x.id === 'd000').nombre, fila: filasCaptura.find(f => f.insumoId === 'd000').nombre,
+                    ficha: /Destilado Cero/.test(document.getElementById('modalFichaTecnica').innerText), nube: window.__nube.leer().negocio_insumos.find(f => f.id === 'd000').datos.nombre }));
+                assert.deepEqual(r, { cat: 'Destilado Cero', fila: 'Destilado Cero', ficha: true, nube: 'Destilado Cero' });
+            });
+            await page.evaluate(() => cerrarFichaTecnica());
+
+            await page.evaluate(() => verFichaReceta('rn0')); await page.waitForTimeout(300);
+            await page.evaluate(() => [...document.querySelectorAll('#modalFichaReceta button')].find(b => /Editar/.test(b.textContent)).click());
+            await caso('«Editar» en la ficha de una receta abre el ESCANDALLO de Recetas', async () => {
+                assert.equal(await srcEditor(), '/recetas/index.html?embed=1&r=rn0');
+                const fr = await marco(/index\.html\?embed=1/);
+                await fr.waitForFunction(() => { const i = document.getElementById('nombreReceta'); return i && i.value === 'Negroni'; }, null, { timeout: 20000 });
+            });
+            await caso('…y al guardar el escandallo, la receta cambia aquí sin recargar', async () => {
+                const fr = await marco(/index\.html\?embed=1/);
+                await fr.fill('#nombreReceta', 'Negroni Clásico');
+                await fr.evaluate(() => guardarReceta());
+                await page.waitForFunction(() => !document.getElementById('invEditorOv'), null, { timeout: 15000 });
+                await page.waitForFunction(() => /Negroni Clásico/.test(document.getElementById('modalFichaReceta').innerText), null, { timeout: 8000 });
+                assert.equal(await page.evaluate(() => getRecetas().find(r => r.id === 'rn0').nombre), 'Negroni Clásico');
+            });
+            await page.evaluate(() => { document.getElementById('modalFichaReceta').style.display = 'none'; abrirFichaTecnica('prePal'); }); await page.waitForTimeout(300);
+            await editarFicha();
+            await caso('un prebatch (sub-receta) se edita en SU escandallo, no en Insumos', async () =>
+                assert.equal(await srcEditor(), '/recetas/index.html?embed=1&r=srPal'));
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }
