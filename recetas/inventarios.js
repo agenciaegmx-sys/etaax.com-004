@@ -2160,6 +2160,36 @@ function _prebatchDesgloseHTML() {
         }).join('') + '</div>';
 }
 
+/* ══ LO DE LOS PREBATCH, PLEGADO (Edwin, 19-nov: «es muy invasiva») ════════
+   El aviso de producciones sin rastrear y el desglose de lo que se llevaron
+   los batches son INFORMATIVOS: ocupaban media pantalla arriba del Resultado.
+   Ahora van detrás de un botón, cerrados de entrada; el botón dice cuántos
+   batches y cuántos avisos hay, para que se sepa si vale la pena abrirlo. El
+   contenido es el mismo (con sus botones para arreglar). */
+var _s5PrebatchAbierto = false;
+function _prebatchPlegable(cuerpo) {
+    if (!cuerpo) return '';
+    var nAv = 0, nBat = 0;
+    try { nAv = _prebatchDiagnostico().length; } catch (e) {}
+    try { nBat = _prebatchDesglose().reduce(function (t, x) { return t + (x.batches || 0); }, 0); } catch (e) {}
+    var resumen = [nBat ? nBat + ' batch' + (nBat === 1 ? '' : 'es') + ' producido' + (nBat === 1 ? '' : 's') : '',
+                   nAv ? nAv + ' sin rastrear' : ''].filter(Boolean).join(' · ');
+    return '<div class="s5-pb">' +
+        '<button type="button" class="s5-pb-btn' + (nAv ? ' s5-pb-av' : '') + '" aria-expanded="' + _s5PrebatchAbierto + '" onclick="_togglePrebatchS5(this)">' +
+        _icInv('rec-sub-bebidas', 16) + '<span>Producción de batches</span>' +
+        (resumen ? '<span class="s5-pb-n">' + resumen + '</span>' : '') +
+        '<span class="s5-pb-acc">' + (_s5PrebatchAbierto ? 'Ocultar ▴' : 'Ver ▾') + '</span></button>' +
+        '<div class="s5-pb-cuerpo"' + (_s5PrebatchAbierto ? '' : ' hidden') + '>' + cuerpo + '</div></div>';
+}
+function _togglePrebatchS5(btn) {
+    _s5PrebatchAbierto = !_s5PrebatchAbierto;
+    var cuerpo = btn && btn.nextElementSibling;
+    if (cuerpo) cuerpo.hidden = !_s5PrebatchAbierto;
+    btn.setAttribute('aria-expanded', String(_s5PrebatchAbierto));
+    var acc = btn.querySelector('.s5-pb-acc'); if (acc) acc.textContent = _s5PrebatchAbierto ? 'Ocultar ▴' : 'Ver ▾';
+}
+window._togglePrebatchS5 = _togglePrebatchS5;
+
 /* El aviso, arriba del Resultado. Va donde se mira la diferencia, no en una
    pestaña aparte: el momento en que esto importa es justo cuando alguien está
    viendo un faltante y no se lo explica. */
@@ -5639,16 +5669,12 @@ function actualizarStepBar() {
 
 function actualizarNavBtns() {
     const esLev  = invActual && invActual.tipoInv === 'primer_lev';
-    const btnAnt = document.getElementById('btnPasoAnt');
-    const btnSig = document.getElementById('btnPasoSig');
     const btnLev = document.getElementById('btnFinalizarLev');
     const btnFin = document.getElementById('btnFinalizarInv');
     const steps  = document.getElementById('invSteps');
     const cerr   = !!(invActual && invActual.cerrado);
 
     if (esLev) {
-        if (btnAnt) btnAnt.style.display = 'none';
-        if (btnSig) btnSig.style.display = 'none';
         if (btnFin) btnFin.style.display = 'none'; // primer_lev usa su propio botón
         if (btnLev) { btnLev.style.display = 'inline-flex'; btnLev.disabled = cerr; btnLev.innerHTML = _icInv('aut-autorizado') + (cerr ? 'Guardado' : 'Guardar levantamiento'); }
         if (steps)  steps.style.display = 'none';
@@ -5660,15 +5686,34 @@ function actualizarNavBtns() {
         if (btnFin) { btnFin.style.display = 'inline-flex'; btnFin.disabled = cerr; btnFin.innerHTML = _icInv('aut-autorizado') + (cerr ? 'Cerrado' : 'Finalizar inventario'); }
         _iconosEncabezadoInv();
         if (steps)  steps.style.display = '';
-        if (btnAnt) btnAnt.style.display = pasoActual > 1 ? 'inline-flex' : 'none';
-        if (btnSig) btnSig.style.display = pasoActual < 5 ? 'inline-flex' : 'none';
+        /* Sin «← Anterior» ni «Siguiente →» (Edwin, 19-nov): el botón de los
+           pasos («③ Ventas ▾») ya lleva a cualquiera de los cinco. */
     }
     // Acciones del Resultado (Recalcular / reportes): fijas en el header, solo en el Paso 5.
     var s5b = document.getElementById('step5HeaderBtns');
     /* `contents`: sus botones fluyen con los demás del encabezado en vez de
        formar un bloque aparte que se iba a su propio renglón. */
     if (s5b) s5b.style.display = (!esLev && pasoActual === 5) ? 'contents' : 'none';
+    /* En el Resultado el buscador y los filtros suben al renglón de «Desglose
+       · Salir · Finalizar», que tenía todo el lado izquierdo vacío. */
+    var hdr = document.querySelector('#vistaCaptura .inv-wizard-header');
+    if (hdr) { hdr.classList.toggle('hdr-p5', !esLev && pasoActual === 5); _hdrP5Medir(hdr); }
     if (typeof _ajustarStickyInv === 'function') setTimeout(_ajustarStickyInv, 0); // el header pudo crecer/encoger
+}
+/* Solo si CABE: buscador + filtros + Desglose + Salir + Finalizar piden ~1180
+   px. Con la barra lateral abierta (o una pantalla más angosta) no caben, el
+   buscador se partía en dos y el encabezado crecía a cuatro renglones; ahí la
+   barra se queda en su propio renglón, como en los demás pasos. Se mide el
+   encabezado mismo (ResizeObserver): abrir o cerrar la barra lateral lo cambia
+   sin pasar por aquí. */
+var _HDR_P5_ANCHO = 1216;
+function _hdrP5Medir(hdr) {
+    if (!hdr) return;
+    hdr.classList.toggle('hdr-ancho', hdr.clientWidth >= _HDR_P5_ANCHO);
+    if (!hdr._roP5 && typeof ResizeObserver === 'function') {
+        hdr._roP5 = new ResizeObserver(function () { hdr.classList.toggle('hdr-ancho', hdr.clientWidth >= _HDR_P5_ANCHO); });
+        hdr._roP5.observe(hdr);
+    }
 }
 // Finalizar el inventario actual desde el wizard (cierra: ABIERTO → CERRADO).
 function finalizarInventarioActual() {
@@ -5987,7 +6032,7 @@ function _herrPasoHTML() {
     }
     if (paso === 5) {
         const subs = [...new Set(filasCaptura.map(f => f.subcategoria || f.categoria).filter(Boolean))].sort();
-        return _herrLados(_herrBuscar('phBuscar', _busqStep5, 'Buscar producto en el resultado…', 'onBusqStep5'), `
+        return _herrLados(_herrBuscar('phBuscar', _busqStep5, 'Buscar producto…', 'onBusqStep5'), `
             <select class="filtro-select" onchange="setSubcatStep5(this.value)">
                 <option value="">Todas las categorías</option>
                 ${subs.map(x => `<option value="${etx(x)}" ${_subcatStep5===x?'selected':''}>${etx(x)}</option>`).join('')}
@@ -5997,7 +6042,7 @@ function _herrPasoHTML() {
                 <option value="falta" ${_difStep5==='falta'?'selected':''}>Solo faltantes</option>
                 <option value="sobra" ${_difStep5==='sobra'?'selected':''}>Solo sobrantes</option>
             </select>
-            <button class="btn-vista" onclick="abrirImprimirS5()" title="Imprime exactamente lo que está en pantalla, eligiendo qué grupos van en la hoja">🖨️ Imprimir lo filtrado</button>
+            <button class="btn-vista" onclick="abrirImprimirS5()" title="Imprimir lo filtrado: exactamente lo que está en pantalla, eligiendo qué grupos van en la hoja">${_icInv('adm-imprimir')}Imprimir</button>
             <div class="vista-toggle">
                 <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">≡ Lista</button>
                 <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
@@ -9483,7 +9528,7 @@ function renderStep5() {
         </div>
     </div></div>`;
     void searchBar5;   // el buscador y los filtros van en la barra del paso (encabezado fijo)
-    return kpis + _prebatchAvisoHTML() + _prebatchDesgloseHTML() + _resumenEjecutivo() +
+    return kpis + _prebatchPlegable(_prebatchAvisoHTML() + _prebatchDesgloseHTML()) + _resumenEjecutivo() +
            `<div id="step5Tablas">${_step5TablasHTML()}</div>`;
 }
 
@@ -10270,17 +10315,20 @@ function _nEquiv(v, dec, signo) {
    armara el suyo, se separarían. */
 function _estiloS5() {
     return '<style>' +
-        '.s5-r1>td{border-bottom:0!important;padding-bottom:4px!important;vertical-align:top;font-size:14px}' +
-        '.s5-r1 .s5-nom{font-size:15px;font-weight:600;line-height:1.3}' +
-        '.s5-r1 .s5-cont{font-size:11.5px;color:var(--text-dim);margin-top:2px}' +
-        '.s5-sub{display:block;font-size:11px;font-weight:400;color:var(--text-dim);white-space:normal;margin-top:2px;line-height:1.35}' +
-        '.s5-r2>td{padding-top:2px!important;padding-bottom:12px!important;vertical-align:top;font-size:12.5px;color:var(--text-muted)}' +
+        /* Letra más grande (Edwin, 19-nov: «para que sea más legible»): el
+           lugar lo dejó la columna de Cancelaciones. */
+        '.s5-r1>td{border-bottom:0!important;padding-top:12px!important;padding-bottom:5px!important;vertical-align:top;font-size:16.5px}' +
+        '.s5-r1 .s5-nom{font-size:17.5px;font-weight:600;line-height:1.3}' +
+        '.s5-r1 .s5-cont{font-size:13px;color:var(--text-dim);margin-top:3px}' +
+        '.s5-sub{display:block;font-size:12.5px;font-weight:400;color:var(--text-dim);white-space:normal;margin-top:3px;line-height:1.35}' +
+        '.s5-r2>td{padding-top:3px!important;padding-bottom:14px!important;vertical-align:top;font-size:14.5px;color:var(--text-muted)}' +
+        '.s5-tabla .s5-mini{font-size:11.5px!important}' +
         /* Una línea GRUESA cierra cada producto (sus dos renglones); entre
            el primer renglón y el segundo, una punteada apenas visible. */
         '.s5-tabla tr.s5-r1{border-bottom:1px dashed var(--border)!important}' +
         '.s5-r2>td{border-bottom:3px solid color-mix(in srgb,var(--text-dim) 38%,transparent)!important}' +
         /* Cada celda, de los DOS renglones, con su título chiquito arriba. */
-        '.s5-c2 .s5-l{display:block;font-size:8.5px;font-weight:500;letter-spacing:.3px;line-height:1.25;text-transform:uppercase;color:var(--text-dim);margin-bottom:2px;white-space:normal}' +
+        '.s5-c2 .s5-l{display:block;font-size:10.5px;font-weight:500;letter-spacing:.3px;line-height:1.25;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px;white-space:normal}' +
         'th small.s5-th2{display:block;font-size:8.5px;font-weight:400;letter-spacing:.3px;text-transform:none;opacity:.8;margin-top:2px}' +
         '.s5-r2 .s5-c2 b{color:var(--text);font-weight:600}' +
         '.s5-uso{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}' +
@@ -10712,7 +10760,7 @@ function _step5TablasHTML() {
                solo una de las dos obliga a convertir en la cabeza. */
             var _ml = copas * (parseFloat(fila.copaML) || 0);
             var _lt = _ml ? '  ·  ' + (Math.abs(_ml) >= 1000 ? _nb(_ml / 1000) + ' L' : _nb(_ml) + ' ml') : '';
-            return '<div style="font-size:9px;opacity:.7;white-space:nowrap" title="Este producto' +
+            return '<div class="s5-mini" style="font-size:9px;opacity:.7;white-space:nowrap" title="Este producto' +
                 ' está dentro de un batch (una sub-receta de producción propia). Su parte se le' +
                 ' devuelve aquí para que la diferencia mire TODO el producto, no solo el' +
                 ' embotellado.">↳ ' + _nb(copas / copasBot) + ' bot' + _lt + ' del insumo en batches</div>';
@@ -10721,7 +10769,7 @@ function _step5TablasHTML() {
         /* Lo PRODUCIDO, si el renglón es un batch: para él es una entrada (suma a
            su teórico). Sin enseñarlo, el teórico del batch sale de la nada. */
         const _prodC  = _prodPrebatchUnidades(fila);
-        const prodStr = _prodC > 0 ? '<div style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +' +
+        const prodStr = _prodC > 0 ? '<div class="s5-mini" style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +' +
             (copasBot > 0 ? _nb(_prodC / copasBot) + ' bot · ' : '') + _fmtCop(_prodC, fila) + ' producido</div>' : '';
         const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
         const difStr    = _fmtCopSgn(dif, fila);
@@ -10757,7 +10805,7 @@ function _step5TablasHTML() {
                         var _vivo = (typeof window._insumoResolver === 'function')
                             ? window._insumoResolver(fila.insumoId) : null;
                         if (_vivo) return '';
-                        return '<div style="font-size:9.5px;color:var(--accent);margin-top:2px;' +
+                        return '<div class="s5-mini" style="font-size:9.5px;color:var(--accent);margin-top:2px;' +
                             'line-height:1.5" title="Este renglón quedó del día que se abrió el ' +
                             'inventario. El insumo ya no está en el catálogo, así que su faltante ' +
                             'no lo explica nadie.">⚠️ este insumo ya no está en el catálogo</div>';
@@ -10768,7 +10816,6 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Venta botella', ventaBot > 0 ? ventaBot + ' bot' : '—')}</td>
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Venta copa', ventaCopaDir > 0 ? _fc(ventaCopaDir) : '—')}</td>
                 <td style="text-align:center;color:${merma > 0 ? 'var(--red)' : 'inherit'};font-weight:${merma > 0 ? 600 : 400}">${_s5c2('Mermas', (merma > 0 ? _fc(merma) : '—') + _s5sub(etx(fila.mermaConcepto || '')))}</td>
-                <td style="text-align:center">${_s5c2('Cancelaciones', cancelCop > 0 ? _fc(cancelCop) + _s5sub('informativo') : '—')}</td>
                 <td style="text-align:center">${_s5c2('Teórico', teoBotS)}</td>
                 <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', fisBotS + _dentroBat(adj.fis))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', difStr + (eqDif ? _s5sub(eqDif) : ''))}</td>
@@ -10780,7 +10827,6 @@ function _step5TablasHTML() {
                 <td style="text-align:center">${_s5c2('Costo', entDinero > 0 ? '<b>' + _s5dinero(entDinero).replace('+', '') + '</b>' : '—')}</td>
                 <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}${_comentarioVentaHTML(fila)}</td>
                 <td style="text-align:center">${_s5c2('Cortesías', (cortesia > 0 ? '<b style="color:var(--viol)">' + _fc(cortesia) + '</b>' : '—') + _s5sub(etx(fila.cortesiaConcepto || '')))}</td>
-                <td></td>
                 <td style="text-align:center">${_s5c2('Copas · onzas', _eqCopOz(teorico, fila))}</td>
                 <td style="text-align:center">${_s5c2('Copas · onzas', _eqCopOz(fisico, fila))}</td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
@@ -10832,10 +10878,9 @@ function _step5TablasHTML() {
                     <div class="s5-cont">${[fila.categoria||'', _contP||''].filter(Boolean).map(etx).join(' · ')}</div>
                 </td>
                 <td style="text-align:center">${_s5c2('Exist. anterior', cant(ea))}</td>
-                <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', (entTotal>0?'+'+cant(entTotal):'—') + (_prodP>0?'<div style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +'+cant(_prodP)+' producido</div>':''))}</td>
+                <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', (entTotal>0?'+'+cant(entTotal):'—') + (_prodP>0?'<div class="s5-mini" style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +'+cant(_prodP)+' producido</div>':''))}</td>
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Ventas', ventasDir>0?cant(ventasDir):'—')}</td>
                 <td style="text-align:center;color:${mermaP>0?'var(--red)':'inherit'};font-weight:${mermaP>0?600:400}">${_s5c2('Mermas', (mermaP>0?cant(mermaP):'—') + _s5sub(etx(fila.mermaConcepto || '')))}</td>
-                <td style="text-align:center">${_s5c2('Cancelaciones', cancelPza>0 ? cant(cancelPza) + _s5sub('informativo') : '—')}</td>
                 <td style="text-align:center">${_s5c2('Teórico', cant(teorico))}</td>
                 <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', cant(fisico))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + cant(dif))}</td>
@@ -10847,7 +10892,6 @@ function _step5TablasHTML() {
                 <td style="text-align:center">${_s5c2('Costo', entDinP > 0 ? '<b>' + _s5dinero(entDinP).replace('+', '') + '</b>' : '—')}</td>
                 <td style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${_s5Uso(coctSoloP, prodPBpVer, cant)}${_comentarioVentaHTML(fila)}</td>
                 <td style="text-align:center">${peso ? '' : _s5c2('Cortesías', (cortP>0 ? '<b style="color:var(--viol)">' + cant(cortP) + '</b>' : '—') + _s5sub(etx(fila.cortesiaConcepto || '')))}</td>
-                <td></td>
                 <td></td>
                 <td></td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
@@ -10972,7 +11016,6 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${mVent>0?_nc(mVent)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--text-muted)">${mcancel>0?_nc(mcancel)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' pza':'—'}</td>
                 <td style="text-align:center;white-space:nowrap">${_nc(mteo)} pza</td>
                 <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} pza</td>
@@ -10988,7 +11031,6 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:var(--accent)">${mVentaCopa>0?_nc(mVentaCopa)+' '+mU.mov:'—'}</td>
                 <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' '+mU.mov:'—'}</td>
                 <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' '+mU.mov:'—'}</td>
-                <td style="text-align:center;color:var(--text-muted)">${mcancel>0?_nc(mcancel)+' '+mU.mov:'—'}</td>
                 <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} ${mU.exist}${_equivBarraHTML(mfis, m)}</td>
                 <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} ${mU.mov}${_equivBarraHTML(mdif, m, {signo:true})}</td>
                 <td style="text-align:center;font-size:11px;color:${mcol}">${mpct!==null?((mpct>=0?'+':'')+mpct.toFixed(1)+'%'):'—'}</td>
@@ -10996,12 +11038,12 @@ function _step5TablasHTML() {
             </tr>`;
         }).join('');
         const esPzaComp = esPzaComp0;
-        const desglose = `<tr id="compDesg-${comp.id}" style="display:none"><td colspan="${esPzaComp0 ? 10 : 11}" style="padding:0;background:var(--bg)">
+        const desglose = `<tr id="compDesg-${comp.id}" style="display:none"><td colspan="${esPzaComp0 ? 9 : 10}" style="padding:0;background:var(--bg)">
             <div style="padding:8px 20px 12px"><div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px">📐 Desglose por presentación</div>
             <table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
                 ${esPzaComp0
-                    ? `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Ventas</th><th style="text-align:center">Cancelac.<br><small>Informativo</small></th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Teórico</th><th style="text-align:center">Físico</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`
-                    : `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Botella</th><th style="text-align:center">Copa</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Cancelac.<br><small>Informativo</small></th><th style="text-align:center">Actual</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`}
+                    ? `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Ventas</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Teórico</th><th style="text-align:center">Físico</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`
+                    : `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Botella</th><th style="text-align:center">Copa</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Actual</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`}
             </tr></thead><tbody>${desgloseRows}</tbody></table></div></td></tr>`;
         const _tdNom = `<td style="min-width:150px">
                 <div class="s5-nom">🧩 ${etx(comp.nombre||vf.nombre)}</div>
@@ -11021,13 +11063,11 @@ function _step5TablasHTML() {
         const prodC  = members.reduce((t, m) => { try { return t + (_consumoBaseProd(m) || 0); } catch (e) { return t; } }, 0);
         const pcC    = _s5Pct(dif, usoComp, teorico);
         const _grupo = (fn, o) => _equivBarraGrupoHTML(members.map(m => ({ fila: m, cantidad: fn(m) })), o).replace(/<(\/?)div\b/g, '<$1span');
-        const _mer = (u) => `<td style="text-align:center;color:${merC>0?'var(--red)':'inherit'};font-weight:${merC>0?600:400}">${_s5c2('Mermas', merC>0 ? _nc(merC)+' '+u : '—')}</td>
-            <td style="text-align:center">${_s5c2('Cancelaciones', cancel > 0 ? _nc(cancel) + ' ' + u + _s5sub('informativo') : '—')}</td>`;
+        const _mer = (u) => `<td style="text-align:center;color:${merC>0?'var(--red)':'inherit'};font-weight:${merC>0?600:400}">${_s5c2('Mermas', merC>0 ? _nc(merC)+' '+u : '—')}</td>`;
         const _fin1 = `
             <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + _nc(dif) + ' ' + (esPzaComp0 ? 'pza' : uC.mov) + (esPzaComp0 ? '' : _s5sub(_grupo(calcDiferencia, {signo:true}))))}</td>
             <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>`;
-        const _cort = (u) => `<td style="text-align:center">${_s5c2('Cortesías', cortC > 0 ? '<b style="color:var(--viol)">' + _nc(cortC) + ' ' + u + '</b>' : '—')}</td>
-            <td></td>`;
+        const _cort = (u) => `<td style="text-align:center">${_s5c2('Cortesías', cortC > 0 ? '<b style="color:var(--viol)">' + _nc(cortC) + ' ' + u + '</b>' : '—')}</td>`;
         const _fin2 = `
             <td style="text-align:center;color:${color}">${_s5c2(pcC.lbl, pcC.html)}</td>
             <td style="text-align:right;color:${color};white-space:nowrap">${_s5c2('A proveedor', '<b style="color:inherit">' + _s5dinero(difProvC) + '</b>')}</td>`;
@@ -11071,39 +11111,17 @@ function _step5TablasHTML() {
         return { html: esPzaComp ? htmlPza : html, dif, difCosto, vend: ventaBot + ventaCopa + ventaCoct, esPza: esPzaComp };
     }
 
-    /* Cada celda ya trae su título en los dos renglones; el encabezado nombra
-       la columna y dice, chiquito, qué va abajo. */
-    const _th2 = (t) => '<small class="s5-th2">' + t + '</small>';
-    const COPA_THEAD = `<thead>
-                    <tr>
-                        <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
-                        <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Exist.<br>anterior${_th2('stock')}</th>
-                        <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Entradas${_th2('costo')}</th>
-                        <th colspan="2" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas${_th2('uso en coctelería')}</th>
-                        <th rowspan="2" style="text-align:center;width:85px;vertical-align:bottom">Mermas${_th2('cortesías')}</th>
-                        <th rowspan="2" style="text-align:center;width:85px;vertical-align:bottom">Cancelac.</th>
-                        <th rowspan="2" style="text-align:center;width:85px;vertical-align:bottom">Teórico${_th2('copas · onzas')}</th>
-                        <th rowspan="2" style="text-align:center;width:85px;vertical-align:bottom">Exist.<br>actual${_th2('copas · onzas')}</th>
-                        <th rowspan="2" style="text-align:center;width:95px;vertical-align:bottom">Diferencia${_th2('% del uso')}</th>
-                        <th rowspan="2" style="text-align:right;width:95px;vertical-align:bottom">Dif. $${_th2('carta · proveedor')}</th>
-                    </tr>
-                    <tr>
-                        <th style="text-align:center;width:70px;font-size:10px;color:var(--text-muted)">Botella</th>
-                        <th style="text-align:center;width:70px;font-size:10px;color:var(--text-muted)">Copa</th>
-                    </tr>
-                </thead>`;
-    const PZA_THEAD = `<thead><tr>
-                    <th>Producto</th>
-                    <th style="text-align:center;width:80px">Exist.<br>anterior${_th2('stock')}</th>
-                    <th style="text-align:center;width:80px">Entradas${_th2('costo')}</th>
-                    <th style="text-align:center;width:85px">Ventas${_th2('uso en coctelería')}</th>
-                    <th style="text-align:center;width:85px">Mermas${_th2('cortesías')}</th>
-                    <th style="text-align:center;width:85px">Cancelac.</th>
-                    <th style="text-align:center;width:80px">Teórico</th>
-                    <th style="text-align:center;width:80px">Exist.<br>actual</th>
-                    <th style="text-align:center;width:90px">Diferencia${_th2('% del uso')}</th>
-                    <th style="text-align:right;width:95px">Dif. $${_th2('carta · proveedor')}</th>
-                </tr></thead>`;
+    /* ══ SIN EL RENGLÓN DE TÍTULOS DE ARRIBA (Edwin, 19-nov) ═══════════════
+       Cada celda de los dos renglones ya trae su título, así que el
+       encabezado de la tabla repetía lo mismo. Se quita y en su lugar va un
+       <colgroup> con los anchos: así las columnas siguen alineadas de un
+       grupo a otro. Sin Cancelaciones: van en el reporte directivo, con los
+       descuentos. */
+    const _cols = (ws) => '<colgroup>' + ws.map(w => w ? '<col style="width:' + w + 'px">' : '<col>').join('') + '</colgroup>';
+    //                    Producto  Ant.  Entr.  V.bot  V.copa  Merma  Teór.  Actual  Dif.  Dif.$
+    const COPA_THEAD = _cols([0,     92,   96,    84,    84,     98,    98,    100,    116,  112]);
+    //                    Producto  Ant.  Entr.  Ventas  Merma  Teór.  Actual  Dif.  Dif.$
+    const PZA_THEAD  = _cols([0,     92,   96,    96,     98,    92,    96,    110,  112]);
 
     // ── Una tarjeta COLAPSABLE por grupo (colapsadas por defecto) con indicadores ──
     const _ordCat = (a,b) => String(a[0]).localeCompare(String(b[0]), 'es');
@@ -11126,8 +11144,8 @@ function _step5TablasHTML() {
             .concat(b.comp.map(f => _uDe(f).mov.toLowerCase())))];
         const mixtas = unidades.length > 1;
         const unidad = unidades[0] || 'u';
-        const copaTable = copaBody ? `<div class="tabla-wrap" style="overflow-x:auto"><table class="s5-tabla" style="min-width:900px;font-size:13.5px">${COPA_THEAD}<tbody>${copaBody}</tbody></table></div>` : '';
-        const pzaTable  = pzaBody  ? `<div class="tabla-wrap" style="overflow-x:auto"><table class="s5-tabla" style="font-size:13.5px">${PZA_THEAD}<tbody>${pzaBody}</tbody></table></div>` : '';
+        const copaTable = copaBody ? `<div class="tabla-wrap" style="overflow-x:auto"><table class="s5-tabla" style="min-width:900px;font-size:15px">${COPA_THEAD}<tbody>${copaBody}</tbody></table></div>` : '';
+        const pzaTable  = pzaBody  ? `<div class="tabla-wrap" style="overflow-x:auto"><table class="s5-tabla" style="font-size:15px">${PZA_THEAD}<tbody>${pzaBody}</tbody></table></div>` : '';
         const abierto   = !!_s5Abiertos[grp];
         const faltTxt   = mixtas ? 'Diferencias por insumo' : dif < -0.05 ? `faltan ${_nc(Math.abs(dif))} ${unidad}` : (dif > 0.05 ? `sobran ${_nc(dif)} ${unidad}` : 'cuadra');
         const faltCol   = dif < -0.05 ? 'var(--red)' : (dif > 0.05 ? 'var(--green)' : 'var(--text-dim)');

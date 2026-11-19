@@ -537,7 +537,8 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 await page.waitForTimeout(300);
                 const nombres = await page.evaluate(() => [...document.querySelectorAll('#step5Tablas .s5-nom')].map(e => e.textContent));
                 assert.ok(nombres.length > 0 && nombres.every(n => /Sprite/.test(n)), JSON.stringify(nombres));
-                assert.equal(await page.evaluate(() => document.querySelectorAll('[placeholder="Buscar producto en el resultado…"]').length), 1);
+                // Un solo buscador del Resultado: el de la barra (no otro dentro de la página).
+                assert.equal(await page.evaluate(() => [...document.querySelectorAll('#vistaCaptura input[placeholder^="Buscar producto"]')].filter(i => i.offsetParent).length), 1);
             });
             await page.evaluate(() => window.scrollTo(0, 3000)); await page.waitForTimeout(300);
             await caso('…y al bajar la barra sigue a la vista, pegada al encabezado', async () => {
@@ -851,6 +852,86 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await editarFicha();
             await caso('un prebatch (sub-receta) se edita en SU escandallo, no en Insumos', async () =>
                 assert.equal(await srcEditor(), '/recetas/index.html?embed=1&r=srPal'));
+            await ctx.close();
+        }
+
+        /* ── O · encabezado sin Anterior/Siguiente, Resultado más legible y
+           editores que caben (19-nov) ──────────────────────────────────────
+           Los pasos se cambian con su botón («③ Ventas ▾»): sin «← Anterior»
+           ni «Siguiente →». En el Resultado: el buscador y los filtros suben al
+           renglón de «Desglose · Salir · Finalizar», sin el renglón de títulos
+           de arriba, sin columna de Cancelaciones, letra más grande, y lo de
+           los prebatch cerrado detrás de un botón. Las ventanas de los
+           editores caben en una pantalla baja con zoom. */
+        console.log('\n══ O · Encabezado, Resultado y ventanas de los editores ══');
+        {
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: { negocio_insumos: filasNube(destilados(4).concat([SPRITE, SQUIRT, BATCH])),
+                recetas: [SUB].map(r => ({ id: r.id, negocio_id: 'n1', datos: r })) }, viewport: { width: 1280, height: 800 } }));
+            page.on('dialog', d => d.accept());
+            await page.evaluate(() => { if (!document.getElementById('nav').classList.contains('cerrado')) toggleNav(); });
+            await nuevoInv(page);
+            await page.waitForTimeout(600);
+            const botones = () => page.evaluate(() => [...document.querySelectorAll('#vistaCaptura .inv-wizard-header button')]
+                .filter(b => b.offsetParent && !b.closest('#pasoHerr') && !b.closest('#pasoMenuPop')).map(b => b.innerText.trim()).join(' | '));
+            await caso('ningún paso trae «← Anterior» ni «Siguiente →»: basta el botón de los pasos', async () => {
+                assert.equal(await page.evaluate(() => !!(document.getElementById('btnPasoAnt') || document.getElementById('btnPasoSig'))), false);
+                for (const p of [1, 2, 3, 4, 5]) {
+                    await page.evaluate((p) => irAPaso(p), p); await page.waitForTimeout(400);
+                    const b = await botones();
+                    assert.ok(!/Anterior|Siguiente/.test(b), 'paso ' + p + ': ' + b);
+                    assert.match(b, new RegExp('^' + p));
+                }
+            });
+            await page.evaluate(() => { filasCaptura.forEach((f, i) => { f.cerradasBodega = i % 3; f.registrado = true; }); invActual.prebatchProducidos = { prePal: 3 };
+                _consumoDirty = true; window._step5Dirty = true; irAPaso(4); irAPaso(5); });
+            await page.waitForTimeout(1200);
+            await caso('Resultado: buscador y filtros en el renglón de Desglose · Salir · Finalizar', async () => {
+                const r = await page.evaluate(() => { const t = (s) => Math.round(document.querySelector(s).getBoundingClientRect().top);
+                    return { tops: ['#phBuscar', '#pasoHerr .ph-der', '#btnRepDesglose', '#btnGuardarInv', '#btnFinalizarInv'].map(t),
+                             desborde: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
+                assert.ok(Math.max(...r.tops) - Math.min(...r.tops) < 30, 'en renglones distintos: ' + r.tops);
+                assert.equal(r.desborde, 0);
+            });
+            await page.evaluate(() => document.querySelectorAll('#step5Tablas .card-header[data-grp]').forEach(h => h.click())); await page.waitForTimeout(400);
+            await caso('…las tablas sin el renglón de títulos de arriba y sin Cancelaciones', async () => {
+                const r = await page.evaluate(() => ({ filas: document.querySelectorAll('#step5Tablas tr.s5-r1').length, thead: document.querySelectorAll('#step5Tablas thead').length,
+                    cancel: /Cancelac/i.test(document.getElementById('step5Tablas').innerText) }));
+                assert.ok(r.filas >= 6, 'sin renglones: ' + r.filas);
+                assert.deepEqual([r.thead, r.cancel], [0, false]);
+            });
+            await caso('…con letra más grande (cifras ≥ 16 px, títulos de celda ≥ 10 px)', async () => {
+                const r = await page.evaluate(() => [parseFloat(getComputedStyle(document.querySelector('.s5-r1 td:nth-child(2)')).fontSize),
+                    parseFloat(getComputedStyle(document.querySelector('.s5-r1 .s5-l')).fontSize)]);
+                assert.ok(r[0] >= 16 && r[1] >= 10, JSON.stringify(r));
+            });
+            await caso('…y lo de los prebatch cerrado detrás de un botón, que dice cuántos batches', async () => {
+                const r = await page.evaluate(() => { const b = document.querySelector('.s5-pb-btn'); return { txt: b.innerText.replace(/\s+/g, ' '), oculto: document.querySelector('.s5-pb-cuerpo').hidden }; });
+                assert.match(r.txt, /Producción de batches 3 batches producidos Ver/);
+                assert.equal(r.oculto, true);
+                await page.click('.s5-pb-btn');
+                assert.equal(await page.evaluate(() => document.querySelector('.s5-pb-cuerpo').hidden), false);
+                assert.match(await page.evaluate(() => document.querySelector('.s5-pb-cuerpo').innerText), /QUÉ SE LLEVÓ LA PRODUCCIÓN DE BATCHES/i);
+            });
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.setViewportSize({ width: 1280, height: 620 });
+            await page.evaluate(() => { document.documentElement.style.zoom = '1.25'; window._pedirClaveAdmin = (a, cb) => cb(); _invEditarInsumo('d000'); });
+            const dentro = () => page.evaluate(() => { const c = document.querySelector('.inv-editor-caja').getBoundingClientRect(), x = document.querySelector('.inv-editor-hd button').getBoundingClientRect();
+                return { alto: innerHeight, caja: [Math.round(c.top), Math.round(c.bottom)], cerrar: Math.round(x.top) }; });
+            await caso('la ventana del editor de Insumos cabe en una pantalla baja con zoom: ✕ y «Guardar» a la vista', async () => {
+                let fr; for (let k = 0; k < 80 && !fr; k++) { await page.waitForTimeout(250); fr = page.frames().find(f => /insumos\.html\?solo=1/.test(f.url())); }
+                await fr.waitForFunction(() => { const i = document.getElementById('ins-nombre'); return i && i.value; }, null, { timeout: 20000 });
+                const r = await dentro();
+                assert.ok(r.caja[0] >= 0 && r.caja[1] <= r.alto && r.cerrar >= 0, JSON.stringify(r));
+                const g = await fr.evaluate(() => { const b = [...document.querySelectorAll('button')].find(b => /Guardar/.test(b.textContent) && b.offsetParent); const q = b.getBoundingClientRect(); return [q.top, q.bottom, innerHeight]; });
+                assert.ok(g[0] >= 0 && g[1] <= g[2], '«Guardar» fuera del marco: ' + g);
+            });
+            await page.evaluate(() => { _invCerrarEditor(true); _invEditarReceta('srPal'); });
+            await caso('…y la del escandallo también', async () => {
+                let fr; for (let k = 0; k < 80 && !fr; k++) { await page.waitForTimeout(250); fr = page.frames().find(f => /index\.html\?embed=1/.test(f.url())); }
+                await fr.waitForFunction(() => { const i = document.getElementById('nombreReceta'); return i && i.value; }, null, { timeout: 20000 });
+                const r = await dentro();
+                assert.ok(r.caja[0] >= 0 && r.caja[1] <= r.alto && r.cerrar >= 0, JSON.stringify(r));
+            });
             await ctx.close();
         }
     } finally {

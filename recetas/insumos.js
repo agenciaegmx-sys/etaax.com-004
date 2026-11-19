@@ -3132,12 +3132,14 @@
                // Los tres modales que abre el escandallo: el editor (.modal-overlay),
                // el catálogo del negocio y el de ETAAX (con estilos en línea).
                '.modal-overlay,#modalCatalogoGlobal,#modalInsumosNeg{background:transparent!important;padding:0!important;align-items:stretch!important}' +
-               '.modal-overlay > *,#modalCatalogoGlobal > *,#modalInsumosNeg > *{max-width:none!important;width:100%!important;height:100vh!important;' +
-                   'max-height:100vh!important;min-width:0!important;border-radius:0!important;border:0!important;resize:none!important;margin:0!important}' +
+               // El alto en % del marco y NO en 100vh: con el zoom de una tablet
+               // 100vh medía más que el marco y «Guardar» quedaba fuera.
+               '.modal-overlay > *,#modalCatalogoGlobal > *,#modalInsumosNeg > *{max-width:none!important;width:100%!important;height:100%!important;' +
+                   'max-height:100%!important;min-width:0!important;border-radius:0!important;border:0!important;resize:none!important;margin:0!important}' +
                // insumos-ui.css topa el editor a «100dvh − 32px» con un ID y
                // !important: le ganaba a la regla de arriba y dejaba una franja
                // vacía abajo de la ventana. Esta pesa un poco más (body + clase).
-               'body.etx-insumos-page :is(#modalOverlay,#modalFicha,#modalCategoria,#modalImportar) > .modal{max-height:100vh!important}' +
+               'body.etx-insumos-page :is(#modalOverlay,#modalFicha,#modalCategoria,#modalImportar) > .modal{max-height:100%!important}' +
                // La ventana de afuera ya trae Minimizar/Cerrar: adentro sobran,
                // incluido el "✕ Cerrar" gris propio de cada catálogo.
                '.etx-hd-btns{display:none!important}' +

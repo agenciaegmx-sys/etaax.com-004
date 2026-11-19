@@ -19884,7 +19884,8 @@ console.log('\n══ BH26 · El prebatch, de punta a punta ══');
         const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
         /* Antes y después del desglose: lo que importa es que vaya ARRIBA de
            los números, no el orden exacto entre los dos bloques de prebatch. */
-        return eq(/return kpis \+ _prebatchAvisoHTML\(\)[^;]*\+ _resumenEjecutivo\(\)/.test(src),
+        // 19-nov: dentro de un botón plegado (_prebatchPlegable), pero ARRIBA.
+        return eq(/return kpis \+ _prebatchPlegable\(_prebatchAvisoHTML\(\)[^;]*\+ _resumenEjecutivo\(\)/.test(src),
                   true, 'donde duele');
     });
     test('…y nombra el renglón culpable, no un «hay un problema»', () => {
@@ -21179,8 +21180,24 @@ console.log('\n══ BH32 · Enseñar la cuenta, no solo el resultado ══');
     });
     test('…y con batches se pinta arriba de los números', () => {
         const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
-        return eq(/return kpis \+ _prebatchAvisoHTML\(\) \+ _prebatchDesgloseHTML\(\) \+ _resumenEjecutivo/.test(src),
+        return eq(/return kpis \+ _prebatchPlegable\(_prebatchAvisoHTML\(\) \+ _prebatchDesgloseHTML\(\)\) \+ _resumenEjecutivo/.test(src),
                   true, 'donde se mira el faltante');
+    });
+    /* 19-nov (Edwin: «es muy invasiva»): es informativo, así que va CERRADO
+       detrás de un botón que dice cuántos batches y avisos hay. */
+    test('…plegado de entrada, detrás de un botón que dice cuántos batches', () => {
+        montar(SR(INGS), INS, FIL(), 3);
+        const h = G._prebatchPlegable(G._prebatchDesgloseHTML());
+        return eq(/class="s5-pb-cuerpo" hidden/.test(h) + '|' + /3 batches producidos/.test(h) + '|' + /Ver ▾/.test(h), 'true|true|true', h.slice(0, 400));
+    });
+    test('…y sin nada que decir, ni el botón', () => eq(G._prebatchPlegable(''), '', 'sin ruido'));
+    test('al abrirlo, el contenido aparece sin repintar el Resultado', () => {
+        const btn = { nextElementSibling: { hidden: true }, setAttribute(){}, querySelector(){ return { textContent: '' }; } };
+        vm.runInContext('_s5PrebatchAbierto = false', G);
+        G._togglePrebatchS5(btn);
+        const abierto = btn.nextElementSibling.hidden === false;
+        G._togglePrebatchS5(btn);
+        return eq(abierto + '|' + btn.nextElementSibling.hidden, 'true|true');
     });
 
     /* ── LA FICHA DECÍA UNA COSA Y EL INVENTARIO DESCONTABA OTRA ──
@@ -35089,11 +35106,13 @@ console.log('\n══ BH75 · Qué entra a cada inventario ══');
      Entradas        lo que entró             │ costo
      Ventas          botella · copa           │ uso en coctelería y uso en prebatch
      Mermas          merma y su comentario    │ cortesías y su comentario
-     Cancelaciones   informativo              │
      Teórico / Exist. actual                  │ copas · onzas
      Diferencia      con su desglose          │ % contra el uso (o el teórico)
      Dif. $          a precio carta           │ a proveedor
-   Se corre el constructor real (_step5TablasHTML) y se lee CELDA por celda. */
+   Se corre el constructor real (_step5TablasHTML) y se lee CELDA por celda.
+   19-nov: sin la columna de Cancelaciones (van en el reporte directivo, con
+   los descuentos) y sin el renglón de títulos de arriba (cada celda trae el
+   suyo); los anchos los da un <colgroup>. */
 console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══');
 {
     const P = crearContexto();
@@ -35138,13 +35157,18 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     const sq = par('Squirt 2 LTS'), sp = par('Sprite 2 LTS'), pb = par('Batch Paloma PR');
     test('cada producto sale en DOS renglones', () =>
         eq((h.match(/class="s5-r1"/g) || []).length + '·' + (h.match(/class="s5-r2"/g) || []).length, '3·3'));
-    test('…con las MISMAS columnas los dos (10 en piezas, 11 en copas)', () =>
-        eq([sq.anchoUno, sq.anchoDos, pb.anchoUno, pb.anchoDos].join(','), '10,10,11,11'));
+    test('…con las MISMAS columnas los dos (9 en piezas, 10 en copas)', () =>
+        eq([sq.anchoUno, sq.anchoDos, pb.anchoUno, pb.anchoDos].join(','), '9,9,10,10'));
+    test('sin el renglón de títulos de arriba: un <colgroup> con tantas columnas como el renglón', () => {
+        const tablas = h.split('<table class="s5-tabla"').slice(1);
+        const cols = tablas.map(t => (t.slice(0, t.indexOf('</colgroup>')).match(/<col\b/g) || []).length).sort().join(',');
+        return eq(/<thead/.test(h) + '|' + cols, 'false|10,9');
+    });
     test('cada celda del PRIMER renglón trae su título (pieza)', () =>
         eq(sq.uno.slice(1).map(t => t.split(' ').slice(0, t.indexOf('Exist.') === 0 || t.indexOf('A carta') === 0 ? 2 : 1).join(' ')).join(' | '),
-           'Exist. anterior | Entradas | Ventas | Mermas | Cancelaciones | Teórico | Exist. actual | Diferencia | A carta'));
+           'Exist. anterior | Entradas | Ventas | Mermas | Teórico | Exist. actual | Diferencia | A carta'));
     test('…y en copas, venta en botella y venta en copa por separado', () =>
-        eq(/^Venta botella/.test(pb.uno[3]) + '·' + /^Venta copa/.test(pb.uno[4]) + '·' + /^Teórico .* bot$/.test(pb.uno[7]), 'true·true·true', pb.uno[3] + ' | ' + pb.uno[4] + ' | ' + pb.uno[7]));
+        eq(/^Venta botella/.test(pb.uno[3]) + '·' + /^Venta copa/.test(pb.uno[4]) + '·' + /^Teórico .* bot$/.test(pb.uno[6]), 'true·true·true', pb.uno[3] + ' | ' + pb.uno[4] + ' | ' + pb.uno[6]));
     test('Producto: abajo del nombre, el botón ⋯ (sin los tres botones de antes)', () =>
         eq(/class="s5-dots"/.test(sq.html2) && !/Marcar bateo|En el impreso|Fuera del impreso<\/button>/.test(h), true, sq.dos[0]));
     test('…y lo ya marcado se queda a la vista: la nota y «fuera del impreso»', () =>
@@ -35156,17 +35180,17 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         eq(sp.uno[2] + ' | ' + sp.dos[2], 'Entradas +2 pza | Costo $76.00'));
     test('Ventas: abajo el uso en coctelería y, en el mismo lugar, el uso en prebatch', () =>
         eq(sq.dos[3], 'Uso en coctelería — Uso en prebatch 1 pza'));
-    test('Mermas arriba con su comentario y, al lado, las cancelaciones', () =>
-        eq(sp.uno[4] + ' | ' + /^Cancelaciones/.test(sp.uno[5]), 'Mermas 1 pza Botella rota | true'));
+    test('Mermas arriba con su comentario, y ya SIN columna de cancelaciones', () =>
+        eq(sp.uno[4] + ' | ' + /Cancelaciones/.test(h), 'Mermas 1 pza Botella rota | false'));
     test('…y las cortesías abajo de las mermas, con su comentario', () =>
         eq(sp.dos[4], 'Cortesías 1 pza Cumpleaños mesa 4'));
     test('Teórico, Exist. actual y Diferencia, cada uno en su columna', () =>
-        eq([sq.uno[6], sq.uno[7], sq.uno[8]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza | Diferencia -1 pza'));
-    test('…y abajo de la diferencia, su % contra el uso (−1 de 1 usada)', () => eq(sq.dos[8], '% del uso -100.0%'));
+        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza | Diferencia -1 pza'));
+    test('…y abajo de la diferencia, su % contra el uso (−1 de 1 usada)', () => eq(sq.dos[7], '% del uso -100.0%'));
     test('Dif. $: a precio carta arriba, a proveedor abajo', () =>
-        eq(sq.uno[9] + ' | ' + sq.dos[9], 'A carta −$60.00 | A proveedor −$36.00'));
+        eq(sq.uno[8] + ' | ' + sq.dos[8], 'A carta −$60.00 | A proveedor −$36.00'));
     test('teórico y existencia en copas: abajo copas · onzas', () =>
-        eq(/^Copas · onzas \d/.test(pb.dos[6]) + '·' + /^Copas · onzas \d/.test(pb.dos[7]), 'true·true', pb.dos[6] + ' | ' + pb.dos[7]));
+        eq(/^Copas · onzas \d/.test(pb.dos[5]) + '·' + /^Copas · onzas \d/.test(pb.dos[6]), 'true·true', pb.dos[5] + ' | ' + pb.dos[6]));
     test('el renglón del batch dice lo producido, en Entradas', () => eq(/producido/.test(pb.uno[2]), true, pb.uno[2]));
     test('una línea gruesa cierra cada producto', () => eq(h.indexOf('.s5-r2>td{border-bottom:3px solid') > -1, true));
     /* El % es contra el USO; sin uso no hay contra qué dividir y se mide
