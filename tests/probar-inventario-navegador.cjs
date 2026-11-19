@@ -551,6 +551,61 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await ctx.close();
         }
+
+        /* ── K · la barra lateral plegada es una caja, no un riel ────────────
+           Edwin (19-nov): plegada, una caja rectangular de esquinas redondeadas
+           junto a la tarjeta del negocio —un poco menos alta que ella— con su
+           icono y «Expandir barra»; expandida, crece y trae «Ocultar barra». Y
+           como la caja no baja de la tarjeta, el contenido usa todo el ancho. */
+        console.log('\n══ K · Barra lateral: caja al plegar, panel al expandir ══');
+        {
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV,
+                { nube: { negocio_insumos: filasNube(destilados(10)) }, viewport: { width: 1280, height: 800 } }));
+            const estado = () => page.evaluate(() => {
+                const nav = document.getElementById('nav'), b = nav.getBoundingClientRect(), t = document.querySelector('#ctxBar .ctx-bar-inner').getBoundingClientRect();
+                const m = document.getElementById('mainContent').getBoundingClientRect();
+                return { cerrada: nav.classList.contains('cerrado'), w: Math.round(b.width), h: Math.round(b.height), top: Math.round(b.top),
+                         tarjetaTop: Math.round(t.top), tarjetaH: Math.round(t.height), tarjetaIzq: Math.round(t.left), mainIzq: Math.round(m.left),
+                         radio: getComputedStyle(nav).borderTopLeftRadius, texto: document.getElementById('navToggleBtn').innerText.trim(),
+                         enlaces: [...nav.querySelectorAll('a.nav-link')].filter(a => a.offsetParent).length };
+            });
+            const plegar = async (quiere) => {
+                if ((await page.evaluate(() => document.getElementById('nav').classList.contains('cerrado'))) !== quiere) await page.click('#navToggleBtn');
+                await page.waitForTimeout(450);
+            };
+            await plegar(true);
+            const p = await estado();
+            await caso('plegada: una caja junto a la tarjeta del negocio, un poco menos alta que ella', async () => {
+                assert.equal(p.top, p.tarjetaTop, 'no arranca a la altura de la tarjeta');
+                assert.ok(p.h < p.tarjetaH && p.h >= p.tarjetaH - 20, 'alto: ' + p.h + ' vs tarjeta ' + p.tarjetaH);
+                assert.ok(p.w > p.h, 'debe ser rectangular (más ancha que alta): ' + p.w + '×' + p.h);
+                assert.notEqual(p.radio, '0px');
+            });
+            await caso('…con su icono y «Expandir barra», sin el riel de iconos de los módulos', async () => {
+                assert.equal(p.texto, 'Expandir barra');
+                assert.ok(await page.evaluate(() => !!document.querySelector('#navToggleBtn .etx-nav-tg-ic svg')));
+                assert.equal(p.enlaces, 0);
+            });
+            await caso('…y el contenido usa TODO el ancho (ya no le deja carril a la barra)', async () => {
+                assert.equal(p.mainIzq, 0);
+                assert.ok(p.tarjetaIzq >= 24 + p.w, 'la tarjeta se encima con la caja');
+            });
+            await plegar(false);
+            const e = await estado();
+            await caso('expandida: crece a lo ancho y a lo largo, con los módulos y «Ocultar barra»', async () => {
+                assert.ok(e.w > p.w && e.h > p.h * 3, JSON.stringify(e));
+                assert.equal(e.texto, 'Ocultar barra');
+                assert.ok(e.enlaces >= 4, 'enlaces: ' + e.enlaces);
+                assert.ok(e.mainIzq >= e.w, 'el contenido se mete debajo de la barra');
+            });
+            await plegar(true);
+            await caso('«Ocultar barra» la regresa a la caja, y se recuerda', async () => {
+                const r = await estado();
+                assert.ok(r.cerrada && r.w === p.w && r.h === p.h, JSON.stringify(r));
+                assert.equal(await page.evaluate(() => localStorage.getItem('etaax_nav_abierta')), '0');
+            });
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }

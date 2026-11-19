@@ -136,14 +136,41 @@
         }).observe(document.body, { childList: true, subtree: true });
     }
 
+    /* LA BARRA PLEGADA ES UNA CAJA (19-nov). Tres medidas:
+       · --etx-sidebar-space: lo que el CONTENIDO le deja a la barra. Abierta,
+         268. Plegada en pantalla grande, NADA: la caja no baja de la tarjeta
+         del negocio, así que debajo de ella todo el ancho es del contenido.
+         En pantallas medianas y chicas la barra va debajo de la tarjeta y se
+         conserva el carril de siempre (112 / 88).
+       · --etx-ctx-space: lo que la tarjeta del negocio le deja: la caja y un
+         respiro.
+       · --etx-nav-caja-h: la caja mide un poco menos que la tarjeta del
+         negocio, que es la que tiene al lado. */
     function medirLayout() {
         if (embebido) return;
-        var bar = document.getElementById('ctxBar'), nav = document.getElementById('nav');
+        var bar = document.getElementById('ctxBar'), nav = document.getElementById('nav'), raiz = document.documentElement.style;
+        var visible = !!nav && getComputedStyle(nav).display !== 'none';
+        var cerrado = visible && nav.classList.contains('cerrado');
+        var w = innerWidth;
+        var cajaW = w <= 600 ? 64 : (w <= 900 ? 88 : 132);
+        var espacio = !visible ? 0 : (w <= 600 ? 88 : (cerrado ? (w <= 900 ? 112 : 0) : 268));
+        var ctxEsp = !visible ? 0 : (cerrado ? cajaW + 16 : 268);
+        raiz.setProperty('--etx-sidebar-space', espacio + 'px');
+        raiz.setProperty('--etx-ctx-space', ctxEsp + 'px');
+        raiz.setProperty('--etx-nav-caja-w', cajaW + 'px');
+        // Se mide DESPUÉS de ceder el carril: la tarjeta puede cambiar de alto.
         var alto = bar && bar.getClientRects().length ? Math.ceil(bar.getBoundingClientRect().height) : 0;
-        var espacio = nav && getComputedStyle(nav).display !== 'none' ? (innerWidth <= 600 ? 88 : (nav.classList.contains('cerrado') ? 112 : 268)) : 0;
-        document.documentElement.style.setProperty('--etx-context-h', alto + 'px');
-        document.documentElement.style.setProperty('--etx-sidebar-space', espacio + 'px');
+        var tarjeta = bar && bar.querySelector('.ctx-bar-inner');
+        var th = tarjeta && tarjeta.getClientRects().length ? tarjeta.getBoundingClientRect().height : 0;
+        var cajaH = (w > 900 && th) ? Math.max(64, Math.round(th - 12)) : (w <= 600 ? 64 : 76);
+        raiz.setProperty('--etx-context-h', alto + 'px');
+        raiz.setProperty('--etx-nav-caja-h', cajaH + 'px');
     }
+    /* El icono del botón: un panel con su flecha. Una flecha para «expandir» y
+       otra para «ocultar»; el CSS enseña la que toca según esté la barra. */
+    var ICONO_TOGGLE = '<span class="etx-nav-tg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3.5"/>' +
+        '<path d="M9 4v16"/><path class="etx-tg-expandir" d="M13 9.5 15.5 12 13 14.5"/><path class="etx-tg-ocultar" d="M15.5 9.5 13 12l2.5 2.5"/></svg></span>';
     window.etaaxEstilizarNav = function (nav) {
         if (embebido || !nav) return;
         var modulo = moduloActual();
@@ -162,7 +189,11 @@
             identidad.appendChild(texto);
             var btn = nav.querySelector('#navToggleBtn');
             top.innerHTML = ''; top.appendChild(identidad);
-            if (btn) { btn.classList.add('etx-nav-contraer'); top.appendChild(btn); }
+            if (btn) {
+                btn.classList.add('etx-nav-contraer');
+                btn.innerHTML = ICONO_TOGGLE + '<span class="nav-toggle-text" id="navToggleTxt"></span>';
+                top.appendChild(btn);
+            }
         }
         nav.querySelectorAll('a.nav-link').forEach(function (a) {
             if (a.classList.contains('etx-nav-back')) return;
@@ -192,9 +223,9 @@
         salida.setAttribute('aria-label',contextoGlobal ? 'Volver al negocio' : 'Volver a módulos');
         salida.title = salida.getAttribute('aria-label');
         var abierto = !nav.classList.contains('cerrado'), boton = nav.querySelector('#navToggleBtn'), txt = nav.querySelector('#navToggleTxt');
-        if (boton && boton.childNodes[0]) boton.childNodes[0].textContent = abierto ? '← ' : '→ ';
-        if (boton) boton.setAttribute('aria-expanded',String(abierto));
-        if (txt) txt.textContent = abierto ? 'Contraer navegación' : 'Expandir navegación';
+        if (boton && boton.childNodes[0] && !boton.querySelector('.etx-nav-tg-ic')) boton.childNodes[0].textContent = abierto ? '← ' : '→ ';
+        if (boton) { boton.setAttribute('aria-expanded',String(abierto)); boton.setAttribute('data-tooltip', abierto ? 'Ocultar barra' : 'Expandir barra'); }
+        if (txt) txt.textContent = abierto ? 'Ocultar barra' : 'Expandir barra';
         if (!nav._etxLayoutObserver) {
             nav._etxLayoutObserver = new MutationObserver(medirLayout);
             nav._etxLayoutObserver.observe(nav,{attributes:true,attributeFilter:['class','style']});

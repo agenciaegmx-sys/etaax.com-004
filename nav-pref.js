@@ -31,9 +31,12 @@
             if (main) main.classList.toggle('expandido', !ab);   // expandido = nav colapsada
             if (document.body) document.body.classList.toggle('nav-open', ab);
             var nuevo = document.body && document.body.classList.contains('etx-modulos-ui');
-            if (btn && btn.childNodes[0]) btn.childNodes[0].textContent = nuevo ? (ab ? '← ' : '→ ') : (ab ? '◀' : '▶');
-            if (txt) txt.textContent = nuevo ? (ab ? 'Contraer navegación' : 'Expandir navegación') : (ab ? 'Ocultar' : 'Expandir');
-            if (btn) btn.setAttribute('data-tooltip', ab ? 'Ocultar' : 'Expandir');
+            /* Con la interfaz nueva el botón trae su icono (un panel con
+               flecha) y el CSS lo voltea: aquí ya no se escribe la flecha. */
+            var conIcono = btn && btn.querySelector('.etx-nav-tg-ic');
+            if (btn && btn.childNodes[0] && !conIcono) btn.childNodes[0].textContent = nuevo ? (ab ? '← ' : '→ ') : (ab ? '◀' : '▶');
+            if (txt) txt.textContent = nuevo ? (ab ? 'Ocultar barra' : 'Expandir barra') : (ab ? 'Ocultar' : 'Expandir');
+            if (btn) btn.setAttribute('data-tooltip', nuevo ? (ab ? 'Ocultar barra' : 'Expandir barra') : (ab ? 'Ocultar' : 'Expandir'));
             if (btn) btn.setAttribute('aria-expanded', String(ab));
         } catch (e) {}
     }

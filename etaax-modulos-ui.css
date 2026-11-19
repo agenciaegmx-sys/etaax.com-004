@@ -67,9 +67,37 @@ body.etx-modulos-ui #nav {
   border:1px solid var(--etx-ui-line);border-radius:18px;background:var(--etx-ui-panel);
   padding:12px;overflow-y:auto;overflow-x:hidden;gap:2px;z-index:100;
   scrollbar-width:thin;scrollbar-color:var(--etx-ui-line) transparent;
-  transition:width .2s ease,padding .2s ease;
+  transition:width .22s ease,max-height .28s ease,padding .2s ease;
 }
-body.etx-modulos-ui #nav.cerrado {width:64px;padding:10px 8px;}
+/* ══ PLEGADA, LA BARRA ES UNA CAJA, NO UN RIEL (Edwin, 19-nov-2026) ════════
+   Antes se plegaba a un riel vertical de iconos que bajaba por toda la
+   pantalla y le seguía robando 112 px al contenido. Ahora se guarda en una
+   caja rectangular de esquinas redondeadas —el estilo de la tarjeta del
+   negocio, un poco menos alta que ella— con su icono y «Expandir barra».
+   Al expandir crece a lo ancho y a lo largo; «Ocultar barra» la regresa a la
+   caja. Como la caja no baja de la tarjeta del negocio, el contenido de abajo
+   usa TODO el ancho (ver medirLayout). */
+body.etx-modulos-ui #nav.cerrado {
+  width:var(--etx-nav-caja-w,132px);max-height:var(--etx-nav-caja-h,92px);
+  padding:0;overflow:hidden;border-radius:18px;
+}
+body.etx-modulos-ui #nav.cerrado>:not(.nav-top) {display:none!important;}
+body.etx-modulos-ui #nav.cerrado .nav-top {padding:0;margin:0;border:0;min-height:var(--etx-nav-caja-h,92px);gap:0;}
+body.etx-modulos-ui #nav.cerrado .etx-nav-identidad {display:none;}
+body.etx-modulos-ui #nav.cerrado .etx-nav-contraer {
+  flex-direction:column;gap:7px;min-height:var(--etx-nav-caja-h,92px);height:100%;width:100%;
+  border:0;border-radius:inherit;padding:8px 6px;font-size:12px;font-weight:600;line-height:1.25;
+  text-align:center;color:var(--text);cursor:pointer;
+}
+body.etx-modulos-ui #nav.cerrado .etx-nav-contraer:hover {background:var(--surface2);}
+/* styles.css esconde este texto con la barra plegada (era el riel de iconos): en la caja SÍ va. */
+body.etx-modulos-ui #nav.cerrado .etx-nav-contraer .nav-toggle-text {display:block!important;font-size:12px;font-weight:600;white-space:normal;}
+/* El icono del botón: un panel con su flecha; apunta a donde va a ir la barra. */
+body.etx-modulos-ui #nav .etx-nav-tg-ic {display:inline-flex;color:var(--etx-ui-cyan);flex-shrink:0;}
+body.etx-modulos-ui #nav .etx-nav-tg-ic svg {width:22px;height:22px;}
+body.etx-modulos-ui #nav.cerrado .etx-nav-tg-ic svg {width:28px;height:28px;}
+body.etx-modulos-ui #nav.cerrado .etx-tg-ocultar,
+body.etx-modulos-ui #nav:not(.cerrado) .etx-tg-expandir {display:none;}
 body.etx-modulos-ui #nav .nav-top {padding:10px 0 16px;min-height:0;height:auto;gap:12px;width:100%;border-bottom:1px solid var(--etx-ui-line);margin-bottom:10px;}
 body.etx-modulos-ui #nav .etx-nav-identidad {display:flex;align-items:center;gap:10px;min-width:0;padding:4px 8px;}
 body.etx-modulos-ui #nav .etx-nav-identidad>div {min-width:0;}
@@ -78,8 +106,8 @@ body.etx-modulos-ui #nav .etx-nav-numero {font-size:8px;letter-spacing:2px;text-
 body.etx-modulos-ui #nav .etx-nav-modulo {background:none;border:0;padding:0;display:inline-flex;flex-shrink:0;margin:0;text-decoration:none;}
 body.etx-modulos-ui #nav .etx-nav-modulo .etx-ic {width:28px;height:28px;}
 body.etx-modulos-ui #nav .etx-nav-contraer {
-  display:flex;align-items:center;justify-content:center;min-height:34px;width:100%;
-  border:1px solid var(--etx-ui-line);border-radius:8px;padding:6px;font-size:11px;
+  display:flex;align-items:center;justify-content:center;gap:8px;min-height:36px;width:100%;
+  border:1px solid var(--etx-ui-line);border-radius:9px;padding:6px 10px;font-size:11.5px;cursor:pointer;
   background:transparent;color:var(--text);font-family:inherit;letter-spacing:0;
 }
 body.etx-modulos-ui #nav .nav-toggle-text {font-size:11px;font-family:inherit;}
@@ -100,12 +128,6 @@ body.etx-modulos-ui #nav .etx-nav-back {
   color:var(--etx-ui-cyan);min-height:52px;align-items:center;
 }
 body.etx-modulos-ui #nav .etx-nav-back .etx-ic {--etx-color:var(--etx-ui-cyan);transform:rotate(180deg);}
-body.etx-modulos-ui #nav.cerrado .etx-nav-identidad {padding:4px 0;justify-content:center;width:100%;}
-body.etx-modulos-ui #nav.cerrado .etx-nav-identidad>div,
-body.etx-modulos-ui #nav.cerrado :is(.nav-text,.etx-nav-desc) {display:none;}
-body.etx-modulos-ui #nav.cerrado .nav-link {display:flex;justify-content:center;padding:12px 0;min-height:46px;}
-body.etx-modulos-ui #nav.cerrado .nav-top {align-items:center;}
-body.etx-modulos-ui #nav.cerrado .etx-nav-contraer {font-size:16px;}
 body.etx-modulos-ui .main-content {
   margin-left:var(--etx-sidebar-space,268px);margin-top:var(--etx-context-h,128px);
   width:calc(100% - var(--etx-sidebar-space,268px));padding:24px 24px 48px;
@@ -407,7 +429,9 @@ body.etx-modulos-ui :is(#nav,#ctxBar,.etx-module-dialog) :is(a,button):focus-vis
    piezas se mueven juntas al contraer la barra y nunca se encabalgan.
    Solo de 901 px para arriba: abajo la barra es un panel que se abre encima. */
 @media(min-width:901px) {
-  body.etx-modulos-ui #ctxBar {padding-left:calc(var(--etx-sidebar-space,268px) + 24px);}
+  /* La tarjeta del negocio le cede su carril a la barra: 268 abierta, y solo
+     lo de la CAJA cuando está plegada (--etx-ctx-space, ver medirLayout). */
+  body.etx-modulos-ui #ctxBar {padding-left:calc(var(--etx-ctx-space,var(--etx-sidebar-space,268px)) + 24px);}
   body.etx-modulos-ui #nav {
     top:calc(var(--etx-header-h,70px) + 16px);
     max-height:calc(100dvh - var(--etx-header-h,70px) - 32px);
@@ -455,6 +479,10 @@ body.etx-modulos-ui :is(#nav,#ctxBar,.etx-module-dialog) :is(a,button):focus-vis
   body.etx-modulos-ui .cf-section-title {font-size:18px;}
   .etx-module-options,.etx-sucursal-datos {grid-template-columns:1fr;}
   .etx-module-options button {min-height:90px;}
+}
+@media(max-width:600px) {
+  body.etx-modulos-ui #nav.cerrado .etx-nav-contraer,
+  body.etx-modulos-ui #nav.cerrado .etx-nav-contraer .nav-toggle-text {font-size:10px;}
 }
 @media(prefers-reduced-motion:reduce) {body.etx-modulos-ui #nav,body.etx-module-cards .etx-tool-card {transition:none;}}
 @media print {
