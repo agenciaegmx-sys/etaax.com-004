@@ -399,10 +399,10 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await page.waitForFunction(() => filasCaptura.some(f => f.insumoId === 'prMix'), null, { polling: 100, timeout: 8000 });
             await page.evaluate(() => irAPaso(3)); await page.waitForTimeout(400);
             const contenido = () => page.evaluate(() => document.getElementById('stepContent').innerText.replace(/\s+/g, ' '));
-            await caso('el Paso 3 abre en Insumos, con las cuatro vistas en la barra fija del encabezado', async () => {
-                assert.equal(await page.evaluate(() => vistaVentas), 'lista');
+            await caso('el Paso 3 abre en «Búsqueda rápida», junto al buscador, con las cuatro vistas en la barra fija', async () => {
+                assert.equal(await page.evaluate(() => vistaVentas), 'busqueda');
                 assert.match(await page.evaluate(() => document.getElementById('pasoHerr').innerText.replace(/\s+/g, ' ').trim()),
-                    /^🧴 Insumos 🍹 Cocteles 🏭 Prebatch 1 🔍 Búsqueda rápida/);
+                    /^Búsqueda rápida Insumos Cocteles Prebatch 1/);
             });
             await page.evaluate(() => setVistaVentas('prebatch')); await page.waitForTimeout(300);
             await caso('Prebatch: el Mix Negroni en LISTA, y dice qué lleva', async () => {
@@ -503,7 +503,7 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await page.evaluate(() => { irAPaso(1); }); await page.waitForTimeout(300);
             await caso('Paso 1: el buscador y los contadores en la barra, sin «Rápida / Lista»', async () => {
                 const b = await barra();
-                assert.match(b, /Pendientes \d+ ✅ Registrados \d+/);
+                assert.match(b, /Pendientes \d+ Registrados \d+/);
                 assert.ok(!/Rápida|Lista/.test(b), b);
             });
             await escribir('#existBuscador', 'Destilado 1');
@@ -673,7 +673,7 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await caso('…y lo registrado agrupado por insumo: «3 entradas», el total y la existencia del Paso 1', async () => {
                 const s = await page.evaluate(() => [...document.querySelectorAll('#entLogList .eg > summary')].map(x => x.innerText.replace(/\s+/g, ' ').trim()));
                 assert.equal(s.length, 1, JSON.stringify(s));
-                assert.match(s[0], /3 entradas 📦 \d+(\.\d+)? bot \+6 bot$/);
+                assert.match(s[0], /3 entradas Existencia actual \d+(\.\d+)? bot \+6 bot$/);
             });
             await caso('…al abrirlo: cada entrada con su tipo, fecha, ✏️ y el total', async () => {
                 await page.evaluate(() => { document.querySelector('#entLogList .eg').open = true; });
@@ -689,6 +689,72 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 assert.ok(await page.evaluate(() => !!document.querySelector('#entFormCard .ent-form-card')));
                 await page.evaluate(() => limpiarSeleccionEntrada()); await page.waitForTimeout(200);
                 assert.equal(await page.evaluate(() => document.querySelectorAll('#entChips .p12-item').length), 12);
+            });
+            await ctx.close();
+        }
+
+        /* ── M · detalles antes de publicar (19-nov) ─────────────────────────
+           Paso 2: modal de editar más chico, iconos de la app en vez de emojis,
+           «Existencia actual» en texto y la foto de evidencia por QR. Paso 3:
+           abre en «Búsqueda rápida», la lista por bloques (venta, cortesía,
+           merma con su comentario) y cocteles en dos columnas. */
+        console.log('\n══ M · Detalles de los Pasos 2 y 3 ══');
+        {
+            const RECS = Array.from({ length: 4 }, (_, i) => ({ id: 'rc' + i, nombre: 'Coctel ' + i, tipo: 'bebidas', status: 'activa', sucursalId: 'suc_principal',
+                precioEnCarta: 150, ingredientes: [{ insumoId: 'd00' + i, cantidad: 60, unidad: 'ML' }] }));
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: { negocio_insumos: filasNube(destilados(6)),
+                recetas: RECS.map(r => ({ id: r.id, negocio_id: 'n1', datos: r })) }, viewport: { width: 1280, height: 800 } }));
+            await nuevoInv(page);
+            await page.waitForTimeout(600);
+            await page.evaluate(() => { const f = filasCaptura[0]; f.cerradasBodega = 2; f.registrado = true;
+                invActual.entradasLog = [{ id: 'm1', insumoId: f.insumoId, nombreProducto: f.nombre, tipo: 'compra', cantidad: 2, fecha: '2026-11-14' }]; irAPaso(2); });
+            await page.waitForTimeout(500);
+            const emojis = () => page.evaluate(() => (document.getElementById('vistaCaptura').innerText.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu) || []).filter(c => c !== '✓' && c !== '✕'));
+            await caso('Paso 2 sin emojis: los iconos son los de la app', async () => {
+                assert.deepEqual(await emojis(), []);
+                assert.ok(await page.evaluate(() => document.querySelectorAll('#vistaCaptura svg.inv-ic').length) > 5);
+            });
+            await caso('…y lo registrado dice «Existencia actual» en texto', async () =>
+                assert.match(await page.evaluate(() => document.querySelector('#entLogList .eg > summary').innerText.replace(/\s+/g, ' ')), /Existencia actual 2 bot/));
+            await page.click('#entChips .p12-item'); await page.waitForTimeout(300);
+            await caso('el registro de una entrada nueva trae la foto de evidencia, también por QR', async () => {
+                assert.ok(await page.evaluate(() => !!document.querySelector('#entFormCard .ent-evid .inv-qr-btn') && !!document.querySelector('#entFormCard .ent-evid input[type=file]')));
+                await page.click('#entFormCard .inv-qr-btn'); await page.waitForTimeout(600);
+                assert.ok(await page.evaluate(() => !!document.querySelector('#entRapidaQrSlot #invQrEvid')), 'no se abrió el recuadro del QR');
+                assert.ok(await page.evaluate(() => (JSON.parse(localStorage.getItem('__nube') || '{}').pairing_sesiones || []).length > 0), 'no pidió el token del QR');
+            });
+            await caso('…y el QR sobrevive a repintar el formulario (cambiar de tipo)', async () => {
+                await page.evaluate(() => setTipoEntrada('consignacion')); await page.waitForTimeout(200);
+                assert.ok(await page.evaluate(() => !!document.querySelector('#entRapidaQrSlot #invQrEvid')));
+            });
+            await page.evaluate(() => limpiarSeleccionEntrada());
+            await page.evaluate(() => abrirEditorEntrada('m1')); await page.waitForTimeout(300);
+            await caso('el modal de editar entrada es más chico y también ofrece el QR', async () => {
+                const r = await page.evaluate(() => ({ w: document.querySelector('.ent-ed-card').getBoundingClientRect().width, qr: !!document.querySelector('.ent-ed-card .inv-qr-btn') }));
+                assert.ok(r.w <= 480 && r.qr, JSON.stringify(r));
+            });
+            await page.evaluate(() => cerrarEditorEntrada());
+            await page.evaluate(() => irAPaso(3)); await page.waitForTimeout(400);
+            await caso('Ventas abre en «Búsqueda rápida»', async () => assert.equal(await page.evaluate(() => vistaVentas), 'busqueda'));
+            await page.evaluate(() => setVistaVentas('lista')); await page.waitForTimeout(300);
+            await caso('lista de insumos: venta, cortesía y merma, cada una con dos campos y su comentario', async () => {
+                const r = await page.evaluate(() => { const tr = document.querySelector('#step3VentasListaCont tr.s3i-row');
+                    return { bloques: tr.querySelectorAll('.s3i-blq').length, coment: [...tr.querySelectorAll('.s3i-coment')].map(i => Math.round(i.getBoundingClientRect().width)),
+                             info: tr.querySelector('.s3i-info').innerText.replace(/\s+/g, ' ') }; });
+                assert.equal(r.bloques, 3);
+                assert.equal(r.coment.length, 3);
+                assert.ok(r.coment.every(w => w > 150), 'comentarios diminutos: ' + r.coment);
+                assert.match(r.info, /Existencia actual 2 bot Entradas \+2 bot/);
+            });
+            await caso('…y el comentario de la cortesía se guarda en el insumo', async () => {
+                await page.fill('#step3VentasListaCont tr.s3i-row .s3i-blq:nth-child(3) .s3i-coment', 'Mesa 4 cumpleaños');
+                assert.equal(await page.evaluate(() => filasCaptura[0].cortesiaConcepto), 'Mesa 4 cumpleaños');
+            });
+            await page.evaluate(() => setVistaVentas('menu')); await page.waitForTimeout(300);
+            await caso('cocteles en DOS columnas, con contadores grandes', async () => {
+                const r = await page.evaluate(() => { const l = document.querySelector('#stepContent .step3-lista');
+                    return { cols: getComputedStyle(l).gridTemplateColumns.split(' ').length, alto: Math.round(l.querySelector('.step3-counter button').getBoundingClientRect().height) }; });
+                assert.deepEqual([r.cols, r.alto >= 44], [2, true], JSON.stringify(r));
             });
             await ctx.close();
         }

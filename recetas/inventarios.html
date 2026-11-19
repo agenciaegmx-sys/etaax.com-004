@@ -26,6 +26,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="/etaax-store.js?v=3bbcc75c"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
 <script src="../supabase-config.js"></script>
+<script src="/qr-pairing.js"></script>
 <script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="/insumo-label.js?v=789551ec"></script>
 <script src="/staff-area.js?v=f7366b4c"></script><!-- vocabulario de áreas: barra, cocina y sus almacenes -->
@@ -359,7 +360,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=4ee745df"></script>
+<script src="/recetas/inventarios.js?v=49959d60"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -508,6 +509,58 @@ body.etx-modulos-ui #vistaCaptura > .inv-wizard-header { margin-top: -24px; }
 .paso-herr .filtro-select { font-size: 11.5px; padding: 7px 4px; max-width: 125px; }
 .paso-herr .vista-toggle { margin-left: 0; }
 .ph-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Íconos de la app dentro de botones y etiquetas (en vez de emojis). */
+.inv-ic { display: inline-block; vertical-align: -3px; margin-right: 6px; flex-shrink: 0; color: var(--etx-ui-cyan, #2a9aa5); }
+/* El tamaño lo manda quien lo pide (una regla general los ponía en 24 px). */
+svg.etx-ic.inv-ic { width: 16px; height: 16px; }
+svg.etx-ic.inv-ic[width="14"] { width: 14px; height: 14px; }
+svg.etx-ic.inv-ic[width="15"] { width: 15px; height: 15px; }
+svg.etx-ic.inv-ic[width="18"] { width: 18px; height: 18px; }
+svg.etx-ic.inv-ic[width="20"] { width: 20px; height: 20px; }
+:is(button, label):has(> svg.inv-ic), .p12-cab > span, .s3i-info > span, .s3-uso > span, .ph-ind > span { display: inline-flex; align-items: center; }
+:is(button, label):has(> svg.inv-ic) { justify-content: center; gap: 5px; }
+:is(button, label):has(> svg.inv-ic) > svg.inv-ic { margin-right: 1px; }
+.s3i-info > span, .eg-ex, .p12-cab > span { gap: 5px; }
+.s3i-info > span > svg.inv-ic, .p12-cab > span > svg.inv-ic { margin-right: 0; }
+.ent-log-del .inv-ic, .s3-ficha .inv-ic, .ent-ed-hd button .inv-ic, .ent-ed-addfoto .inv-ic { margin-right: 0; }
+.ent-ed-addfoto { display: inline-flex; align-items: center; justify-content: center; }
+/* La foto de evidencia por QR. */
+.inv-qr-btn { display: inline-flex; align-items: center; background: transparent; border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 11px; font: inherit; font-size: 12px; cursor: pointer; }
+.inv-qr-btn:hover, .inv-qr-btn.on { border-color: var(--etx-ui-cyan, #2a9aa5); }
+.inv-qr-evid { margin-top: 10px; }
+.ent-evid { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.eg-ex b { color: var(--text); font-weight: 600; }
+/* Paso 3 · ventas por bloques: Venta, Cortesía y Merma con su comentario abajo. */
+.s3i-tabla .inv-td-prod { min-width: 230px; }
+.s3i-nom { font-size: 16px; font-weight: 700; color: var(--text); line-height: 1.3; margin-bottom: 4px; }
+.s3i-info { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+.s3i-info b { color: var(--text); font-weight: 600; }
+.s3i-blq { vertical-align: top; padding: 12px 10px !important; min-width: 190px; }
+.s3i-tit { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--text-dim); font-weight: 600; margin-bottom: 6px; text-align: center; }
+.s3i-tit.cort { color: #8a7ad8; } .s3i-tit.merm { color: var(--red); }
+.s3i-par { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.s3i-campo { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.s3i-l { font-size: 10px; color: var(--text-dim); min-height: 14px; }
+.s3i-campo .inv-num-input { width: 100%; box-sizing: border-box; }
+.s3i-campo .inv-bottle-out { width: 100%; margin: 0; }
+.s3i-campo .inv-bottle-out small { display: none; }
+.s3i-na { color: var(--text-dim); font-size: 18px; padding-top: 6px; }
+.s3i-blq input.inv-num-input.s3i-coment { width: 100% !important; max-width: none !important; box-sizing: border-box; margin-top: 8px; height: 36px !important;
+    font-size: 12.5px !important; font-weight: 400 !important; text-align: left !important; padding: 0 10px !important; }
+.s3i-campo .inv-bottle-out input { width: 100% !important; box-sizing: border-box; }
+.s3i-campo .inv-num-input { max-width: none !important; }
+/* Cocteles y prebatch: en DOS columnas y con contadores grandes. */
+.step3-lista { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; border: 0 !important; background: transparent !important; overflow: visible !important; }
+.step3-lista .step3-menu-item { border: 1px solid var(--border) !important; border-radius: 11px !important; background: var(--surface) !important; padding: 12px 14px !important; }
+.step3-lista .step3-menu-item.has-cnt { background: rgba(61,190,122,0.07) !important; border-color: rgba(61,190,122,.45) !important; }
+.step3-lista .step3-counter button { width: 46px; height: 46px; font-size: 22px; }
+.step3-lista .step3-counter input { width: 76px !important; height: 46px; font-size: 18px !important; font-weight: 700; }
+/* Búsqueda rápida de Ventas: lo capturado en dos columnas. */
+.s3-busq #ventasResumen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.s3-busq #ventasResumen .ent-log-fila { margin: 0; }
+.s3-busq #ventasResumen > div:only-child:not(.ent-log-fila) { grid-column: 1 / -1; }
+@media (max-width: 900px) { .step3-lista, .s3-busq #ventasResumen { grid-template-columns: minmax(0, 1fr) !important; } }
 .ph-ind { display: inline-flex; gap: 6px; flex-shrink: 0; }
 .ph-ind > span { border: 1px solid var(--border); border-radius: 9px; padding: 7px 11px; font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
 
@@ -873,13 +926,19 @@ body.etx-modulos-ui #vistaCaptura > .inv-wizard-header { margin-top: -24px; }
 .ent-ed-ov { position:fixed; inset:0; z-index:9400; background:rgba(0,0,0,.66); backdrop-filter:blur(3px);
     display:flex; align-items:center; justify-content:center; padding:18px; }
 .ent-ed-card { background:var(--surface); border:1px solid var(--border); border-radius:16px;
-    width:100%; max-width:560px; max-height:92vh; display:flex; flex-direction:column; overflow:hidden;
+    width:100%; max-width:470px; max-height:86vh; display:flex; flex-direction:column; overflow:hidden;
     box-shadow:0 24px 70px rgba(0,0,0,.5); }
-.ent-ed-hd { display:flex; align-items:center; justify-content:space-between; padding:16px 20px;
+.ent-ed-hd { display:flex; align-items:center; justify-content:space-between; padding:11px 16px;
     border-bottom:1px solid var(--border); font-family:'Bebas Neue',sans-serif; font-size:19px;
     letter-spacing:1.2px; color:var(--text); }
 .ent-ed-hd button { background:none; border:none; color:var(--text-dim); font-size:19px; cursor:pointer; line-height:1; }
-.ent-ed-body { padding:18px 20px 20px; overflow-y:auto; }
+.ent-ed-body { padding:12px 16px 14px; overflow-y:auto; font-size:13px; }
+/* El modal de editar entrada, más chico (Edwin, 19-nov). */
+.ent-ed-body .ent-tipo-btn { padding:6px 10px; font-size:12px; }
+.ent-ed-body .ent-ed-inp { padding:8px 10px; font-size:13px; }
+.ent-ed-body textarea.ent-ed-inp { min-height:54px; height:54px; resize:vertical; }
+.ent-ed-body .ent-ed-lbl { margin-top:10px !important; }
+.ent-ed-hd span { display:inline-flex; align-items:center; gap:8px; }
 .ent-ed-lbl { font-size:10px; letter-spacing:1.6px; text-transform:uppercase; color:var(--text-dim);
     margin-bottom:7px; font-weight:600; }
 .ent-ed-ins { background:var(--surface2); border:1px solid var(--border); border-radius:9px;

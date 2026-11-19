@@ -649,7 +649,7 @@ let _existInsumoId    = null;
 let vistaEntradas2 = 'busqueda'; // 'busqueda' | 'lista'
 
 // Vista ventas paso 3 — default: menú
-let vistaVentas    = 'lista';    // 'lista' (insumos, la primera) | 'menu' (cocteles) | 'prebatch' | 'busqueda'
+let vistaVentas    = 'busqueda'; // 'busqueda' (la primera) | 'lista' (insumos) | 'menu' (cocteles) | 'prebatch'
 let _ventasBusqueda = '';
 let _ventasInsumoId = null;
 
@@ -4771,10 +4771,10 @@ function recalcularResultado() {
     if (!inv) return;
     // Lo tecleado antes del autoguardado no se puede perder en el rearmado.
     if (filasCaptura.length) invActual.filas = filasCaptura.map(function(f){ return Object.assign({}, f); });
-    var btn = document.getElementById('btnRecalc5'), txt = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Recalculando…'; }
+    var btn = document.getElementById('btnRecalc5'), txt = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Recalculando…'; }
     var fin = function () {
-        if (btn) { btn.disabled = false; btn.textContent = txt || '🔄 Recalcular'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = txt || (_icInv('mov-movimientos') + 'Recalcular'); }
         if (!invActual || invActual !== inv) return;
         /* UN rearmado, con lo más fresco que haya: lo de la nube si llegó, y si
            no (sin red), lo que ya estaba en memoria —nunca la copia local de
@@ -5650,14 +5650,15 @@ function actualizarNavBtns() {
         if (btnAnt) btnAnt.style.display = 'none';
         if (btnSig) btnSig.style.display = 'none';
         if (btnFin) btnFin.style.display = 'none'; // primer_lev usa su propio botón
-        if (btnLev) { btnLev.style.display = 'inline-flex'; btnLev.disabled = cerr; btnLev.textContent = cerr ? '✅ Guardado' : '✅ Guardar levantamiento'; }
+        if (btnLev) { btnLev.style.display = 'inline-flex'; btnLev.disabled = cerr; btnLev.innerHTML = _icInv('aut-autorizado') + (cerr ? 'Guardado' : 'Guardar levantamiento'); }
         if (steps)  steps.style.display = 'none';
         _pintarPasoMenu();
         const lbl = document.getElementById('stepLabel');
         if (lbl) lbl.textContent = 'Primer Levantamiento — Captura de existencias';
     } else {
         if (btnLev) btnLev.style.display = 'none';
-        if (btnFin) { btnFin.style.display = 'inline-flex'; btnFin.disabled = cerr; btnFin.textContent = cerr ? '✅ Cerrado' : '✅ Finalizar inventario'; }
+        if (btnFin) { btnFin.style.display = 'inline-flex'; btnFin.disabled = cerr; btnFin.innerHTML = _icInv('aut-autorizado') + (cerr ? 'Cerrado' : 'Finalizar inventario'); }
+        _iconosEncabezadoInv();
         if (steps)  steps.style.display = '';
         if (btnAnt) btnAnt.style.display = pasoActual > 1 ? 'inline-flex' : 'none';
         if (btnSig) btnSig.style.display = pasoActual < 5 ? 'inline-flex' : 'none';
@@ -5874,6 +5875,24 @@ function buildFiltroRegistroBar() {
     </div>`;
 }
 
+/* ══ ÍCONOS DE LA APP EN VEZ DE EMOJIS (Edwin, 19-nov) ════════════════════
+   Los emojis se ven distinto en cada teléfono y no son del estilo de la app.
+   Aquí se piden los mismos SVG del resto de ETAAX (etaax-iconos.js). Si el
+   archivo de iconos todavía no cargó, no se pinta nada (el texto basta). */
+function _icInv(nombre, tam) {
+    return (typeof window.etaaxIcono === 'function') ? window.etaaxIcono(nombre, { tam: tam || 16, clase: 'inv-ic' }) : '';
+}
+/* Los botones fijos del encabezado (vienen en el HTML con emoji). */
+var _ICONOS_HDR = [['btnInfoGeneral', 'sto-detalle', 'Info general'], ['btnPreviewActual', 'fin-estadisticas', 'Existencias'],
+    ['btnRecalc5', 'mov-movimientos', 'Recalcular'], ['btnRepGerencial', 'aut-candado', 'Reporte gerencial'],
+    ['btnRepDirectivo', 'adm-comprobante', 'Reporte directivo'], ['btnRepDesglose', 'cor-desglose', 'Desglose por insumo'],
+    ['btnGuardarInv', 'cerrar-sesion', 'Salir']];
+function _iconosEncabezadoInv() {
+    if (typeof window.etaaxIcono !== 'function') return;
+    _ICONOS_HDR.forEach(function (x) { var b = document.getElementById(x[0]); if (b && !b.querySelector('.inv-ic')) b.innerHTML = _icInv(x[1]) + x[2]; });
+}
+document.addEventListener('DOMContentLoaded', function () { try { _iconosEncabezadoInv(); } catch (e) {} });
+
 /* ══ LA BARRA DEL PASO, FIJA EN EL ENCABEZADO (Edwin, 19-nov) ═════════════
    Cada paso tenía su buscador y sus filtros dentro del contenido, y al bajar
    se iban. Ahora viven en una franja del encabezado fijo y cambian con el paso
@@ -5939,19 +5958,22 @@ function _herrPasoHTML() {
            los contadores se quedan y se elige verlo en lista o en iconos. */
         const nReg = filasCaptura.filter(_esRegistrado).length, nPend = filasCaptura.length - nReg;
         return _herrLados(_herrBuscar('existBuscador', _existBusqueda, 'Buscar producto…', 'buscarInsumoExist') +
-            '<div class="ph-ind"><span>🔍 Pendientes <span class="ph-n">' + nPend + '</span></span>' +
-            '<span>✅ Registrados <span class="ph-n">' + nReg + '</span></span></div>', _herrVistaToggle());
+            '<div class="ph-ind"><span>' + _icInv('adm-pendiente', 14) + 'Pendientes <span class="ph-n">' + nPend + '</span></span>' +
+            '<span>' + _icInv('adm-pagado', 14) + 'Registrados <span class="ph-n">' + nReg + '</span></span></div>', _herrVistaToggle());
     }
     if (paso === 2) {
-        const seg = _herrSeg([['busqueda', '🔍 Rápida'], ['lista', '≡ Lista']], vistaEntradas2, 'setVistaEntradas2');
+        const seg = _herrSeg([['busqueda', _icInv('adm-buscar', 14) + 'Rápida'], ['lista', _icInv('ins-lista', 14) + 'Lista']], vistaEntradas2, 'setVistaEntradas2');
         return vistaEntradas2 === 'busqueda'
-            ? _herrLados(_herrBuscar('entBuscador', _entRapidaBusqueda, '🔍 Producto para registrar…', 'buscarInsumoEntrada') + seg, _filtroTipoHTML(true))
+            ? _herrLados(_herrBuscar('entBuscador', _entRapidaBusqueda, 'Producto para registrar…', 'buscarInsumoEntrada') + seg, _filtroTipoHTML(true))
             : _herrLados(_herrBuscarCapt() + seg, _herrSelectsCapt(true));
     }
     if (paso === 3) {
         const nPb = prebatchesProducibles().length;
-        const vistas = _herrSeg([['lista', '🧴 Insumos'], ['menu', '🍹 Cocteles'],
-            ['prebatch', '🏭 Prebatch' + (nPb ? ' <span class="ph-n">' + nPb + '</span>' : '')], ['busqueda', '🔍 Búsqueda rápida']], vistaVentas, 'setVistaVentas');
+        /* «Búsqueda rápida» va primero, junto al buscador, y es la vista con la
+           que abre Ventas (Edwin, 19-nov). */
+        const vistas = _herrSeg([['busqueda', _icInv('adm-buscar', 14) + 'Búsqueda rápida'], ['lista', _icInv('cat-insumos', 14) + 'Insumos'],
+            ['menu', _icInv('cor-bebidas', 14) + 'Cocteles'],
+            ['prebatch', _icInv('rec-sub-bebidas', 14) + 'Prebatch' + (nPb ? ' <span class="ph-n">' + nPb + '</span>' : '')]], vistaVentas, 'setVistaVentas');
         if (vistaVentas === 'lista')    return _herrLados(_herrBuscarCapt() + vistas, _herrSelectsCapt(false));
         if (vistaVentas === 'menu')     return _herrLados(_herrBuscar('phBuscar', _menuBusquedaVentas, 'Buscar coctel o receta…', '_filtrarMenuVentas') + vistas, '');
         if (vistaVentas === 'prebatch') return _herrLados(_herrBuscar('phBuscar', _menuBusquedaVentas, 'Buscar prebatch…', '_filtrarMenuVentas') + vistas, '');
@@ -6151,12 +6173,12 @@ function renderStep1() {
     return _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() + `
         <div class="p12-split">
             <section class="p12-col">
-                <div class="p12-cab"><span>🔍 Pendientes</span><b id="p1NPend"></b></div>
+                <div class="p12-cab"><span>${_icInv('adm-pendiente', 14)}Pendientes</span><b id="p1NPend"></b></div>
                 <div id="p1Pend"></div>
             </section>
             <section class="p12-col">
-                <div class="p12-cab"><span>✅ Registrados</span><b id="p1NReg"></b>
-                    ${nReg > 0 ? `<button class="p12-salir" onclick="guardarYSalir()">💾 Guardar y salir</button>` : ''}</div>
+                <div class="p12-cab"><span>${_icInv('adm-pagado', 14)}Registrados</span><b id="p1NReg"></b>
+                    ${nReg > 0 ? `<button class="p12-salir" onclick="guardarYSalir()">${_icInv('adm-guardar', 14)}Guardar y salir</button>` : ''}</div>
                 <div id="p1Reg"></div>
             </section>
         </div>
@@ -6170,8 +6192,8 @@ function _p1ItemHTML(f, reg) {
     const u = f.tipo === 'peso' ? (f.baseUnit || 'g').toLowerCase() : (f.tipo === 'pza' ? 'pza' : 'bot');
     const ea = parseFloat(f.existenciaAnterior) || 0, cb = f.contNeto > 0 && f.copaML > 0 ? f.contNeto / f.copaML : 0;
     const eaB = f.tipo === 'pza' || f.tipo === 'peso' ? ea : (cb > 0 ? ea / cb : ea);
-    const met = (f.metodoCaptura || 'peso'), metIc = met === 'nivel' ? '🌡️' : met === 'foto' ? '📷' : '⚖️';
-    const dato = reg ? '<b class="p12-ok">' + metIc + ' ' + fmtBot(calcExistenciaBot(f)) + ' ' + u + '</b>'
+    const met = (f.metodoCaptura || 'peso'), metIc = _icInv(met === 'nivel' ? 'ins-contenido' : met === 'foto' ? 'ins-foto' : 'ins-peso', 14);
+    const dato = reg ? '<b class="p12-ok">' + metIc + fmtBot(calcExistenciaBot(f)) + ' ' + u + '</b>'
                      : '<span class="p12-ant">Anterior ' + fmtBot(Math.round(eaB * 100) / 100) + ' ' + u + '</span>';
     const meta = insumoMeta(f) ? insumoMetaHTML(f) : (f.categoria ? etx(f.categoria) : '');
     return `<button class="p12-item ${reg ? 'reg' : ''}" onclick="seleccionarProductoExist('${f.insumoId}')">
@@ -6420,7 +6442,7 @@ function renderCardExist() {
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
-                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
+                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">${_icInv('rec-ficha', 14)}Ver</button>
                     <button onclick="_cerrarModalExist()" title="Cerrar sin marcar como registrado"
                         style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
                 </div>
@@ -6431,9 +6453,9 @@ function renderCardExist() {
             <div style="margin-bottom:16px">
                 <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;font-weight:500">Método de captura</div>
                 <div class="ent-tipo-row">
-                    <button class="ent-tipo-btn ${metodo==='peso'?'active':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','peso')">⚖️ Peso</button>
-                    <button class="ent-tipo-btn ${metodo==='nivel'?'active':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','nivel')">🌡️ Nivel</button>
-                    <button class="ent-tipo-btn ${metodo==='foto'?'active':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','foto')">📷 Foto</button>
+                    <button class="ent-tipo-btn ${metodo==='peso'?'active':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','peso')">${_icInv('ins-peso')}Peso</button>
+                    <button class="ent-tipo-btn ${metodo==='nivel'?'active':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','nivel')">${_icInv('ins-contenido')}Nivel</button>
+                    <button class="ent-tipo-btn ${metodo==='foto'?'active':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','foto')">${_icInv('ins-foto')}Foto</button>
                 </div>
             </div>
 
@@ -6521,7 +6543,7 @@ function _cardExistPeso(fila, idx) {
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
-                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
+                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">${_icInv('rec-ficha', 14)}Ver</button>
                     <button onclick="_cerrarModalExist()" title="Cerrar sin marcar como registrado" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
                 </div>
             </div>
@@ -6690,7 +6712,7 @@ function renderStep1Lista(filas) {
                         <button class="${metodo==='nivel'?'on':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','nivel')" title="Nivel">🌡️</button>
                         <button class="${metodo==='foto'?'on':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','foto')" title="Foto">📷</button>
                     </span>
-                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
+                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">${_icInv('rec-ficha', 14)}Ver</button>
                 </div>
             </td>
             <td class="inv-td-ant">
@@ -6963,7 +6985,7 @@ function renderStep2Lista(filas) {
                 <div class="inv-prod-meta">
                     ${insumoMeta(fila) ? `<span class="inv-tag">${insumoMetaHTML(fila)}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
-                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
+                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">${_icInv('rec-ficha', 14)}Ver</button>
                 </div>
             </td>
             <td class="inv-td-ant">
@@ -7271,90 +7293,86 @@ function renderStep3Insumos() {
     // El buscador actualiza SOLO esta lista (no el toolbar) → no se pierde el foco al escribir.
     return '<div id="step3VentasListaCont" style="padding-top:12px">' + _step3VentasInner() + '</div>';
 }
+/* ══ LA LISTA DE VENTAS POR BLOQUES (Edwin, 19-nov) ═════════════════════
+   Cada insumo: su nombre grande con lo que ya se sabe de él (existencia
+   actual del Paso 1, entradas del Paso 2 y lo usado en coctelería y en
+   batches) y tres bloques —Venta, Cortesía, Merma—, cada uno con sus dos
+   campos arriba (copas/piezas y botellas) y su comentario abajo. */
 function _step3VentasInner() {
     const b        = busquedaCapt.toLowerCase();
-    // Modelo nuevo: cada PRESENTACIÓN (miembro) se vende por separado y aquí es una
-    // fila normal. El compuesto es solo consolidación en el reporte → no aparece aquí.
     const filtradas = filasCaptura.filter(f =>
         (!filtroFamActivo || f.familia === filtroFamActivo) &&
         (!filtroCatActiva || f.categoria === filtroCatActiva) &&
         (!b || f.nombre.toLowerCase().includes(b))
     );
-    const items = filtradas;
-    const _ncop = v => (v % 1 ? (Math.round(v*10)/10).toFixed(1) : v);
-    const rows = items.map(fila => {
+    const selSt = "background:transparent;border:none;color:var(--text-dim);font-family:inherit;font-size:10px;cursor:pointer;padding:0;max-width:96px";
+    const rows = filtradas.map(fila => {
         const esComp = !!fila.esCompuesto;
-        const idx    = esComp ? -1 : filasCaptura.indexOf(fila);
-        const unidad = esComp ? (fila.tipo === 'pza' ? 'pza' : 'cop') : _umCapLbl(fila);
-        const tipoSt = fila.tipo === 'pza'
-            ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
-            : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
-        const esCopa = fila.tipo !== 'pza';
-        // Compuestos: siempre en copas (agrupan varios insumos y no tienen una copa propia).
-        const hV = esComp ? `updVentasCompuesto('${fila.compId}','ventas',+this.value)`   : `updVentasUM(${idx},'ventasCopasDirectas',this.value)`;
-        const hC = esComp ? `updVentasCompuesto('${fila.compId}','cortesia',+this.value)` : `updVentasUM(${idx},'cortesiaCopas',this.value)`;
-        const hM = esComp ? `updVentasCompuesto('${fila.compId}','merma',+this.value)`    : `updVentasUM(${idx},'mermaCopas',this.value)`;
-        const vV = esComp ? (fila.ventasCopasDirectas||0) : (_copAUm(fila, fila.ventasCopasDirectas, 'ventasCopasDirectas')||0);
-        return `<tr class="inv-row">
+        if (esComp) return '';                      // el compuesto es consolidación del reporte
+        const idx    = filasCaptura.indexOf(fila);
+        const esCopa = fila.tipo === 'copa';
+        const u      = fila.tipo === 'peso' ? (fila.baseUnit || 'g').toLowerCase() : (fila.tipo === 'pza' ? 'pza' : 'bot');
+        const reg    = _esRegistrado(fila);
+        const ent    = getEntradasBottles(fila.insumoId);
+        const info   = '<div class="s3i-info">' +
+            '<span>Existencia actual <b>' + (reg ? fmtBot(calcExistenciaBot(fila)) + ' ' + u : 'sin contar') + '</b></span>' +
+            '<span>Entradas <b>' + (ent > 0 ? '+' + fmtBot(Math.round(ent * 100) / 100) + ' ' + _unidadCompra(fila) : '—') + '</b></span></div>';
+        const vV = _copAUm(fila, fila.ventasCopasDirectas, 'ventasCopasDirectas') || 0;
+        const campo = (lbl, html) => '<div class="s3i-campo"><span class="s3i-l">' + lbl + '</span>' + html + '</div>';
+        const num = (val, onblur, extra) => `<input type="text" inputmode="decimal" class="inv-num-input" value="${val || ''}" placeholder="—"
+            title="Puedes escribir operaciones: 6+4" onkeydown="_celdaKey(event,this)" onblur="${onblur}" ${extra || ''}>`;
+        const coment = (campoNom, val, ph) => `<input type="text" class="inv-num-input s3i-coment" value="${etx(val || '')}" placeholder="${ph}"
+            oninput="updVentasConcepto(${idx},'${campoNom}',this.value)">`;
+        const botSalida = (campoCop) => {
+            if (!esCopa) return campo('bot', '<div class="s3i-na">—</div>');
+            return campo('Botellas', _inputSalidaBotella(idx, campoCop, true).replace(/<label[^>]*>[^<]*<\/label>/, ''));
+        };
+        const umSel = (campoNom) => esCopa ? _selUM(idx, campoNom, selSt) : (fila.tipo === 'pza' ? 'pza' : u);
+        return `<tr class="inv-row s3i-row">
             <td class="inv-td-prod">
-                <div class="inv-prod-name">${esComp ? '🧩 ' + etx(fila.nombre) : etx(insumoTitulo(fila))}</div>
+                <div class="s3i-nom">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta">
-                    ${esComp
-                        ? `<span class="inv-tag" style="background:rgba(122,184,245,0.12);border-color:rgba(122,184,245,0.4);color:#7ab8f5">compuesto · ${_ncop(fila._existCopas)} cop disp.</span>`
-                        : (insumoMeta(fila)?`<span class="inv-tag">${insumoMetaHTML(fila)}</span>`:'')}
-                    <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
-                    ${esComp ? '' : `<button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>`}
+                    ${insumoMeta(fila) ? `<span class="inv-tag">${insumoMetaHTML(fila)}</span>` : ''}
+                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">${_icInv('rec-ficha', 14)}Ver</button>
                 </div>
-                ${esComp ? '' : _usoFilaPaso3HTML(fila)}
-                ${esComp ? '' : `<div style="margin-top:10px;max-width:360px"><label for="venta-comentario-lista-${idx}" style="font-size:11px;color:var(--text-dim)">Comentarios de venta</label>
-                    <input id="venta-comentario-lista-${idx}" type="text" class="inv-num-input inv-comment-input" style="height:40px;margin-top:4px"
-                        value="${etx(fila.ventasComentario||'')}" placeholder="Comentario opcional…"
-                        oninput="updVentasConcepto(${idx},'ventasComentario',this.value)"></div>`}
+                ${info}
+                ${_usoFilaPaso3HTML(fila)}
             </td>
-            <td class="inv-td-input" style="width:95px">
-                ${(esComp || fila.tipo === 'pza')
-                    ? `<div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">${unidad}</div>`
-                    : `<div style="text-align:center;margin-bottom:3px">${_selUM(idx, 'ventasCopasDirectas', "background:transparent;border:none;color:var(--text-dim);font-family:inherit;font-size:10px;text-align:center;cursor:pointer;padding:0;max-width:78px")}</div>`}
-                <input type="text" inputmode="decimal" class="inv-num-input" value="${vV||''}" placeholder="—"
-                    title="Puedes escribir operaciones: 6+4" onkeydown="_celdaKey(event,this)"
-                    onblur="${esComp ? `updVentasCompuesto('${fila.compId}','ventas',_evalCelda(this.value)||0);this.value=_evalCelda(this.value)||''` : `updVentasCalc(${idx},'ventasCopasDirectas',this)`}">
+            <td class="s3i-blq">
+                <div class="s3i-tit">Venta</div>
+                <div class="s3i-par">
+                    ${campo(umSel('ventasCopasDirectas'), num(vV, `updVentasCalc(${idx},'ventasCopasDirectas',this)`))}
+                    ${esCopa ? campo('Botellas', num(fila.ventasBotella, `updVentasDirCalc(${idx},'ventasBotella',this)`)) : campo('bot', '<div class="s3i-na">—</div>')}
+                </div>
+                ${coment('ventasComentario', fila.ventasComentario, 'Comentario de venta…')}
             </td>
-            <td class="inv-td-input" style="width:95px">
-                <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">bot</div>
-                ${(esComp || fila.tipo === 'pza')
-                    ? `<div style="text-align:center;color:var(--text-dim);font-size:18px;padding-top:4px">—</div>`
-                    : `<input type="text" inputmode="decimal" class="inv-num-input" value="${fila.ventasBotella||''}" placeholder="—"
-                        title="Puedes escribir operaciones" onkeydown="_celdaKey(event,this)"
-                        onblur="updVentasDirCalc(${idx},'ventasBotella',this)">`}
+            <td class="s3i-blq">
+                <div class="s3i-tit cort">Cortesía</div>
+                <div class="s3i-par">
+                    ${campo(umSel('cortesiaCopas'), num(_salidaCaptura(fila, 'cortesiaCopas') || 0, `updVentasCalc(${idx},'cortesiaCopas',this)`, 'style="border-color:rgba(155,141,232,.45)"'))}
+                    ${botSalida('cortesiaCopas')}
+                </div>
+                ${coment('cortesiaConcepto', fila.cortesiaConcepto, 'ej. VIP, degustación…')}
             </td>
-            <td class="inv-td-input" style="width:95px">
-                <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">cortesía${(esComp || fila.tipo === 'pza') ? '' : _selUM(idx, 'cortesiaCopas', "background:transparent;border:none;color:var(--text-dim);font-family:inherit;font-size:10px;text-align:center;cursor:pointer;padding:0;max-width:78px")}</div>
-                <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(155,141,232,.4)" placeholder="—"
-                    title="Puedes escribir operaciones" onkeydown="_celdaKey(event,this)"
-                    value="${(esComp ? (fila.cortesiaCopas||0) : (_salidaCaptura(fila, 'cortesiaCopas')||0))||''}"
-                    onblur="${esComp ? `updVentasCompuesto('${fila.compId}','cortesia',_evalCelda(this.value)||0);this.value=_evalCelda(this.value)||''` : `updVentasCalc(${idx},'cortesiaCopas',this)`}">
-                ${esComp ? '' : _inputSalidaBotella(idx, 'cortesiaCopas', true)}
-            </td>
-            <td class="inv-td-input" style="width:95px">
-                <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">merma${(esComp || fila.tipo === 'pza') ? '' : _selUM(idx, 'mermaCopas', "background:transparent;border:none;color:var(--text-dim);font-family:inherit;font-size:10px;text-align:center;cursor:pointer;padding:0;max-width:78px")}</div>
-                <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(224,90,58,.35)" placeholder="—"
-                    title="Puedes escribir operaciones" onkeydown="_celdaKey(event,this)"
-                    value="${(esComp ? (fila.mermaCopas||0) : (_salidaCaptura(fila, 'mermaCopas')||0))||''}"
-                    onblur="${esComp ? `updVentasCompuesto('${fila.compId}','merma',_evalCelda(this.value)||0);this.value=_evalCelda(this.value)||''` : `updVentasCalc(${idx},'mermaCopas',this)`}">
-                ${esComp ? '' : _inputSalidaBotella(idx, 'mermaCopas', true)}
+            <td class="s3i-blq">
+                <div class="s3i-tit merm">Merma</div>
+                <div class="s3i-par">
+                    ${campo(umSel('mermaCopas'), num(_salidaCaptura(fila, 'mermaCopas') || 0, `updVentasCalc(${idx},'mermaCopas',this)`, 'style="border-color:rgba(224,90,58,.4)"'))}
+                    ${botSalida('mermaCopas')}
+                </div>
+                ${coment('mermaConcepto', fila.mermaConcepto, 'ej. derrame, rotura…')}
             </td>
         </tr>`;
     }).join('');
     return `<div class="inv-table-wrap">
-        <table class="inv-capture-table">
+        <table class="inv-capture-table s3i-tabla">
             <thead><tr>
                 <th class="inv-th">Producto</th>
-                <th class="inv-th inv-th-c" style="width:95px">Copas / Pzas</th>
-                <th class="inv-th inv-th-c" style="width:95px">Botellas</th>
-                <th class="inv-th inv-th-c" style="width:95px">Cortesía</th>
-                <th class="inv-th inv-th-c" style="width:95px">Merma</th>
+                <th class="inv-th inv-th-c">Venta</th>
+                <th class="inv-th inv-th-c">Cortesía</th>
+                <th class="inv-th inv-th-c">Merma</th>
             </tr></thead>
-            <tbody>${rows||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:32px">Sin resultados</td></tr>'}</tbody>
+            <tbody>${rows||'<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:32px">Sin resultados</td></tr>'}</tbody>
         </table>
     </div>`;
 }
@@ -7549,7 +7567,7 @@ function _step3PrebatchItemHTML(p, prod) {
         <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:flex-start;gap:6px">
                 <div class="s3-nom" title="${etx(p.nombre)}">${etx(p.nombre)}</div>
-                ${p.recetaId ? `<button onclick="verFichaReceta('${p.recetaId}')" title="Ver la sub-receta" class="s3-ficha">📋</button>` : ''}
+                ${p.recetaId ? `<button onclick="verFichaReceta('${p.recetaId}')" title="Ver la sub-receta" class="s3-ficha">${_icInv('rec-ficha')}</button>` : ''}
             </div>
             ${sr ? `<div class="s3-sub" title="Capturar aquí descuenta los ingredientes de «${etx(sr.nombre)}»">hace: ${etx(sr.nombre)}</div>` : ''}
             ${bases ? `<div class="s3-sub">↓ ${etx(bases)}</div>` : ''}
@@ -7583,7 +7601,7 @@ function _step3RecetaItemHTML(r, vendidos) {
         <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:6px;min-width:0">
                 <div class="s3-nom">${etx(r.nombre)}</div>
-                <button onclick="verFichaReceta('${r.id}')" title="Ficha técnica" class="s3-ficha">📋</button>
+                <button onclick="verFichaReceta('${r.id}')" title="Ficha técnica" class="s3-ficha">${_icInv('rec-ficha')}</button>
                 ${p>0?`<span class="s3-precio">$${p.toFixed(0)}</span>`:''}
             </div>
             ${ingStr?`<div class="s3-sub">${etx(ingStr)}</div>`:''}
@@ -7612,8 +7630,8 @@ function _usoFilaPaso3HTML(fila) {
     var fmt = fila.tipo === 'copa' ? function (v) { return _fmtCop(v, fila) + (copa ? ' · ' + _mlTxt(v * parseFloat(fila.copaML)) : ''); }
         : function (v) { return _fmtEquivalenteBatch(v, fila.tipo === 'pza' ? 'PZA' : (fila.baseUnit || 'G')); };
     return '<div class="s3-uso">' +
-        (coct > 0.0001 ? '<span>🍹 Uso en coctelería <b>' + fmt(coct) + '</b></span>' : '') +
-        (pb > 0.0001 ? '<span>🏭 Uso en prebatch <b>' + fmt(pb) + '</b></span>' : '') + '</div>';
+        (coct > 0.0001 ? '<span>' + _icInv('cor-bebidas', 14) + 'Uso en coctelería <b>' + fmt(coct) + '</b></span>' : '') +
+        (pb > 0.0001 ? '<span>' + _icInv('rec-sub-bebidas', 14) + 'Uso en prebatch <b>' + fmt(pb) + '</b></span>' : '') + '</div>';
 }
 
 /* ══ EL PREBATCH QUE NO SALE, Y POR QUÉ ═════════════════════════════════════
@@ -7869,7 +7887,7 @@ function renderStep3Menu() {
     }
     const grupos = {};
     recetas.forEach(r => {
-        const g = r.grupo || (r.tipo === 'alimentos' ? '🍽️ Alimentos' : '🍹 Bebidas');
+        const g = r.grupo || (r.tipo === 'alimentos' ? 'Alimentos' : 'Bebidas');
         if (!grupos[g]) grupos[g] = [];
         grupos[g].push(r);
     });
@@ -8019,7 +8037,8 @@ function renderStep3BusquedaScaffold() {
         (f.ventasCopasDirectas||0)>0 || (f.ventasBotella||0)>0 ||
         (f.cortesiaCopas||0)>0 || (f.mermaCopas||0)>0 || !!String(f.ventasComentario||'').trim()
     ).length;
-    return `<div class="ent-rapida-wrap">
+    // A lo ancho y lo capturado en DOS columnas (Edwin, 19-nov): aprovechar la pantalla.
+    return `<div class="ent-rapida-wrap ent-ancho s3-busq">
         <div>
             <!-- El buscador (insumos, cocteles y prebatch) va en la barra del paso. -->
             <div id="ventasChips" class="ent-chips"></div>
@@ -8126,7 +8145,7 @@ function renderCardVentas() {
                     </div>
                 </div>
                 <div style="display:flex;gap:6px;align-items:flex-start">
-                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
+                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">${_icInv('rec-ficha', 14)}Ver</button>
                     <button onclick="limpiarSeleccionVentas()"
                         style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
                 </div>
@@ -12823,10 +12842,10 @@ function cerrarEntradaLog() {
 // está disponible aunque alguien la consulte antes de que corra este tramo.
 function entTipos() {
     return [
-        { id:'compra',          lbl:'Compra',          emoji:'🛒', color:'var(--accent)', suma:true  },
-        { id:'bonificacion',    lbl:'Bonificación',    emoji:'🎁', color:'var(--green)',  suma:false },
-        { id:'consignacion',    lbl:'Consignación',    emoji:'📦', color:'#7c7cff',       suma:false },
-        { id:'prestamo_pagado', lbl:'Préstamo pagado', emoji:'🔁', color:'#e0a45a',       suma:false }
+        { id:'compra',          lbl:'Compra',          emoji:'🛒', ic:'fin-gastos',      color:'var(--accent)', suma:true  },
+        { id:'bonificacion',    lbl:'Bonificación',    emoji:'🎁', ic:'nom-bono',        color:'var(--green)',  suma:false },
+        { id:'consignacion',    lbl:'Consignación',    emoji:'📦', ic:'mod-inventarios', color:'#7c7cff',       suma:false },
+        { id:'prestamo_pagado', lbl:'Préstamo pagado', emoji:'🔁', ic:'ev-devolver',     color:'#e0a45a',       suma:false }
     ];
 }
 var ENT_TIPOS = entTipos();   // atajo para pintar los botones/selects
@@ -12890,15 +12909,47 @@ function renderChipsEntrada() {
 }
 
 function seleccionarProductoEntrada(insumoId) {
+    if (_entRapidaInsumoId !== insumoId) { _entRapidaFotos = []; _entRapidaQr = false; _qrEvidCerrar(); }
     _entRapidaInsumoId = insumoId;
     renderChipsEntrada();
     renderFormEntrada();
 }
 
+var _entRapidaFotos = [], _entRapidaQr = false, _entRapidaSubiendo = false;
+function _entRapidaToggleQr() {
+    if (_entRapidaQr) { _entRapidaQr = false; _qrEvidCerrar(); renderFormEntrada(); return; }
+    _entRapidaQr = true; renderFormEntrada();
+    _qrEvidAbrir('entRapidaQrSlot', function (foto) {
+        if (!foto || !foto.url) return;
+        _entRapidaFotos.push(foto.url); _entRapidaPintarFotos();
+    });
+}
+window._entRapidaToggleQr = _entRapidaToggleQr;
+async function _entRapidaSubirFotos(input) {
+    if (!input.files || !input.files.length) return;
+    var files = Array.prototype.slice.call(input.files);
+    input.value = '';
+    _entRapidaSubiendo = true; _entRapidaPintarFotos();
+    for (var i = 0; i < files.length; i++) {
+        try { var url = await _entEdSubirUna(files[i]); if (url) _entRapidaFotos.push(url); } catch (e) { console.warn('[foto entrada]', e); }
+    }
+    _entRapidaSubiendo = false; _entRapidaPintarFotos();
+}
+window._entRapidaSubirFotos = _entRapidaSubirFotos;
+function _entRapidaPintarFotos() {
+    var el = document.getElementById('entRapidaFotos'); if (!el) return;
+    el.innerHTML = _entRapidaFotos.map(function (u, i) {
+        return '<span class="ent-ed-foto"><img ' + sbAttr(u) + ' onclick="etaaxVerFoto(this.src)">' +
+            '<button title="Quitar foto" onclick="_entRapidaFotos.splice(' + i + ',1);_entRapidaPintarFotos()">✕</button></span>';
+    }).join('') +
+    '<label class="ent-ed-addfoto" title="Subir desde este equipo">' + (_entRapidaSubiendo ? '…' : _icInv('adm-subir-archivo', 20)) +
+        '<input type="file" accept="image/*" multiple style="display:none" onchange="_entRapidaSubirFotos(this)"></label>';
+}
 function renderFormEntrada() {
     const cont = document.getElementById('entFormCard');
     if (!cont) return;
-    if (!_entRapidaInsumoId) { cont.innerHTML = ''; return; }
+    const _qrB = _qrEvidApartar();
+    if (!_entRapidaInsumoId) { cont.innerHTML = ''; if (_qrB) _qrEvidCerrar(); _entRapidaQr = false; return; }
     const fila = filasCaptura.find(f => f.insumoId === _entRapidaInsumoId);
     if (!fila) { cont.innerHTML = ''; return; }
     const totalBot = getEntradasBottles(_entRapidaInsumoId);
@@ -12911,13 +12962,13 @@ function renderFormEntrada() {
                     ${totalBot > 0 ? `<div style="font-size:12px;color:var(--green);margin-top:5px;font-weight:600">Ya registrado este período: +${totalBot % 1 ? totalBot.toFixed(1) : totalBot} bot</div>` : ''}
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
-                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${_entRapidaInsumoId}')">📋 Ver</button>
+                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${_entRapidaInsumoId}')">${_icInv('rec-ficha', 14)}Ver</button>
                     <button onclick="limpiarSeleccionEntrada()"
                         style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
                 </div>
             </div>
             <div class="ent-tipo-row">
-                ${ENT_TIPOS.map(t => `<button class="ent-tipo-btn ${_entRapidaTipo === t.id ? 'active' : ''}" onclick="setTipoEntrada('${t.id}')">${t.emoji} ${t.lbl}</button>`).join('')}
+                ${ENT_TIPOS.map(t => `<button class="ent-tipo-btn ${_entRapidaTipo === t.id ? 'active' : ''}" onclick="setTipoEntrada('${t.id}')">${_icInv(t.ic)}${t.lbl}</button>`).join('')}
             </div>
             <div style="display:flex;gap:12px;align-items:flex-end;margin-top:16px;flex-wrap:wrap">
                 <div>
@@ -12945,7 +12996,15 @@ function renderFormEntrada() {
                     + Agregar
                 </button>
             </div>
+            <div class="ent-evid">
+                <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Evidencia (opcional): foto del ticket o del producto</div>
+                <div class="ent-ed-fotos" id="entRapidaFotos"></div>
+                <div style="margin-top:8px">${_qrEvidBoton(_entRapidaQr, '_entRapidaToggleQr()')}</div>
+                <div id="entRapidaQrSlot"></div>
+            </div>
         </div>`;
+    _entRapidaPintarFotos();
+    _qrEvidReponer(_qrB, 'entRapidaQrSlot');
     document.getElementById('entRapidaCant')?.focus();
 }
 
@@ -12956,6 +13015,7 @@ function setTipoEntrada(tipo) {
 
 function limpiarSeleccionEntrada() {
     _entRapidaInsumoId = null;
+    _entRapidaFotos = []; _entRapidaQr = false; _qrEvidCerrar();
     /* En dos columnas se regresa a la lista CON el filtro que había: se sigue
        registrando entre lo que se buscó. */
     if (!document.querySelector('.p12-split-ent')) {
@@ -12991,7 +13051,9 @@ function agregarEntradaRapida() {
         cantidad:       cant,
         fecha,
         origen:         'manual',
-        sucursalId:     _suc
+        sucursalId:     _suc,
+        foto_urls:      _entRapidaFotos.slice(),
+        foto_url:       _entRapidaFotos[0] || ''
     });
     guardarEntradas();
     // ESPEJO al log global (fuente maestra) → aparece también en el "Registro de entradas".
@@ -13004,12 +13066,15 @@ function agregarEntradaRapida() {
             familia: ins ? (ins.familia || '') : '',
             cantidad: cant, costo: 0, tipo: _entRapidaTipo, notas: '',
             fecha, origen: 'manual', sucursalId: _suc,
+            foto_urls: _entRapidaFotos.slice(), foto_url: _entRapidaFotos[0] || '',
             importadoEnInv: invActual.id, registrado: new Date().toISOString()
         });
         _guardarELLocal(); _sbUpEL(_gl[_gl.length - 1]); // diff no ve el push → forzar
     } catch(e) { console.warn('[entRapida espejo global]', e); }
     const cantEl = document.getElementById('entRapidaCant');
     if (cantEl) { cantEl.value = ''; cantEl.focus(); }
+    // La evidencia era de ESTA entrada: la siguiente arranca sin fotos.
+    _entRapidaFotos = [];
     renderFormEntrada();
     renderListadoEntradas();
     renderChipsEntrada();
@@ -13081,13 +13146,13 @@ function _entPintaChips(cta) {
             'background:' + (on ? bg : 'transparent') + ';' +
             'color:' + (on ? col : 'var(--text-muted)') + ';border-radius:20px;padding:5px 13px;' +
             'font-family:inherit;font-size:12px;cursor:pointer;font-weight:' + (on ? '700' : '500') + '">' +
-            ic + ' ' + lbl + ' <span style="opacity:.75">' + n + '</span></button>';
+            _icInv(ic, 15) + lbl + ' <span style="opacity:.75">' + n + '</span></button>';
     };
     el.innerHTML =
-        chip('todos',   '📋', 'Todo',      total,       'var(--accent)', 'rgba(245,200,66,.14)') +
-        chip('entrada', '📦', 'Entradas',  cta.entrada, 'var(--green)',  'rgba(61,190,122,.14)') +
-        chip('merma',   '🗑️', 'Mermas',    cta.merma,   'var(--red)',    'rgba(224,90,58,.14)') +
-        chip('salida',  '🎁', 'Cortesías', cta.salida,  '#9b7fe0',       'rgba(124,95,211,.16)');
+        chip('todos',   'ins-lista',       'Todo',      total,       'var(--accent)', 'rgba(245,200,66,.14)') +
+        chip('entrada', 'mod-inventarios', 'Entradas',  cta.entrada, 'var(--green)',  'rgba(61,190,122,.14)') +
+        chip('merma',   'rec-alerta',      'Mermas',    cta.merma,   'var(--red)',    'rgba(224,90,58,.14)') +
+        chip('salida',  'nom-bono',        'Cortesías', cta.salida,  '#9b7fe0',       'rgba(124,95,211,.16)');
 }
 
 function _entTipoDe(e) {
@@ -13322,7 +13387,7 @@ const fotoTh = _fotosThumbHTML(e);
                 <span class="ent-log-fecha">${e.fecha || '—'}${_horaCapHTML(e)}</span>
                 <span class="ent-log-cant" style="color:var(--red)">−${cant} ${etx(e.unidad || 'pza')}</span>
                 ${fotoTh}
-                <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">🗑️</button>
+                <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">${_icInv('mov-eliminar')}</button>
             </div>`;
         }
         if (e.concepto === 'salida') {
@@ -13335,7 +13400,7 @@ const fotoTh = _fotosThumbHTML(e);
                 <span class="ent-log-fecha">${e.fecha || '—'}${_horaCapHTML(e)}</span>
                 <span class="ent-log-cant" style="color:#9b7fe0">−${cant} ${etx(e.unidad || 'pza')}</span>
                 ${fotoTh}
-                <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">🗑️</button>
+                <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">${_icInv('mov-eliminar')}</button>
             </div>`;
         }
         return `<div class="ent-log-fila">
@@ -13344,9 +13409,9 @@ const fotoTh = _fotosThumbHTML(e);
             <span class="ent-log-fecha">${e.fecha || '—'}${_horaCapHTML(e)}</span>
             <span class="ent-log-cant">+${cant} ${_unidadCompra(e)}</span>
             ${fotoTh}
-            <button class="ent-log-del" title="Editar registro completo" onclick="abrirEditorEntrada('${e.id}')">✏️</button>
+            <button class="ent-log-del" title="Editar registro completo" onclick="abrirEditorEntrada('${e.id}')">${_icInv('rec-editar')}</button>
             <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')"
-                onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">🗑️</button>
+                onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">${_icInv('mov-eliminar')}</button>
         </div>`;
     };
     // Mapeo SEGURO: si una entrada trae datos raros y rowHTML lanza, esa fila muestra
@@ -13375,9 +13440,9 @@ const fotoTh = _fotosThumbHTML(e);
            lista corrida de siempre. */
         const _bloque = (arr, tipo) => invActual ? _entGruposHTML(arr, tipo, _safeRow) : arr.map(_safeRow).join('');
         cont.innerHTML =
-            (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(entradasArr, 'entrada') : '') +
-            (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(mermasArr, 'merma') : '') +
-            (salidasArr.length  ? secHdr('🎁 Cortesías / Préstamos' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(salidasArr, 'salida') : '') +
+            (entradasArr.length ? secHdr(_icInv('mod-inventarios', 14) + 'Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(entradasArr, 'entrada') : '') +
+            (mermasArr.length   ? secHdr(_icInv('rec-alerta', 14) + 'Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(mermasArr, 'merma') : '') +
+            (salidasArr.length  ? secHdr(_icInv('nom-bono', 14) + 'Cortesías / Préstamos' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(salidasArr, 'salida') : '') +
             (!visibles.length ? _entVacioHTML() : '');
     } catch (err) {
         console.warn('[registro entradas] render por secciones falló, fallback plano:', err);
@@ -13412,7 +13477,7 @@ function _entGruposHTML(arr, tipo, fila) {
         return '<details class="eg" data-k="' + etx(key) + '"' + (_entGruposAbiertos[key] ? ' open' : '') + ' ontoggle="_entGrupoToggle(this)">' +
             '<summary><span class="eg-nom">' + etx(e0.nombreProducto || e0.nombre || '—') + '</span>' +
             '<span class="eg-n">' + es.length + ' ' + lbl[es.length === 1 ? 0 : 1] + '</span>' +
-            (f ? '<span class="eg-ex" title="Existencia registrada en el Paso 1">📦 ' + exist + '</span>' : '') +
+            (f ? '<span class="eg-ex" title="Registrada en el Paso 1">Existencia actual <b>' + exist + '</b></span>' : '') +
             '<b class="eg-tot ' + tipo + '">' + tot + '</b></summary>' +
             '<div class="eg-cuerpo">' + es.map(fila).join('') +
             '<div class="eg-total"><span>Total</span><b class="' + tipo + '">' + tot + '</b></div></div></details>';
@@ -13477,6 +13542,43 @@ function _entAplicarCambios(id, campos, ins) {
     return !!(g || invActual);
 }
 
+/* ══ LA FOTO DE EVIDENCIA, DESDE EL CELULAR CON UN QR (Edwin, 19-nov) ══════
+   El mismo puente que usan los cortes y gastos (qr-pairing.js): la pantalla
+   enseña un QR, el celular lo escanea, toma la foto y aquí llega sola.
+   El recuadro del QR se SACA antes de repintar y se vuelve a poner después:
+   repintar lo destruía y el código cambiaba a media escaneada. */
+function _qrEvidCerrar() {
+    try { if (window.QrPuente) QrPuente.cerrar(); } catch (e) {}
+    var b = document.getElementById('invQrEvid'); if (b) b.remove();
+}
+function _qrEvidAbrir(slotId, onFoto) {
+    var slot = document.getElementById(slotId);
+    if (!slot) return;
+    if (!window.QrPuente) { alert('El escaneo con el celular no está disponible en esta pantalla. Recarga la página.'); return; }
+    _qrEvidCerrar();
+    var box = document.createElement('div');
+    box.id = 'invQrEvid'; box.className = 'inv-qr-evid';
+    slot.appendChild(box);
+    QrPuente.abrir(getNegocioActivo(), 'entrada', box, onFoto);
+}
+// Antes de repintar un contenedor, se aparta el QR; después se regresa a su lugar.
+function _qrEvidApartar() { var b = document.getElementById('invQrEvid'); if (b && b.parentNode) b.parentNode.removeChild(b); return b; }
+function _qrEvidReponer(b, slotId) { if (!b) return; var slot = document.getElementById(slotId); if (slot) slot.appendChild(b); else _qrEvidCerrar(); }
+function _qrEvidBoton(activo, fn) {
+    return '<button type="button" class="inv-qr-btn' + (activo ? ' on' : '') + '" onclick="' + fn + '">' +
+        _icInv(activo ? 'adm-cerrar' : 'cor-escanear-qr', 16) + (activo ? 'Cerrar el escaneo' : 'Subir foto con el celular (QR)') + '</button>';
+}
+function _entEdToggleQr() {
+    if (!_entEd) return;
+    if (_entEd.qr) { _entEd.qr = false; _qrEvidCerrar(); _entEdPintar(); return; }
+    _entEd.qr = true; _entEdPintar();
+    _qrEvidAbrir('entEdQrSlot', function (foto) {
+        if (!_entEd || !foto || !foto.url) return;
+        _entEd.fotos.push(foto.url); _entEdPintar();
+    });
+}
+window._entEdToggleQr = _entEdToggleQr;
+
 function abrirEditorEntrada(id) {
     var e = _entBuscarPorId(id);
     if (!e) { alert('No se encontró la entrada.'); return; }
@@ -13494,6 +13596,7 @@ function abrirEditorEntrada(id) {
     _entEdPintar();
 }
 function cerrarEditorEntrada() {
+    if (_entEd && _entEd.qr) _qrEvidCerrar();
     _entEd = null;
     var ov = document.getElementById('entEdOv');
     if (ov) ov.remove();
@@ -13519,18 +13622,19 @@ function _entEdPintar() {
         return x && (insumoEtiqueta(x) || '').toLowerCase().indexOf(q) >= 0;
     }).slice(0, 12) : [];
 
+    var _qrB = _qrEvidApartar();
     ov.innerHTML =
         '<div class="ent-ed-card" onclick="event.stopPropagation()">' +
             '<div class="ent-ed-hd">' +
-                '<span>✏️ Editar entrada</span>' +
-                '<button onclick="cerrarEditorEntrada()">✕</button>' +
+                '<span>' + _icInv('rec-editar', 18) + 'Editar entrada</span>' +
+                '<button onclick="cerrarEditorEntrada()" title="Cerrar">' + _icInv('adm-cerrar', 18) + '</button>' +
             '</div>' +
             '<div class="ent-ed-body">' +
                 '<div class="ent-ed-lbl">Concepto</div>' +
                 '<div class="ent-tipo-row">' +
                     ENT_TIPOS.map(function(t){
                         return '<button class="ent-tipo-btn ' + (_entEd.tipo === t.id ? 'active' : '') + '" ' +
-                            'onclick="_entEd.tipo=\'' + t.id + '\';_entEdPintar()">' + t.emoji + ' ' + t.lbl + '</button>';
+                            'onclick="_entEd.tipo=\'' + t.id + '\';_entEdPintar()">' + _icInv(t.ic) + t.lbl + '</button>';
                     }).join('') +
                 '</div>' +
                 '<div style="font-size:11px;color:var(--text-dim);margin-top:6px">' +
@@ -13569,10 +13673,12 @@ function _entEdPintar() {
                             '<button title="Quitar foto" onclick="_entEd.fotos.splice(' + i + ',1);_entEdPintar()">✕</button>' +
                         '</span>';
                     }).join('') +
-                    '<label class="ent-ed-addfoto">' + (_entEd.subiendo ? '⏳' : '＋') +
+                    '<label class="ent-ed-addfoto" title="Subir desde este equipo">' + (_entEd.subiendo ? '…' : _icInv('adm-subir-archivo', 20)) +
                         '<input type="file" accept="image/*" multiple style="display:none" onchange="_entEdSubirFotos(this)">' +
                     '</label>' +
                 '</div>' +
+                '<div style="margin-top:8px">' + _qrEvidBoton(!!_entEd.qr, '_entEdToggleQr()') + '</div>' +
+                '<div id="entEdQrSlot"></div>' +
 
                 '<div class="ent-ed-acc">' +
                     '<button class="ent-ed-btn" onclick="cerrarEditorEntrada()">Cancelar</button>' +
@@ -13580,6 +13686,7 @@ function _entEdPintar() {
                 '</div>' +
             '</div>' +
         '</div>';
+    _qrEvidReponer(_qrB, 'entEdQrSlot');
 }
 // Comprime y sube las fotos nuevas a Storage (bucket 'evidencias', igual que el QR).
 async function _entEdSubirFotos(input) {

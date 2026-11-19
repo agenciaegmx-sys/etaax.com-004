@@ -35365,10 +35365,16 @@ console.log('\n══ BH78 · Paso 3 en cuatro vistas, pasos en un botón y el p
 
     /* ── el Paso 3 ── */
     /* Desde el 19-nov las vistas van en la barra fija del encabezado. */
-    test('el Paso 3 abre en Insumos y ofrece las cuatro vistas (en la barra del encabezado)', () => {
+    /* Desde el 19-nov (tarde) «Búsqueda rápida» va primero, junto al buscador,
+       y es la vista con la que abre Ventas. */
+    test('el Paso 3 ofrece las cuatro vistas, «Búsqueda rápida» primero (en la barra del encabezado)', () => {
         const h = B._herrPasoHTML();
         const vistas = (h.match(/setVistaVentas\('(\w+)'\)/g) || []).map(x => x.match(/'(\w+)'/)[1]).join(',');
-        return eq(vistas + ' · ' + /class="on" onclick="setVistaVentas\('lista'\)"/.test(h) + ' · ' + /setVistaVentas/.test(B.renderStep3()), 'lista,menu,prebatch,busqueda · true · false');
+        return eq(vistas + ' · ' + /class="on" onclick="setVistaVentas\('lista'\)"/.test(h) + ' · ' + /setVistaVentas/.test(B.renderStep3()), 'busqueda,lista,menu,prebatch · true · false');
+    });
+    test('…y Ventas abre en «Búsqueda rápida»', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        return eq(/let vistaVentas\s*=\s*'busqueda'/.test(src), true);
     });
     test('Prebatch: en LISTA, solo los que se pueden anotar', () => {
         vm.runInContext('vistaVentas = "prebatch";', B);
@@ -35390,7 +35396,7 @@ console.log('\n══ BH78 · Paso 3 en cuatro vistas, pasos en un botón y el p
         eq(['gin', 'campari', 'vermut'].map(id => B.consumoBasesPorProduccion(id)).join(','), '900,900,900'));
     test('…y la lista de insumos lo dice en el renglón de cada uno, en copas y en ml', () => {
         const fs_ = vm.runInContext('filasCaptura', B);
-        return eq(B._usoFilaPaso3HTML(fs_[0]).replace(/<[^>]+>/g, ''), '🏭 Uso en prebatch 30 cop · 900 ml');
+        return eq(B._usoFilaPaso3HTML(fs_[0]).replace(/<[^>]+>/g, ''), 'Uso en prebatch 30 cop · 900 ml');
     });
     test('…y un insumo sin uso no pinta nada', () => {
         vm.runInContext('invActual.prebatchProducidos = {};', B);
@@ -35496,7 +35502,7 @@ console.log('\n══ BH79 · El catálogo completo y la barra del paso ══')
        y lista/iconos. */
     test('Paso 1: el buscador, los contadores de pendientes y registrados, y lista/iconos', () => {
         const h = barra(1);
-        return eq(txt(h) + ' · ' + /id="existBuscador"/.test(h) + ' · ' + /setModoCaptura\('galeria'\)/.test(h), '🔍 Pendientes 1 ✅ Registrados 1 ≡ ⊞ · true · true');
+        return eq(txt(h) + ' · ' + /id="existBuscador"/.test(h) + ' · ' + /setModoCaptura\('galeria'\)/.test(h), 'Pendientes 1 Registrados 1 ≡ ⊞ · true · true');
     });
     test('…y ya sin «Rápida / Lista» ni filtros de familia', () => {
         const h = barra(1);
