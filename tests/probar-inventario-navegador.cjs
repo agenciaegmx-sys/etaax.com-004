@@ -105,6 +105,9 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                     assert.equal(abajo.hdr.bottom - abajo.hdr.top, arriba.hdr.bottom - arriba.hdr.top, 'cambió de alto al bajar');
                     assert.ok(!abajo.compacto, 'se compactó');
                     assert.ok(Math.abs(abajo.hdr.top - abajo.ctx.bottom) < 2, 'no quedó pegado bajo la barra de contexto: ' + JSON.stringify(abajo));
+                    /* Sin corrimiento (19-nov): arriba del todo ya está en su lugar
+                       fijo; antes arrancaba 24 px abajo y se recorría al bajar. */
+                    assert.equal(arriba.hdr.top, abajo.hdr.top, 'se corre al bajar: ' + arriba.hdr.top + ' → ' + abajo.hdr.top);
                 });
             }
             /* Título y botones en dos renglones como mucho, más la barra del paso
@@ -592,6 +595,19 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await plegar(false);
             const e = await estado();
+            await caso('expandida: «Ocultar barra» se ve como botón (contorno grueso) y «MÓDULO» va en vertical', async () => {
+                const r = await page.evaluate(() => { const b = getComputedStyle(document.getElementById('navToggleBtn')), n = document.querySelector('#nav .etx-nav-numero');
+                    const hijos = [...document.querySelector('#nav .etx-nav-identidad').children].map(x => x.className || x.tagName);
+                    return { borde: parseFloat(b.borderTopWidth), modo: n ? getComputedStyle(n).writingMode : '', primero: hijos[0] }; });
+                assert.ok(r.borde >= 2, 'borde: ' + r.borde);
+                assert.equal(r.modo, 'vertical-rl');
+                assert.equal(r.primero, 'etx-nav-numero', 'la etiqueta debe ir a la izquierda del icono');
+            });
+            await caso('…y la cabecera no se aplasta: el botón queda entero dentro de ella', async () => {
+                const r = await page.evaluate(() => { const top = document.querySelector('#nav .nav-top').getBoundingClientRect(), b = document.getElementById('navToggleBtn').getBoundingClientRect();
+                    return { dentro: b.bottom <= top.bottom + 0.5, top: [top.top, top.bottom], btn: [b.top, b.bottom] }; });
+                assert.ok(r.dentro, JSON.stringify(r));
+            });
             await caso('expandida: crece a lo ancho y a lo largo, con los módulos y «Ocultar barra»', async () => {
                 assert.ok(e.w > p.w && e.h > p.h * 3, JSON.stringify(e));
                 assert.equal(e.texto, 'Ocultar barra');

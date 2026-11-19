@@ -182,10 +182,16 @@
             if (panel) { panel.removeAttribute('style'); panel.classList.add('etx-nav-modulo'); panel.innerHTML = ic(icono,28); }
             var identidad = document.createElement('div');
             identidad.className = 'etx-nav-identidad';
+            /* «MÓDULO 1» va en vertical a la izquierda del icono, y el nombre
+               a la derecha (pedido de Edwin, 19-nov). */
+            var numero = document.createElement('span');
+            numero.className = 'etx-nav-numero';
+            numero.textContent = contextoGlobal ? 'Vista de negocio' : 'Módulo ' + (MODULOS.indexOf(modulo) + 1);
+            identidad.appendChild(numero);
             if (panel) identidad.appendChild(panel);
-            else identidad.innerHTML = ic(icono,28);
+            else { var ico = document.createElement('span'); ico.innerHTML = ic(icono,28); identidad.appendChild(ico); }
             var texto = document.createElement('div');
-            texto.innerHTML = '<span class="etx-nav-numero">' + (contextoGlobal ? 'Vista de negocio' : 'Módulo ' + (MODULOS.indexOf(modulo) + 1)) + '</span><strong>' + esc(etiqueta) + '</strong>';
+            texto.innerHTML = '<strong>' + esc(etiqueta) + '</strong>';
             identidad.appendChild(texto);
             var btn = nav.querySelector('#navToggleBtn');
             top.innerHTML = ''; top.appendChild(identidad);

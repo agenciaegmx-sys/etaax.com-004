@@ -82,11 +82,17 @@ body.etx-modulos-ui #nav.cerrado {
   padding:0;overflow:hidden;border-radius:18px;
 }
 body.etx-modulos-ui #nav.cerrado>:not(.nav-top) {display:none!important;}
+/* LAS PIEZAS NO SE APLASTAN. La barra es una columna flexible con alto
+   máximo: cuando no cabía en la pantalla (tablet vertical, celular) encogía
+   sus piezas en vez de desplazarse, y la cabecera quedaba más chica que su
+   contenido —la línea de abajo cruzaba el botón «Ocultar barra» y la etiqueta
+   vertical se salía por arriba—. Ahora conservan su alto y la barra se desplaza. */
+body.etx-modulos-ui #nav>* {flex-shrink:0;}
 body.etx-modulos-ui #nav.cerrado .nav-top {padding:0;margin:0;border:0;min-height:var(--etx-nav-caja-h,92px);gap:0;}
 body.etx-modulos-ui #nav.cerrado .etx-nav-identidad {display:none;}
 body.etx-modulos-ui #nav.cerrado .etx-nav-contraer {
   flex-direction:column;gap:7px;min-height:var(--etx-nav-caja-h,92px);height:100%;width:100%;
-  border:0;border-radius:inherit;padding:8px 6px;font-size:12px;font-weight:600;line-height:1.25;
+  border:0;border-radius:inherit;background:transparent;padding:8px 6px;font-size:12px;font-weight:600;line-height:1.25;
   text-align:center;color:var(--text);cursor:pointer;
 }
 body.etx-modulos-ui #nav.cerrado .etx-nav-contraer:hover {background:var(--surface2);}
@@ -99,18 +105,26 @@ body.etx-modulos-ui #nav.cerrado .etx-nav-tg-ic svg {width:28px;height:28px;}
 body.etx-modulos-ui #nav.cerrado .etx-tg-ocultar,
 body.etx-modulos-ui #nav:not(.cerrado) .etx-tg-expandir {display:none;}
 body.etx-modulos-ui #nav .nav-top {padding:10px 0 16px;min-height:0;height:auto;gap:12px;width:100%;border-bottom:1px solid var(--etx-ui-line);margin-bottom:10px;}
-body.etx-modulos-ui #nav .etx-nav-identidad {display:flex;align-items:center;gap:10px;min-width:0;padding:4px 8px;}
+body.etx-modulos-ui #nav .etx-nav-identidad {display:flex;align-items:center;gap:10px;min-width:0;padding:4px 4px;}
 body.etx-modulos-ui #nav .etx-nav-identidad>div {min-width:0;}
 body.etx-modulos-ui #nav .etx-nav-identidad strong {font-size:13px;line-height:1.4;display:block;color:var(--text);}
-body.etx-modulos-ui #nav .etx-nav-numero {font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--etx-ui-muted);display:block;margin-bottom:5px;}
+/* «MÓDULO 1» en vertical, a la izquierda del icono; el nombre a la derecha. */
+body.etx-modulos-ui #nav .etx-nav-numero {font-size:8.5px;letter-spacing:2px;text-transform:uppercase;color:var(--etx-ui-muted);display:block;
+  writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;line-height:1;flex-shrink:0;align-self:center;}
 body.etx-modulos-ui #nav .etx-nav-modulo {background:none;border:0;padding:0;display:inline-flex;flex-shrink:0;margin:0;text-decoration:none;}
 body.etx-modulos-ui #nav .etx-nav-modulo .etx-ic {width:28px;height:28px;}
+/* «Ocultar barra» tiene que verse como BOTÓN y no como un submódulo más:
+   contorno grueso en el cian de la marca y un fondo apenas teñido. Sin alto
+   fijo: styles.css le daba 28 px a .nav-toggle y con el texto el contenido se
+   salía y la línea de la cabecera le cruzaba por dentro. */
 body.etx-modulos-ui #nav .etx-nav-contraer {
-  display:flex;align-items:center;justify-content:center;gap:8px;min-height:36px;width:100%;
-  border:1px solid var(--etx-ui-line);border-radius:9px;padding:6px 10px;font-size:11.5px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:8px;min-height:40px;height:auto;width:100%;
+  border:2px solid var(--etx-ui-cyan);border-radius:10px;padding:7px 10px;font-size:12px;font-weight:600;cursor:pointer;
+  background:color-mix(in srgb,var(--etx-ui-cyan) 9%,transparent);
   background:transparent;color:var(--text);font-family:inherit;letter-spacing:0;
 }
-body.etx-modulos-ui #nav .nav-toggle-text {font-size:11px;font-family:inherit;}
+body.etx-modulos-ui #nav .nav-toggle-text {font-size:12px;font-weight:600;font-family:inherit;letter-spacing:0;}
+body.etx-modulos-ui #nav:not(.cerrado) .etx-nav-contraer:hover {background:color-mix(in srgb,var(--etx-ui-cyan) 18%,transparent);}
 body.etx-modulos-ui #nav .nav-section {padding:0;margin:0;}
 body.etx-modulos-ui #nav .nav-section-label {display:none;}
 body.etx-modulos-ui #nav .nav-link {

@@ -14484,6 +14484,18 @@ console.log('\n══ BG9 · La foto del QR y los ajustes de inventario ══')
         eq(dV('ajustarHorariosInv').length > 0, true, 'existe'));
     test('…pidiendo contraseña, porque mueve dinero de periodo', () =>
         eq(dV('ajustarHorariosInv').indexOf('_solicitarClave(') > -1, true, 'con clave'));
+    /* LA CONTRASEÑA GENERAL (19-nov): editar, finalizar, reabrir… pedían SOLO
+       la contraseña de la cuenta con sesión (la del dueño). El colaborador con
+       su usuario no la sabe: choca con roles y permisos. Ahora va por el
+       guardia general, que acepta también la del colaborador con sesión. */
+    test('editar / finalizar el inventario piden la contraseña GENERAL, no solo la del correo principal', () => {
+        const C = crearContexto();
+        cargarJS(C, 'etaax-core.js'); cargarJS(C, 'insumo-label.js'); cargarJS(C, 'recetas/inventarios.js');
+        let pedido = null;
+        C.window._pedirClaveAdmin = (accion, cb, etiqueta) => { pedido = [accion, typeof cb, etiqueta]; };
+        C._solicitarClave('Editar inventario', function () {});
+        return eq(JSON.stringify(pedido), '["Editar inventario","function","Confirmar"]');
+    });
     /* Un cierre ANTERIOR a la apertura deja el periodo al revés: ningún
        movimiento cae dentro y el inventario sale en ceros sin decir por qué. */
     test('…y no deja poner el cierre antes de la apertura', () =>

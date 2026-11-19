@@ -12,7 +12,7 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=e6d5073b">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=fd2dac1b">
     <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=46053adb">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=724d5489">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function(){
          casi nadie usa. Ahora se piden cuando se elige el archivo
          (_cargarXLSX / _cargarPDFJS en inventarios.js). -->
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=ad2a324b">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1c48ab27">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 </head>
 <body>
@@ -359,7 +359,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=dac1e0a8"></script>
+<script src="/recetas/inventarios.js?v=f8df2981"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -470,11 +470,26 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
 #vistaCaptura .inv-wizard-header { justify-content: flex-end; align-items: center; gap: 8px; }
 #vistaCaptura .inv-wizard-header > div:first-child { margin-right: auto; }
 #hdrBtns { display: contents !important; }
+/* SIN CORRIMIENTO AL BAJAR. Arriba del todo el encabezado quedaba 24 px por
+   debajo de la tarjeta del negocio (el margen del contenido) y, al empezar a
+   bajar, se recorría hasta pegarse a ella; al cambiar de paso la página
+   vuelve arriba y se separaba otra vez. Esa era la «animación rara». Ahora
+   arranca ya en su lugar fijo: no se mueve nunca. */
+body.etx-modulos-ui #vistaCaptura > .inv-wizard-header { margin-top: -24px; }
+@media (max-width: 600px) { body.etx-modulos-ui #vistaCaptura > .inv-wizard-header { margin-top: -16px; } }
 /* ══ LA BARRA DEL PASO (Edwin, 19-nov) ══════════════════════════════════════
    Buscador y filtros FIJOS en el encabezado, que se adaptan al paso y a la
    vista visibles: existencias (rápida/lista, pendientes/registrados), entradas
    (registrar y lo registrado), ventas (las cuatro vistas y un solo buscador),
    cancelaciones/descuentos y el Resultado. */
+/* La barra del paso alinea a la IZQUIERDA (una regla vieja alineaba a la
+   derecha el último hijo del encabezado, que ahora es esta barra). Buscador y
+   vistas a la izquierda; los filtros, a la derecha y solo cuando los hay. */
+#pasoHerr.paso-herr { justify-content: flex-start; flex-wrap: nowrap; }
+.ph-izq, .ph-der { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.ph-izq { flex: 0 1 auto; }
+.ph-der { flex: 0 0 auto; margin-left: auto; }
+@media (max-width: 900px) { #pasoHerr.paso-herr { flex-wrap: wrap; } .ph-der { flex: 0 1 auto; } }
 .paso-herr { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     padding-top: 8px; margin-top: 2px; border-top: 1px solid var(--border); }
 .paso-herr:empty { display: none; }
@@ -485,11 +500,13 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
 .ph-seg button.on { background: var(--accent); color: var(--bg); font-weight: 600; }
 .ph-n { display: inline-block; min-width: 16px; padding: 0 5px; margin-left: 3px; border-radius: 8px; font-size: 10.5px;
     line-height: 16px; text-align: center; background: color-mix(in srgb, currentColor 18%, transparent); }
-.ph-buscar { flex: 1 1 110px; min-width: 110px; max-width: 360px; box-sizing: border-box; background: var(--surface2);
+/* El buscador es el primero, a la izquierda, con ancho FIJO: no se estira
+   para llenar el renglón (Edwin: «más fijo y orgánico»). */
+.ph-buscar { flex: 0 1 250px; width: 250px; min-width: 150px; max-width: 250px; box-sizing: border-box; background: var(--surface2);
     border: 1px solid var(--border); color: var(--text); border-radius: 9px; padding: 8px 12px; font: inherit; font-size: 13px; outline: none; }
 .ph-buscar:focus { border-color: var(--accent); }
-.paso-herr .filtro-select { font-size: 11.5px; padding: 7px 4px; max-width: 132px; }
-.paso-herr .vista-toggle { margin-left: auto; }
+.paso-herr .filtro-select { font-size: 11.5px; padding: 7px 4px; max-width: 125px; }
+.paso-herr .vista-toggle { margin-left: 0; }
 .ph-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .inv-wizard-header .btn-vista { padding: 8px 13px; font-size: 13px; white-space: nowrap; }
 .inv-paso-menu { position: relative; display: inline-flex; }
@@ -1215,7 +1232,7 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=15a5a6ef"></script>
-<script src="/etaax-modulos-ui.js?v=46053adb"></script>
+<script src="/etaax-modulos-ui.js?v=724d5489"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 </body>
 </html>

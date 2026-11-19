@@ -4942,6 +4942,19 @@ let _sesionEmail   = null;
 })();
 
 function _solicitarClave(accion, callback) {
+    /* ══ LA CONTRASEÑA GENERAL (19-nov-2026) ══════════════════════════════
+       Esto pedía SOLO la contraseña de la cuenta con sesión de Supabase: el
+       colaborador que entra con su usuario veía «Cuenta: el correo del dueño»
+       y tenía que saberse la contraseña del dueño. Choca con los roles y
+       permisos (Edwin). Ahora va por el guardia general (admin-guard.js), el
+       mismo de los borrados de este módulo: acepta la contraseña del
+       colaborador con sesión, la de la cuenta, la del dueño o la del admin.
+       Lo que cada rol puede hacer lo siguen decidiendo sus permisos
+       (_exigeInv), no esta contraseña. */
+    if (typeof window._pedirClaveAdmin === 'function') {
+        window._pedirClaveAdmin(accion, callback, 'Confirmar');
+        return;
+    }
     _claveCallback = callback;
     document.getElementById('claveAccionLabel').textContent = accion;
     document.getElementById('claveError').textContent       = '';
@@ -5876,6 +5889,16 @@ function _herrBuscar(id, val, ph, fn) {
     return '<input type="search" class="ph-buscar" id="' + id + '" value="' + etx(val || '') + '" placeholder="' + etx(ph) +
         '" oninput="' + fn + '(this.value)" autocomplete="off">';
 }
+/* A la izquierda, fijos: el buscador y luego los botones de vista. A la
+   derecha, solo cuando los hay: los filtros. */
+function _herrLados(izq, der) {
+    return '<div class="ph-izq">' + izq + '</div>' + (der ? '<div class="ph-der">' + der + '</div>' : '');
+}
+// Familia/categoría/subcategoría (+ Lista/Galería) de las listas de captura.
+function _herrSelectsCapt(conModo) {
+    return _herrFiltrosCapt(conModo).replace(/^<input[^>]*>/, '');
+}
+function _herrBuscarCapt() { return _herrBuscar('phBuscar', busquedaCapt, 'Buscar…', 'onBusqueda'); }
 // Buscador + familia/categoría/subcategoría (+ Lista/Galería) de las listas de captura.
 function _herrFiltrosCapt(conModo) {
     const pool = filasCaptura
@@ -5907,38 +5930,37 @@ function _herrPasoHTML() {
     const paso = invActual.tipoInv === 'primer_lev' ? 1 : pasoActual;
     if (paso === 1) {
         const nReg = filasCaptura.filter(_esRegistrado).length, nPend = filasCaptura.length - nReg;
-        return _herrSeg([['busqueda', '🔍 Rápida'], ['lista', '≡ Lista']], vistaCapturaExist, 'setVistaExist') +
+        const segs = _herrSeg([['busqueda', '🔍 Rápida'], ['lista', '≡ Lista']], vistaCapturaExist, 'setVistaExist') +
             _herrSeg([['pendientes', 'Pendientes <span class="ph-n">' + nPend + '</span>'], ['registrados', '✅ Registrados <span class="ph-n">' + nReg + '</span>']],
-                     filtroRegistroActivo, 'setFiltroRegistro') +
-            (vistaCapturaExist === 'busqueda'
-                ? _herrBuscar('existBuscador', _existBusqueda, filtroRegistroActivo === 'registrados' ? 'Buscar en registrados…' : 'Buscar producto pendiente…', 'buscarInsumoExist')
-                : _herrFiltrosCapt(true));
+                     filtroRegistroActivo, 'setFiltroRegistro');
+        return vistaCapturaExist === 'busqueda'
+            ? _herrLados(_herrBuscar('existBuscador', _existBusqueda, filtroRegistroActivo === 'registrados' ? 'Buscar en registrados…' : 'Buscar producto pendiente…', 'buscarInsumoExist') + segs, '')
+            : _herrLados(_herrBuscarCapt() + segs, _herrSelectsCapt(true));
     }
     if (paso === 2) {
-        return _herrSeg([['busqueda', '🔍 Rápida'], ['lista', '≡ Lista']], vistaEntradas2, 'setVistaEntradas2') +
-            (vistaEntradas2 === 'busqueda'
-                ? _herrBuscar('entBuscador', _entRapidaBusqueda, '🔍 Producto para registrar…', 'buscarInsumoEntrada') +
-                  _filtroTipoHTML(true)
-                : _herrFiltrosCapt(true));
+        const seg = _herrSeg([['busqueda', '🔍 Rápida'], ['lista', '≡ Lista']], vistaEntradas2, 'setVistaEntradas2');
+        return vistaEntradas2 === 'busqueda'
+            ? _herrLados(_herrBuscar('entBuscador', _entRapidaBusqueda, '🔍 Producto para registrar…', 'buscarInsumoEntrada') + seg, _filtroTipoHTML(true))
+            : _herrLados(_herrBuscarCapt() + seg, _herrSelectsCapt(true));
     }
     if (paso === 3) {
         const nPb = prebatchesProducibles().length;
         const vistas = _herrSeg([['lista', '🧴 Insumos'], ['menu', '🍹 Cocteles'],
             ['prebatch', '🏭 Prebatch' + (nPb ? ' <span class="ph-n">' + nPb + '</span>' : '')], ['busqueda', '🔍 Búsqueda rápida']], vistaVentas, 'setVistaVentas');
-        if (vistaVentas === 'lista')    return vistas + _herrFiltrosCapt(false);
-        if (vistaVentas === 'menu')     return vistas + _herrBuscar('phBuscar', _menuBusquedaVentas, 'Buscar coctel o receta…', '_filtrarMenuVentas');
-        if (vistaVentas === 'prebatch') return vistas + _herrBuscar('phBuscar', _menuBusquedaVentas, 'Buscar prebatch…', '_filtrarMenuVentas');
-        return vistas + _herrBuscar('ventasBuscador', _ventasBusqueda, 'Buscar insumo, coctel o prebatch…', 'buscarInsumoVentas');
+        if (vistaVentas === 'lista')    return _herrLados(_herrBuscarCapt() + vistas, _herrSelectsCapt(false));
+        if (vistaVentas === 'menu')     return _herrLados(_herrBuscar('phBuscar', _menuBusquedaVentas, 'Buscar coctel o receta…', '_filtrarMenuVentas') + vistas, '');
+        if (vistaVentas === 'prebatch') return _herrLados(_herrBuscar('phBuscar', _menuBusquedaVentas, 'Buscar prebatch…', '_filtrarMenuVentas') + vistas, '');
+        return _herrLados(_herrBuscar('ventasBuscador', _ventasBusqueda, 'Buscar insumo, coctel o prebatch…', 'buscarInsumoVentas') + vistas, '');
     }
     if (paso === 4) {
         const c = (invActual.cancelaciones || []).length, d = invActual.descuentos || [];
         const td = d.reduce((t, x) => t + (parseFloat(x.monto) || 0), 0);
-        return _herrSeg([['cancelaciones', '🚫 Cancelaciones <span class="ph-n">' + c + '</span>'],
-                         ['descuentos', '💸 Descuentos' + (d.length ? ' <span class="ph-n">$' + td.toFixed(0) + '</span>' : '')]], _paso4Tab, 'setPaso4Tab');
+        return _herrLados(_herrSeg([['cancelaciones', '🚫 Cancelaciones <span class="ph-n">' + c + '</span>'],
+                         ['descuentos', '💸 Descuentos' + (d.length ? ' <span class="ph-n">$' + td.toFixed(0) + '</span>' : '')]], _paso4Tab, 'setPaso4Tab'), '');
     }
     if (paso === 5) {
         const subs = [...new Set(filasCaptura.map(f => f.subcategoria || f.categoria).filter(Boolean))].sort();
-        return _herrBuscar('phBuscar', _busqStep5, 'Buscar producto en el resultado…', 'onBusqStep5') + `
+        return _herrLados(_herrBuscar('phBuscar', _busqStep5, 'Buscar producto en el resultado…', 'onBusqStep5'), `
             <select class="filtro-select" onchange="setSubcatStep5(this.value)">
                 <option value="">Todas las categorías</option>
                 ${subs.map(x => `<option value="${etx(x)}" ${_subcatStep5===x?'selected':''}>${etx(x)}</option>`).join('')}
@@ -5952,7 +5974,7 @@ function _herrPasoHTML() {
             <div class="vista-toggle">
                 <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">≡ Lista</button>
                 <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
-            </div>`;
+            </div>`);
     }
     return '';
 }
