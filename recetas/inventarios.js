@@ -5757,8 +5757,8 @@ function renderStepContent() {
     if (ffF) ffF.value = filtroFamActivo;
     if (ffC) ffC.value = filtroCatActiva;
     if (ffS) ffS.value = filtroSubcatActiva;
-    if (paso === 2 && vistaEntradas2 === 'busqueda') initEntradaRapidaUI();
-    if (paso === 1 && vistaCapturaExist === 'busqueda') initExistBusquedaUI();
+    if (paso === 2 && vistaEntradas2 === 'busqueda') { initEntradaRapidaUI(); renderChipsEntrada(); }
+    if (paso === 1) initExistBusquedaUI();
     if (paso === 3 && vistaVentas === 'busqueda') initVentasBusquedaUI();
     if (paso === 3 && (vistaVentas === 'menu' || vistaVentas === 'prebatch') && _menuBusquedaVentas) _filtrarMenuVentas(_menuBusquedaVentas);
     if (paso === 4) _initPaso4Tables();
@@ -5899,6 +5899,12 @@ function _herrSelectsCapt(conModo) {
     return _herrFiltrosCapt(conModo).replace(/^<input[^>]*>/, '');
 }
 function _herrBuscarCapt() { return _herrBuscar('phBuscar', busquedaCapt, 'Buscar…', 'onBusqueda'); }
+function _herrVistaToggle() {
+    return `<div class="vista-toggle" title="Ver en lista o en iconos">
+        <button class="${modoListaCapt==='lista'?'active':''}" onclick="setModoCaptura('lista')" title="Lista">≡</button>
+        <button class="${modoListaCapt==='galeria'?'active':''}" onclick="setModoCaptura('galeria')" title="Iconos">⊞</button>
+    </div>`;
+}
 // Buscador + familia/categoría/subcategoría (+ Lista/Galería) de las listas de captura.
 function _herrFiltrosCapt(conModo) {
     const pool = filasCaptura
@@ -5929,13 +5935,12 @@ function _herrPasoHTML() {
     if (!invActual) return '';
     const paso = invActual.tipoInv === 'primer_lev' ? 1 : pasoActual;
     if (paso === 1) {
+        /* Una sola vista (pendientes | registrados): el buscador filtra las dos,
+           los contadores se quedan y se elige verlo en lista o en iconos. */
         const nReg = filasCaptura.filter(_esRegistrado).length, nPend = filasCaptura.length - nReg;
-        const segs = _herrSeg([['busqueda', '🔍 Rápida'], ['lista', '≡ Lista']], vistaCapturaExist, 'setVistaExist') +
-            _herrSeg([['pendientes', 'Pendientes <span class="ph-n">' + nPend + '</span>'], ['registrados', '✅ Registrados <span class="ph-n">' + nReg + '</span>']],
-                     filtroRegistroActivo, 'setFiltroRegistro');
-        return vistaCapturaExist === 'busqueda'
-            ? _herrLados(_herrBuscar('existBuscador', _existBusqueda, filtroRegistroActivo === 'registrados' ? 'Buscar en registrados…' : 'Buscar producto pendiente…', 'buscarInsumoExist') + segs, '')
-            : _herrLados(_herrBuscarCapt() + segs, _herrSelectsCapt(true));
+        return _herrLados(_herrBuscar('existBuscador', _existBusqueda, 'Buscar producto…', 'buscarInsumoExist') +
+            '<div class="ph-ind"><span>🔍 Pendientes <span class="ph-n">' + nPend + '</span></span>' +
+            '<span>✅ Registrados <span class="ph-n">' + nReg + '</span></span></div>', _herrVistaToggle());
     }
     if (paso === 2) {
         const seg = _herrSeg([['busqueda', '🔍 Rápida'], ['lista', '≡ Lista']], vistaEntradas2, 'setVistaEntradas2');
@@ -6135,53 +6140,73 @@ function _avisoAreaHTML() {
         '📍 '+parts.join(' · ')+' no aparecen en este inventario de <b style="color:var(--text)">'+etx(invA||'—')+'</b>. Asígnales su área en el <b>Catálogo de insumos</b> (campo «📍 Área — dónde se guarda») para incluirlas aquí.</div></div>';
 }
 
+/* ══ EL PASO 1 EN DOS COLUMNAS (Edwin, 19-nov) ══════════════════════════
+   Ya no hay «Búsqueda rápida» ni «Lista completa»: una sola vista con los
+   PENDIENTES a la izquierda y los REGISTRADOS a la derecha —en lista o en
+   iconos—, y el buscador filtra las dos. Al tocar un insumo se abre su captura
+   en un modal; «Registrado — Siguiente» pasa al siguiente pendiente. */
 function renderStep1() {
-    if (vistaCapturaExist === 'busqueda') {
-        const nReg  = filasCaptura.filter(_esRegistrado).length;
-        const nPend = filasCaptura.length - nReg;
-        const placeholder = filtroRegistroActivo === 'registrados'
-            ? 'Buscar en registrados…' : 'Buscar producto pendiente…';
-        // Las vistas, Pendientes/Registrados y el buscador van en la barra del paso (encabezado).
-        return _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() + `
-            <div class="ent-rapida-wrap">
-                <div>
-                    <div id="existChips" class="ent-chips"></div>
-                </div>
-                <div id="existCardWrap"></div>
-                <div>
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-                        <div style="display:flex;align-items:center;gap:10px">
-                            <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Registrados</span>
-                            <span style="font-size:13px;font-weight:700;color:${nReg>0?'var(--green)':'var(--text)'}">${nReg} / ${filasCaptura.length} productos</span>
-                        </div>
-                        <!-- AQUÍ HABÍA UN «✅ Finalizar» PEGADO A «Guardar y salir».
-                             Dos botones del mismo tamaño, uno junto al otro, y el de la
-                             derecha cerraba el inventario: un dedo de más y el conteo
-                             del mes queda sellado. Ya le pasó a Edwin.
-
-                             Finalizar se queda SOLO arriba, en la barra del wizard, que
-                             es donde se va a propósito cuando se terminó de contar.
-                             Aquí abajo, en medio de la captura, lo único que se necesita
-                             es salir sin perder lo escrito. -->
-                        ${nReg > 0 ? `
-                        <div style="display:flex;gap:8px">
-                            <button onclick="guardarYSalir()"
-                                style="background:rgba(245,200,66,.1);border:1px solid var(--accent);color:var(--accent);
-                                border-radius:7px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
-                                💾 Guardar y salir
-                            </button>
-                        </div>` : ''}
-                    </div>
-                    <div id="existResumen"></div>
-                </div>
-            </div>`;
-    }
-
-    // La lista va en su propio contenedor → la búsqueda actualiza SOLO esto (no el
-    // input del toolbar) para no perder el foco al escribir.
-    return _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() +
-        '<div id="step1ListaCont">' + _step1ListaInner() + '</div>';
+    vistaCapturaExist = 'busqueda';
+    const nReg = filasCaptura.filter(_esRegistrado).length;
+    return _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() + `
+        <div class="p12-split">
+            <section class="p12-col">
+                <div class="p12-cab"><span>🔍 Pendientes</span><b id="p1NPend"></b></div>
+                <div id="p1Pend"></div>
+            </section>
+            <section class="p12-col">
+                <div class="p12-cab"><span>✅ Registrados</span><b id="p1NReg"></b>
+                    ${nReg > 0 ? `<button class="p12-salir" onclick="guardarYSalir()">💾 Guardar y salir</button>` : ''}</div>
+                <div id="p1Reg"></div>
+            </section>
+        </div>
+        <div id="p1Modal" class="p12-modal" style="display:none" onclick="if(event.target===this)_cerrarModalExist()">
+            <div class="p12-modal-caja"><div id="existCardWrap"></div></div>
+        </div>`;
 }
+/* Un insumo en la lista (o en iconos): lo que hace falta para reconocerlo y,
+   si ya se contó, cuánto. */
+function _p1ItemHTML(f, reg) {
+    const u = f.tipo === 'peso' ? (f.baseUnit || 'g').toLowerCase() : (f.tipo === 'pza' ? 'pza' : 'bot');
+    const ea = parseFloat(f.existenciaAnterior) || 0, cb = f.contNeto > 0 && f.copaML > 0 ? f.contNeto / f.copaML : 0;
+    const eaB = f.tipo === 'pza' || f.tipo === 'peso' ? ea : (cb > 0 ? ea / cb : ea);
+    const met = (f.metodoCaptura || 'peso'), metIc = met === 'nivel' ? '🌡️' : met === 'foto' ? '📷' : '⚖️';
+    const dato = reg ? '<b class="p12-ok">' + metIc + ' ' + fmtBot(calcExistenciaBot(f)) + ' ' + u + '</b>'
+                     : '<span class="p12-ant">Anterior ' + fmtBot(Math.round(eaB * 100) / 100) + ' ' + u + '</span>';
+    const meta = insumoMeta(f) ? insumoMetaHTML(f) : (f.categoria ? etx(f.categoria) : '');
+    return `<button class="p12-item ${reg ? 'reg' : ''}" onclick="seleccionarProductoExist('${f.insumoId}')">
+        <span class="p12-nom">${etx(insumoTitulo(f))}${meta ? `<small>${meta}</small>` : ''}</span>${dato}</button>`;
+}
+function _p1ListasPintar() {
+    const pend = document.getElementById('p1Pend'), reg = document.getElementById('p1Reg');
+    if (!pend || !reg) return;
+    const q = String(_existBusqueda || '').trim().toLowerCase();
+    const pasa = (f) => !q || String(f.nombre || '').toLowerCase().indexOf(q) > -1 || String(insumoTitulo(f) || '').toLowerCase().indexOf(q) > -1;
+    const p = filasCaptura.filter(f => !_esRegistrado(f) && pasa(f)), r = filasCaptura.filter(f => _esRegistrado(f) && pasa(f));
+    const cls = 'p12-lista' + (modoListaCapt === 'galeria' ? ' p12-iconos' : '');
+    const vacio = (t) => `<div class="p12-vacio">${t}</div>`;
+    pend.className = cls; reg.className = cls;
+    pend.innerHTML = p.length ? p.map(f => _p1ItemHTML(f, false)).join('') : vacio(q ? 'Sin pendientes con «' + etx(_existBusqueda) + '»' : '¡Ya se contó todo! 🎉');
+    reg.innerHTML = r.length ? r.map(f => _p1ItemHTML(f, true)).join('') : vacio(q ? 'Sin registrados con «' + etx(_existBusqueda) + '»' : 'Aún no hay existencias registradas');
+    const np = document.getElementById('p1NPend'), nr = document.getElementById('p1NReg');
+    if (np) np.textContent = p.length + (q ? ' de ' + filasCaptura.filter(f => !_esRegistrado(f)).length : '');
+    if (nr) nr.textContent = r.length + (q ? ' de ' + filasCaptura.filter(_esRegistrado).length : '');
+}
+function _abrirModalExist() {
+    const m = document.getElementById('p1Modal');
+    if (!m) return;
+    m.style.display = _existInsumoId ? 'flex' : 'none';
+    renderCardExist();
+}
+/* Cerrar NO marca como registrado: es «todavía no». (La ✕ de la tarjeta lo
+   marcaba, que en un modal es una sorpresa.) */
+function _cerrarModalExist() {
+    _existInsumoId = null;
+    const m = document.getElementById('p1Modal'); if (m) m.style.display = 'none';
+    const c = document.getElementById('existCardWrap'); if (c) c.innerHTML = '';
+    _p1ListasPintar();
+}
+window._cerrarModalExist = _cerrarModalExist;
 
 // Contenido de la lista (filas filtradas) — se re-renderiza solo al buscar/filtrar.
 function _step1ListaInner() {
@@ -6202,7 +6227,7 @@ function _step1ListaInner() {
 // ── Búsqueda rápida existencias ───────────────────────────────
 function buscarInsumoExist(val) {
     _existBusqueda = val;
-    renderChipsExist();
+    _p1ListasPintar();      // filtra pendientes Y registrados
 }
 
 function renderChipsExist() {
@@ -6231,6 +6256,7 @@ function renderChipsExist() {
 
 function seleccionarProductoExist(insumoId) {
     _existInsumoId = insumoId;
+    if (document.getElementById('p1Modal')) { _abrirModalExist(); return; }
     renderChipsExist();
     renderCardExist();
 }
@@ -6245,14 +6271,22 @@ function registrarFilaLista(idx) {
 }
 function limpiarSeleccionExist() {
     // Marcar el producto actual como registrado (aunque tenga ceros)
-    if (_existInsumoId) {
-        const fila = filasCaptura.find(f => f.insumoId === _existInsumoId);
+    var actual = _existInsumoId, siguiente = null;
+    if (actual) {
+        const fila = filasCaptura.find(f => f.insumoId === actual);
         if (fila) { fila.registrado = true; _autoGuardar(); }
+        /* «Registrado — Siguiente»: el siguiente PENDIENTE de la lista de la
+           izquierda (con el mismo filtro del buscador), para contar de corrido. */
+        const q = String(_existBusqueda || '').trim().toLowerCase();
+        const pend = filasCaptura.filter(f => !_esRegistrado(f) && (!q || String(f.nombre || '').toLowerCase().indexOf(q) > -1));
+        const i = filasCaptura.findIndex(f => f.insumoId === actual);
+        const despues = pend.find(f => filasCaptura.indexOf(f) > i) || pend[0];
+        siguiente = despues ? despues.insumoId : null;
     }
     _existInsumoId = null;
-    _existBusqueda = '';
     // Re-render completo para actualizar contadores y filtros
     renderStepContent();
+    if (siguiente && document.getElementById('p1Modal')) { _existInsumoId = siguiente; _abrirModalExist(); return; }
     setTimeout(() => { const inp = document.getElementById('existBuscador'); if (inp) inp.focus(); }, 40);
 }
 
@@ -6387,7 +6421,7 @@ function renderCardExist() {
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
                     <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
-                    <button onclick="limpiarSeleccionExist()"
+                    <button onclick="_cerrarModalExist()" title="Cerrar sin marcar como registrado"
                         style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
                 </div>
             </div>
@@ -6488,7 +6522,7 @@ function _cardExistPeso(fila, idx) {
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
                     <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
-                    <button onclick="limpiarSeleccionExist()" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
+                    <button onclick="_cerrarModalExist()" title="Cerrar sin marcar como registrado" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
                 </div>
             </div>
 
@@ -6578,11 +6612,10 @@ function renderResumenExist() {
 }
 
 function initExistBusquedaUI() {
-    if (_existBusqueda) {
-        const inp = document.getElementById('existBuscador');
-        if (inp) inp.value = _existBusqueda;
-        renderChipsExist();
-    }
+    const inp = document.getElementById('existBuscador');
+    if (inp && inp.value !== (_existBusqueda || '')) inp.value = _existBusqueda || '';
+    if (document.getElementById('p1Pend')) { _p1ListasPintar(); if (_existInsumoId) _abrirModalExist(); return; }
+    if (_existBusqueda) renderChipsExist();
     if (_existInsumoId) renderCardExist();
     renderResumenExist();
 }
@@ -6883,23 +6916,24 @@ function renderStep2() {
             ? `<div class="empty-state" style="padding:60px"><div class="empty-icon">📥</div><div class="empty-title">Sin insumos</div></div>` : null;
         return switcher + (noData || renderStep2Lista(filas));
     }
-    // vista búsqueda (default)
+    /* ══ DOS COLUMNAS, UNA POR BUSCADOR (Edwin, 19-nov) ═════════════════
+       Izquierda: TODOS los insumos del inventario desde el principio (antes
+       la columna estaba vacía hasta teclear); el buscador «Producto para
+       registrar» la reduce, y al tocar uno ese espacio se vuelve el registro
+       de la entrada. Derecha: lo registrado, agrupado por insumo, con su
+       existencia contada en el Paso 1 — para no regresar a revisar. */
     const logCount = (invActual?.entradasLog || []).length;
-    return switcher + `
-        <div class="ent-rapida-wrap">
-            <div>
-                <div id="entChips" class="ent-chips"></div>
-            </div>
-            <div id="entFormCard"></div>
-            <div>
-                <!-- El buscador y las pestañas de lo registrado (entradas, mermas,
-                     cortesías) viven en la barra del paso, fijos arriba. -->
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                    <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Movimientos del período</span>
-                    <span id="entLogCount" style="font-size:13px;font-weight:700;color:var(--text)">${logCount} registro${logCount !== 1 ? 's' : ''}</span>
-                </div>
+    return bannerMovsQR() + `
+        <div class="p12-split p12-split-ent">
+            <section class="p12-col">
+                <div id="entFormCard"></div>
+                <div id="entChips"></div>
+            </section>
+            <section class="p12-col">
+                <div class="p12-cab"><span>Movimientos del período</span>
+                    <b id="entLogCount">${logCount} registro${logCount !== 1 ? 's' : ''}</b></div>
                 <div id="entLogList"></div>
-            </div>
+            </section>
         </div>`;
 }
 
@@ -12824,6 +12858,23 @@ function buscarInsumoEntrada(val) {
 function renderChipsEntrada() {
     const cont = document.getElementById('entChips');
     if (!cont) return;
+    /* En el Paso 2 en dos columnas: la LISTA COMPLETA de insumos desde el
+       principio, reducida por el buscador; mientras se registra uno, el
+       espacio es del formulario. */
+    if (cont.closest('.p12-split-ent')) {
+        if (_entRapidaInsumoId) { cont.innerHTML = ''; return; }
+        const q2 = String(_entRapidaBusqueda || '').trim().toLowerCase();
+        const lista = filasCaptura.filter(f => !q2 || String(f.nombre || '').toLowerCase().indexOf(q2) > -1 || String(insumoTitulo(f) || '').toLowerCase().indexOf(q2) > -1);
+        cont.className = 'p12-lista';
+        cont.innerHTML = lista.length ? lista.map(f => {
+            const ya = getEntradasBottles(f.insumoId);
+            const meta = insumoMeta(f) ? insumoMetaHTML(f) : (f.categoria ? etx(f.categoria) : '');
+            return `<button class="p12-item ${ya > 0 ? 'reg' : ''}" onclick="seleccionarProductoEntrada('${f.insumoId}')">
+                <span class="p12-nom">${etx(insumoTitulo(f))}${meta ? `<small>${meta}</small>` : ''}</span>
+                ${ya > 0 ? `<b class="p12-ok">+${fmtBot(Math.round(ya * 100) / 100)} ${_unidadCompra(f)}</b>` : '<span class="p12-ant">+ registrar</span>'}</button>`;
+        }).join('') : `<div class="p12-vacio">Sin insumos con «${etx(_entRapidaBusqueda)}»</div>`;
+        return;
+    }
     const q = _entRapidaBusqueda.trim().toLowerCase();
     if (!q) { cont.innerHTML = ''; return; }
     const matches = filasCaptura.filter(f => f.nombre.toLowerCase().includes(q));
@@ -12905,9 +12956,13 @@ function setTipoEntrada(tipo) {
 
 function limpiarSeleccionEntrada() {
     _entRapidaInsumoId = null;
-    _entRapidaBusqueda = '';
-    const inp = document.getElementById('entBuscador');
-    if (inp) { inp.value = ''; inp.focus(); }
+    /* En dos columnas se regresa a la lista CON el filtro que había: se sigue
+       registrando entre lo que se buscó. */
+    if (!document.querySelector('.p12-split-ent')) {
+        _entRapidaBusqueda = '';
+        const inp = document.getElementById('entBuscador');
+        if (inp) { inp.value = ''; inp.focus(); }
+    }
     renderChipsEntrada();
     renderFormEntrada();
 }
@@ -13176,7 +13231,7 @@ function _entAvisoInsumo(e) {
 }
 function _entNombreCell(e, nombre, extraInline) {
     return '<span class="ent-log-nombre" style="display:flex;flex-direction:column;gap:2px">' +
-        '<span>' + nombre + (extraInline || '') + _qrOrigenHTML(e) + '</span>' +
+        '<span><span class="eln-n">' + nombre + '</span>' + (extraInline || '') + _qrOrigenHTML(e) + '</span>' +
         _entAvisoInsumo(e) +
         (e && e.notas ? '<span style="font-size:10.5px;color:var(--text-dim);font-style:italic">📝 ' + etx(e.notas) + '</span>' : '') +
     '</span>';
@@ -13313,10 +13368,16 @@ const fotoTh = _fotosThumbHTML(e);
             ' · ' + mermasArr.length + ' merma' + (mermasArr.length !== 1 ? 's' : '') +
             (salidasArr.length ? ' · ' + salidasArr.length + ' cortesía/préstamo' + (salidasArr.length !== 1 ? 's' : '') : '') +
             (_sucNomH ? ' · ' + _sucNomH : '');
+        /* Dentro de un inventario: UN renglón por insumo que junta sus
+           movimientos («Campo Azul · 3 entradas»), con su total y la
+           existencia que se contó en el Paso 1; al abrirlo, cada movimiento
+           con su cantidad, tipo, fecha y ✏️. En el historial de afuera, la
+           lista corrida de siempre. */
+        const _bloque = (arr, tipo) => invActual ? _entGruposHTML(arr, tipo, _safeRow) : arr.map(_safeRow).join('');
         cont.innerHTML =
-            (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + entradasArr.map(_safeRow).join('') : '') +
-            (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + mermasArr.map(_safeRow).join('') : '') +
-            (salidasArr.length  ? secHdr('🎁 Cortesías / Préstamos' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + salidasArr.map(_safeRow).join('') : '') +
+            (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(entradasArr, 'entrada') : '') +
+            (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(mermasArr, 'merma') : '') +
+            (salidasArr.length  ? secHdr('🎁 Cortesías / Préstamos' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(salidasArr, 'salida') : '') +
             (!visibles.length ? _entVacioHTML() : '');
     } catch (err) {
         console.warn('[registro entradas] render por secciones falló, fallback plano:', err);
@@ -13325,6 +13386,37 @@ const fotoTh = _fotosThumbHTML(e);
             ? visibles.map(_safeRow).join('')
             : _entVacioHTML();
     }
+}
+
+/* Los movimientos de un insumo, juntos en un renglón que se abre. */
+var _entGruposAbiertos = {};
+function _entGrupoToggle(el) { if (el && el.dataset) _entGruposAbiertos[el.dataset.k] = !!el.open; }
+window._entGrupoToggle = _entGrupoToggle;
+function _entGruposHTML(arr, tipo, fila) {
+    const grupos = {}, orden = [];
+    arr.forEach(function (e) {
+        const k = e.insumoId ? 'i:' + (_canonInsumoId(e.insumoId) || e.insumoId) : 'n:' + String(e.nombreProducto || e.nombre || '').toLowerCase();
+        if (!grupos[k]) { grupos[k] = []; orden.push(k); }
+        grupos[k].push(e);
+    });
+    const lbl = { entrada: ['entrada', 'entradas'], merma: ['merma', 'mermas'], salida: ['salida', 'salidas'] }[tipo];
+    return orden.map(function (k) {
+        const es = grupos[k], e0 = es[0];
+        const total = es.reduce(function (t, e) { return t + (parseFloat(e.cantidad) || 0); }, 0);
+        const unidad = tipo === 'entrada' ? _unidadCompra(e0) : etx(e0.unidad || 'pza');
+        const f = e0.insumoId ? (filasCaptura.find(function (x) { return x.insumoId === e0.insumoId; }) || _filaDeMiembro(e0.insumoId)) : null;
+        const u = f ? (f.tipo === 'peso' ? (f.baseUnit || 'g').toLowerCase() : (f.tipo === 'pza' ? 'pza' : 'bot')) : '';
+        const exist = !f ? '' : (_esRegistrado(f) ? fmtBot(calcExistenciaBot(f)) + ' ' + u : 'sin contar');
+        const tot = (tipo === 'entrada' ? '+' : '−') + fmtBot(Math.round(total * 100) / 100) + ' ' + unidad;
+        const key = tipo + '|' + k;
+        return '<details class="eg" data-k="' + etx(key) + '"' + (_entGruposAbiertos[key] ? ' open' : '') + ' ontoggle="_entGrupoToggle(this)">' +
+            '<summary><span class="eg-nom">' + etx(e0.nombreProducto || e0.nombre || '—') + '</span>' +
+            '<span class="eg-n">' + es.length + ' ' + lbl[es.length === 1 ? 0 : 1] + '</span>' +
+            (f ? '<span class="eg-ex" title="Existencia registrada en el Paso 1">📦 ' + exist + '</span>' : '') +
+            '<b class="eg-tot ' + tipo + '">' + tot + '</b></summary>' +
+            '<div class="eg-cuerpo">' + es.map(fila).join('') +
+            '<div class="eg-total"><span>Total</span><b class="' + tipo + '">' + tot + '</b></div></div></details>';
+    }).join('');
 }
 
 function eliminarEntradaPorId(id) {

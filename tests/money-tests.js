@@ -35491,13 +35491,21 @@ console.log('\n══ BH79 · El catálogo completo y la barra del paso ══')
                                { insumoId:'ron', nombre:'Ron', familia:'Bebidas', categoria:'Destilados', tipo:'copa' }]);
     const barra = (paso, extra) => { vm.runInContext('pasoActual = ' + paso + ';' + (extra || ''), B); return B._herrPasoHTML(); };
     const txt = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    test('Paso 1: rápida/lista, pendientes/registrados (con cuántos) y el buscador', () => {
-        const h = barra(1, 'vistaCapturaExist = "busqueda"; filtroRegistroActivo = "pendientes";');
-        return eq(txt(h) + ' · ' + /id="existBuscador"/.test(h), '🔍 Rápida ≡ Lista Pendientes 1 ✅ Registrados 1 · true');
+    /* Desde el 19-nov el Paso 1 es UNA vista (pendientes | registrados): sin
+       «Rápida» ni «Lista», sin familia/categoría; el buscador, los contadores
+       y lista/iconos. */
+    test('Paso 1: el buscador, los contadores de pendientes y registrados, y lista/iconos', () => {
+        const h = barra(1);
+        return eq(txt(h) + ' · ' + /id="existBuscador"/.test(h) + ' · ' + /setModoCaptura\('galeria'\)/.test(h), '🔍 Pendientes 1 ✅ Registrados 1 ≡ ⊞ · true · true');
     });
-    test('…y en Lista completa, también familia, categoría y Lista/Galería', () => {
-        const h = barra(1, 'vistaCapturaExist = "lista";');
-        return eq(/id="phBuscar"/.test(h) && /id="filtroFamStep"/.test(h) && /id="filtroCatStep"/.test(h) && /setModoCaptura\('galeria'\)/.test(h), true);
+    test('…y ya sin «Rápida / Lista» ni filtros de familia', () => {
+        const h = barra(1);
+        return eq(/setVistaExist|filtroFamStep|setFiltroRegistro/.test(h), false);
+    });
+    test('Paso 1: el contenido son DOS listas (pendientes | registrados) y el registro va en modal', () => {
+        vm.runInContext('pasoActual = 1;', B);
+        const h = B.renderStep1();
+        return eq(/id="p1Pend"/.test(h) && /id="p1Reg"/.test(h) && /id="p1Modal"/.test(h) && /id="existCardWrap"/.test(h), true);
     });
     test('Paso 2: el buscador para registrar y el de lo registrado con sus pestañas', () => {
         const h = barra(2, 'vistaEntradas2 = "busqueda";');

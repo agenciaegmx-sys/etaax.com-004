@@ -500,22 +500,19 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             const barra = () => page.evaluate(() => document.getElementById('pasoHerr').innerText.replace(/\s+/g, ' ').trim());
             const escribir = async (sel, txt) => { await page.click(sel); await page.keyboard.type(txt, { delay: 15 }); await page.waitForTimeout(350); };
             const foco = () => page.evaluate(() => (document.activeElement || {}).id || '');
-            await page.evaluate(() => { irAPaso(1); setVistaExist('busqueda'); }); await page.waitForTimeout(300);
-            await caso('Paso 1: rápida/lista, pendientes/registrados y el buscador, en la barra', async () =>
-                assert.match(await barra(), /Rápida ≡ Lista Pendientes \d+ ✅ Registrados \d+/));
+            await page.evaluate(() => { irAPaso(1); }); await page.waitForTimeout(300);
+            await caso('Paso 1: el buscador y los contadores en la barra, sin «Rápida / Lista»', async () => {
+                const b = await barra();
+                assert.match(b, /Pendientes \d+ ✅ Registrados \d+/);
+                assert.ok(!/Rápida|Lista/.test(b), b);
+            });
             await escribir('#existBuscador', 'Destilado 1');
-            await caso('…escribir busca en el contenido y el foco se queda en el buscador', async () => {
+            await caso('…escribir filtra pendientes Y registrados, y el foco se queda en el buscador', async () => {
                 assert.equal(await foco(), 'existBuscador');
-                assert.ok(await page.evaluate(() => document.querySelectorAll('#existChips .ent-chip').length) > 0, 'sin resultados');
+                const r = await page.evaluate(() => [...document.querySelectorAll('#p1Pend .p12-item, #p1Reg .p12-item')].map(e => e.textContent));
+                assert.ok(r.length > 0 && r.every(x => /Destilado 1/.test(x)), JSON.stringify(r.slice(0, 3)));
             });
-            await page.evaluate(() => setVistaExist('lista')); await page.waitForTimeout(300);
-            const nAntes = await page.evaluate(() => document.querySelectorAll('#step1ListaCont tr.inv-row, #step1ListaCont .inv-row').length);
-            await escribir('#phBuscar', 'Sprite');
-            await caso('…en Lista completa el buscador filtra la lista y no pierde el foco', async () => {
-                assert.equal(await foco(), 'phBuscar');
-                const n = await page.evaluate(() => document.querySelectorAll('#step1ListaCont tr.inv-row, #step1ListaCont .inv-row').length);
-                assert.ok(n < nAntes, 'no filtró: ' + n + ' de ' + nAntes);
-            });
+            await page.evaluate(() => { const i = document.getElementById('existBuscador'); i.value = ''; buscarInsumoExist(''); });
             await page.evaluate(() => { irAPaso(2); }); await page.waitForTimeout(400);
             await caso('Paso 2: buscar para registrar, y el buscador y las pestañas de lo registrado', async () => {
                 assert.ok(await page.evaluate(() => !!document.querySelector('#pasoHerr #entBuscador') && !!document.querySelector('#pasoHerr #entBuscar') &&
@@ -619,6 +616,79 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 const r = await estado();
                 assert.ok(r.cerrada && r.w === p.w && r.h === p.h, JSON.stringify(r));
                 assert.equal(await page.evaluate(() => localStorage.getItem('etaax_nav_abierta')), '0');
+            });
+            await ctx.close();
+        }
+
+        /* ── L · Pasos 1 y 2 en dos columnas ─────────────────────────────────
+           Edwin (19-nov): Paso 1 = pendientes | registrados (lista o iconos),
+           el registro en modal y sin «Rápida / Lista». Paso 2 = la lista
+           completa de insumos a la izquierda (se vuelve el formulario al tocar
+           uno) y lo registrado AGRUPADO por insumo a la derecha, con la
+           existencia contada en el Paso 1. */
+        console.log('\n══ L · Pasos 1 y 2 en dos columnas ══');
+        {
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV,
+                { nube: { negocio_insumos: filasNube(destilados(12)) }, viewport: { width: 1280, height: 800 } }));
+            await nuevoInv(page);
+            await page.waitForTimeout(600);
+            await page.evaluate(() => irAPaso(1)); await page.waitForTimeout(300);
+            const n = () => page.evaluate(() => [document.querySelectorAll('#p1Pend .p12-item').length, document.querySelectorAll('#p1Reg .p12-item').length]);
+            await caso('Paso 1: todos a la izquierda (pendientes), nada a la derecha', async () => assert.deepEqual(await n(), [12, 0]));
+            await page.click('#p1Pend .p12-item');
+            await page.waitForTimeout(300);
+            const primero = await page.evaluate(() => _existInsumoId);
+            await caso('tocar un insumo abre su registro en un MODAL', async () => {
+                assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('p1Modal')).display), 'flex');
+                assert.ok(await page.evaluate(() => !!document.querySelector('#p1Modal .ent-form-card')));
+            });
+            await page.evaluate(() => [...document.querySelectorAll('#existCardWrap button')].find(b => /Siguiente/.test(b.textContent)).click());
+            await page.waitForTimeout(400);
+            await caso('«Registrar — Siguiente» lo pasa a la derecha y abre el siguiente pendiente', async () => {
+                assert.deepEqual(await n(), [11, 1]);
+                const ahora = await page.evaluate(() => _existInsumoId);
+                assert.ok(ahora && ahora !== primero, primero + ' → ' + ahora);
+            });
+            await page.evaluate(() => [...document.querySelectorAll('#existCardWrap button')].find(b => b.textContent.trim() === '✕').click());
+            await page.waitForTimeout(250);
+            await caso('…y la ✕ cierra SIN marcarlo como registrado', async () => {
+                assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('p1Modal')).display), 'none');
+                assert.deepEqual(await n(), [11, 1]);
+            });
+            await page.evaluate(() => setModoCaptura('galeria')); await page.waitForTimeout(250);
+            await caso('lista o iconos: la misma vista, en cuadrícula', async () =>
+                assert.ok(await page.evaluate(() => document.getElementById('p1Pend').classList.contains('p12-iconos') && document.querySelectorAll('#p1Pend .p12-item').length === 11)));
+            await page.evaluate(() => setModoCaptura('lista'));
+            // Paso 2
+            await page.evaluate((id) => {
+                invActual.entradasLog = [
+                    { id: 'x1', insumoId: id, nombreProducto: 'Destilado 0', tipo: 'compra', cantidad: 2, fecha: '2026-11-14' },
+                    { id: 'x2', insumoId: id, nombreProducto: 'Destilado 0', tipo: 'consignacion', cantidad: 1, fecha: '2026-11-15' },
+                    { id: 'x3', insumoId: id, nombreProducto: 'Destilado 0', tipo: 'compra', cantidad: 3, fecha: '2026-11-16' }];
+                irAPaso(2);
+            }, primero);
+            await page.waitForTimeout(500);
+            await caso('Paso 2: la lista COMPLETA de insumos a la izquierda, sin teclear nada', async () =>
+                assert.equal(await page.evaluate(() => document.querySelectorAll('#entChips .p12-item').length), 12));
+            await caso('…y lo registrado agrupado por insumo: «3 entradas», el total y la existencia del Paso 1', async () => {
+                const s = await page.evaluate(() => [...document.querySelectorAll('#entLogList .eg > summary')].map(x => x.innerText.replace(/\s+/g, ' ').trim()));
+                assert.equal(s.length, 1, JSON.stringify(s));
+                assert.match(s[0], /3 entradas 📦 \d+(\.\d+)? bot \+6 bot$/);
+            });
+            await caso('…al abrirlo: cada entrada con su tipo, fecha, ✏️ y el total', async () => {
+                await page.evaluate(() => { document.querySelector('#entLogList .eg').open = true; });
+                const r = await page.evaluate(() => { const c = document.querySelector('#entLogList .eg .eg-cuerpo');
+                    return { filas: c.querySelectorAll('.ent-log-fila').length, editar: c.querySelectorAll('[title="Editar registro completo"]').length,
+                             tipos: c.innerText.match(/Compra|Consignaci/g) || [], total: c.querySelector('.eg-total').innerText.replace(/\s+/g, ' ') }; });
+                assert.deepEqual([r.filas, r.editar, r.tipos.length], [3, 3, 3]);
+                assert.match(r.total, /Total \+6 bot/);
+            });
+            await page.click('#entChips .p12-item'); await page.waitForTimeout(300);
+            await caso('tocar un insumo vuelve ese espacio el registro de la entrada; la ✕ regresa a la lista', async () => {
+                assert.equal(await page.evaluate(() => document.querySelectorAll('#entChips .p12-item').length), 0);
+                assert.ok(await page.evaluate(() => !!document.querySelector('#entFormCard .ent-form-card')));
+                await page.evaluate(() => limpiarSeleccionEntrada()); await page.waitForTimeout(200);
+                assert.equal(await page.evaluate(() => document.querySelectorAll('#entChips .p12-item').length), 12);
             });
             await ctx.close();
         }
