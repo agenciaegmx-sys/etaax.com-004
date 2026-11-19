@@ -358,7 +358,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=c1ced532"></script>
+<script src="/recetas/inventarios.js?v=69f3a449"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -476,6 +476,15 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
    arranca ya en su lugar fijo: no se mueve nunca. */
 body.etx-modulos-ui #vistaCaptura > .inv-wizard-header { margin-top: -24px; }
 @media (max-width: 600px) { body.etx-modulos-ui #vistaCaptura > .inv-wizard-header { margin-top: -16px; } }
+/* Lo mismo en el HISTORIAL de inventarios y en «Revisar entradas» (Edwin,
+   19-nov): arrancaban 24 px abajo de la tarjeta del negocio y al bajar se
+   recorrían hasta pegarse. Ahora arrancan ya pegados; el aire va por dentro. */
+body.etx-modulos-ui #vistaLista > .header { margin-top: -24px; padding-top: 16px; }
+body.etx-modulos-ui #vistaEntradas > .inv-wizard-header { margin-top: -24px; }
+@media (max-width: 600px) {
+    body.etx-modulos-ui #vistaLista > .header { margin-top: -16px; padding-top: 12px; }
+    body.etx-modulos-ui #vistaEntradas > .inv-wizard-header { margin-top: -16px; }
+}
 /* ══ LA BARRA DEL PASO (Edwin, 19-nov) ══════════════════════════════════════
    Buscador y filtros FIJOS en el encabezado, que se adaptan al paso y a la
    vista visibles: existencias (rápida/lista, pendientes/registrados), entradas

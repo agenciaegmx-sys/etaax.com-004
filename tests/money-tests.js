@@ -19884,9 +19884,10 @@ console.log('\n══ BH26 · El prebatch, de punta a punta ══');
         const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
         /* Antes y después del desglose: lo que importa es que vaya ARRIBA de
            los números, no el orden exacto entre los dos bloques de prebatch. */
-        // 19-nov: dentro de un botón plegado (_prebatchPlegable), pero ARRIBA.
-        return eq(/return kpis \+ _prebatchPlegable\(_prebatchAvisoHTML\(\)[^;]*\+ _resumenEjecutivo\(\)/.test(src),
-                  true, 'donde duele');
+        /* 19-nov (Edwin): es INFORMATIVO. Va cerrado detrás de un botón y
+           DESPUÉS de las tablas de cada insumo, con lo demás informativo. */
+        return eq(/<div id="step5Tablas">\$\{_step5TablasHTML\(\)\}<\/div>` \+\s*_resumenAbajo \+ _prebatchPlegable\(_prebatchAvisoHTML\(\)/.test(src),
+                  true, 'abajo de las tablas');
     });
     test('…y nombra el renglón culpable, no un «hay un problema»', () => {
         montar(17.5, 0, 1900, 1150, () => {
@@ -21180,8 +21181,8 @@ console.log('\n══ BH32 · Enseñar la cuenta, no solo el resultado ══');
     });
     test('…y con batches se pinta arriba de los números', () => {
         const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
-        return eq(/return kpis \+ _prebatchPlegable\(_prebatchAvisoHTML\(\) \+ _prebatchDesgloseHTML\(\)\) \+ _resumenEjecutivo/.test(src),
-                  true, 'donde se mira el faltante');
+        return eq(/_resumenAbajo \+ _prebatchPlegable\(_prebatchAvisoHTML\(\) \+ _prebatchDesgloseHTML\(\)\);/.test(src),
+                  true, 'abajo de las tablas, plegado');
     });
     /* 19-nov (Edwin: «es muy invasiva»): es informativo, así que va CERRADO
        detrás de un botón que dice cuántos batches y avisos hay. */
@@ -22395,8 +22396,9 @@ console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
            (_s5Menu, abajo del nombre), y el ⋯ abre _s5AbrirMenu. */
         const menu = src.slice(src.indexOf('function _s5AbrirMenu('), src.indexOf('window._s5AbrirMenu'));
         const ok = /op\('toggleOcultoImpreso'/.test(menu) &&
-                   /_s5Menu\(fila\.insumoId, true\)/.test(cuerpo('function _rowCopa(')) &&
-                   /_s5Menu\(fila\.insumoId, true\)/.test(cuerpo('function _rowPza(')) &&
+                   // (desde el 19-nov también recibe los comentarios: _s5Comentarios)
+                   /_s5Menu\(fila\.insumoId, true[,)]/.test(cuerpo('function _rowCopa(')) &&
+                   /_s5Menu\(fila\.insumoId, true[,)]/.test(cuerpo('function _rowPza(')) &&
                    /_s5Menu\(vf\.compId\|\|vf\.insumoId/.test(cuerpo('function _rowComp('));
         return eq(ok, true, 'los tres tipos');
     });
@@ -35180,10 +35182,16 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         eq(sp.uno[2] + ' | ' + sp.dos[2], 'Entradas +2 pza | Costo $76.00'));
     test('Ventas: abajo el uso en coctelería y, en el mismo lugar, el uso en prebatch', () =>
         eq(sq.dos[3], 'Uso en coctelería — Uso en prebatch 1 pza'));
-    test('Mermas arriba con su comentario, y ya SIN columna de cancelaciones', () =>
-        eq(sp.uno[4] + ' | ' + /Cancelaciones/.test(h), 'Mermas 1 pza Botella rota | false'));
-    test('…y las cortesías abajo de las mermas, con su comentario', () =>
-        eq(sp.dos[4], 'Cortesías 1 pza Cumpleaños mesa 4'));
+    test('Mermas arriba, y ya SIN columna de cancelaciones', () =>
+        eq(sp.uno[4] + ' | ' + /Cancelaciones/.test(h), 'Mermas 1 pza | false'));
+    test('…y las cortesías abajo de las mermas', () => eq(sp.dos[4], 'Cortesías 1 pza'));
+    /* 19-nov (Edwin): los comentarios ensuciaban las columnas de números; van
+       juntos en el hueco junto al ⋯, cada uno con su nombre. */
+    test('los comentarios de merma y cortesía van juntos junto al ⋯', () =>
+        eq(/Comentarios Cortesía Cumpleaños mesa 4 Merma Botella rota/.test(sp.dos[0]), true, sp.dos[0]));
+    test('…y sin comentarios no se pinta el bloque', () => eq(/Comentarios/.test(sq.dos[0]), false, sq.dos[0]));
+    test('líneas entre columnas, menos entre venta botella y venta copa', () =>
+        eq(/tr\.s5-r1>td\+td,.*border-left:1px/.test(h) + '|' + /td class="s5-vc"/.test(h), 'true|true'));
     test('Teórico, Exist. actual y Diferencia, cada uno en su columna', () =>
         eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza | Diferencia -1 pza'));
     test('…y abajo de la diferencia, su % contra el uso (−1 de 1 usada)', () => eq(sq.dos[7], '% del uso -100.0%'));

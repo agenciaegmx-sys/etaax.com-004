@@ -869,6 +869,14 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 recetas: [SUB].map(r => ({ id: r.id, negocio_id: 'n1', datos: r })) }, viewport: { width: 1280, height: 800 } }));
             page.on('dialog', d => d.accept());
             await page.evaluate(() => { if (!document.getElementById('nav').classList.contains('cerrado')) toggleNav(); });
+            await caso('el historial arranca con el encabezado en su lugar: no se recorre al bajar', async () => {
+                await page.evaluate(() => mostrarVista('vistaLista')); await page.waitForTimeout(300);
+                const top = () => page.evaluate(() => Math.round(document.querySelector('#vistaLista > .header').getBoundingClientRect().top));
+                await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(150); const t0 = await top();
+                await page.evaluate(() => { document.body.style.minHeight = '3000px'; window.scrollTo(0, 60); }); await page.waitForTimeout(150); const t1 = await top();  // el corrimiento era de 24 px; el historial vacío es corto
+                await page.evaluate(() => { document.body.style.minHeight = ''; window.scrollTo(0, 0); });
+                assert.equal(t0, t1, 'arriba ' + t0 + ' · al bajar ' + t1);
+            });
             await nuevoInv(page);
             await page.waitForTimeout(600);
             const botones = () => page.evaluate(() => [...document.querySelectorAll('#vistaCaptura .inv-wizard-header button')]
@@ -883,8 +891,15 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 }
             });
             await page.evaluate(() => { filasCaptura.forEach((f, i) => { f.cerradasBodega = i % 3; f.registrado = true; }); invActual.prebatchProducidos = { prePal: 3 };
+                const d = filasCaptura.find(f => f.insumoId === 'd000'); d.ventasComentario = 'Mesa 7 pidió botella'; d.mermaCopas = 1; d.mermaConcepto = 'Se derramó';
                 _consumoDirty = true; window._step5Dirty = true; irAPaso(4); irAPaso(5); });
             await page.waitForTimeout(1200);
+            await caso('Resultado: las tablas de cada insumo primero; insumos sin usar y batches, abajo', async () => {
+                const r = await page.evaluate(() => { const y = (e) => e ? Math.round(e.getBoundingClientRect().top + scrollY) : null;
+                    const sinUsar = [...document.querySelectorAll('#step5Keep div')].find(d => /^💤 Insumos sin usar/.test(d.textContent) && d.children.length < 2);
+                    return { tablas: y(document.getElementById('step5Tablas')), sinUsar: y(sinUsar), batches: y(document.querySelector('.s5-pb')) }; });
+                assert.ok(r.tablas && r.sinUsar > r.tablas && r.batches > r.sinUsar, JSON.stringify(r));
+            });
             await caso('Resultado: buscador y filtros en el renglón de Desglose · Salir · Finalizar', async () => {
                 const r = await page.evaluate(() => { const t = (s) => Math.round(document.querySelector(s).getBoundingClientRect().top);
                     return { tops: ['#phBuscar', '#pasoHerr .ph-der', '#btnRepDesglose', '#btnGuardarInv', '#btnFinalizarInv'].map(t),
@@ -903,6 +918,16 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 const r = await page.evaluate(() => [parseFloat(getComputedStyle(document.querySelector('.s5-r1 td:nth-child(2)')).fontSize),
                     parseFloat(getComputedStyle(document.querySelector('.s5-r1 .s5-l')).fontSize)]);
                 assert.ok(r[0] >= 16 && r[1] >= 10, JSON.stringify(r));
+            });
+            await caso('…cada renglón con sus cifras a la MISMA altura, el stock centrado y líneas entre columnas', async () => {
+                const r = await page.evaluate(() => { const tr = [...document.querySelectorAll('#step5Tablas tr.s5-r1')].find(t => /Destilado 0/.test(t.textContent));
+                    const tops = [...tr.querySelectorAll('td .s5-c2')].map(c => { const g = document.createRange(); g.selectNodeContents(c); g.setStartAfter(c.querySelector('.s5-l')); return Math.round(g.getClientRects()[0].top); });
+                    const r2 = tr.nextElementSibling;
+                    return { tops, stock: getComputedStyle(r2.children[1]).textAlign, linea: getComputedStyle(tr.children[2]).borderLeftWidth,
+                             entreVentas: getComputedStyle(tr.querySelector('td.s5-vc')).borderLeftWidth, coms: r2.children[0].innerText.replace(/\s+/g, ' ') }; });
+                assert.equal(new Set(r.tops).size, 1, 'cifras a distinta altura: ' + r.tops);
+                assert.deepEqual([r.stock, r.linea, r.entreVentas], ['center', '1px', '0px']);
+                assert.match(r.coms, /COMENTARIOS Venta Mesa 7 pidió botella Merma Se derramó/i);
             });
             await caso('…y lo de los prebatch cerrado detrás de un botón, que dice cuántos batches', async () => {
                 const r = await page.evaluate(() => { const b = document.querySelector('.s5-pb-btn'); return { txt: b.innerText.replace(/\s+/g, ' '), oculto: document.querySelector('.s5-pb-cuerpo').hidden }; });

@@ -9426,8 +9426,15 @@ function _resumenEjecutivo() {
         sinUsarLista.map(function(n){ return '<span style="font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px 9px;color:var(--text-dim)">'+etx(n)+'</span>'; }).join('')+
         (sinUsar>sinUsarLista.length?'<span style="font-size:11px;color:var(--text-dim)">+'+(sinUsar-sinUsarLista.length)+' más</span>':'')+'</div></div></div>') : '';
 
-    return '<div class="wrap" style="padding-top:0"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text);margin:6px 0 10px">📊 Resumen ejecutivo</div>'+bloqueKpis+'</div>'+tablaCat+tablaMerma+listaSinUsar;
+    /* Lo de ABAJO (Edwin, 19-nov): los cocteles vendidos por categoría y los
+       insumos sin usar son informativos y empujaban las tablas de cada insumo
+       media pantalla hacia abajo. Van después de ellas. */
+    _resumenAbajo = tablaCat + listaSinUsar;
+    return '<div class="wrap" style="padding-top:0"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text);margin:6px 0 10px">📊 Resumen ejecutivo</div>'+bloqueKpis+'</div>'+tablaMerma;
 }
+/* La parte de abajo del resumen la deja lista _resumenEjecutivo() (se arma con
+   las mismas cuentas, así que no se recalcula). */
+var _resumenAbajo = '';
 
 function renderStep5() {
     const mapaC5 = _compDeInsumo();
@@ -9528,8 +9535,14 @@ function renderStep5() {
         </div>
     </div></div>`;
     void searchBar5;   // el buscador y los filtros van en la barra del paso (encabezado fijo)
-    return kpis + _prebatchPlegable(_prebatchAvisoHTML() + _prebatchDesgloseHTML()) + _resumenEjecutivo() +
-           `<div id="step5Tablas">${_step5TablasHTML()}</div>`;
+    /* Arriba: los totales y el resumen. En medio: las tablas de cada insumo.
+       Abajo, informativo: cocteles vendidos, insumos sin usar y la producción
+       de batches (plegada). */
+    _resumenAbajo = '';
+    const _arriba = _resumenEjecutivo();
+    return kpis + _arriba +
+           `<div id="step5Tablas">${_step5TablasHTML()}</div>` +
+           _resumenAbajo + _prebatchPlegable(_prebatchAvisoHTML() + _prebatchDesgloseHTML());
 }
 
 var _busqStep5 = '';
@@ -10351,6 +10364,20 @@ function _estiloS5() {
         '.s5-tabla td{padding-left:6px!important;padding-right:6px!important}' +
         '.s5-r1>td:not(:first-child){white-space:nowrap}' +
         '.s5-tabla .s5-sub,.s5-tabla .s5-sub *,.s5-tabla td div[style*="nowrap"]{white-space:normal!important}' +
+        /* ALINEADOS (Edwin, 19-nov): todos los títulos de celda ocupan lo de
+           dos líneas, con el texto abajo, para que las cifras de un renglón
+           queden a la misma altura aunque «Exist. anterior» o «Venta botella»
+           se partan en dos y «Entradas» no. */
+        '.s5-tabla .s5-c2 .s5-l{display:flex;flex-direction:column;justify-content:flex-end;min-height:2.5em}' +
+        /* Líneas que dividen las columnas, de arriba abajo del producto. Entre
+           venta botella y venta copa no: abajo comparten el uso en coctelería. */
+        '.s5-tabla tr.s5-r1>td+td,.s5-tabla tr.s5-r2>td+td{border-left:1px solid var(--border)!important}' +
+        '.s5-tabla tr.s5-r1>td.s5-vc{border-left:0!important}' +
+        /* Los comentarios, junto al ⋯. */
+        '.s5-menu{align-items:flex-start}' +
+        '.s5-coms{flex:1 1 150px;min-width:0;font-size:13px;line-height:1.45;color:var(--text-muted);text-align:left;overflow-wrap:anywhere}' +
+        '.s5-coms .s5-l{display:block;font-size:10.5px;font-weight:500;letter-spacing:.3px;line-height:1.25;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px}' +
+        '.s5-coms b{color:var(--text);font-weight:600}' +
         /* Los dos renglones son UN producto: se iluminan juntos. */
         '.s5-r1:hover+.s5-r2,.s5-r1:has(+.s5-r2:hover){background:var(--surface2)}' +
         '</style>';
@@ -10395,6 +10422,17 @@ function _s5Estado(id) {
     var n = _notaInsumo(id);
     if (n) h += '<span class="s5-nota">📝 ' + etx(n) + '</span>';
     return '<div class="s5-est" id="s5est-' + id + '">' + h + '</div>';
+}
+/* ══ LOS COMENTARIOS, JUNTO AL ⋯ (Edwin, 19-nov) ══════════════════════════
+   El de la venta iba debajo del uso en coctelería y los de merma y cortesía
+   debajo de su cifra: ensuciaban las columnas de números y el hueco junto al
+   ⋯ quedaba vacío. Ahora van juntos ahí, cada uno con su nombre. */
+function _s5Comentarios(f) {
+    var c = [['Venta', f.ventasComentario], ['Cortesía', f.cortesiaConcepto], ['Merma', f.mermaConcepto]]
+        .filter(function (x) { return x[1] && String(x[1]).trim(); });
+    if (!c.length) return '';
+    return '<div class="s5-coms"><span class="s5-l">Comentarios</span>' +
+        c.map(function (x) { return '<div><b>' + x[0] + '</b> ' + etx(String(x[1]).trim()) + '</div>'; }).join('') + '</div>';
 }
 function _s5Menu(id, conBateo, extra) {
     if (!id) return '';
@@ -10814,19 +10852,19 @@ function _step5TablasHTML() {
                 <td style="text-align:center">${_s5c2('Exist. anterior', eaBot + ' bot' + _dentroBat(adj.ea))}</td>
                 <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', entBotStr + prodStr)}</td>
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Venta botella', ventaBot > 0 ? ventaBot + ' bot' : '—')}</td>
-                <td style="text-align:center;color:var(--accent)">${_s5c2('Venta copa', ventaCopaDir > 0 ? _fc(ventaCopaDir) : '—')}</td>
-                <td style="text-align:center;color:${merma > 0 ? 'var(--red)' : 'inherit'};font-weight:${merma > 0 ? 600 : 400}">${_s5c2('Mermas', (merma > 0 ? _fc(merma) : '—') + _s5sub(etx(fila.mermaConcepto || '')))}</td>
+                <td class="s5-vc" style="text-align:center;color:var(--accent)">${_s5c2('Venta copa', ventaCopaDir > 0 ? _fc(ventaCopaDir) : '—')}</td>
+                <td style="text-align:center;color:${merma > 0 ? 'var(--red)' : 'inherit'};font-weight:${merma > 0 ? 600 : 400}">${_s5c2('Mermas', (merma > 0 ? _fc(merma) : '—'))}</td>
                 <td style="text-align:center">${_s5c2('Teórico', teoBotS)}</td>
                 <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', fisBotS + _dentroBat(adj.fis))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', difStr + (eqDif ? _s5sub(eqDif) : ''))}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>
             </tr>
             <tr class="s5-r2">
-                <td>${_s5Menu(fila.insumoId, true)}</td>
-                <td>${_s5Stock(fila)}</td>
+                <td>${_s5Menu(fila.insumoId, true, _s5Comentarios(fila))}</td>
+                <td style="text-align:center">${_s5Stock(fila)}</td>
                 <td style="text-align:center">${_s5c2('Costo', entDinero > 0 ? '<b>' + _s5dinero(entDinero).replace('+', '') + '</b>' : '—')}</td>
-                <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}${_comentarioVentaHTML(fila)}</td>
-                <td style="text-align:center">${_s5c2('Cortesías', (cortesia > 0 ? '<b style="color:var(--viol)">' + _fc(cortesia) + '</b>' : '—') + _s5sub(etx(fila.cortesiaConcepto || '')))}</td>
+                <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}</td>
+                <td style="text-align:center">${_s5c2('Cortesías', (cortesia > 0 ? '<b style="color:var(--viol)">' + _fc(cortesia) + '</b>' : '—'))}</td>
                 <td style="text-align:center">${_s5c2('Copas · onzas', _eqCopOz(teorico, fila))}</td>
                 <td style="text-align:center">${_s5c2('Copas · onzas', _eqCopOz(fisico, fila))}</td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
@@ -10880,18 +10918,18 @@ function _step5TablasHTML() {
                 <td style="text-align:center">${_s5c2('Exist. anterior', cant(ea))}</td>
                 <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', (entTotal>0?'+'+cant(entTotal):'—') + (_prodP>0?'<div class="s5-mini" style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +'+cant(_prodP)+' producido</div>':''))}</td>
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Ventas', ventasDir>0?cant(ventasDir):'—')}</td>
-                <td style="text-align:center;color:${mermaP>0?'var(--red)':'inherit'};font-weight:${mermaP>0?600:400}">${_s5c2('Mermas', (mermaP>0?cant(mermaP):'—') + _s5sub(etx(fila.mermaConcepto || '')))}</td>
+                <td style="text-align:center;color:${mermaP>0?'var(--red)':'inherit'};font-weight:${mermaP>0?600:400}">${_s5c2('Mermas', (mermaP>0?cant(mermaP):'—'))}</td>
                 <td style="text-align:center">${_s5c2('Teórico', cant(teorico))}</td>
                 <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', cant(fisico))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + cant(dif))}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>
             </tr>
             <tr class="s5-r2">
-                <td>${_s5Menu(fila.insumoId, true)}</td>
-                <td>${_s5Stock(fila)}</td>
+                <td>${_s5Menu(fila.insumoId, true, _s5Comentarios(fila))}</td>
+                <td style="text-align:center">${_s5Stock(fila)}</td>
                 <td style="text-align:center">${_s5c2('Costo', entDinP > 0 ? '<b>' + _s5dinero(entDinP).replace('+', '') + '</b>' : '—')}</td>
-                <td style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${_s5Uso(coctSoloP, prodPBpVer, cant)}${_comentarioVentaHTML(fila)}</td>
-                <td style="text-align:center">${peso ? '' : _s5c2('Cortesías', (cortP>0 ? '<b style="color:var(--viol)">' + cant(cortP) + '</b>' : '—') + _s5sub(etx(fila.cortesiaConcepto || '')))}</td>
+                <td style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${_s5Uso(coctSoloP, prodPBpVer, cant)}</td>
+                <td style="text-align:center">${peso ? '' : _s5c2('Cortesías', (cortP>0 ? '<b style="color:var(--viol)">' + cant(cortP) + '</b>' : '—'))}</td>
                 <td></td>
                 <td></td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
@@ -11094,7 +11132,7 @@ function _step5TablasHTML() {
             <td style="text-align:center">${_s5c2('Exist. anterior', _nc(eaBot) + ' ' + uC.exist)}</td>
             <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', entU>0 ? '+'+_nc(entU)+' '+uC.exist : '—')}</td>
             <td style="text-align:center;color:var(--accent)">${_s5c2('Venta botella', ventaBotU>0 ? _nc(ventaBotU)+' '+uC.exist : '—')}</td>
-            <td style="text-align:center;color:var(--accent)">${_s5c2('Venta copa', ventaCopa>0 ? _nc(ventaCopa)+' '+uC.mov : '—')}</td>
+            <td class="s5-vc" style="text-align:center;color:var(--accent)">${_s5c2('Venta copa', ventaCopa>0 ? _nc(ventaCopa)+' '+uC.mov : '—')}</td>
             ${_mer(uC.mov)}
             <td style="text-align:center">${_s5c2('Teórico', _nc(teoBotC) + ' ' + uC.exist)}</td>
             <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', _nc(fisBot) + ' ' + uC.exist)}</td>${_fin1}
