@@ -120,6 +120,14 @@
        Eso ya no es avisar, es estorbar. */
     var VIGENCIA_DIAS = 2;
 
+    /* ── EL INTERRUPTOR DEL AVISITO ────────────────────────────────────────
+       APAGADO el 19-nov-2026, a petición de Edwin, junto con la presentación.
+       Se publica casi a diario: con el avisito prendido saldría «hubo
+       actualizaciones hoy» en cada pantalla casi todos los días, y estuvo
+       callado semanas (la presentación vigente lo tapaba). Para volver a
+       avisar cada publicación: `true`. */
+    var AVISITO = false;
+
     /* Devuelve QUÉ decidió —'presentacion', 'avisito' o '' — y no solo porque
        quede bonito: las dos capas se muestran con un temporizador, así que
        desde fuera son indistinguibles hasta que aparecen en pantalla. Sin este
@@ -146,6 +154,7 @@
                como se le enseña a alguien a cerrar los avisos sin leerlos. */
             return '';
         }
+        if (!AVISITO) return '';                            // apagado (ver AVISITO)
         if (_diasDesde(FECHA) > VIGENCIA_DIAS) return '';   // ya es historia
         if (_yaSes(SESION) === FECHA) return '';  // ya se dio por enterado en esta sesión
         if (_ya(VISTO)   === FECHA) return '';    // y en una sesión anterior, también
@@ -223,25 +232,33 @@
        anunciar una actualización que todavía no se publica, con los marcos
        vacíos, es peor que no anunciarla.
 
+       APAGADA el 19-nov-2026 a petición de Edwin: «solo debía durar 3 días y ya
+       van semanas». Sigue en el menú de la cuenta para quien quiera verla.
+
        Para la SIGUIENTE actualización grande: subir NUMERO y NOMBRE, cambiar la
-       lista de novedades y sus capturas, y dejar esto en `true`. */
-    var ANUNCIAR = true;
+       lista de novedades y sus capturas, poner FECHA_ANUNCIO (abajo) en el día
+       de la publicación y dejar esto en `true`. */
+    var ANUNCIAR = false;
 
     /* ── CUÁNTO DURA EL ANUNCIO ────────────────────────────────────────────
        Tres días desde la publicación, y dentro de esa ventana aparece en CADA
        inicio de sesión —lo haya visto o no—, porque un anuncio que solo sale
        una vez se lo pierde quien ese día entró con prisa.
 
-       La fecha de referencia no se escribe a mano: es la misma `FECHA` que el
-       hook de pre-commit estampa en cada publicación, así que la cuenta arranca
-       sola el día del push. OJO: si se vuelve a publicar dentro de esos tres
-       días, la ventana se reinicia — es a propósito, la referencia es siempre
-       la última publicación.
+       ══ POR QUÉ DURÓ SEMANAS EN VEZ DE TRES DÍAS ══════════════════════════
+       La ventana se contaba desde `FECHA`, y `FECHA` la vuelve a estampar el
+       hook de pre-commit en CADA publicación. Se publicaba casi a diario, así
+       que los tres días se reiniciaban una y otra vez: el anuncio de ETAAX 2.0
+       (13-oct) seguía saliendo a mediados de noviembre.
+
+       Ahora cuenta desde FECHA_ANUNCIO: el día en que se anunció, escrito a
+       mano UNA vez y que el hook no toca (solo estampa `var FECHA = '…'`).
 
        Pasados los tres días el anuncio deja de asomarse, pero NO desaparece:
        sigue en el menú de la cuenta para quien quiera verlo o repasarlo. */
+    var FECHA_ANUNCIO = '2026-10-13';   /* el día del anuncio — a mano, una vez */
     var VIGENCIA_ANUNCIO = 3;
-    function _anuncioVigente() { return _diasDesde(FECHA) <= VIGENCIA_ANUNCIO; }
+    function _anuncioVigente() { return _diasDesde(FECHA_ANUNCIO) <= VIGENCIA_ANUNCIO; }
 
     /* ── QUÉ SE ANUNCIA ────────────────────────────────────────────────────
        Orden de lectura, no de importancia técnica: primero lo que la persona
@@ -831,6 +848,8 @@
                               anunciar: function (v) { ANUNCIAR = (v !== false); return ANUNCIAR; },
                               anunciando: function () { return ANUNCIAR; },
                               VIGENCIA_ANUNCIO: VIGENCIA_ANUNCIO,
+                              FECHA_ANUNCIO: FECHA_ANUNCIO,
+                              avisitoPrendido: function () { return AVISITO; },
                               vigenteAnuncio: _anuncioVigente,
                               lista: function () { return NOVEDADES.slice(); },
                               pendiente: _pendiente,

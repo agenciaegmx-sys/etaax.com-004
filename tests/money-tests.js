@@ -2661,6 +2661,9 @@ console.log('\n══ SUITE Q · Aviso de actualizaciones (novedades.js) ══'
                       + '-' + String(d.getDate()).padStart(2, '0');
             src = src.replace(/var FECHA\s*=\s*'[^']*'/, "var FECHA = '" + iso + "'");
         }
+        /* En el archivo el avisito viene APAGADO (19-nov); aquí se prende para
+           probar su regla, salvo que la prueba quiera ver el archivo tal cual. */
+        if (!opts.talCual) src = src.replace(/var AVISITO\s*=\s*false/, 'var AVISITO = true');
         vm.runInContext(src, ctx, { filename: 'novedades.js' });
         return { ctx, ls, ss, veces: () => pintadas, cerrar: () => cerrar && cerrar(),
                  otraPantalla: () => ctx.EtaaxNovedades.arrancar() };
@@ -2711,6 +2714,26 @@ console.log('\n══ SUITE Q · Aviso de actualizaciones (novedades.js) ══'
         test('la vigencia es de 2 días y se puede consultar', () => eq(Q2.VIGENCIA_DIAS, 2, 'dias'));
         test('…y el helper responde igual que el comportamiento', () =>
             eq(Q2.vigente(2) === true && Q2.vigente(3) === false, true, 'coherente'));
+    }
+    /* ── APAGADOS (19-nov-2026) ──
+       Edwin: «solo debía durar 3 días y ya van semanas». La presentación de
+       2.0 contaba sus tres días desde FECHA, que el hook reestampa en cada
+       commit: con publicaciones casi diarias la ventana nunca cerraba. */
+    {
+        const a = montarAviso({ hace: 0, talCual: true });
+        test('el avisito viene APAGADO en el archivo: hoy no sale aunque haya publicación', () =>
+            eq(a.veces() + ' · ' + a.ctx.EtaaxNovedades.avisitoPrendido(), '0 · false'));
+        const N = a.ctx.EtaaxNovedades;
+        test('la presentación grande viene APAGADA', () => eq(N.anunciando(), false));
+        test('su ventana cuenta desde FECHA_ANUNCIO (fija), no desde la FECHA que el hook mueve', () =>
+            eq(N.FECHA_ANUNCIO + ' · ' + N.vigenteAnuncio(), '2026-10-13 · false'));
+        test('…y el hook solo estampa `var FECHA`, nunca FECHA_ANUNCIO', () => {
+            const hook = fs.readFileSync(path.join(RAIZ, '.githooks/pre-commit'), 'utf8');
+            const nov = fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8');
+            const patron = /var FECHA = '\[0-9-\]\*'/;          // el que usa el sed del hook
+            const sed = nov.match(/var FECHA = '[0-9-]*'/g) || [];
+            return eq(patron.test(hook) + ' · ' + sed.length + ' · ' + /var FECHA_ANUNCIO = '[0-9-]+'/.test(nov), 'true · 1 · true');
+        });
     }
     }
 })();
@@ -27273,8 +27296,14 @@ console.log('\n══ BE17 · «Actualizamos el sistema, ve las novedades» ═�
             const d = new Date(); d.setDate(d.getDate() - opc.hace);
             const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
                       + '-' + String(d.getDate()).padStart(2, '0');
+            /* Desde el 19-nov la ventana se cuenta desde FECHA_ANUNCIO (fija, el
+               día del anuncio), no desde FECHA: se mueven las dos. Y el avisito
+               se prende en la copia, para seguir probando su regla (en el
+               archivo viene apagado; lo vigila otra prueba). */
             const src = fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8')
-                          .replace(/var FECHA\s*=\s*'[^']*'/, "var FECHA = '" + iso + "'");
+                          .replace(/var FECHA\s*=\s*'[^']*'/, "var FECHA = '" + iso + "'")
+                          .replace(/var FECHA_ANUNCIO\s*=\s*'[^']*'/, "var FECHA_ANUNCIO = '" + iso + "'")
+                          .replace(/var AVISITO\s*=\s*false/, 'var AVISITO = true');
             vm.runInContext(src, C, { filename: 'novedades.js' });
         }
         const N = C.window.EtaaxNovedades;
