@@ -646,7 +646,7 @@ let _existBusqueda    = '';
 let _existInsumoId    = null;
 
 // Vista entradas paso 2 — default: búsqueda rápida
-let vistaEntradas2 = 'busqueda'; // 'busqueda' | 'lista'
+let vistaEntradas2 = 'busqueda'; // una sola vista (dos columnas); se ve en lista o cuadrícula (modoListaCapt), como el Paso 1
 
 // Vista ventas paso 3 — default: menú
 let vistaVentas    = 'busqueda'; // 'busqueda' (la primera) | 'lista' (insumos) | 'menu' (cocteles) | 'prebatch'
@@ -6007,10 +6007,11 @@ function _herrPasoHTML() {
             '<span>' + _icInv('adm-pagado', 14) + 'Registrados <span class="ph-n">' + nReg + '</span></span></div>', _herrVistaToggle());
     }
     if (paso === 2) {
-        const seg = _herrSeg([['busqueda', _icInv('adm-buscar', 14) + 'Rápida'], ['lista', _icInv('ins-lista', 14) + 'Lista']], vistaEntradas2, 'setVistaEntradas2');
-        return vistaEntradas2 === 'busqueda'
-            ? _herrLados(_herrBuscar('entBuscador', _entRapidaBusqueda, 'Producto para registrar…', 'buscarInsumoEntrada') + seg, _filtroTipoHTML(true))
-            : _herrLados(_herrBuscarCapt() + seg, _herrSelectsCapt(true));
+        /* «Rápida / Lista» se van (Edwin, 19-nov): la tabla de «Lista» ya no
+           servía. Es una sola vista en dos columnas que se ve en LISTA o en
+           CUADRÍCULA, con el mismo botón del Paso 1. */
+        vistaEntradas2 = 'busqueda';
+        return _herrLados(_herrBuscar('entBuscador', _entRapidaBusqueda, 'Producto para registrar…', 'buscarInsumoEntrada') + _herrVistaToggle(), _filtroTipoHTML(true));
     }
     if (paso === 3) {
         const nPb = prebatchesProducibles().length;
@@ -6214,7 +6215,6 @@ function _avisoAreaHTML() {
    en un modal; «Registrado — Siguiente» pasa al siguiente pendiente. */
 function renderStep1() {
     vistaCapturaExist = 'busqueda';
-    const nReg = filasCaptura.filter(_esRegistrado).length;
     return _avisoCatalogoHTML() + _avisoAreaHTML() + bannerConteosQR() + `
         <div class="p12-split">
             <section class="p12-col">
@@ -6222,8 +6222,7 @@ function renderStep1() {
                 <div id="p1Pend"></div>
             </section>
             <section class="p12-col">
-                <div class="p12-cab"><span>${_icInv('adm-pagado', 14)}Registrados</span><b id="p1NReg"></b>
-                    ${nReg > 0 ? `<button class="p12-salir" onclick="guardarYSalir()">${_icInv('adm-guardar', 14)}Guardar y salir</button>` : ''}</div>
+                <div class="p12-cab"><span>${_icInv('adm-pagado', 14)}Registrados</span><b id="p1NReg"></b></div>
                 <div id="p1Reg"></div>
             </section>
         </div>
@@ -6977,12 +6976,7 @@ function bannerMovsQR() {
 function renderStep2() {
     // Las vistas, los buscadores y las pestañas de lo registrado van en la barra del paso.
     const switcher = '<div style="padding-top:14px"></div>' + bannerMovsQR();
-    if (vistaEntradas2 === 'lista') {
-        const filas  = getFilasFiltradas();
-        const noData = !filasCaptura.length
-            ? `<div class="empty-state" style="padding:60px"><div class="empty-icon">📥</div><div class="empty-title">Sin insumos</div></div>` : null;
-        return switcher + (noData || renderStep2Lista(filas));
-    }
+    vistaEntradas2 = 'busqueda';   // la tabla «Lista» se retiró (19-nov)
     /* ══ DOS COLUMNAS, UNA POR BUSCADOR (Edwin, 19-nov) ═════════════════
        Izquierda: TODOS los insumos del inventario desde el principio (antes
        la columna estaba vacía hasta teclear); el buscador «Producto para
@@ -10378,6 +10372,13 @@ function _estiloS5() {
         '.s5-coms{flex:1 1 150px;min-width:0;font-size:13px;line-height:1.45;color:var(--text-muted);text-align:left;overflow-wrap:anywhere}' +
         '.s5-coms .s5-l{display:block;font-size:10.5px;font-weight:500;letter-spacing:.3px;line-height:1.25;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px}' +
         '.s5-coms b{color:var(--text);font-weight:600}' +
+        /* Las presentaciones de un compuesto: sangradas y unidas a él (línea
+           delgada entre ellas; la gruesa cierra al compuesto completo). */
+        '.s5-tabla tr.s5-mem>td{background:color-mix(in srgb,var(--viol) 5%,transparent)}' +
+        '.s5-tabla tr.s5-mem>td:first-child{padding-left:28px!important}' +
+        '.s5-tabla tr.s5-mem .s5-nom{font-size:15px}' +
+        '.s5-tabla tr.s5-mem .s5-nom::before{content:"↳ ";color:var(--viol)}' +
+        '.s5-tabla tr.s5-r2.s5-comp-abierto>td,.s5-tabla tr.s5-mem.s5-r2:has(+ tr.s5-mem)>td{border-bottom:1px dashed var(--border)!important}' +
         /* La ficha informativa de cada batch. */
         '.s5-pbt{width:100%;border-collapse:collapse}' +
         '.s5-pbt>tbody>tr>td{padding:14px 16px;border-bottom:3px solid color-mix(in srgb,var(--text-dim) 38%,transparent)}' +
@@ -10416,6 +10417,9 @@ function _estiloS5Papel() {
         '.s5-papel .s5-pill,.s5-papel .s5-nota{font-size:8px}' +
         '.s5-papel tr.s5-r1>td+td,.s5-papel tr.s5-r2>td+td{border-left:1px solid #d6d0c4!important}' +
         '.s5-papel tr.s5-r1>td.s5-vc{border-left:0!important}' +
+        '.s5-papel tr.s5-r2.s5-comp-abierto>td,.s5-papel tr.s5-mem.s5-r2:has(+ tr.s5-mem)>td{border-bottom:1px dashed #cfc9bd!important}' +
+        '.s5-papel tr.s5-mem>td:first-child{padding-left:12px!important}' +
+        '.s5-papel tr.s5-mem .s5-nom{font-size:10px!important}' +
         /* El dinero no se parte en dos líneas («−» arriba, la cifra abajo). */
         '.s5-papel tr.s5-r1>td:not(:first-child),.s5-papel tr.s5-r2>td:last-child{white-space:nowrap!important}' +
         '.s5-papel .s5-sub,.s5-papel .s5-sub *,.s5-papel .s5-mini{white-space:normal!important}' +
@@ -10438,9 +10442,11 @@ function _estiloS5Papel() {
 }
 // El desglose por presentación de un compuesto: se abre y se cierra desde su segundo renglón.
 function _toggleCompDesg(id, btn) {
-    var d = document.getElementById('compDesg-' + id); if (!d) return;
-    var abrir = d.style.display === 'none';
-    d.style.display = abrir ? '' : 'none';
+    // Las presentaciones son renglones de la misma tabla (s5-mem compDesg-<id>).
+    var rows = document.querySelectorAll('tr.compDesg-' + id); if (!rows.length) return;
+    var abrir = rows[0].style.display === 'none';
+    rows.forEach(function (r) { r.style.display = abrir ? '' : 'none'; });
+    var tr = btn && btn.closest('tr'); if (tr) tr.classList.toggle('s5-comp-abierto', abrir);
     if (btn) btn.textContent = abrir ? '▾ Ocultar desglose' : '▸ Ver desglose';
 }
 /* ══ EL RESULTADO EN DOS RENGLONES, POR COLUMNAS (18-nov-2026) ════════════
@@ -11140,74 +11146,20 @@ function _step5TablasArmar(opts) {
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctStr    = pctValC !== null ? ((pctValC>=0?'+':'')+pctValC.toFixed(1)+'%') : '—';
         const esPzaComp0 = members.length > 0 && members.every(m => m.tipo === 'pza');
-        const desgloseRows = members.map(m => {
-            const mea = parseFloat(m.existenciaAnterior)||0;
-            const ment = getEntradasCopas(m);
-            const mcancel = getCancelacionesCopas(m.insumoId);
-            const mU = _uDe(m);
-            const mCopasBot = mU.copasBot;
-            const mVentaBotU = parseFloat(m.ventasBotella)||0;           // botellas, como se venden
-            const mVentaBot = mVentaBotU * (mCopasBot || 1);             // en copas, para el % y los totales
-            const mentU = getEntradasBottles(m.insumoId);                // entradas: se compran botellas
-            const mVentaCopa = parseFloat(m.ventasCopasDirectas)||0;
-            const mVentaCoct = consumoRecetasFila(m);
-            const mcm = (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
-            const mfis = calcExistencia(m), mteo = calcExistenciaTeorica(m), mdif = mfis - mteo;
-            const mDifCosto = mdif * (m.precioCarta || 0);
-            const mpct = _pctVarianza(mdif, mVentaBot + mVentaCopa + mVentaCoct);
-            const mcol = Math.abs(mdif)<0.05?'var(--text-dim)':(mdif>0?'var(--green)':'var(--red)');
-            const meaBot = mCopasBot>0 ? mea/mCopasBot : mea;   // existencia en botellas (su propia presentación)
-            const mfisBot = mCopasBot>0 ? mfis/mCopasBot : mfis;
-            const mCont   = _fmtContenido(m); // 📦 contenido por botella (ml/pza) de la presentación
-            /* ══ CADA PRESENTACIÓN, SU PROPIA NOTA ════════════════════════
-               La nota vivía solo en el COMPUESTO. Pero el faltante no es del
-               compuesto: es de la Porter, no de la Stout. «La Brü −2 pza» con
-               un comentario que vale para las cinco presentaciones no explica
-               nada, y al que revisa el reporte directivo le llega un renglón
-               rojo sin una línea que lo justifique.
-
-               Las notas ya se guardaban por insumoId —cada miembro tiene el
-               suyo—, así que no hacía falta inventar nada: solo faltaba el
-               botón en el renglón. */
-            const mNom = `<td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${_stockFilaHTML(m, calcExistencia(m), false)}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}${mCont?`<div style="font-size:9.5px;color:#7ab8f5;margin-top:1px">📦 ${mCont}</div>`:''}${papel ? (_notaInsumo(m.insumoId) ? '<div class="s5-nota">📝 ' + etx(_notaInsumo(m.insumoId)) + '</div>' : '') : _btnNotaInsumo(m.insumoId)}</td>`;
-            // Miembros de pieza: mismas columnas que la tabla de piezas (con
-            // teórico y físico), sin "Botella" ni "Copa", que ahí no existen.
-            if (esPzaComp0) {
-                const mVent = mVentaCopa + mVentaBot;
-                return `<tr>${mNom}
-                <td style="text-align:center;white-space:nowrap">${_nc(meaBot)} pza</td>
-                <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--accent)">${mVent>0?_nc(mVent)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' pza':'—'}</td>
-                <td style="text-align:center;white-space:nowrap">${_nc(mteo)} pza</td>
-                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} pza</td>
-                <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} pza</td>
-                <td style="text-align:center;font-size:11px;color:${mcol}">${mpct!==null?((mpct>=0?'+':'')+mpct.toFixed(1)+'%'):'—'}</td>
-                <td style="text-align:right;font-weight:600;color:${mcol};white-space:nowrap">${mDifCosto>=0?'+':''}$${mDifCosto.toFixed(2)}</td>
-            </tr>`;
-            }
-            return `<tr>${mNom}
-                <td style="text-align:center;white-space:nowrap">${_nc(meaBot)} ${mU.exist}</td>
-                <td style="text-align:center;color:var(--green)">${mentU>0?'+'+_nc(mentU)+' '+mU.exist:'—'}</td>
-                <td style="text-align:center;color:var(--accent)">${mVentaBotU>0?_nc(mVentaBotU)+' '+mU.exist:'—'}</td>
-                <td style="text-align:center;color:var(--accent)">${mVentaCopa>0?_nc(mVentaCopa)+' '+mU.mov:'—'}</td>
-                <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' '+mU.mov:'—'}</td>
-                <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' '+mU.mov:'—'}</td>
-                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} ${mU.exist}${_equivBarraHTML(mfis, m, {impreso:papel})}</td>
-                <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} ${mU.mov}${_equivBarraHTML(mdif, m, {signo:true, impreso:papel})}</td>
-                <td style="text-align:center;font-size:11px;color:${mcol}">${mpct!==null?((mpct>=0?'+':'')+mpct.toFixed(1)+'%'):'—'}</td>
-                <td style="text-align:right;font-weight:600;color:${mcol};white-space:nowrap">${mDifCosto>=0?'+':''}$${mDifCosto.toFixed(2)}</td>
-            </tr>`;
-        }).join('');
+        /* ══ EL DESGLOSE TIENE LA MISMA ESTRUCTURA (Edwin, 19-nov) ══════════
+           Era una tabla aparte, metida en un renglón, con sus propias columnas
+           (anterior, entradas, coctelería, ventas, cortesía/merma…): no
+           cuadraba con las de arriba y, al partirse de hoja en el impreso, su
+           encabezado se colaba arriba de la tabla de afuera. Ahora cada
+           presentación es un producto más, con SUS dos renglones (el mismo
+           armador que cualquier insumo), sangrado debajo del compuesto. En la
+           pantalla se abre con «Ver desglose»; en papel va abierto. */
         const esPzaComp = esPzaComp0;
-        const desglose = `<tr id="compDesg-${comp.id}" style="${papel ? '' : 'display:none'}"><td colspan="${esPzaComp0 ? 9 : 10}" style="padding:0;background:var(--bg)">
-            <div style="padding:8px 20px 12px"><div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px">📐 Desglose por presentación</div>
-            <table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-                ${esPzaComp0
-                    ? `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Ventas</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Teórico</th><th style="text-align:center">Físico</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`
-                    : `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Botella</th><th style="text-align:center">Copa</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Actual</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`}
-            </tr></thead><tbody>${desgloseRows}</tbody></table></div></td></tr>`;
+        const desglose = members.map(m => {
+            const r = (esPzaComp0 || m.tipo !== 'copa') ? _rowPza(m) : _rowCopa(m);
+            return r.html.replace(/<tr class="s5-r([12])">/g, (x, n) =>
+                '<tr class="s5-r' + n + ' s5-mem compDesg-' + comp.id + '"' + (papel ? '' : ' style="display:none"') + '>');
+        }).join('');
         const _tdNom = `<td style="min-width:150px">
                 <div class="s5-nom">🧩 ${etx(comp.nombre||vf.nombre)}</div>
                 <div class="s5-cont">Compuesto · ${members.length} presentaciones</div>
@@ -11244,7 +11196,7 @@ function _step5TablasArmar(opts) {
             <td style="text-align:center">${_s5c2('Teórico', _nc(teorico) + ' pza')}</td>
             <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', _nc(fisBot) + ' pza')}</td>${_fin1}
         </tr>
-        <tr class="s5-r2">
+        <tr class="s5-r2${papel ? ' s5-comp-abierto' : ''}">
             <td>${_menuComp}</td>
             <td></td>
             ${_costo}
@@ -11262,7 +11214,7 @@ function _step5TablasArmar(opts) {
             <td style="text-align:center">${_s5c2('Teórico', _nc(teoBotC) + ' ' + uC.exist)}</td>
             <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', _nc(fisBot) + ' ' + uC.exist)}</td>${_fin1}
         </tr>
-        <tr class="s5-r2">
+        <tr class="s5-r2${papel ? ' s5-comp-abierto' : ''}">
             <td>${_menuComp}</td>
             <td></td>
             ${_costo}
@@ -11555,9 +11507,12 @@ function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
     const shell = (orig) => {
         const t = orig.cloneNode(false);
         // Los anchos de columna viajan con la tabla a la hoja siguiente.
-        const cg = orig.querySelector('colgroup');
+        /* SOLO los propios (:scope >): una tabla metida en un renglón —como el
+           desglose viejo de un compuesto— colaba SU encabezado arriba de la
+           tabla de afuera, con otras columnas y un hueco a la derecha. */
+        const cg = orig.querySelector(':scope > colgroup');
         if (cg) t.appendChild(cg.cloneNode(true));
-        const th = orig.querySelector('thead');
+        const th = orig.querySelector(':scope > thead');
         if (th) t.appendChild(th.cloneNode(true));
         t.appendChild(document.createElement('tbody'));
         return t;
@@ -12977,7 +12932,8 @@ function renderChipsEntrada() {
         if (_entRapidaInsumoId) { cont.innerHTML = ''; return; }
         const q2 = String(_entRapidaBusqueda || '').trim().toLowerCase();
         const lista = filasCaptura.filter(f => !q2 || String(f.nombre || '').toLowerCase().indexOf(q2) > -1 || String(insumoTitulo(f) || '').toLowerCase().indexOf(q2) > -1);
-        cont.className = 'p12-lista';
+        // Lista o cuadrícula, con el mismo botón (y la misma preferencia) que el Paso 1.
+        cont.className = 'p12-lista' + (modoListaCapt === 'galeria' ? ' p12-iconos' : '');
         cont.innerHTML = lista.length ? lista.map(f => {
             const ya = getEntradasBottles(f.insumoId);
             const meta = insumoMeta(f) ? insumoMetaHTML(f) : (f.categoria ? etx(f.categoria) : '');

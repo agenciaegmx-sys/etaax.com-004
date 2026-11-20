@@ -1007,6 +1007,65 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 assert.deepEqual([r.comentario, r.ficha], [true, true], JSON.stringify(r)));
             await ctx.close();
         }
+
+        /* ── Q · pulido del 20-nov ───────────────────────────────────────────
+           Paso 1 sin «Guardar y salir»; Paso 2 en lista o cuadrícula (como el
+           Paso 1) en vez de «Rápida / Lista»; Paso 3 sin el hueco arriba de lo
+           capturado; y el desglose de un compuesto con la MISMA estructura que
+           cualquier insumo, en pantalla y en el impreso (sin encabezados
+           colados de otra tabla). */
+        console.log('\n══ Q · Pulido: Paso 1, Paso 2, Paso 3 y el desglose del compuesto ══');
+        {
+            const LB = ['Stout', 'IPA', 'Porter'].map((v, i) => base('lb' + i, { nombre: 'La Brü', variedad: v, tipoInsumo: 'cerveza', categoria: 'Cervezas',
+                presentaciones: [{ contNeto: 355, umContenido: 'ML', costoPieza: 40, precioCarta: 95 }] }));
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: { negocio_insumos: filasNube(destilados(6).concat(LB)) }, viewport: { width: 1280, height: 800 } }));
+            page.on('dialog', d => d.accept());
+            await page.evaluate(() => { localStorage.setItem(_compuestosKey(), JSON.stringify([{ id: 'labru', nombre: 'La Bru', miembros: ['lb0', 'lb1', 'lb2'] }])); });
+            await nuevoInv(page);
+            await page.waitForTimeout(600);
+            await page.evaluate(() => { filasCaptura.forEach((f, i) => { f.cerradasBodega = i % 3; f.existenciaAnterior = f.tipo === 'copa' ? 30 : 6; f.registrado = true; });
+                const ipa = filasCaptura.find(f => f.insumoId === 'lb1'); ipa.ventasCopasDirectas = 3; ipa.cortesiaCopas = 1; ipa.cortesiaConcepto = 'Músicos'; renderStepContent(); });
+            await page.waitForTimeout(300);
+            await caso('Paso 1 sin el botón «Guardar y salir»', async () =>
+                assert.equal(await page.evaluate(() => /Guardar y salir/.test(document.getElementById('stepContent').innerText)), false));
+            await page.evaluate(() => irAPaso(2)); await page.waitForTimeout(300);
+            await caso('Paso 2: junto al buscador, lista o cuadrícula (sin «Rápida / Lista»)', async () => {
+                const b = await page.evaluate(() => ({ t: document.getElementById('pasoHerr').innerText, tg: !!document.querySelector('#pasoHerr .vista-toggle') }));
+                assert.ok(b.tg && !/Rápida|Lista/.test(b.t), JSON.stringify(b));
+            });
+            await page.evaluate(() => setModoCaptura('galeria')); await page.waitForTimeout(300);
+            await caso('…y en cuadrícula los insumos van en mosaicos, con lo registrado a la derecha', async () => {
+                const r = await page.evaluate(() => { const c = document.getElementById('entChips'); return { cls: c.className, cols: getComputedStyle(c).gridTemplateColumns.split(' ').length, der: !!document.getElementById('entLog') || !!document.querySelector('.p12-split-ent') }; });
+                assert.ok(/p12-iconos/.test(r.cls) && r.cols >= 2 && r.der, JSON.stringify(r));
+            });
+            await page.evaluate(() => { setModoCaptura('lista'); irAPaso(3); setVistaVentas('busqueda'); }); await page.waitForTimeout(300);
+            await caso('Paso 3, búsqueda rápida: lo capturado arranca pegado a la barra (sin el hueco)', async () => {
+                const g = await page.evaluate(() => document.getElementById('ventasResumenCuenta').getBoundingClientRect().top - document.getElementById('pasoHerr').getBoundingClientRect().bottom);
+                assert.ok(g < 50, g + ' px');
+            });
+            await page.evaluate(() => { _consumoDirty = true; window._step5Dirty = true; irAPaso(4); irAPaso(5); }); await page.waitForTimeout(1000);
+            await page.evaluate(() => { const h = [...document.querySelectorAll('#step5Tablas .card-header[data-grp]')].find(x => /Cervezas/.test(x.dataset.grp)); if (h) h.click(); });
+            await page.waitForTimeout(200);
+            await caso('el desglose del compuesto: cada presentación con SUS dos renglones y las mismas columnas', async () => {
+                const r = await page.evaluate(() => { document.querySelector('.s5-desg').click();
+                    const m = [...document.querySelectorAll('tr.s5-mem.s5-r1')], comp = m[0] && m[0].parentElement.querySelector('tr.s5-r1:not(.s5-mem)');
+                    const ipa = m.find(x => /IPA/.test(x.textContent));
+                    return { n: m.length, vis: m.filter(x => x.offsetParent).length, celdas: m.map(x => x.children.length), compCeldas: comp && comp.children.length,
+                             cortesia: ipa && /Cortesías\s*1 pza/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')), coment: ipa && /Comentarios\s*Cortesía\s*Músicos/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')),
+                             tablaVieja: !!document.querySelector('#step5Tablas tr[id^="compDesg-"]') }; });
+                assert.equal(r.n, 3); assert.equal(r.vis, 3);
+                assert.ok(r.celdas.every(c => c === r.compCeldas), JSON.stringify(r));
+                assert.deepEqual([r.cortesia, r.coment, r.tablaVieja], [true, true, false], JSON.stringify(r));
+            });
+            await page.evaluate(() => verReporteDirectivo(false, 'desglose')); await page.waitForTimeout(1500);
+            await caso('…y en el impreso, sin encabezados colados de otra tabla ni hueco a la derecha', async () => {
+                const r = await page.evaluate(() => ({ mem: document.querySelectorAll('#rd-pages tr.s5-mem.s5-r1').length, thead: document.querySelectorAll('#rd-pages table.s5-tabla thead').length,
+                    desborde: Math.max(...[...document.querySelectorAll('#rd-pages .rd-bodyinner')].map(b => b.scrollWidth - b.clientWidth)),
+                    vieja: /Desglose por presentación/i.test(document.getElementById('rd-pages').innerText) }));
+                assert.deepEqual([r.mem, r.thead, r.desborde, r.vieja], [3, 0, 0, false], JSON.stringify(r));
+            });
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }

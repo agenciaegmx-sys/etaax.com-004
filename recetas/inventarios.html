@@ -358,7 +358,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=fda38463"></script>
+<script src="/recetas/inventarios.js?v=182c76bf"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -608,6 +608,10 @@ body .step3-lista .step3-menu-item.has-cnt { background: var(--surface) !importa
 .step3-lista .step3-counter button { width: 46px; height: 46px; font-size: 22px; }
 .step3-lista .step3-counter input { width: 76px !important; height: 46px; font-size: 18px !important; font-weight: 700; }
 /* Búsqueda rápida de Ventas: lo capturado en dos columnas. */
+.ent-rapida-wrap.s3-busq { margin-top: 10px; gap: 12px; }
+/* Las sugerencias y la tarjeta del insumo, mientras están vacías, no ocupan lugar
+   (dejaban ~90 px en blanco arriba de «Ventas capturadas»). */
+.s3-busq > div:has(> #ventasChips:empty), .s3-busq > #ventasCardWrap:empty { display: none; }
 .s3-busq #ventasResumen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .s3-busq #ventasResumen .ent-log-fila { margin: 0; }
 .s3-busq #ventasResumen > div:only-child:not(.ent-log-fila) { grid-column: 1 / -1; }

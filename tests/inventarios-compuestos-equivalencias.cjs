@@ -23,9 +23,16 @@ module.exports=function({test,eq,crearContexto,cargarJS,setVar}){
     });
     test('la fila agrupada y ambas presentaciones muestran existencia y diferencia',()=>{
         preparar();const html=C._step5TablasHTML(),lineas=textos(html);
-        eq(lineas.length,7);   // + el teórico del compuesto, columna nueva del 18-nov
-        for(const t of ['1.50 bot · 39.7 oz · 26.1 cp','0.50 bot · 16.1 oz · 10.6 cp','1.00 bot · 23.7 oz · 15.6 cp','+0.05 bot · +1.5 oz · +1.0 cp','0.00 bot · 0.0 oz · 0.0 cp']) eq(html.includes(t),true,t);
+        /* 20-nov: cada presentación es un renglón con la MISMA estructura que
+           cualquier insumo (Exist. actual en botellas, su diferencia con su
+           línea ≈), así que las líneas ≈ son: las 3 del compuesto (diferencia,
+           teórico y lo que hay) + la diferencia de cada presentación. */
+        eq(lineas.length,5);
+        for(const t of ['1.50 bot · 39.7 oz · 26.1 cp','+0.05 bot · +1.5 oz · +1.0 cp','0.00 bot · 0.0 oz · 0.0 cp']) eq(html.includes(t),true,t);
         eq(lineas.filter(t=>t.includes('+0.05 bot')).length,2,'total y presentación con diferencia');
+        const mem=(html.match(/<tr class="s5-r1 s5-mem[\s\S]*?<\/tr>/g)||[]).map(x=>x.replace(/<[^>]+>/g,' ').replace(/\s+/g,' '));
+        eq(mem.length,2,'una por presentación');
+        eq(/Centenario 950.*Exist\. actual 0\.50 bot/.test(mem.join('|'))&&/Centenario 700.*Exist\. actual 1\.00 bot/.test(mem.join('|')),true,mem.join(' | '));
     });
     test('copas de distinto tamaño mantienen su medida y no convierten todo con la primera',()=>{
         const {filas}=preparar(60,45),e=C._equivBarraGrupo(fis(filas));
@@ -72,7 +79,9 @@ module.exports=function({test,eq,crearContexto,cargarJS,setVar}){
         assert.ok(n>=0&&inicio>=0&&fin>n,'falta el compuesto en el impreso');
         eq(html.includes('s5-papel'),true,'en versión de papel');
         eq(grupo.includes('1.50 bot · 39.7 oz · 26.1 cp'),true);eq(grupo.includes('+0.05 bot · +1.5 oz · +1.0 cp'),true);
-        eq(html.includes('0.50 bot · 16.1 oz · 10.6 cp'),true);eq(html.includes('1.00 bot · 23.7 oz · 15.6 cp'),true);
+        // Las presentaciones: sus propios dos renglones, abiertos en papel.
+        eq((html.match(/<tr class="s5-r1 s5-mem compDesg-centenario">/g)||[]).length,2,'las dos presentaciones');
+        eq(/Exist\. actual\s*<\/span>\s*0\.50 bot/.test(html.replace(/<span class="s5-l">/g,'<span>'))||html.includes('0.50 bot'),true);
         eq(/var\(--|cursor:help|title=/.test(C._equivBarraGrupoHTML(fis(filas),{impreso:true})),false);
     });
     test('añadir el desglose no altera captura, teórico, diferencia ni dinero',()=>{

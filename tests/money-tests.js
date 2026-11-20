@@ -21257,19 +21257,26 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
     const v67  = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v67.sql'), 'utf8');
 
     /* ── 1. LA NOTA POR PRESENTACIÓN ── */
+    /* 20-nov: cada presentación es un renglón con la MISMA estructura que
+       cualquier insumo (_rowCopa/_rowPza), y ese renglón trae su ⋯ con
+       «Agregar nota»: una nota por presentación. */
     test('cada presentación del compuesto tiene su botón de nota', () => {
-        const i = inv.indexOf('const desgloseRows = members.map');
-        const bloque = inv.slice(i, i + 2600);
-        return eq(bloque.indexOf('_btnNotaInsumo(m.insumoId)') > -1, true, 'una por miembro');
+        const i = inv.indexOf('const desglose = members.map(m => {');
+        const bloque = inv.slice(i, i + 600);
+        const copa = inv.slice(inv.indexOf('    function _rowCopa('), inv.indexOf('    function _rowPza('));
+        return eq(/\? _rowPza\(m\) : _rowCopa\(m\)/.test(bloque) && /_s5Menu\(fila\.insumoId, true/.test(copa) &&
+                  /editarNotaInsumo/.test(inv.slice(inv.indexOf('function _s5AbrirMenu('), inv.indexOf('window._s5AbrirMenu'))), true, 'una por miembro');
     });
     /* Y en el impreso, que es donde acaba el reporte directivo: una nota que
        solo se ve en pantalla no sirve para lo que se pidió. */
     /* 19-nov: el impreso es el mismo armador del Paso 5 en papel; ahí, en
        vez del botón, cada presentación lleva el TEXTO de su nota. */
     test('…y esa nota sale en el reporte impreso', () => {
-        const i = inv.indexOf('const desgloseRows = members.map');
-        const bloque = inv.slice(i, i + 2600);
-        return eq(/papel \? \(_notaInsumo\(m\.insumoId\)/.test(bloque), true, 'en el directivo');
+        // En papel el ⋯ no es botón: deja los comentarios y lo marcado, nota incluida (_s5Estado).
+        const i = inv.indexOf('function _s5Menu(');
+        const bloque = inv.slice(i, i + 400);
+        return eq(/if \(_s5ModoPapel\) return [^;]*_s5Estado\(id\)/.test(bloque) &&
+                  /_notaInsumo\(id\)/.test(inv.slice(inv.indexOf('function _s5Estado('), inv.indexOf('function _s5Estado(') + 500)), true, 'en el directivo');
     });
     /* El compuesto conserva la suya: son dos notas distintas —una del conjunto
        y otra de cada presentación— y ninguna reemplaza a la otra. */

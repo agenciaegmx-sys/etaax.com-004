@@ -204,8 +204,9 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         const b=src.indexOf('function _step5TablasArmar(');
         const arm=src.slice(b,src.indexOf('\nfunction ',b+10));
         eq(/_equivBarraHTML\(dif, fila, \{signo:true, impreso:papel\}\)/.test(arm),true,'falta en la diferencia');
-        eq(/_equivBarraHTML\(mfis, m, \{impreso:papel\}\)/.test(arm),true,'falta en los miembros de un compuesto');
-        eq(/_equivBarraHTML\(mdif, m, \{signo:true, impreso:papel\}\)/.test(arm),true,'falta en la diferencia de los miembros');
+        // 20-nov: cada presentación de un compuesto se arma con el MISMO renglón (_rowCopa/_rowPza),
+        // así que su diferencia pide la línea de papel por el mismo camino.
+        eq(/\? _rowPza\(m\) : _rowCopa\(m\)/.test(arm),true,'falta en los miembros de un compuesto');
         return eq(/Object\.assign\(\{ impreso: papel \}, o\)/.test(arm),true,'falta en el total del compuesto');
     });
     /* Complemento, no sustituto: que el reporte impreso de existencias siga
