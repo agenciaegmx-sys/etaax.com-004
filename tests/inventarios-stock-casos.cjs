@@ -119,6 +119,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         _tituloCoct:()=>'', _lineaProd:()=>'', _unidadCompra:()=>'bot',
         esBateo:()=>false, _btnNotaInsumo:()=>'', _btnOcultoImpreso:()=>'', _s5Menu:()=>'', _s5Stock:()=>'',
         _nb:v=>String(v), toggleBateo:()=>{}, insumoTitulo:x=>x.nombre||'',
+        papel:false, _costoOk:true,   // del armador (_step5TablasArmar): pantalla, con costos
     });
     /* Botella de 750 con copa de 60: 25 copas de físico y un faltante de 350 ml
        (−5.8333 copas). Son los ejemplos de la factura. */
@@ -192,13 +193,20 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
        columnas de cantidad —lo que hay y la varianza— pidan la línea en
        versión de papel, incluidos los miembros de un compuesto. */
     test('el desglose impreso pide la equivalencia en sus dos cantidades',()=>{
+        /* 19-nov: el desglose impreso es el armador del Paso 5 en papel
+           (_step5TablasHTML({papel:true})). Lo que se vigila: que el reporte
+           lo pida así, y que el armador pida la línea en versión de papel en
+           la diferencia y en lo que hay de cada presentación de un compuesto. */
         const src=fs.readFileSync(path.join(root,'recetas/inventarios.js'),'utf8');
         const a=src.indexOf('function verReporteDirectivo(');
         const cuerpo=src.slice(a,src.indexOf('\nfunction ',a+10));
-        eq(/_equivBarraHTML\(a\.fisico, a\.f, \{impreso:true\}\)/.test(cuerpo),true,'falta en lo que hay');
-        eq(/_equivBarraHTML\(a\.dif, a\.f, \{signo:true, impreso:true\}\)/.test(cuerpo),true,'falta en la varianza');
-        eq(/_equivBarraHTML\(m\.fisico, m\.f/.test(cuerpo),true,'falta en los miembros de un compuesto');
-        return eq(/_equivBarraHTML\(m\.dif, m\.f/.test(cuerpo),true,'falta en la varianza de los miembros');
+        eq(/_step5TablasHTML\(\{ papel: true/.test(cuerpo),true,'el reporte no pide la tabla en papel');
+        const b=src.indexOf('function _step5TablasArmar(');
+        const arm=src.slice(b,src.indexOf('\nfunction ',b+10));
+        eq(/_equivBarraHTML\(dif, fila, \{signo:true, impreso:papel\}\)/.test(arm),true,'falta en la diferencia');
+        eq(/_equivBarraHTML\(mfis, m, \{impreso:papel\}\)/.test(arm),true,'falta en los miembros de un compuesto');
+        eq(/_equivBarraHTML\(mdif, m, \{signo:true, impreso:papel\}\)/.test(arm),true,'falta en la diferencia de los miembros');
+        return eq(/Object\.assign\(\{ impreso: papel \}, o\)/.test(arm),true,'falta en el total del compuesto');
     });
     /* Complemento, no sustituto: que el reporte impreso de existencias siga
        pidiendo la versión de papel. Correr ese reporte entero aquí pediría

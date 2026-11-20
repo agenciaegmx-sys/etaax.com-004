@@ -66,8 +66,11 @@ module.exports=function({test,eq,crearContexto,cargarJS,setVar}){
     test('el impreso incluye total y miembros con las mismas equivalencias, sin variables de tema',()=>{
         const {filas}=preparar();let html='';C.document.body.appendChild=n=>{html=n.innerHTML;};
         try{C.verReporteDirectivo(false,'desglose');}catch(e){if(!html)throw e;}
-        const inicio=html.indexOf('<tr style="background:#faf7ff">'),fin=html.indexOf('</tr>',inicio),grupo=html.slice(inicio,fin);
-        assert.ok(inicio>=0,'falta el compuesto en el impreso');
+        // 19-nov: el desglose impreso es el MISMO armador del Paso 5, en papel: el compuesto son
+        // sus dos renglones (s5-r1 + s5-r2), y sus presentaciones van abiertas debajo.
+        const n=html.indexOf('🧩 Centenario Plata'),inicio=html.lastIndexOf('<tr class="s5-r1">',n),fin=html.indexOf('compDesg-',n),grupo=html.slice(inicio,fin);
+        assert.ok(n>=0&&inicio>=0&&fin>n,'falta el compuesto en el impreso');
+        eq(html.includes('s5-papel'),true,'en versión de papel');
         eq(grupo.includes('1.50 bot · 39.7 oz · 26.1 cp'),true);eq(grupo.includes('+0.05 bot · +1.5 oz · +1.0 cp'),true);
         eq(html.includes('0.50 bot · 16.1 oz · 10.6 cp'),true);eq(html.includes('1.00 bot · 23.7 oz · 15.6 cp'),true);
         eq(/var\(--|cursor:help|title=/.test(C._equivBarraGrupoHTML(fis(filas),{impreso:true})),false);

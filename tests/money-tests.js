@@ -21260,14 +21260,16 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
     test('cada presentación del compuesto tiene su botón de nota', () => {
         const i = inv.indexOf('const desgloseRows = members.map');
         const bloque = inv.slice(i, i + 2600);
-        return eq(bloque.indexOf('${_btnNotaInsumo(m.insumoId)}') > -1, true, 'una por miembro');
+        return eq(bloque.indexOf('_btnNotaInsumo(m.insumoId)') > -1, true, 'una por miembro');
     });
     /* Y en el impreso, que es donde acaba el reporte directivo: una nota que
        solo se ve en pantalla no sirve para lo que se pidió. */
+    /* 19-nov: el impreso es el mismo armador del Paso 5 en papel; ahí, en
+       vez del botón, cada presentación lleva el TEXTO de su nota. */
     test('…y esa nota sale en el reporte impreso', () => {
-        const i = inv.indexOf('const subRows = a.members.map');
-        const bloque = inv.slice(i, i + 1800);
-        return eq(bloque.indexOf('_notaInsumo(m.f.insumoId)') > -1, true, 'en el directivo');
+        const i = inv.indexOf('const desgloseRows = members.map');
+        const bloque = inv.slice(i, i + 2600);
+        return eq(/papel \? \(_notaInsumo\(m\.insumoId\)/.test(bloque), true, 'en el directivo');
     });
     /* El compuesto conserva la suya: son dos notas distintas —una del conjunto
        y otra de cada presentación— y ninguna reemplaza a la otra. */
@@ -22368,11 +22370,15 @@ console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
                   b.indexOf('esOcultoImpreso(c.id || c)') > -1, true, 'completo');
     });
     /* En la pantalla se sigue viendo: ese es el punto. */
+    /* 19-nov: el armador del Paso 5 también hace el impreso ({papel:true});
+       ahí sí aparta lo marcado, pero SOLO en papel: cada uso va detrás de
+       `papel`. La pantalla lo sigue enseñando. */
     test('…pero se sigue viendo en el Resultado', () => {
-        const i = src.indexOf('const analisis = filasCaptura.filter');
-        const paso5 = src.indexOf('function _step5TablasHTML');
-        const bloque = src.slice(paso5, paso5 + 3000);
-        return eq(bloque.indexOf('esOcultoImpreso') === -1, true, 'solo el impreso');
+        const a = src.indexOf('function _step5TablasArmar(');
+        const bloque = src.slice(a, src.indexOf('\n    // 5.5 · 2.4 · 3', a));
+        const usos = bloque.split('esOcultoImpreso').length - 1;
+        const enPapel = (bloque.match(/papel \? !esOcultoImpreso|if \(papel\) \{ if \(esOcultoImpreso/g) || []).length;
+        return eq(usos > 0 && usos === enPapel, true, 'solo el impreso');
     });
     test('…y el botón dice en cuál de los dos estados está', () => {
         base();
@@ -22593,41 +22599,33 @@ console.log('\n══ BH41 · «Sin renglón» cuando el renglón sí está ═�
 console.log('\n══ BH42 · La producción propia en el impreso ══');
 {
     const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
-    /* El bloque del grupo, extraído por su guardia: es lo que decide si ese
-       grupo se imprime como tabla o como informativo. */
+    /* 19-nov (Edwin): un batch es INFORMATIVO en la pantalla Y en el impreso
+       —«ese producto, tanto que se hizo, que tomó tanto de tales insumos, y
+       hay tal cantidad que representa esto en cada insumo»—. Es UNA función,
+       _batchInfoHTML, que piden los dos. */
     const bloque = (() => {
-        const i = src.indexOf("if (grp === GPROD_RD) {");
-        const fin = src.indexOf('        let gDif = 0, gVend = 0, gNet = 0;', i);
-        return src.slice(i, fin > 0 ? fin : i + 3000);
+        const i = src.indexOf('function _batchInfoHTML(fila) {');
+        return src.slice(i, src.indexOf('\nfunction ', i + 10));
     })();
-
-    test('la producción propia se imprime aparte de las tablas de varianza', () =>
-        eq(src.indexOf("if (grp === GPROD_RD) {") > -1, true, 'su propio bloque'));
-    /* Las dos preguntas que contesta un batch. */
+    test('la producción propia es una ficha aparte de las tablas de diferencias', () =>
+        eq(bloque.length > 0 && /if \(grp === GPROD\) \{[\s\S]{0,300}_batchInfoHTML\(f\)/.test(src), true, 'su propio bloque'));
     test('…diciendo cuántos batches se hicieron', () =>
-        eq(bloque.indexOf('Batches hechos en el periodo') > -1 &&
-           bloque.indexOf('_batchesProducidos(a.f.insumoId)') > -1, true, 'lo producido'));
-    test('…y cuánto quedó, con su equivalencia en litros', () =>
-        eq(bloque.indexOf('Existencia actual') > -1 && bloque.indexOf("' L'") > -1,
+        eq(bloque.indexOf('Producido en el periodo') > -1 &&
+           bloque.indexOf('_batchesProducidos(fila.insumoId)') > -1, true, 'lo producido'));
+    test('…qué tomó de cada insumo', () =>
+        eq(bloque.indexOf('Tomó de sus insumos') > -1 && bloque.indexOf('d.porBatch * n') > -1, true, 'lo que se llevó'));
+    test('…y cuánto hay, con su equivalencia en litros', () =>
+        eq(bloque.indexOf('Hay (existencia actual)') > -1 && src.indexOf("(Math.round(ml / 10) / 100) + ' L'") > -1,
            true, 'lo que hay'));
-    test('…y en qué se reparte', () =>
-        eq(bloque.indexOf('Equivalentes por insumo:') > -1, true, 'la distribución'));
-    /* Lo que NO debe llevar: las columnas que salían en cero. */
-    ['Varianza', 'Dif. $', 'Vta. copa', 'Entradas'].forEach(col =>
-        test('…y NO lleva la columna «' + col + '», que salía en cero', () =>
-            eq(bloque.indexOf(col) === -1, true, 'sin ceros que parecen error')));
-    /* Y dice POR QUÉ no hay varianza, que es la pregunta que deja un bloque
-       sin esas columnas al lado de otros que sí las tienen. */
-    test('…y explica por qué aquí no hay varianza', () =>
-        eq(bloque.indexOf('ya está descontado en sus insumos') > -1, true, 'con el motivo'));
-    /* El resto de los grupos sigue imprimiéndose como siempre: esto es un caso
-       especial, no un cambio de formato para todos. */
-    test('los demás grupos siguen con su tabla completa', () => {
-        const i = src.indexOf('const _grupoInvHTML = ([grp, items]) => {');
-        const resto = src.slice(i, i + 9000);
-        return eq(resto.indexOf('let gDif = 0, gVend = 0, gNet = 0;') > -1 &&
-                  resto.indexOf('const rows = items.map(a => {') > -1, true, 'intactos');
-    });
+    test('…y a cuánto equivale en cada insumo', () =>
+        eq(bloque.indexOf('Equivale en sus insumos a') > -1 && bloque.indexOf('d.ml') > -1, true, 'la distribución'));
+    ['Diferencia', 'A carta', 'A proveedor', 'Venta copa', 'Teórico'].forEach(col =>
+        test('…y NO lleva «' + col + '»: un batch no tiene resultado por ahora', () =>
+            eq(bloque.indexOf(col) === -1, true, 'informativo')));
+    test('el impreso pide la MISMA tabla que la pantalla, en papel', () =>
+        eq(/<div class="rd-sec">Inventario completo por grupo de categoría<\/div>\s*\$\{_step5TablasHTML\(\{ papel: true, sinCostos: ger \}\)\}/.test(src), true, 'una sola tabla'));
+    test('…y el armador viejo del impreso ya no existe', () =>
+        eq(src.indexOf('const _grupoInvHTML') === -1, true, 'sin copia'));
 
     /* ── EL ID CRUDO COMO NOMBRE ──
        «Contiene: California Don Simón 2183 ml · 7d0b72c22 2183 ml». Un
@@ -35127,7 +35125,8 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     setVar(P, '_cacheInsumosInv', [
         { id:'prePal', nombre:'Batch Paloma PR', esSubReceta:true, recetaId:'srPal', activo:'1' },
         { id:'squirt', nombre:'Squirt 2 LTS', tipoInsumo:'refresco', activo:'1', presentaciones:[{ contNeto:2, umContenido:'LT', costoPieza:36 }] },
-        { id:'sprite', nombre:'Sprite 2 LTS', tipoInsumo:'refresco', activo:'1', presentaciones:[{ contNeto:2, umContenido:'LT', costoPieza:38 }] }]);
+        { id:'sprite', nombre:'Sprite 2 LTS', tipoInsumo:'refresco', activo:'1', presentaciones:[{ contNeto:2, umContenido:'LT', costoPieza:38 }] },
+        { id:'vodka', nombre:'Vodka Absolut', tipoInsumo:'destilado', activo:'1', presentaciones:[{ contNeto:750, umContenido:'ML', costoUnitario:300 }] }]);
     setVar(P, 'invActual', { id:'inv', area:'barra', entradasLog:[], ventasCompuesto:{}, cancelaciones:[],
         descuentos:[], filas:[], prebatchProducidos:{ prePal: 4 }, cocktailsVendidos:{},
         notasInsumo:{ sprite:'Una se rompió al surtir' }, ocultosReporte:{ sprite:1 } });
@@ -35140,7 +35139,11 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
             mermaCopas:1, mermaConcepto:'Botella rota', cortesiaCopas:1, cortesiaConcepto:'Cumpleaños mesa 4' }),
         { insumoId:'prePal', nombre:'Batch Paloma PR', tipo:'copa', contNeto:2000, copaML:250, rendimientoBatch:2000,
           existenciaAnterior:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0,
-          entradas:[], pesos:['8'], pesoCristal:0, cerradasBodega:0, cerradasBarra:0 }]);
+          entradas:[], pesos:['8'], pesoCristal:0, cerradasBodega:0, cerradasBarra:0 },
+        // De copa: 2 bot de anterior (30 copas), 5 vendidas, queda 1 bot (15) → faltan 10 copas.
+        { insumoId:'vodka', nombre:'Vodka Absolut', tipo:'copa', contNeto:750, copaML:50, existenciaAnterior:30,
+          ventasCopasDirectas:5, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], pesos:[],
+          cerradasBodega:1, cerradasBarra:0, precioCarta:80, costoUnitario:300 }]);
     vm.runInContext('_consumoDirty = true; _s5Abiertos = new Proxy({}, { get: () => true });', P);
     const h = P._step5TablasHTML();
     const texto = (x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -35156,8 +35159,10 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         return { uno: celdas(h.slice(r1, r2)), dos: celdas(h.slice(r2, fin)), html2: h.slice(r2, fin),
                  anchoUno: ancho(h.slice(r1, r2)), anchoDos: ancho(h.slice(r2, fin)) };
     };
-    const sq = par('Squirt 2 LTS'), sp = par('Sprite 2 LTS'), pb = par('Batch Paloma PR');
-    test('cada producto sale en DOS renglones', () =>
+    /* El batch ya no sigue esta estructura (19-nov): es una ficha informativa,
+       ver BH42. El ejemplo de copa es un vodka. */
+    const sq = par('Squirt 2 LTS'), sp = par('Sprite 2 LTS'), pb = par('Vodka Absolut');
+    test('cada producto sale en DOS renglones (el batch no: es ficha informativa)', () =>
         eq((h.match(/class="s5-r1"/g) || []).length + '·' + (h.match(/class="s5-r2"/g) || []).length, '3·3'));
     test('…con las MISMAS columnas los dos (9 en piezas, 10 en copas)', () =>
         eq([sq.anchoUno, sq.anchoDos, pb.anchoUno, pb.anchoDos].join(','), '9,9,10,10'));
@@ -35199,7 +35204,35 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         eq(sq.uno[8] + ' | ' + sq.dos[8], 'A carta −$60.00 | A proveedor −$36.00'));
     test('teórico y existencia en copas: abajo copas · onzas', () =>
         eq(/^Copas · onzas \d/.test(pb.dos[5]) + '·' + /^Copas · onzas \d/.test(pb.dos[6]), 'true·true', pb.dos[5] + ' | ' + pb.dos[6]));
-    test('el renglón del batch dice lo producido, en Entradas', () => eq(/producido/.test(pb.uno[2]), true, pb.uno[2]));
+    /* El batch: lo que se hizo, lo que tomó de cada insumo y lo que hay —sin
+       diferencia ni dinero— (Edwin, 19-nov). 4 batches de 2 L con 500 ml de
+       Squirt cada uno. */
+    const fichaPB = (() => { const i = h.indexOf('<div class="s5b">'); return i < 0 ? '' : texto(h.slice(i, h.indexOf('</td>', i))); })();
+    test('el batch es una ficha: lo producido en el periodo', () =>
+        eq(/Batch Paloma PR .*Producido en el periodo 4 batches · 4 bot · 8 L/.test(fichaPB), true, fichaPB));
+    test('…lo que tomó de cada insumo', () => eq(/Tomó de sus insumos Squirt 2 LTS 2 L/.test(fichaPB), true, fichaPB));
+    test('…y lo que hay, sin diferencia ni dinero', () =>
+        eq(/Hay \(existencia actual\)/.test(fichaPB) + '|' + /Diferencia|\$/.test(fichaPB), 'true|false', fichaPB));
+    test('…y el grupo de producción propia va al final, sin totales', () => {
+        const g = h.indexOf('🏭 Producción propia'), otros = h.lastIndexOf('<table class="s5-tabla"');
+        return eq(g > otros && /Informativo · 1 batch · 4 producidos en el periodo/.test(texto(h.slice(g, g + 600))), true, texto(h.slice(g, g + 300)));
+    });
+    /* EL IMPRESO ES LA MISMA TABLA: mismos renglones y celdas, en papel. */
+    const hp = P._step5TablasHTML({ papel: true });
+    test('el impreso trae los mismos renglones que la pantalla, en papel y sin botones', () =>
+        eq((hp.match(/class="s5-r1"/g) || []).length + '|' + /class="s5-tabla s5-papel"/.test(hp) + '|' + /class="s5-dots"|onclick=/.test(hp), '2|true|false'));
+    test('…sin lo marcado «fuera del impreso» (la Sprite), que la pantalla sí enseña', () =>
+        eq(/Sprite 2 LTS/.test(hp) + '|' + /Sprite 2 LTS/.test(h), 'false|true'));
+    test('…con el comentario junto al nombre y el batch como ficha', () => {
+        vm.runInContext("filasCaptura.find(f => f.insumoId === 'vodka').ventasComentario = 'Mesa 7'", P);
+        const x = texto(P._step5TablasHTML({ papel: true }));
+        vm.runInContext("delete filasCaptura.find(f => f.insumoId === 'vodka').ventasComentario", P);
+        return eq(/Comentarios Venta Mesa 7/.test(x) + '|' + /Producido en el periodo 4 batches/.test(x), 'true|true', x.slice(0, 300));
+    });
+    test('…y en el gerencial, sin el costo de las entradas ni la diferencia a proveedor', () => {
+        const g = texto(P._step5TablasHTML({ papel: true, sinCostos: true }));
+        return eq(/A proveedor|Costo \$/.test(g) + '|' + /A carta/.test(g), 'false|true', g.slice(0, 300));
+    });
     test('una línea gruesa cierra cada producto', () => eq(h.indexOf('.s5-r2>td{border-bottom:3px solid') > -1, true));
     /* El % es contra el USO; sin uso no hay contra qué dividir y se mide
        contra el teórico, diciéndolo (antes salía «—»). */

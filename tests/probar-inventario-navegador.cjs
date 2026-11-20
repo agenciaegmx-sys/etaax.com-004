@@ -205,9 +205,11 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 const t = await page.evaluate(() => document.getElementById('step5Keep').textContent.replace(/\s+/g, ' '));
                 assert.match(t, /Sprite · 2 LTS[^]*?Uso en coctelería\s*—\s*Uso en prebatch\s*1 pza/);
             });
-            await caso('…y el batch tiene su renglón, con lo producido', async () => {
+            /* Desde el 20-nov el batch es una FICHA informativa (lo que se hizo, lo
+               que tomó, lo que hay), no un renglón de resultado. */
+            await caso('…y el batch tiene su ficha, con lo producido', async () => {
                 const t = await page.evaluate(() => document.getElementById('step5Keep').textContent.replace(/\s+/g, ' '));
-                assert.match(t, /Batch Paloma[^]*?↳ \+[^]*?producido/);
+                assert.match(t, /Batch Paloma[^]*?Producido en el periodo\s*4 batches/i);
             });
             /* El ⋯ del renglón de la Sprite: bateo, nota e impreso en un menú. */
             const abrirMenu = () => page.evaluate(() => {
@@ -957,6 +959,52 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 const r = await dentro();
                 assert.ok(r.caja[0] >= 0 && r.caja[1] <= r.alto && r.cerrar >= 0, JSON.stringify(r));
             });
+            await ctx.close();
+        }
+
+        /* ── P · el desglose impreso es el Resultado en papel (20-nov) ─────────
+           «Deben verse igual el Paso 5 y el reporte impreso en el desglose de
+           insumos.» Mismos renglones (dos por producto, con su título en cada
+           celda), comentarios junto al nombre, el batch como ficha informativa
+           (lo que se hizo, lo que tomó, lo que hay) y ningún producto partido
+           entre dos hojas. En tema oscuro, la hoja sigue en tinta de papel. */
+        console.log('\n══ P · El desglose impreso es el Resultado en papel ══');
+        {
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: { negocio_insumos: filasNube(destilados(14).concat([SPRITE, SQUIRT, BATCH])),
+                recetas: [SUB].map(r => ({ id: r.id, negocio_id: 'n1', datos: r })) }, viewport: { width: 1280, height: 800 } }));
+            page.on('dialog', d => d.accept());
+            await page.evaluate(() => { try { localStorage.setItem('etaax_theme', 'dark'); } catch (e) {} document.documentElement.setAttribute('data-theme', 'dark'); });
+            await nuevoInv(page);
+            await page.waitForTimeout(600);
+            await page.evaluate(() => { filasCaptura.forEach((f, i) => { f.cerradasBodega = i % 3; f.existenciaAnterior = f.tipo === 'copa' ? 30 : 4; f.registrado = true; });
+                invActual.prebatchProducidos = { prePal: 3 };
+                const d = filasCaptura.find(f => f.insumoId === 'd000'); d.ventasComentario = 'Mesa 7 pidió botella';
+                _consumoDirty = true; window._step5Dirty = true; irAPaso(4); irAPaso(5); });
+            await page.waitForTimeout(1200);
+            const enPantalla = await page.evaluate(() => document.querySelectorAll('#step5Tablas tr.s5-r1').length);
+            await page.evaluate(() => verReporteDirectivo(false, 'desglose'));
+            await page.waitForTimeout(1500);
+            const r = await page.evaluate(() => {
+                const hojas = [...document.querySelectorAll('#rd-pages .rd-paper')];
+                const partidos = hojas.reduce((t, h) => t + [...h.querySelectorAll('tbody')].filter(b =>
+                    (b.lastElementChild && b.lastElementChild.classList.contains('s5-r1')) || (b.firstElementChild && b.firstElementChild.classList.contains('s5-r2'))).length, 0);
+                const txt = document.getElementById('rd-pages').innerText.replace(/\s+/g, ' ');
+                return { hojas: hojas.length, partidos, r1: document.querySelectorAll('#rd-pages tr.s5-r1').length,
+                    desborde: Math.max(...hojas.map(h => { const b = h.querySelector('.rd-bodyinner'); return b.scrollWidth - b.clientWidth; })),
+                    tinta: getComputedStyle(document.querySelector('#rd-pages tr.s5-r1 td')).color, botones: document.querySelectorAll('#rd-pages .s5-dots, #rd-pages .s5-desg').length,
+                    comentario: /COMENTARIOS Venta Mesa 7 pidió botella/i.test(txt), ficha: /Producido en el periodo 3 batches/i.test(txt) && /Tomó de sus insumos/i.test(txt) && /Equivale en sus insumos a/i.test(txt),
+                    viejo: /Vta\. copa|Varianza/i.test(txt) };
+            });
+            await caso('el desglose impreso trae los MISMOS renglones que el Resultado, en dos renglones por producto', async () => {
+                assert.ok(r.r1 > 0 && r.r1 === enPantalla, 'impreso ' + r.r1 + ' · pantalla ' + enPantalla);
+                assert.equal(r.viejo, false, 'todavía sale la tabla vieja');
+            });
+            await caso('…ningún producto partido entre dos hojas y nada se sale a lo ancho', async () =>
+                assert.deepEqual([r.partidos, r.desborde, r.hojas > 1], [0, 0, true], JSON.stringify(r)));
+            await caso('…en tinta de papel aunque la app esté en tema oscuro, y sin botones', async () =>
+                assert.deepEqual([r.tinta, r.botones], ['rgb(26, 25, 22)', 0]));
+            await caso('…con los comentarios junto al nombre y el batch como ficha informativa', async () =>
+                assert.deepEqual([r.comentario, r.ficha], [true, true], JSON.stringify(r)));
             await ctx.close();
         }
     } finally {
