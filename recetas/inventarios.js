@@ -9267,7 +9267,9 @@ function _resumenEjecutivo() {
        ($12,205 contra $12,919 con las mismas existencias). Ahora los dos suman los
        miembros con su propio precio y dan lo mismo. */
     filasCaptura.filter(function(f){ return !_mapaRE[f.insumoId]; }).concat(_compuestosActivos().map(_virtualFilaCompuesto)).forEach(function(f){
-        var _esPBr = !f.esCompuesto && _esPrebatchRepartido(f.insumoId);
+        /* El batch (repartido o de consumo) no tiene resultado ni uso propio:
+           es un puente. Ni faltante, ni sobrante, ni «sin usar». */
+        var _esPBr = !f.esCompuesto && (_esPrebatchRepartido(f.insumoId) || _esBatchFila(f));
         var _aR = (_esPBr || f.esCompuesto) ? _repZero : _repartoDe(f.insumoId);
         var cc = costoCopa(f), dif = _esPBr ? 0 : (calcDiferencia(f) + _aR.dif); // prebatch: dif repartida en sus insumos
         if (f.esCompuesto) {
@@ -9293,8 +9295,11 @@ function _resumenEjecutivo() {
             if (esOcultoImpreso(f.insumoId)) ocultosN++; else sobrCartaImp += dif*(f.precioCarta||0); }
         var merma = (parseFloat(f.mermaCopas)||0) + (parseFloat(f.mermaBase)||0);
         if (merma > 0) { mermados.push({nombre:f.nombre, costo:merma*cc, f:f, m:merma}); mermaCosto += merma*cc; }
-        var cons = _consumoPeriodo(f) + _aR.venta; // compuesto-aware + su parte de ventas del prebatch
-        if (cons > 0.001) { usados++; vendidoCosto += cons*cc; } else { sinUsar++; if (sinUsarLista.length<60) sinUsarLista.push(f.nombre); }
+        // El uso a precio proveedor: venta + coctelería directa + cortesías y mermas
+        // + lo que se fue al producir batches (_usoPeriodo, el mismo del reporte).
+        if (_esPBr) return;
+        var cons = _usoPeriodo(f, _aR);
+        if (cons > 0.001) { usados++; vendidoCosto += (f.esCompuesto ? _costoUsoComp(f) : cons*cc); } else { sinUsar++; if (sinUsarLista.length<60) sinUsarLista.push(f.nombre); }
     });
     // Mermas de PRODUCTO del menú registradas por QR (viven en el inventario)
     ((invActual && invActual.mermasProductoQR) || []).forEach(function(mp){
@@ -10379,6 +10384,9 @@ function _estiloS5() {
         '.s5-tabla tr.s5-mem .s5-nom{font-size:15px}' +
         '.s5-tabla tr.s5-mem .s5-nom::before{content:"↳ ";color:var(--viol)}' +
         '.s5-tabla tr.s5-r2.s5-comp-abierto>td,.s5-tabla tr.s5-mem.s5-r2:has(+ tr.s5-mem)>td{border-bottom:1px dashed var(--border)!important}' +
+        '.s5-lim{font-size:12.5px;color:var(--text-muted);margin-top:4px}' +
+        '.s5-ind{font-size:13px;font-weight:700;margin-top:2px}' +
+        '.s5-tabla .s5-enbat{color:var(--viol);opacity:.95;white-space:normal!important}' +
         /* La ficha informativa de cada batch. */
         '.s5-pbt{width:100%;border-collapse:collapse}' +
         '.s5-pbt>tbody>tr>td{padding:14px 16px;border-bottom:3px solid color-mix(in srgb,var(--text-dim) 38%,transparent)}' +
@@ -10414,6 +10422,8 @@ function _estiloS5Papel() {
         '.s5-papel .s5-c2 .s5-l,.s5-papel .s5-l{font-size:7px!important;letter-spacing:.2px!important;margin-bottom:1px!important}' +
         '.s5-papel .s5-sub,.s5-papel .s5-mini{font-size:8px!important}' +
         '.s5-papel .s5-coms{font-size:8.5px;flex-basis:100px}' +
+        '.s5-papel .s5-lim{font-size:8px!important}' +
+        '.s5-papel .s5-ind{font-size:8.5px!important}' +
         '.s5-papel .s5-pill,.s5-papel .s5-nota{font-size:8px}' +
         '.s5-papel tr.s5-r1>td+td,.s5-papel tr.s5-r2>td+td{border-left:1px solid #d6d0c4!important}' +
         '.s5-papel tr.s5-r1>td.s5-vc{border-left:0!important}' +
@@ -10468,7 +10478,8 @@ function _s5c2(lbl, html) {
     return '<div class="s5-c2"><span class="s5-l">' + lbl + '</span>' + (html === '' || html == null ? '—' : html) + '</div>';
 }
 function _s5sub(html) { return html ? '<span class="s5-sub">' + html + '</span>' : ''; }
-function _s5dinero(v) { v = parseFloat(v) || 0; return (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2); }
+// Redondeado ANTES de elegir el signo: un residuo de −0.0000001 pintaba «−$0.00».
+function _s5dinero(v) { v = Math.round((parseFloat(v) || 0) * 100) / 100; return (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2); }
 /* ══ LAS OPCIONES DEL PRODUCTO, EN UN BOTÓN DE TRES PUNTOS (18-nov) ═══════
    Bateo, nota e impreso eran tres botones apilados en cada producto: 200
    productos, 600 botones, y el renglón medía el doble por ellos. Pedido de
@@ -10589,6 +10600,78 @@ function _s5AbrirMenu(btn, id, conBateo) {
 window._s5AbrirMenu = _s5AbrirMenu; window._s5CerrarMenu = _s5CerrarMenu;
 /* El stock del producto: solo CÓMO está (ideal, medio, bajo) y sus límites.
    La existencia ya está en su columna; repetirla aquí era ruido. */
+/* ══ EL BATCH ES UN PUENTE (regla fija de Edwin, 21-nov) ══════════════════
+   «Las recetas que usan una sub-receta/prebatch no cuentan en el uso de
+   insumos; solo las que tienen al insumo directo. El uso de un insumo es: la
+   venta de copas o botellas + los cócteles que lo llevan directo + lo que se
+   fue en las recetas producidas de prebatch. Eso es el uso a precio
+   proveedor.» Y la existencia del batch es INFORMATIVA: dice cuánto de cada
+   insumo hay dentro, para saber el total; no es un resultado propio.
+     · _esBatchFila: el renglón de un batch (producción propia).
+     · _usoPeriodo: el uso de UN insumo, en las unidades de su renglón. La
+       pantalla (resumen ejecutivo) y el reporte piden ESTA función.
+     · _enBatches: lo que hay del insumo dentro de los batches (informativo). */
+/* El uso de un compuesto a precio proveedor: cada presentación con SU costo. */
+function _costoUsoComp(f) {
+    var c = getCompuestos().find(function (x) { return x.id === f.compId; });
+    return ((c && c.miembros) || []).reduce(function (t, mid) {
+        var m = _filaDeMiembro(mid); return m ? t + _usoPeriodo(m, _repartoDe(m.insumoId)) * costoCopa(m) : t;
+    }, 0);
+}
+function _esBatchFila(f) { return !!(f && !f.esCompuesto && f.insumoId && _recetaIdDePrebatch(f.insumoId)); }
+function _usoPeriodo(f, adj) {
+    if (!f) return 0;
+    if (f.esCompuesto) {
+        var c = getCompuestos().find(function (x) { return x.id === f.compId; });
+        return ((c && c.miembros) || []).reduce(function (t, mid) {
+            var m = _filaDeMiembro(mid); return m ? t + _usoPeriodo(m, _repartoDe(m.insumoId)) : t;
+        }, 0);
+    }
+    if (_esBatchFila(f)) return 0;                      // un batch no tiene uso propio
+    adj = adj || _repZero;
+    var cb    = _copasBotDe(f, 1);
+    var coct  = consumoRecetasFila(f) + (adj.vco || 0);  // solo recetas con el insumo DIRECTO
+    var dir   = parseFloat(f.ventasCopasDirectas) || 0, bot = parseFloat(f.ventasBotella) || 0;
+    var cort  = f.tipo === 'peso' ? 0 : (parseFloat(f.cortesiaCopas) || 0);
+    var merma = (parseFloat(f.tipo === 'peso' ? f.mermaBase : f.mermaCopas) || 0) + (adj.cm || 0);
+    var venta = f.tipo === 'pza' ? bot + coct + dir : coct + dir + bot * cb;
+    return venta + cort + merma + _prodPBVisible(f, adj); // + lo que se fue al PRODUCIR batches
+}
+function _enBatches(id) { return (!_PREBATCH_REPARTE && _repCache && _repCache.porInsumo && _repCache.porInsumo[id]) || _repZero; }
+/* El renglón del Resultado (Edwin, 21-nov): los límites de stock bajo el
+   nombre, el indicador en la existencia anterior y, abajo de la existencia
+   anterior y de la actual, el desglose en botellas y onzas. */
+function _s5StockInfo(fila) {
+    if (!fila || fila.esCompuesto) return null;
+    var st = _stockDeFila(fila, calcExistencia(fila), invActual && invActual.sucursalId);
+    var txt = { ideal:'Ideal', intermedio:'Medio', bajo:'Bajo', revisar:'Revisar mín./máx.', 'sin-parametros':'Sin mín./máx.',
+                'sin-equivalencia':'Sin equivalencia de compra', 'sin-conteo':'Sin conteo' }[st.estado] || st.estado;
+    var col = { ideal:'var(--green)', intermedio:'var(--accent)', bajo:'var(--red)' }[st.estado] || 'var(--text-muted)';
+    return { st: st, txt: txt, col: col };
+}
+function _s5Limites(fila) {
+    var i = _s5StockInfo(fila); if (!i || i.st.estado === 'sin-parametros') return '';
+    var num = function (v) { return v == null || !isFinite(v) ? '—' : (Math.round(v * 100) / 100).toLocaleString('es-MX'); };
+    return '<div class="s5-lim">Stock mín. ' + num(i.st.minimo) + ' · máx. ' + num(i.st.maximo) + ' ' + etx(i.st.unidad) + '</div>';
+}
+function _s5Indicador(fila) {
+    var i = _s5StockInfo(fila); if (!i || i.st.estado === 'sin-parametros') return '';
+    return '<div class="s5-ind" data-stock="' + i.st.estado + '" style="color:' + i.col + '">' + i.txt + '</div>';
+}
+/* Botellas llenas + lo que queda en onzas: «1 bot + 4.2 oz». Es como se cuenta
+   en el anaquel. Sin contenido o sin medida de copa no hay cómo partirlo. */
+function _botOzTxt(copas, fila) {
+    var cn = parseFloat(fila && fila.contNeto) || 0, cm = parseFloat(fila && fila.copaML) || 0;
+    if (!(cn > 0 && cm > 0)) return '';
+    var ml = (parseFloat(copas) || 0) * cm, neg = ml < -0.5;
+    ml = Math.abs(ml);
+    var llenas = Math.floor(ml / cn + 1e-9), oz = Math.round((ml - llenas * cn) / OZ_ML * 10) / 10;
+    if (oz >= Math.round(cn / OZ_ML * 10) / 10) { llenas++; oz = 0; }
+    var p = [];
+    if (llenas) p.push(llenas + ' bot');
+    if (oz || !llenas) p.push(oz + ' oz');
+    return (neg ? '−' : '') + p.join(' + ');
+}
 function _s5Stock(fila) {
     if (!fila || fila.esCompuesto) return '';
     var st = _stockDeFila(fila, calcExistencia(fila), invActual && invActual.sucursalId);
@@ -10922,18 +11005,23 @@ function _step5TablasArmar(opts) {
            mismo producto con números distintos y sin una línea que lo explique
            no es un modelo, es un error aparente. */
         const _nb = (v) => { const r = Math.round(v * 10) / 10; return r % 1 ? r.toFixed(1) : String(r); };
-        const _dentroBat = (copas) => {
+        const _dentroBat = (copas, total) => {
             if (!(Math.abs(copas) > 0.05) || !(copasBot > 0)) return '';
             /* En botellas Y en litros. Se compara contra la receta del batch,
                que está en litros, y contra la bodega, que cuenta botellas: dar
                solo una de las dos obliga a convertir en la cabeza. */
             var _ml = copas * (parseFloat(fila.copaML) || 0);
             var _lt = _ml ? '  ·  ' + (Math.abs(_ml) >= 1000 ? _nb(_ml / 1000) + ' L' : _nb(_ml) + ' ml') : '';
+            if (!_PREBATCH_REPARTE)   // modelo de consumo: informativo, con el total
+                return '<div class="s5-mini s5-enbat" title="Informativo: lo que hay de este insumo DENTRO de los' +
+                    ' batches (' + etx(_lt.replace(/^\s*·\s*/, '')) + '). No entra a la diferencia (producir ya se lo' +
+                    ' descontó): sirve para saber cuánto hay en total.">↳ +' + _nb(copas / copasBot) + ' bot en batches<br>total ' + _nb(total / copasBot) + ' bot</div>';
             return '<div class="s5-mini" style="font-size:9px;opacity:.7;white-space:nowrap" title="Este producto' +
                 ' está dentro de un batch (una sub-receta de producción propia). Su parte se le' +
                 ' devuelve aquí para que la diferencia mire TODO el producto, no solo el' +
                 ' embotellado.">↳ ' + _nb(copas / copasBot) + ' bot' + _lt + ' del insumo en batches</div>';
         };
+        const _enB = _enBatches(fila.insumoId);
         const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
         /* Lo PRODUCIDO, si el renglón es un batch: para él es una entrada (suma a
            su teórico). Sin enseñarlo, el teórico del batch sale de la nada. */
@@ -10963,6 +11051,7 @@ function _step5TablasArmar(opts) {
                 <td style="min-width:150px">
                     <div class="s5-nom">${etx(insumoTitulo(fila))}</div>
                     <div class="s5-cont">${[fila.categoria||'', _contC ? _contC + (fila.tipo==='copa'&&parseFloat(fila.copaML)>0 ? ' · copa de ' + _fmtBase(parseFloat(fila.copaML)) + ' ml' : '') : ''].filter(Boolean).map(etx).join(' · ')}</div>
+                    ${_s5Limites(fila)}
                     ${(function(){
                         /* ══ UN RENGLÓN SIN INSUMO DETRÁS ══════════════════════
                            El inventario guarda sus renglones cuando se abre. Si
@@ -10980,24 +11069,24 @@ function _step5TablasArmar(opts) {
                             'no lo explica nadie.">⚠️ este insumo ya no está en el catálogo</div>';
                     })()}
                 </td>
-                <td style="text-align:center">${_s5c2('Exist. anterior', eaBot + ' bot' + _dentroBat(adj.ea))}</td>
+                <td style="text-align:center">${_s5c2('Exist. anterior', eaBot + ' bot' + _s5Indicador(fila) + (_PREBATCH_REPARTE ? _dentroBat(adj.ea) : _dentroBat(_enB.ea, ea + _enB.ea)))}</td>
                 <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', entBotStr + prodStr)}</td>
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Venta botella', ventaBot > 0 ? ventaBot + ' bot' : '—')}</td>
                 <td class="s5-vc" style="text-align:center;color:var(--accent)">${_s5c2('Venta copa', ventaCopaDir > 0 ? _fc(ventaCopaDir) : '—')}</td>
                 <td style="text-align:center;color:${merma > 0 ? 'var(--red)' : 'inherit'};font-weight:${merma > 0 ? 600 : 400}">${_s5c2('Mermas', (merma > 0 ? _fc(merma) : '—'))}</td>
                 <td style="text-align:center">${_s5c2('Teórico', teoBotS)}</td>
-                <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', fisBotS + _dentroBat(adj.fis))}</td>
+                <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', fisBotS + (_PREBATCH_REPARTE ? _dentroBat(adj.fis) : _dentroBat(_enB.fis, fisico + _enB.fis)))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', difStr + (eqDif ? _s5sub(eqDif) : ''))}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>
             </tr>
             <tr class="s5-r2">
                 <td>${_s5Menu(fila.insumoId, true, _s5Comentarios(fila))}</td>
-                <td style="text-align:center">${_s5Stock(fila)}</td>
+                <td style="text-align:center">${_s5c2('Botellas y oz', _botOzTxt(ea, fila) || '—')}</td>
                 <td style="text-align:center">${_costoOk ? _s5c2('Costo', entDinero > 0 ? '<b>' + _s5dinero(entDinero).replace('+', '') + '</b>' : '—') : ''}</td>
                 <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}</td>
                 <td style="text-align:center">${_s5c2('Cortesías', (cortesia > 0 ? '<b style="color:var(--viol)">' + _fc(cortesia) + '</b>' : '—'))}</td>
                 <td style="text-align:center">${_s5c2('Copas · onzas', _eqCopOz(teorico, fila))}</td>
-                <td style="text-align:center">${_s5c2('Copas · onzas', _eqCopOz(fisico, fila))}</td>
+                <td style="text-align:center">${_s5c2('Botellas y oz', _botOzTxt(fisico, fila) || _eqCopOz(fisico, fila))}</td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
                 <td style="text-align:right;color:${color};white-space:nowrap">${_costoOk ? _s5c2('A proveedor', '<b style="color:inherit">' + _s5dinero(dif * costoCopa(fila)) + '</b>') : ''}</td>
             </tr>`;
@@ -11041,23 +11130,28 @@ function _step5TablasArmar(opts) {
         const _prodP    = _prodPrebatchUnidades(fila);
         const pc        = _s5Pct(dif, _usoTotal(ventas, prodPBpVer, prodPBpMat), teorico);
         const coctSoloP = Math.max(0, ventaCoct - prodPBpMat);
+        // Lo que hay de este insumo dentro de los batches: informativo, con el total.
+        const _enBP  = _enBatches(fila.insumoId);
+        const _enBatP = (v, tot) => Math.abs(v) > 0.005 ? '<div class="s5-mini s5-enbat" title="Informativo: lo que hay de este insumo DENTRO de los batches. No entra a la diferencia (producir ya se lo descontó).">↳ +' +
+            cant(v) + ' en batches<br>total ' + cant(tot + v) + '</div>' : '';
         const html = `<tr class="s5-r1">
                 <td style="min-width:150px">
                     <div class="s5-nom">${etx(insumoTitulo(fila))}</div>
                     <div class="s5-cont">${[fila.categoria||'', _contP||''].filter(Boolean).map(etx).join(' · ')}</div>
+                    ${_s5Limites(fila)}
                 </td>
-                <td style="text-align:center">${_s5c2('Exist. anterior', cant(ea))}</td>
+                <td style="text-align:center">${_s5c2('Exist. anterior', cant(ea) + _s5Indicador(fila) + _enBatP(_enBP.ea, ea))}</td>
                 <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', (entTotal>0?'+'+cant(entTotal):'—') + (_prodP>0?'<div class="s5-mini" style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +'+cant(_prodP)+' producido</div>':''))}</td>
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Ventas', ventasDir>0?cant(ventasDir):'—')}</td>
                 <td style="text-align:center;color:${mermaP>0?'var(--red)':'inherit'};font-weight:${mermaP>0?600:400}">${_s5c2('Mermas', (mermaP>0?cant(mermaP):'—'))}</td>
                 <td style="text-align:center">${_s5c2('Teórico', cant(teorico))}</td>
-                <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', cant(fisico))}</td>
+                <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', cant(fisico) + _enBatP(_enBP.fis, fisico))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + cant(dif))}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>
             </tr>
             <tr class="s5-r2">
                 <td>${_s5Menu(fila.insumoId, true, _s5Comentarios(fila))}</td>
-                <td style="text-align:center">${_s5Stock(fila)}</td>
+                <td></td>
                 <td style="text-align:center">${_costoOk ? _s5c2('Costo', entDinP > 0 ? '<b>' + _s5dinero(entDinP).replace('+', '') + '</b>' : '—') : ''}</td>
                 <td style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${_s5Uso(coctSoloP, prodPBpVer, cant)}</td>
                 <td style="text-align:center">${peso ? '' : _s5c2('Cortesías', (cortP>0 ? '<b style="color:var(--viol)">' + cant(cortP) + '</b>' : '—'))}</td>
@@ -11663,7 +11757,11 @@ function verReporteDirectivo(gerencial, modo) {
     };
     const analisis = filasCaptura.filter(f => !_fueraImp(f)).map(f => {
         // Prebatch repartido: se excluye del análisis (su variancia vive en sus insumos).
-        const esPBo     = _esPrebatchRepartido(f.insumoId);
+        /* Sin resultado propio: el prebatch repartido y el batch del modelo de
+           consumo (un puente, regla de Edwin del 21-nov). Su dif y su uso van en
+           cero aquí; su existencia sí entra al capital (lo que hay en el batch ya
+           no está en las botellas: no se cuenta dos veces). */
+        const esPBo     = _esPrebatchRepartido(f.insumoId) || _esBatchFila(f);
         const adjO      = esPBo ? _repZero : _repartoDe(f.insumoId);
         const fisico    = calcExistencia(f) + adjO.fis;
         const teorico   = calcExistenciaTeorica(f) + adjO.teo;
@@ -11696,9 +11794,7 @@ function verReporteDirectivo(gerencial, modo) {
            que cuenta como uso a precio proveedor igual que una venta. Lo que NO es
            es una venta —no se le cobró a nadie—, por eso vive fuera de ventaNeta y
            del % de varianza, que se miden contra lo vendido. */
-        const consumo   = (f.tipo === 'pza'
-            ? ventaPzaTot + cortesia + merma
-            : ventaCopa + ventaBot * copasBot + cortesia + merma) + prodPB;
+        const consumo   = _usoPeriodo(f, adjO);   // la misma cuenta que la pantalla
         const disponible = ea + (f.tipo === 'copa' ? entBot * copasBot : entBot);
         const pctConsumo = disponible > 0 ? (consumo / disponible) * 100 : 0;
         /* % de varianza contra TODO el uso del insumo (misma definición que la columna

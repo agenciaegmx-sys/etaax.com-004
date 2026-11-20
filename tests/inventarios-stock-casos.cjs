@@ -120,6 +120,8 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         esBateo:()=>false, _btnNotaInsumo:()=>'', _btnOcultoImpreso:()=>'', _s5Menu:()=>'', _s5Stock:()=>'',
         _nb:v=>String(v), toggleBateo:()=>{}, insumoTitulo:x=>x.nombre||'',
         papel:false, _costoOk:true,   // del armador (_step5TablasArmar): pantalla, con costos
+        _PREBATCH_REPARTE:false, _enBatches:()=>({ea:0,ent:0,vco:0,cm:0,teo:0,fis:0,dif:0,venta:0}),
+        _s5Limites:()=>'', _s5Indicador:()=>'', _botOzTxt:()=>'',
     });
     /* Botella de 750 con copa de 60: 25 copas de físico y un faltante de 350 ml
        (−5.8333 copas). Son los ejemplos de la factura. */

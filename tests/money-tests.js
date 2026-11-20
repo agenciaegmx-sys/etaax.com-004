@@ -22111,7 +22111,7 @@ console.log('\n══ BH38 · Decir en qué unidad, y de dónde sale ══');
        al agregarle una línea. Un candado que depende de cuánto texto hay antes
        protege el tamaño, no la conducta. */
     const _dentroSrc = (() => {
-        const i = src.indexOf('const _dentroBat = (copas) => {');
+        const i = src.indexOf('const _dentroBat = (copas, total) => {');
         const fin = src.indexOf('\n        };', i);
         return src.slice(i, fin > 0 ? fin : i + 1200);
     })();
@@ -22129,6 +22129,12 @@ console.log('\n══ BH38 · Decir en qué unidad, y de dónde sale ══');
     });
     /* Sin reparto no se pinta: la inmensa mayoría de los renglones no tiene
        nada dentro de ningún batch y una línea de más en cada uno es ruido. */
+    /* 21-nov (Edwin): en el modelo de consumo la parte del insumo dentro de
+       los batches es INFORMATIVA —sirve para saber cuánto hay en total— y no
+       entra a la diferencia (producir ya se la descontó). */
+    test('…y en el modelo de consumo es informativa, con el total', () =>
+        eq(/_dentroBat\(_enB\.ea, ea \+ _enB\.ea\)/.test(src) && /_dentroBat\(_enB\.fis, fisico \+ _enB\.fis\)/.test(src) &&
+           _dentroSrc.indexOf("en batches<br>total ") > -1 && _dentroSrc.indexOf('No entra a la diferencia') > -1, true, 'informativo'));
     test('…y no se pinta cuando no hay nada dentro de un batch', () =>
         eq(/if \(!\(Math\.abs\(copas\) > 0\.05\)/.test(_dentroSrc), true, 'solo cuando aplica'));
     /* Y explica POR QUÉ, no solo cuánto: el que mira un faltante necesita
@@ -35187,8 +35193,15 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         eq(/class="s5-dots"/.test(sq.html2) && !/Marcar bateo|En el impreso|Fuera del impreso<\/button>/.test(h), true, sq.dos[0]));
     test('…y lo ya marcado se queda a la vista: la nota y «fuera del impreso»', () =>
         eq(/Fuera del impreso/.test(sp.dos[0]) + '·' + /Una se rompió al surtir/.test(sp.dos[0]), 'true·true', sp.dos[0]));
-    test('Exist. anterior: abajo el stock, SOLO cómo está y sus límites', () =>
-        eq(sq.dos[1], 'Stock Medio Mín. 2 · Máx. 10 pza'));
+    /* 21-nov (Edwin): los límites de stock bajo el NOMBRE, el indicador
+       (bajo / medio / ideal) en la existencia anterior y, abajo de las
+       existencias, el desglose en botellas y onzas. */
+    test('los límites de stock van bajo el nombre', () =>
+        eq(/Squirt 2 LTS .*Stock mín\. 2 · máx\. 10 pza/.test(sq.uno[0]), true, sq.uno[0]));
+    test('…y en la existencia anterior, SOLO el indicador', () =>
+        eq(/^Exist\. anterior 10 pza Medio/.test(sq.uno[1]) + '|' + /Mín\./.test(sq.uno[1]), 'true|false', sq.uno[1]));
+    test('…y abajo de la existencia anterior, sus botellas y onzas (copa: 30 copas de 50 ml = 2 bot)', () =>
+        eq(pb.dos[1], 'Botellas y oz 2 bot'));
     test('…sin repetir la existencia', () => eq(/Disponible/.test(sq.dos[1] + sp.dos[1]), false));
     test('Entradas: abajo, su COSTO (2 × $38)', () =>
         eq(sp.uno[2] + ' | ' + sp.dos[2], 'Entradas +2 pza | Costo $76.00'));
@@ -35205,12 +35218,68 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     test('líneas entre columnas, menos entre venta botella y venta copa', () =>
         eq(/tr\.s5-r1>td\+td,.*border-left:1px/.test(h) + '|' + /td class="s5-vc"/.test(h), 'true|true'));
     test('Teórico, Exist. actual y Diferencia, cada uno en su columna', () =>
-        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza | Diferencia -1 pza'));
+        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza ↳ +1 pza en batches total 9 pza | Diferencia -1 pza'));
+    /* La parte del Squirt dentro del batch (8 L de Paloma, 500 ml de Squirt por
+       cada 2 L = 2 L = 1 pza) se ENSEÑA con el total, pero no entra a la
+       diferencia: producir ya se la descontó (regla del 21-nov). */
+    test('lo que hay del insumo dentro de los batches es informativo: no mueve la diferencia', () =>
+        eq(/Diferencia -1 pza/.test(sq.uno[7]) && /en batches total 9 pza/.test(sq.uno[6]), true, sq.uno[6] + ' | ' + sq.uno[7]));
     test('…y abajo de la diferencia, su % contra el uso (−1 de 1 usada)', () => eq(sq.dos[7], '% del uso -100.0%'));
     test('Dif. $: a precio carta arriba, a proveedor abajo', () =>
         eq(sq.uno[8] + ' | ' + sq.dos[8], 'A carta −$60.00 | A proveedor −$36.00'));
-    test('teórico y existencia en copas: abajo copas · onzas', () =>
-        eq(/^Copas · onzas \d/.test(pb.dos[5]) + '·' + /^Copas · onzas \d/.test(pb.dos[6]), 'true·true', pb.dos[5] + ' | ' + pb.dos[6]));
+    test('abajo del teórico, copas · onzas; abajo de la existencia actual, botellas y onzas', () =>
+        eq(/^Copas · onzas \d/.test(pb.dos[5]) + '·' + pb.dos[6], 'true·Botellas y oz 1 bot', pb.dos[5] + ' | ' + pb.dos[6]));
+    test('botellas y onzas: llenas + lo que queda en la abierta', () => {
+        const f = { contNeto: 750, copaML: 50 };
+        return eq([P._botOzTxt(15, f), P._botOzTxt(17.4, f), P._botOzTxt(2, f), P._botOzTxt(-3, f), P._botOzTxt(5, { contNeto: 0, copaML: 50 })].join(' | '),
+                  '1 bot | 1 bot + 4.1 oz | 3.4 oz | −5.1 oz | ');
+    });
+    /* ══ EL USO DE UN INSUMO (regla fija de Edwin, 21-nov) ══
+       venta + cócteles con el insumo DIRECTO + cortesías y mermas + lo que se
+       fue al producir batches = uso a precio proveedor. Un batch es un puente:
+       sin uso ni resultado propios. La pantalla y el reporte piden la misma
+       función (_usoPeriodo). */
+    const filaDe = (id) => vm.runInContext('filasCaptura.find(f => f.insumoId === "' + id + '")', P);
+    test('el uso del Squirt es lo que se fue al producir: 4 batches × 500 ml = 1 pza', () => eq(P._usoPeriodo(filaDe('squirt')), 1));
+    test('…el de la Sprite, su merma y su cortesía (2 pza)', () => eq(P._usoPeriodo(filaDe('sprite')), 2));
+    test('…el del vodka, sus 5 copas vendidas', () => eq(P._usoPeriodo(filaDe('vodka')), 5));
+    test('…y un batch NO tiene uso propio', () => eq(P._usoPeriodo(filaDe('prePal')), 0));
+    test('«Vendido a precio proveedor» es ese uso, cada uno a su costo (sin el batch)', () => {
+        const esperado = ['squirt', 'sprite', 'vodka'].reduce((t, id) => t + P._usoPeriodo(filaDe(id)) * P.costoCopa(filaDe(id)), 0);
+        const h = P._resumenEjecutivo();
+        const m = h.match(/Vendido a precio proveedor[\s\S]*?\$([\d,]+(?:\.\d+)?)/);
+        return eq(m && Math.round(parseFloat(m[1].replace(/,/g, ''))), Math.round(esperado), m && m[0].slice(-40));
+    });
+    test('…el batch tampoco sale como «sin usar»', () => {
+        P._resumenEjecutivo();
+        return eq(/Batch Paloma/.test(vm.runInContext('_resumenAbajo', P)), false);
+    });
+    test('…ni su diferencia mueve los faltantes y sobrantes', () => {
+        const tarjeta = () => { const h = P._resumenEjecutivo(); const i = h.search(/(Faltante|Sobrante) \(a carta\)/); return h.slice(i, h.indexOf('Merma del periodo', i)); };
+        const antes = tarjeta();
+        vm.runInContext('filasCaptura.find(f => f.insumoId === "prePal").pesos = ["16"]; _consumoDirty = true;', P);
+        const despues = tarjeta();
+        vm.runInContext('filasCaptura.find(f => f.insumoId === "prePal").pesos = ["8"]; _consumoDirty = true;', P);
+        return eq(despues, antes);
+    });
+    test('el reporte directivo usa la MISMA cuenta de uso y también deja fuera al batch', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const i = src.indexOf('const analisis = filasCaptura.filter(f => !_fueraImp(f)).map(f =>');
+        const b = src.slice(i, i + 6000);
+        return eq(/const esPBo\s*=\s*_esPrebatchRepartido\(f\.insumoId\) \|\| _esBatchFila\(f\)/.test(b) &&
+                  /const consumo\s*=\s*_usoPeriodo\(f, adjO\)/.test(b) && /consumo: esPBo \? 0 : consumo/.test(b), true, 'una sola cuenta');
+    });
+    /* Y lo producido SÍ mueve el resultado de cada insumo: 8 batches en vez de
+       4 → se usaron 2 Squirt, el teórico baja uno y abajo dice «Uso en
+       prebatch 2 pza». */
+    test('capturar MÁS batches producidos baja el teórico del insumo y lo dice en Uso en prebatch', () => {
+        vm.runInContext('invActual.prebatchProducidos = { prePal: 8 }; _consumoDirty = true;', P);
+        const h8 = P._step5TablasHTML();
+        vm.runInContext('invActual.prebatchProducidos = { prePal: 4 }; _consumoDirty = true;', P);
+        const i = h8.indexOf('<div class="s5-nom">Squirt 2 LTS'), r1 = h8.lastIndexOf('<tr class="s5-r1">', i), r2 = h8.indexOf('</tr>', h8.indexOf('<tr class="s5-r2">', i));
+        const x = texto(h8.slice(r1, r2));
+        return eq(/Teórico 8 pza/.test(x) && /Uso en prebatch 2 pza/.test(x) && /Diferencia \+0 pza|Diferencia 0 pza/.test(x), true, x);
+    });
     /* El batch: lo que se hizo, lo que tomó de cada insumo y lo que hay —sin
        diferencia ni dinero— (Edwin, 19-nov). 4 batches de 2 L con 500 ml de
        Squirt cada uno. */

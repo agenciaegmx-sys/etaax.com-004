@@ -1066,6 +1066,51 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await ctx.close();
         }
+
+        /* ── R · el batch es un puente (regla de Edwin, 21-nov) ───────────────
+           3 batches de Mix Negroni (250 ml de Campari y 250 de Cinzano cada uno)
+           usan 1 botella de cada uno: eso ES uso a precio proveedor, igual en la
+           pantalla y en el reporte. Lo que queda en el batch se enseña junto a
+           la existencia de cada insumo (informativo, con el total) y no mueve su
+           diferencia. Y el renglón: límites bajo el nombre, el indicador en la
+           existencia anterior, botellas y onzas abajo. */
+        console.log('\n══ R · El batch es un puente: uso, existencia y el renglón ══');
+        {
+            const LIC = [base('camp', { nombre: 'Campari', tipoInsumo: 'licor', categoria: 'Licores', stockMin: 1, stockMax: 3, presentaciones: [{ contNeto: 750, umContenido: 'ML', costoUnitario: 300, precioCarta: 90 }] }),
+                base('cinz', { nombre: 'Cinzano Rosso', tipoInsumo: 'licor', categoria: 'Licores', presentaciones: [{ contNeto: 750, umContenido: 'ML', costoUnitario: 200, precioCarta: 80 }] }),
+                base('mix', { nombre: 'Mix Negroni PR', categoria: 'Producción propia', esSubReceta: true, recetaId: 'srMix', presentaciones: [{ contNeto: 1000, umContenido: 'ML' }] })];
+            const MIX = { id: 'srMix', nombre: 'Mix Negroni', tipo: 'sub-bebidas', status: 'activa', sucursalId: 'suc_principal', camposExtra: { rendimientoFinal: '500', unidadRendimientoFinal: 'ML' },
+                ingredientes: [{ insumoId: 'camp', cantidad: 250, unidad: 'ML' }, { insumoId: 'cinz', cantidad: 250, unidad: 'ML' }] };
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { nube: { negocio_insumos: filasNube(LIC), recetas: [MIX].map(r => ({ id: r.id, negocio_id: 'n1', datos: r })) }, viewport: { width: 1280, height: 800 } }));
+            page.on('dialog', d => d.accept());
+            await nuevoInv(page);
+            await page.waitForTimeout(600);
+            await page.evaluate(() => { const c = filasCaptura.find(f => f.insumoId === 'camp'); c.existenciaAnterior = 3 * (750 / c.copaML); c.cerradasBodega = 2; c.registrado = true;
+                const z = filasCaptura.find(f => f.insumoId === 'cinz'); z.existenciaAnterior = 2 * (750 / z.copaML); z.cerradasBodega = 1; z.registrado = true;
+                const mx = filasCaptura.find(f => f.insumoId === 'mix'); mx.cerradasBodega = 1; mx.registrado = true;
+                invActual.prebatchProducidos = { mix: 3 }; _consumoDirty = true; window._step5Dirty = true; irAPaso(4); irAPaso(5); });
+            await page.waitForTimeout(1200);
+            const vendidoPantalla = await page.evaluate(() => { const m = document.getElementById('step5Keep').innerText.match(/VENDIDO A PRECIO PROVEEDOR\s*\$([\d,\.]+)/i); return m && m[1]; });
+            await caso('lo producido en batches ES uso: 1 bot de Campari ($225) + 1 de Cinzano ($150) = $375', async () => assert.equal(vendidoPantalla, '375'));
+            await page.evaluate(() => document.querySelectorAll('#step5Tablas .card-header[data-grp]').forEach(h => { if (/Licores/.test(h.dataset.grp)) h.click(); }));
+            await page.waitForTimeout(300);
+            const camp = await page.evaluate(() => { const tr = [...document.querySelectorAll('#step5Tablas tr.s5-r1')].find(t => /Campari/.test(t.textContent));
+                return { uno: tr.innerText.replace(/\s+/g, ' '), dos: tr.nextElementSibling.innerText.replace(/\s+/g, ' ') }; });
+            await caso('…y el Campari: 3 bot − 1 al batch = 2 de teórico, 2 contadas → sin diferencia', async () =>
+                assert.match(camp.uno, /TEÓRICO 2\.00 bot EXIST\. ACTUAL 2\.00 bot[^]*DIFERENCIA \+?0 cop[^]*A CARTA \+\$0\.00/i, camp.uno));
+            await caso('…lo que hay en el batch se enseña junto a su existencia, con el total (informativo)', async () =>
+                assert.match(camp.uno, /↳ \+0\.7 bot en batches total 2\.7 bot/));
+            await caso('…el renglón: límites bajo el nombre, indicador en la anterior, botellas y oz abajo', async () => {
+                assert.match(camp.uno, /Campari Licores · 750 ml · copa de [\d.]+ ml Stock mín\. 1 · máx\. 3 bot EXIST\. ANTERIOR 3\.0 bot (Bajo|Medio|Ideal)/i);
+                assert.match(camp.dos, /BOTELLAS Y OZ 3 bot[^]*USO EN PREBATCH 25\.4 cop[^]*BOTELLAS Y OZ 2 bot/i);
+            });
+            await page.evaluate(() => verReporteDirectivo(false)); await page.waitForTimeout(1500);
+            await caso('…y el reporte directivo dice el mismo uso a precio proveedor', async () => {
+                const v = await page.evaluate(() => { const m = document.getElementById('rd-pages').innerText.match(/Vendido a precio proveedor\s*\$([\d,\.]+)/i); return m && m[1]; });
+                assert.equal(v, vendidoPantalla);
+            });
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }
