@@ -1100,9 +1100,10 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 assert.match(camp.uno, /TEÓRICO 2\.00 bot EXIST\. ACTUAL 2\.00 bot[^]*DIFERENCIA \+?0 cop[^]*A CARTA \+\$0\.00/i, camp.uno));
             await caso('…lo que hay en el batch se enseña junto a su existencia, con el total (informativo)', async () =>
                 assert.match(camp.uno, /↳ \+0\.7 bot en batches total 2\.7 bot/));
-            await caso('…el renglón: límites bajo el nombre, indicador en la anterior, botellas y oz abajo', async () => {
-                assert.match(camp.uno, /Campari Licores · 750 ml · copa de [\d.]+ ml Stock mín\. 1 · máx\. 3 bot EXIST\. ANTERIOR 3\.0 bot (Bajo|Medio|Ideal)/i);
-                assert.match(camp.dos, /BOTELLAS Y OZ 3 bot[^]*USO EN PREBATCH 25\.4 cop[^]*BOTELLAS Y OZ 2 bot/i);
+            await caso('…el renglón: límites bajo el nombre, indicador con palabras en las dos existencias, desglose en copas y oz', async () => {
+                assert.match(camp.uno, /Campari Licores · 750 ml · copa de [\d.]+ ml Stock mín\. 1 · máx\. 3 bot EXIST\. ANTERIOR 3\.0 bot Stock (bajo|medio|ideal)/i);
+                assert.match(camp.uno, /EXIST\. ACTUAL 2\.00 bot Stock (bajo|medio|ideal)/i);
+                assert.match(camp.dos, /DESGLOSE [\d.]+ cop · [\d.]+ oz[^]*USO EN PREBATCH 25\.4 cop[^]*DESGLOSE [\d.]+ cop · [\d.]+ oz[^]*DESGLOSE [\d.]+ cop · [\d.]+ oz/i);
             });
             await page.evaluate(() => verReporteDirectivo(false)); await page.waitForTimeout(1500);
             await caso('…y el reporte directivo dice el mismo uso a precio proveedor', async () => {

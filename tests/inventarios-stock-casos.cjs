@@ -121,7 +121,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         _nb:v=>String(v), toggleBateo:()=>{}, insumoTitulo:x=>x.nombre||'',
         papel:false, _costoOk:true,   // del armador (_step5TablasArmar): pantalla, con costos
         _PREBATCH_REPARTE:false, _enBatches:()=>({ea:0,ent:0,vco:0,cm:0,teo:0,fis:0,dif:0,venta:0}),
-        _s5Limites:()=>'', _s5Indicador:()=>'', _botOzTxt:()=>'',
+        _s5Limites:()=>'', _s5Indicador:()=>'',
     });
     /* Botella de 750 con copa de 60: 25 copas de físico y un faltante de 350 ml
        (−5.8333 copas). Son los ejemplos de la factura. */
@@ -135,21 +135,22 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
        primer renglón y en copas · onzas en el segundo, en su misma columna. */
     test('el renglón de barra dice la existencia en botellas, y abajo en copas y onzas',()=>{
         eq(fila.html.includes('2.00 bot'),true,'sin botellas');
-        eq(fila.html.includes('25.0 cp · 50.7 oz'),true,'el físico no trae copas y onzas');
+        eq(fila.html.includes('25.0 cop · 50.7 oz'),true,'el físico no trae copas y onzas');
     });
-    test('…y la diferencia conserva el signo en las tres lecturas',()=>{
-        eq(fila.html.includes('-0.47 bot · -11.8 oz · -5.8 cp'),true,
+    // 21-nov: la diferencia ya va en copas → su desglose es botellas y onzas.
+    test('…y la diferencia conserva el signo en sus lecturas',()=>{
+        eq(fila.html.includes('-0.47 bot · -11.8 oz') && !fila.html.includes('-11.8 oz · -5.8 cp'),true,
             'la diferencia no trae su equivalencia con signo: '+(fila.html.match(/≈[^<]*/g)||[]).join(' // '));
     });
     test('…teórico y existencia dicen copas · onzas, y la diferencia trae su desglose completo',()=>{
-        eq((fila.html.match(/\d cp · [-+]?\d/g)||[]).length,2,'copas · onzas de teórico y existencia');
+        eq((fila.html.match(/\d cop · [-+]?\d/g)||[]).length,3,'copas · onzas de la anterior, el teórico y la existencia');
         return eq((fila.html.match(/≈ /g)||[]).length,1,'el desglose de la diferencia');
     });
     /* Un sobrante no puede salir con el signo de un faltante. */
     test('un sobrante sale en positivo',()=>{
         c.calcExistenciaTeorica=()=>25-350/60;
         const r=c._rowCopa(fcopa);
-        return eq(r.html.includes('+0.47 bot · +11.8 oz · +5.8 cp'),true,
+        return eq(r.html.includes('+0.47 bot · +11.8 oz'),true,
             (r.html.match(/≈[^<]*/g)||[]).join(' // '));
     });
     /* `−0.00 bot` se lee como un error del sistema, no como «cuadró». */
@@ -205,7 +206,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         eq(/_step5TablasHTML\(\{ papel: true/.test(cuerpo),true,'el reporte no pide la tabla en papel');
         const b=src.indexOf('function _step5TablasArmar(');
         const arm=src.slice(b,src.indexOf('\nfunction ',b+10));
-        eq(/_equivBarraHTML\(dif, fila, \{signo:true, impreso:papel\}\)/.test(arm),true,'falta en la diferencia');
+        eq(/_equivBarraHTML\(dif, fila, \{signo:true, impreso:papel, sinCopas:true\}\)/.test(arm),true,'falta en la diferencia');
         // 20-nov: cada presentación de un compuesto se arma con el MISMO renglón (_rowCopa/_rowPza),
         // así que su diferencia pide la línea de papel por el mismo camino.
         eq(/\? _rowPza\(m\) : _rowCopa\(m\)/.test(arm),true,'falta en los miembros de un compuesto');

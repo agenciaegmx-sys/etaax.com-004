@@ -35198,10 +35198,15 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
        existencias, el desglose en botellas y onzas. */
     test('los límites de stock van bajo el nombre', () =>
         eq(/Squirt 2 LTS .*Stock mín\. 2 · máx\. 10 pza/.test(sq.uno[0]), true, sq.uno[0]));
-    test('…y en la existencia anterior, SOLO el indicador', () =>
-        eq(/^Exist\. anterior 10 pza Medio/.test(sq.uno[1]) + '|' + /Mín\./.test(sq.uno[1]), 'true|false', sq.uno[1]));
-    test('…y abajo de la existencia anterior, sus botellas y onzas (copa: 30 copas de 50 ml = 2 bot)', () =>
-        eq(pb.dos[1], 'Botellas y oz 2 bot'));
+    /* 21-nov (2): el indicador dice con PALABRAS cómo está el stock, y cada
+       existencia trae el suyo (cómo arrancó / cómo quedó); abajo, «Desglose»
+       en copas y onzas; la diferencia, que ya va en copas, en botellas y onzas. */
+    test('…y en la existencia anterior, SOLO el indicador, con sus palabras', () =>
+        eq(/^Exist\. anterior 10 pza Stock (bajo|medio|ideal)$/.test(sq.uno[1]) + '|' + /Mín\./.test(sq.uno[1]), 'true|false', sq.uno[1]));
+    test('…y la existencia actual trae el suyo (8 de mín. 2 · máx. 10)', () =>
+        eq(/^Exist\. actual 8 pza Stock (bajo|medio|ideal)/.test(sq.uno[6]), true, sq.uno[6]));
+    test('…y abajo de la existencia anterior, su desglose en copas y onzas (30 copas de 50 ml)', () =>
+        eq(pb.dos[1], 'Desglose 30.0 cop · 50.7 oz'));
     test('…sin repetir la existencia', () => eq(/Disponible/.test(sq.dos[1] + sp.dos[1]), false));
     test('Entradas: abajo, su COSTO (2 × $38)', () =>
         eq(sp.uno[2] + ' | ' + sp.dos[2], 'Entradas +2 pza | Costo $76.00'));
@@ -35218,7 +35223,7 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     test('líneas entre columnas, menos entre venta botella y venta copa', () =>
         eq(/tr\.s5-r1>td\+td,.*border-left:1px/.test(h) + '|' + /td class="s5-vc"/.test(h), 'true|true'));
     test('Teórico, Exist. actual y Diferencia, cada uno en su columna', () =>
-        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza ↳ +1 pza en batches total 9 pza | Diferencia -1 pza'));
+        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza ' + sq.uno[6].match(/Stock \w+/)[0] + ' ↳ +1 pza en batches total 9 pza | Diferencia -1 pza'));
     /* La parte del Squirt dentro del batch (8 L de Paloma, 500 ml de Squirt por
        cada 2 L = 2 L = 1 pza) se ENSEÑA con el total, pero no entra a la
        diferencia: producir ya se la descontó (regla del 21-nov). */
@@ -35227,13 +35232,10 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     test('…y abajo de la diferencia, su % contra el uso (−1 de 1 usada)', () => eq(sq.dos[7], '% del uso -100.0%'));
     test('Dif. $: a precio carta arriba, a proveedor abajo', () =>
         eq(sq.uno[8] + ' | ' + sq.dos[8], 'A carta −$60.00 | A proveedor −$36.00'));
-    test('abajo del teórico, copas · onzas; abajo de la existencia actual, botellas y onzas', () =>
-        eq(/^Copas · onzas \d/.test(pb.dos[5]) + '·' + pb.dos[6], 'true·Botellas y oz 1 bot', pb.dos[5] + ' | ' + pb.dos[6]));
-    test('botellas y onzas: llenas + lo que queda en la abierta', () => {
-        const f = { contNeto: 750, copaML: 50 };
-        return eq([P._botOzTxt(15, f), P._botOzTxt(17.4, f), P._botOzTxt(2, f), P._botOzTxt(-3, f), P._botOzTxt(5, { contNeto: 0, copaML: 50 })].join(' | '),
-                  '1 bot | 1 bot + 4.1 oz | 3.4 oz | −5.1 oz | ');
-    });
+    test('abajo del teórico y de la existencia actual, también su desglose en copas y onzas', () =>
+        eq(/^Desglose \d+\.\d cop · \d+\.\d oz$/.test(pb.dos[5]) + '·' + pb.dos[6], 'true·Desglose 15.0 cop · 25.4 oz', pb.dos[5] + ' | ' + pb.dos[6]));
+    test('la diferencia va en copas, así que su desglose es SOLO botellas y onzas', () =>
+        eq(/Diferencia -10 cop ≈ -0\.67 bot · -16\.9 oz$/.test(pb.uno[8]), true, pb.uno[8]));
     /* ══ EL USO DE UN INSUMO (regla fija de Edwin, 21-nov) ══
        venta + cócteles con el insumo DIRECTO + cortesías y mermas + lo que se
        fue al producir batches = uso a precio proveedor. Un batch es un puente:

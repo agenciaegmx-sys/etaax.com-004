@@ -28,7 +28,9 @@ module.exports=function({test,eq,crearContexto,cargarJS,setVar}){
            línea ≈), así que las líneas ≈ son: las 3 del compuesto (diferencia,
            teórico y lo que hay) + la diferencia de cada presentación. */
         eq(lineas.length,5);
-        for(const t of ['1.50 bot · 39.7 oz · 26.1 cp','+0.05 bot · +1.5 oz · +1.0 cp','0.00 bot · 0.0 oz · 0.0 cp']) eq(html.includes(t),true,t);
+        // La diferencia ya va en copas: su desglose es botellas y onzas (21-nov).
+        for(const t of ['1.50 bot · 39.7 oz · 26.1 cp','+0.05 bot · +1.5 oz','0.00 bot · 0.0 oz']) eq(html.includes(t),true,t);
+        eq(html.includes('+1.5 oz · +1.0 cp'),false,'la diferencia sin copas');
         eq(lineas.filter(t=>t.includes('+0.05 bot')).length,2,'total y presentación con diferencia');
         const mem=(html.match(/<tr class="s5-r1 s5-mem[\s\S]*?<\/tr>/g)||[]).map(x=>x.replace(/<[^>]+>/g,' ').replace(/\s+/g,' '));
         eq(mem.length,2,'una por presentación');
@@ -78,7 +80,7 @@ module.exports=function({test,eq,crearContexto,cargarJS,setVar}){
         const n=html.indexOf('🧩 Centenario Plata'),inicio=html.lastIndexOf('<tr class="s5-r1">',n),fin=html.indexOf('compDesg-',n),grupo=html.slice(inicio,fin);
         assert.ok(n>=0&&inicio>=0&&fin>n,'falta el compuesto en el impreso');
         eq(html.includes('s5-papel'),true,'en versión de papel');
-        eq(grupo.includes('1.50 bot · 39.7 oz · 26.1 cp'),true);eq(grupo.includes('+0.05 bot · +1.5 oz · +1.0 cp'),true);
+        eq(grupo.includes('1.50 bot · 39.7 oz · 26.1 cp'),true);eq(grupo.includes('+0.05 bot · +1.5 oz'),true);
         // Las presentaciones: sus propios dos renglones, abiertos en papel.
         eq((html.match(/<tr class="s5-r1 s5-mem compDesg-centenario">/g)||[]).length,2,'las dos presentaciones');
         eq(/Exist\. actual\s*<\/span>\s*0\.50 bot/.test(html.replace(/<span class="s5-l">/g,'<span>'))||html.includes('0.50 bot'),true);

@@ -10385,7 +10385,9 @@ function _estiloS5() {
         '.s5-tabla tr.s5-mem .s5-nom::before{content:"↳ ";color:var(--viol)}' +
         '.s5-tabla tr.s5-r2.s5-comp-abierto>td,.s5-tabla tr.s5-mem.s5-r2:has(+ tr.s5-mem)>td{border-bottom:1px dashed var(--border)!important}' +
         '.s5-lim{font-size:12.5px;color:var(--text-muted);margin-top:4px}' +
-        '.s5-ind{font-size:13px;font-weight:700;margin-top:2px}' +
+        // En su propio renglón, centrado bajo la cifra (display:table encoge al texto).
+        '.s5-ind{display:table;margin:4px auto 0;font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:10px;border:1px solid currentColor;' +
+            'background:color-mix(in srgb,currentColor 10%,transparent);white-space:nowrap}' +
         '.s5-tabla .s5-enbat{color:var(--viol);opacity:.95;white-space:normal!important}' +
         /* La ficha informativa de cada batch. */
         '.s5-pbt{width:100%;border-collapse:collapse}' +
@@ -10423,7 +10425,7 @@ function _estiloS5Papel() {
         '.s5-papel .s5-sub,.s5-papel .s5-mini{font-size:8px!important}' +
         '.s5-papel .s5-coms{font-size:8.5px;flex-basis:100px}' +
         '.s5-papel .s5-lim{font-size:8px!important}' +
-        '.s5-papel .s5-ind{font-size:8.5px!important}' +
+        '.s5-papel .s5-ind{font-size:7.5px!important;padding:0 4px!important;margin:2px auto 0!important}' +
         '.s5-papel .s5-pill,.s5-papel .s5-nota{font-size:8px}' +
         '.s5-papel tr.s5-r1>td+td,.s5-papel tr.s5-r2>td+td{border-left:1px solid #d6d0c4!important}' +
         '.s5-papel tr.s5-r1>td.s5-vc{border-left:0!important}' +
@@ -10641,10 +10643,10 @@ function _enBatches(id) { return (!_PREBATCH_REPARTE && _repCache && _repCache.p
 /* El renglón del Resultado (Edwin, 21-nov): los límites de stock bajo el
    nombre, el indicador en la existencia anterior y, abajo de la existencia
    anterior y de la actual, el desglose en botellas y onzas. */
-function _s5StockInfo(fila) {
+function _s5StockInfo(fila, existencia) {
     if (!fila || fila.esCompuesto) return null;
-    var st = _stockDeFila(fila, calcExistencia(fila), invActual && invActual.sucursalId);
-    var txt = { ideal:'Ideal', intermedio:'Medio', bajo:'Bajo', revisar:'Revisar mín./máx.', 'sin-parametros':'Sin mín./máx.',
+    var st = _stockDeFila(fila, existencia == null ? calcExistencia(fila) : existencia, invActual && invActual.sucursalId);
+    var txt = { ideal:'Stock ideal', intermedio:'Stock medio', bajo:'Stock bajo', revisar:'Revisar mín./máx.', 'sin-parametros':'Sin mín./máx.',
                 'sin-equivalencia':'Sin equivalencia de compra', 'sin-conteo':'Sin conteo' }[st.estado] || st.estado;
     var col = { ideal:'var(--green)', intermedio:'var(--accent)', bajo:'var(--red)' }[st.estado] || 'var(--text-muted)';
     return { st: st, txt: txt, col: col };
@@ -10654,23 +10656,11 @@ function _s5Limites(fila) {
     var num = function (v) { return v == null || !isFinite(v) ? '—' : (Math.round(v * 100) / 100).toLocaleString('es-MX'); };
     return '<div class="s5-lim">Stock mín. ' + num(i.st.minimo) + ' · máx. ' + num(i.st.maximo) + ' ' + etx(i.st.unidad) + '</div>';
 }
-function _s5Indicador(fila) {
-    var i = _s5StockInfo(fila); if (!i || i.st.estado === 'sin-parametros') return '';
+/* El indicador dice con palabras cómo está el stock (no solo un color), y cada
+   existencia trae el suyo: la anterior, cómo arrancó; la actual, cómo quedó. */
+function _s5Indicador(fila, existencia) {
+    var i = _s5StockInfo(fila, existencia); if (!i || i.st.estado === 'sin-parametros') return '';
     return '<div class="s5-ind" data-stock="' + i.st.estado + '" style="color:' + i.col + '">' + i.txt + '</div>';
-}
-/* Botellas llenas + lo que queda en onzas: «1 bot + 4.2 oz». Es como se cuenta
-   en el anaquel. Sin contenido o sin medida de copa no hay cómo partirlo. */
-function _botOzTxt(copas, fila) {
-    var cn = parseFloat(fila && fila.contNeto) || 0, cm = parseFloat(fila && fila.copaML) || 0;
-    if (!(cn > 0 && cm > 0)) return '';
-    var ml = (parseFloat(copas) || 0) * cm, neg = ml < -0.5;
-    ml = Math.abs(ml);
-    var llenas = Math.floor(ml / cn + 1e-9), oz = Math.round((ml - llenas * cn) / OZ_ML * 10) / 10;
-    if (oz >= Math.round(cn / OZ_ML * 10) / 10) { llenas++; oz = 0; }
-    var p = [];
-    if (llenas) p.push(llenas + ' bot');
-    if (oz || !llenas) p.push(oz + ' oz');
-    return (neg ? '−' : '') + p.join(' + ');
 }
 function _s5Stock(fila) {
     if (!fila || fila.esCompuesto) return '';
@@ -10718,7 +10708,7 @@ function _eqCopOz(copas, fila, signo) {
     if (cp === null || oz === null) return _equivBarraHTML(copas, fila, { signo: signo }).replace(/<(\/?)div\b/g, '<$1span');
     /* Sin contenido de botella no hay botellas arriba: los LITROS sí se saben. */
     var lt = _nEquiv(e.botellas, 2, signo) === null ? _nEquiv(e.litros, 2, signo) : null;
-    return (lt !== null ? lt + ' L · ' : '') + cp + ' cp · ' + oz + ' oz';
+    return (lt !== null ? lt + ' L · ' : '') + cp + ' cop · ' + oz + ' oz';
 }
 function _equivBarraHTML(copas, fila, opts) {
     opts = opts || {};
@@ -10737,11 +10727,12 @@ function _equivBarraHTML(copas, fila, opts) {
         if (e.contNeto === null && e.ml === null) faltan.push('el contenido de la botella');
         if (e.copaML   === null) faltan.push('el tamaño de la copa');
     }
+    /* `sinCopas`: cuando la cifra de arriba YA está en copas (la diferencia),
+       repetirlas abajo sobra: el desglose va en botellas y onzas (Edwin, 21-nov). */
     var partes = [
         bot !== null ? bot + ' bot' : (lt !== null ? lt + ' L' : '— bot'),
-        (oz  === null ? '—' : oz)  + ' oz',
-        (cp  === null ? '—' : cp)  + ' cp'
-    ].join(' · ');
+        (oz  === null ? '—' : oz)  + ' oz'
+    ].concat(opts.sinCopas ? [] : [(cp === null ? '—' : cp) + ' cp']).join(' · ');
     var ref = e.grupo ? 'suma por presentación, con su propia botella y copa' :
               [e.contNeto !== null ? _fmtBase(e.contNeto) + ' ml/bot' : null,
                e.copaML   !== null ? _fmtBase(e.copaML)   + ' ml/copa' : null]
@@ -11036,7 +11027,7 @@ function _step5TablasArmar(opts) {
         const entDinero = getEntradasCopas(fila) * costoCopa(fila);          // lo que entró, a costo
         /* La diferencia trae su desglose COMPLETO (botellas · onzas · copas),
            el de siempre; teórico y existencia, copas · onzas abajo. */
-        const eqDif     = _equivBarraHTML(dif, fila, {signo:true, impreso:papel}).replace(/<(\/?)div\b/g, '<$1span');
+        const eqDif     = _equivBarraHTML(dif, fila, {signo:true, impreso:papel, sinCopas:true}).replace(/<(\/?)div\b/g, '<$1span');
         /* ══ DOS RENGLONES POR COLUMNAS, CADA CELDA CON SU TÍTULO (18-nov) ═══
            Arriba: existencia anterior, entradas, venta botella, venta copa,
            mermas, cancelaciones, teórico, existencia actual, diferencia y su
@@ -11069,24 +11060,24 @@ function _step5TablasArmar(opts) {
                             'no lo explica nadie.">⚠️ este insumo ya no está en el catálogo</div>';
                     })()}
                 </td>
-                <td style="text-align:center">${_s5c2('Exist. anterior', eaBot + ' bot' + _s5Indicador(fila) + (_PREBATCH_REPARTE ? _dentroBat(adj.ea) : _dentroBat(_enB.ea, ea + _enB.ea)))}</td>
+                <td style="text-align:center">${_s5c2('Exist. anterior', eaBot + ' bot' + _s5Indicador(fila, ea) + (_PREBATCH_REPARTE ? _dentroBat(adj.ea) : _dentroBat(_enB.ea, ea + _enB.ea)))}</td>
                 <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', entBotStr + prodStr)}</td>
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Venta botella', ventaBot > 0 ? ventaBot + ' bot' : '—')}</td>
                 <td class="s5-vc" style="text-align:center;color:var(--accent)">${_s5c2('Venta copa', ventaCopaDir > 0 ? _fc(ventaCopaDir) : '—')}</td>
                 <td style="text-align:center;color:${merma > 0 ? 'var(--red)' : 'inherit'};font-weight:${merma > 0 ? 600 : 400}">${_s5c2('Mermas', (merma > 0 ? _fc(merma) : '—'))}</td>
                 <td style="text-align:center">${_s5c2('Teórico', teoBotS)}</td>
-                <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', fisBotS + (_PREBATCH_REPARTE ? _dentroBat(adj.fis) : _dentroBat(_enB.fis, fisico + _enB.fis)))}</td>
+                <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', fisBotS + _s5Indicador(fila, fisico) + (_PREBATCH_REPARTE ? _dentroBat(adj.fis) : _dentroBat(_enB.fis, fisico + _enB.fis)))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', difStr + (eqDif ? _s5sub(eqDif) : ''))}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>
             </tr>
             <tr class="s5-r2">
                 <td>${_s5Menu(fila.insumoId, true, _s5Comentarios(fila))}</td>
-                <td style="text-align:center">${_s5c2('Botellas y oz', _botOzTxt(ea, fila) || '—')}</td>
+                <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(ea, fila) || '—')}</td>
                 <td style="text-align:center">${_costoOk ? _s5c2('Costo', entDinero > 0 ? '<b>' + _s5dinero(entDinero).replace('+', '') + '</b>' : '—') : ''}</td>
                 <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}</td>
                 <td style="text-align:center">${_s5c2('Cortesías', (cortesia > 0 ? '<b style="color:var(--viol)">' + _fc(cortesia) + '</b>' : '—'))}</td>
-                <td style="text-align:center">${_s5c2('Copas · onzas', _eqCopOz(teorico, fila))}</td>
-                <td style="text-align:center">${_s5c2('Botellas y oz', _botOzTxt(fisico, fila) || _eqCopOz(fisico, fila))}</td>
+                <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(teorico, fila))}</td>
+                <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(fisico, fila))}</td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
                 <td style="text-align:right;color:${color};white-space:nowrap">${_costoOk ? _s5c2('A proveedor', '<b style="color:inherit">' + _s5dinero(dif * costoCopa(fila)) + '</b>') : ''}</td>
             </tr>`;
@@ -11140,12 +11131,12 @@ function _step5TablasArmar(opts) {
                     <div class="s5-cont">${[fila.categoria||'', _contP||''].filter(Boolean).map(etx).join(' · ')}</div>
                     ${_s5Limites(fila)}
                 </td>
-                <td style="text-align:center">${_s5c2('Exist. anterior', cant(ea) + _s5Indicador(fila) + _enBatP(_enBP.ea, ea))}</td>
+                <td style="text-align:center">${_s5c2('Exist. anterior', cant(ea) + _s5Indicador(fila, ea) + _enBatP(_enBP.ea, ea))}</td>
                 <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', (entTotal>0?'+'+cant(entTotal):'—') + (_prodP>0?'<div class="s5-mini" style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +'+cant(_prodP)+' producido</div>':''))}</td>
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Ventas', ventasDir>0?cant(ventasDir):'—')}</td>
                 <td style="text-align:center;color:${mermaP>0?'var(--red)':'inherit'};font-weight:${mermaP>0?600:400}">${_s5c2('Mermas', (mermaP>0?cant(mermaP):'—'))}</td>
                 <td style="text-align:center">${_s5c2('Teórico', cant(teorico))}</td>
-                <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', cant(fisico) + _enBatP(_enBP.fis, fisico))}</td>
+                <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', cant(fisico) + _s5Indicador(fila, fisico) + _enBatP(_enBP.fis, fisico))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + cant(dif))}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>
             </tr>
@@ -11274,7 +11265,7 @@ function _step5TablasArmar(opts) {
         const _grupo = (fn, o) => _equivBarraGrupoHTML(members.map(m => ({ fila: m, cantidad: fn(m) })), Object.assign({ impreso: papel }, o)).replace(/<(\/?)div\b/g, '<$1span');
         const _mer = (u) => `<td style="text-align:center;color:${merC>0?'var(--red)':'inherit'};font-weight:${merC>0?600:400}">${_s5c2('Mermas', merC>0 ? _nc(merC)+' '+u : '—')}</td>`;
         const _fin1 = `
-            <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + _nc(dif) + ' ' + (esPzaComp0 ? 'pza' : uC.mov) + (esPzaComp0 ? '' : _s5sub(_grupo(calcDiferencia, {signo:true}))))}</td>
+            <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + _nc(dif) + ' ' + (esPzaComp0 ? 'pza' : uC.mov) + (esPzaComp0 ? '' : _s5sub(_grupo(calcDiferencia, {signo:true, sinCopas:true}))))}</td>
             <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>`;
         const _cort = (u) => `<td style="text-align:center">${_s5c2('Cortesías', cortC > 0 ? '<b style="color:var(--viol)">' + _nc(cortC) + ' ' + u + '</b>' : '—')}</td>`;
         const _fin2 = `
