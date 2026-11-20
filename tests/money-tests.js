@@ -22806,17 +22806,19 @@ console.log('\n══ BH44 · Un solo capital ══');
     test('…y el batch ya no sale del capital con valor cero', () => {
         const i = src.indexOf('let capitalCosto=0, capitalCarta=0, difCostoTotal=0');
         const b = src.slice(i, i + 1900);
-        const posSalto = b.indexOf('if (_esPrebatchRepartido(fila.insumoId)) return;');
+        const posSalto = b.indexOf('if (_esPrebatchRepartido(fila.insumoId) || _esBatchFila(fila)) return;');
         const posCap   = b.indexOf('capitalCosto  += exist * cc;');
         return eq(posSalto > posCap, true, 'cuenta y luego se salta la variancia');
     });
     /* LO QUE NO SE PUEDE ROMPER: el reparto sigue mandando en la VARIANCIA,
        que es su trabajo. El batch no tiene diferencia propia. */
+    /* 21-nov (Edwin): el batch es un puente. No tiene diferencia propia y lo
+       que le falte o le sobre se va a sus insumos (total contra total). */
     test('la variancia del batch SIGUE viviendo en sus insumos', () => {
-        const i = src.indexOf('// La variancia SÍ usa el reparto');
-        const b = src.slice(i, i + 300);
-        return eq(b.indexOf('if (_esPrebatchRepartido(fila.insumoId)) return;') > -1,
-                  true, 'cada lente en lo suyo');
+        const i = src.indexOf('// El batch no tiene diferencia propia (es un puente)');
+        const b = src.slice(i, i + 500);
+        return eq(b.indexOf('if (_esPrebatchRepartido(fila.insumoId) || _esBatchFila(fila)) return;') > -1 &&
+                  b.indexOf('_enBatches(fila.insumoId).dif') > -1, true, 'cada lente en lo suyo');
     });
 
     /* ── EL REPORTE DE EXISTENCIAS, LOS DOS BUGS DE SU IMPRESO ── */
@@ -35229,12 +35231,16 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     test('líneas entre columnas, menos entre venta botella y venta copa', () =>
         eq(/tr\.s5-r1>td\+td,.*border-left:1px/.test(h) + '|' + /td class="s5-vc"/.test(h), 'true|true'));
     test('Teórico, Exist. actual y Diferencia, cada uno en su columna', () =>
-        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza en piezas | Exist. actual 8 pza en piezas + 1 prebatch = 9 total real ' + sq.uno[6].match(/Stock \w+/)[0] + ' | Diferencia -1 pza'));
+        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza en piezas + 1 prebatch = 10 total | Exist. actual 8 pza en piezas + 1 prebatch = 9 total real ' + sq.uno[6].match(/Stock \w+/)[0] + ' | Diferencia -1 pza piezas -1 pza · prebatch +0 pza'));
     /* La parte del Squirt dentro del batch (8 L de Paloma, 500 ml de Squirt por
        cada 2 L = 2 L = 1 pza) se ENSEÑA con el total, pero no entra a la
        diferencia: producir ya se la descontó (regla del 21-nov). */
-    test('lo que hay del insumo dentro de los batches es informativo: no mueve la diferencia', () =>
-        eq(/Diferencia -1 pza/.test(sq.uno[7]) && /\+ 1 prebatch = 9 total real/.test(sq.uno[6]), true, sq.uno[6] + ' | ' + sq.uno[7]));
+    /* 21-nov (2): TOTAL CONTRA TOTAL. Al teórico se le suma lo que DEBERÍA
+       haber en prebatch (4 batches × 500 ml = 1 pza, sin cocteles que se lo
+       llevaran) y a la existencia lo que HAY (1 pza). La diferencia dice de
+       dónde sale: piezas −1 · prebatch 0. Nada se cuenta dos veces. */
+    test('el resultado es total contra total: 10 (9 + 1 en prebatch) contra 9 (8 + 1) = −1', () =>
+        eq(/Diferencia -1 pza piezas -1 pza · prebatch \+0 pza/.test(sq.uno[7]) && /\+ 1 prebatch = 10 total/.test(sq.uno[5]), true, sq.uno[5] + ' | ' + sq.uno[7]));
     /* Pasar del máximo es SOBRE STOCK (en amarillo), no «ideal». */
     test('arriba del máximo, el indicador dice «Sobre stock» (en amarillo)', () => {
         const f = filaDe('squirt'), h = P._s5Indicador(f, 12), h10 = P._s5Indicador(f, 10);
@@ -35266,13 +35272,17 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         P._resumenEjecutivo();
         return eq(/Batch Paloma/.test(vm.runInContext('_resumenAbajo', P)), false);
     });
-    test('…ni su diferencia mueve los faltantes y sobrantes', () => {
-        const tarjeta = () => { const h = P._resumenEjecutivo(); const i = h.search(/(Faltante|Sobrante) \(a carta\)/); return h.slice(i, h.indexOf('Merma del periodo', i)); };
-        const antes = tarjeta();
+    /* El batch no tiene renglón propio en los totales, pero lo que hay en él
+       SÍ es de sus insumos: si en el batch hay el doble, al Squirt le toca 1
+       pza más y su faltante de −1 se vuelve 0 (total contra total). */
+    test('…y lo que hay en el batch se va a sus insumos: con el doble en el batch, el Squirt cuadra', () => {
+        const sqDif = () => { const h = P._step5TablasHTML(); const i = h.indexOf('<div class="s5-nom">Squirt 2 LTS'), r1 = h.lastIndexOf('<tr class="s5-r1">', i);
+            return (texto(h.slice(r1, h.indexOf('</tr>', i))).match(/Diferencia ([+-]?\d+) pza/) || [])[1]; };
+        const antes = sqDif();
         vm.runInContext('filasCaptura.find(f => f.insumoId === "prePal").pesos = ["16"]; _consumoDirty = true;', P);
-        const despues = tarjeta();
+        const despues = sqDif();
         vm.runInContext('filasCaptura.find(f => f.insumoId === "prePal").pesos = ["8"]; _consumoDirty = true;', P);
-        return eq(despues, antes);
+        return eq(antes + ' → ' + despues, '-1 → +0');
     });
     test('el reporte directivo usa la MISMA cuenta de uso y también deja fuera al batch', () => {
         const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
@@ -35290,7 +35300,11 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         vm.runInContext('invActual.prebatchProducidos = { prePal: 4 }; _consumoDirty = true;', P);
         const i = h8.indexOf('<div class="s5-nom">Squirt 2 LTS'), r1 = h8.lastIndexOf('<tr class="s5-r1">', i), r2 = h8.indexOf('</tr>', h8.indexOf('<tr class="s5-r2">', i));
         const x = texto(h8.slice(r1, r2));
-        return eq(/Teórico 8 pza/.test(x) && /Uso en prebatch 2 pza/.test(x) && /Diferencia \+0 pza|Diferencia 0 pza/.test(x), true, x);
+        /* Total contra total: producir pasa Squirt de las piezas al batch. Si en
+           el batch no está lo de 8 batches (solo hay lo de 4), la diferencia lo
+           dice en «prebatch»: piezas 0 · prebatch −1. */
+        return eq(/Teórico 8 pza en piezas \+ 2 prebatch = 10 total/.test(x) && /Uso en prebatch 2 pza/.test(x) &&
+                  /Diferencia -1 pza piezas \+0 pza · prebatch -1 pza/.test(x), true, x);
     });
     /* El batch: lo que se hizo, lo que tomó de cada insumo y lo que hay —sin
        diferencia ni dinero— (Edwin, 19-nov). 4 batches de 2 L con 500 ml de

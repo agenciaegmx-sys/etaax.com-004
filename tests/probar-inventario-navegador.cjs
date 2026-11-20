@@ -1096,8 +1096,12 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await page.waitForTimeout(300);
             const camp = await page.evaluate(() => { const tr = [...document.querySelectorAll('#step5Tablas tr.s5-r1')].find(t => /Campari/.test(t.textContent));
                 return { uno: tr.innerText.replace(/\s+/g, ' '), dos: tr.nextElementSibling.innerText.replace(/\s+/g, ' ') }; });
-            await caso('…y el Campari: 3 bot − 1 al batch = 2 de teórico, 2 contadas → sin diferencia', async () =>
-                assert.match(camp.uno, /TEÓRICO 2\.00 bot en botellas EXIST\. ACTUAL 2\.00 bot[^]*DIFERENCIA \+?0 cop[^]*A CARTA \+\$0\.00/i, camp.uno));
+            /* TOTAL CONTRA TOTAL (21-nov): en botellas cuadra (3 − 1 al batch = 2, y
+               hay 2), pero el batch debía tener 1 bot de Campari (3 batches, sin
+               Negronis capturados) y tiene 0.67 (1 L de mix): faltan 250 ml EN EL
+               PREBATCH, y la diferencia lo dice. */
+            await caso('…y el Campari: total contra total, y la diferencia dice que lo que falta está en el prebatch', async () =>
+                assert.match(camp.uno, /TEÓRICO 2\.00 bot en botellas \+ 1\.00 prebatch = 3\.00 total EXIST\. ACTUAL 2\.00 bot en botellas \+ 0\.67 prebatch = 2\.67 total real[^]*DIFERENCIA -8\.5 cop botellas \+?0 cop · prebatch -8\.5 cop/i, camp.uno));
             await caso('…las dos existencias dicen en botellas, + prebatch y = total real (informativo)', async () =>
                 assert.match(camp.uno, /EXIST\. ACTUAL 2\.00 bot en botellas \+ 0\.67 prebatch = 2\.67 total real/i));
             await caso('…el renglón: límites bajo el nombre, indicador con palabras en las dos existencias, desglose en copas y oz', async () => {
