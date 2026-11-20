@@ -9274,14 +9274,14 @@ function _resumenEjecutivo() {
            es un puente. Ni faltante, ni sobrante, ni «sin usar». */
         var _esPBr = !f.esCompuesto && (_esPrebatchRepartido(f.insumoId) || _esBatchFila(f));
         var _aR = (_esPBr || f.esCompuesto) ? _repZero : _repartoDe(f.insumoId);
-        var cc = costoCopa(f), dif = _esPBr ? 0 : (calcDiferencia(f) + _aR.dif + _enBatches(f.insumoId).dif); // total contra total
+        var cc = costoCopa(f), dif = _esPBr ? 0 : (calcDiferencia(f) + _aR.dif + _difEnBatches(f.insumoId)); // total contra total
         if (f.esCompuesto) {
             // El dinero del compuesto sale de sus miembros, no de la fila agregada.
             var _comp = getCompuestos().find(function(x){ return x.id === f.compId; });
             ((_comp && _comp.miembros) || []).forEach(function(mid){
                 var m = _filaDeMiembro(mid); if (!m) return;
                 var mAj = _repartoDe(m.insumoId);
-                var mDif = calcDiferencia(m) + mAj.dif + _enBatches(m.insumoId).dif, mCc = costoCopa(m);
+                var mDif = calcDiferencia(m) + mAj.dif + _difEnBatches(m.insumoId), mCc = costoCopa(m);
                 /* Un miembro se aparta por su propio renglón o por el de su
                    compuesto: en la tabla se ve dentro del compuesto, así que
                    ocultar el compuesto tiene que llevárselos a todos. */
@@ -9474,7 +9474,7 @@ function renderStep5() {
         if (_esPrebatchRepartido(fila.insumoId) || _esBatchFila(fila)) return;
         // La diferencia de los MIEMBROS se evalúa en su compuesto, no individual.
         if (!mapaC5[fila.insumoId]) {
-            const dif = calcDiferencia(fila) + adj.dif + _enBatches(fila.insumoId).dif;   // total contra total
+            const dif = calcDiferencia(fila) + adj.dif + _difEnBatches(fila.insumoId);   // total contra total
             difCostoTotal += dif * (fila.precioCarta || 0); // diferencia valorada a precio de carta
             difNetoCosto  += dif * cc;                      // faltante/sobrante a COSTO proveedor
             // Alerta con la MISMA métrica que la columna %: dif vs venta neta del periodo
@@ -9488,9 +9488,9 @@ function renderStep5() {
            precio y su costo (como el resumen y el renglón): con el precio de la
            primera, la lista del historial no cuadraba con el resumen. */
         const _mems = _miembrosFila(getCompuestos().find(c => c.id === vf.compId));
-        const dif = calcDiferencia(vf) + _mems.reduce((t, m) => t + _enBatches(m.insumoId).dif, 0);
+        const dif = calcDiferencia(vf) + _mems.reduce((t, m) => t + _difEnBatches(m.insumoId), 0);
         _mems.forEach(m => {
-            const md = calcDiferencia(m) + _repartoDe(m.insumoId).dif + _enBatches(m.insumoId).dif;
+            const md = calcDiferencia(m) + _repartoDe(m.insumoId).dif + _difEnBatches(m.insumoId);
             difCostoTotal += md * (m.precioCarta || 0);
             difNetoCosto  += md * costoCopa(m);
         });
@@ -10663,6 +10663,17 @@ function _usoPeriodo(f, adj) {
     return venta + cort + merma + _prodPBVisible(f, adj); // + lo que se fue al PRODUCIR batches
 }
 function _enBatches(id) { return (!_PREBATCH_REPARTE && _repCache && _repCache.porInsumo && _repCache.porInsumo[id]) || _repZero; }
+/* ══ LA FÓRMULA DE EDWIN (21-nov, decisión suya) ═══════════════════════════
+   Teórico = existencia anterior TOTAL (en botellas + en prebatch) + entradas
+   − venta − coctelería directa − lo producido en prebatch − cortesías y
+   mermas. Existencia = TOTAL REAL (en botellas + en prebatch). Diferencia =
+   total real − teórico. Al teórico no le llega el prebatch del cierre: solo
+   el del arranque (dentro de la anterior).
+   Se le advirtió que lo que se queda dentro del batch cuenta como usado (en
+   lo producido) y como existencia; él lo eligió así. Esta es la parte del
+   prebatch que entra a la diferencia de un insumo: lo que hay al cierre menos
+   lo que había al arrancar. */
+function _difEnBatches(id) { var e = _enBatches(id); return (e.fis || 0) - (e.ea || 0); }
 /* El renglón del Resultado (Edwin, 21-nov): los límites de stock bajo el
    nombre, el indicador en la existencia anterior y, abajo de la existencia
    anterior y de la actual, el desglose en botellas y onzas. */
@@ -11031,7 +11042,7 @@ function _step5TablasArmar(opts) {
         const _enB      = _enBatches(fila.insumoId);
         const teorico   = calcExistenciaTeorica(fila) + adj.teo;
         const fisico    = calcExistencia(fila) + adj.fis;
-        const dif       = (fisico + _enB.fis) - (teorico + _enB.teo);
+        const dif       = (fisico + _enB.fis) - (teorico + _enB.ea);   // la fórmula de Edwin (ver _difEnBatches)
         const difCosto  = dif * (fila.precioCarta || 0);
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctVal    = _pctVarianza(dif, _usoTotal(ventaCopa + ventaBot * copasBot, prodPBver, prodPBmat));
@@ -11061,7 +11072,7 @@ function _step5TablasArmar(opts) {
                 ' embotellado.">↳ ' + _nb(copas / copasBot) + ' bot' + _lt + ' del insumo en batches</div>';
         };
         // Hay algo del insumo en batches (al empezar, en el teórico o al cerrar): las tres lo dicen igual.
-        const _conBat = !_PREBATCH_REPARTE && (Math.abs(_enB.ea) > 0.05 || Math.abs(_enB.fis) > 0.05 || Math.abs(_enB.teo) > 0.05);
+        const _conBat = !_PREBATCH_REPARTE && (Math.abs(_enB.ea) > 0.05 || Math.abs(_enB.fis) > 0.05);
         const _botTxt = (c) => copasBot > 0 ? (Math.round(c / copasBot * 100) / 100).toFixed(2) + ' bot' : _fmtCop(c, fila);
         const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
         /* Lo PRODUCIDO, si el renglón es un batch: para él es una entrada (suma a
@@ -11085,9 +11096,9 @@ function _step5TablasArmar(opts) {
            stock, el costo de lo que entró, el uso en coctelería y en prebatch,
            las cortesías, copas · onzas, el % contra el uso y el dinero a
            proveedor. */
-        const pc       = _s5Pct(dif, _usoTotal(ventaCopa + ventaBot * copasBot, prodPBver, prodPBmat), teorico + _enB.teo);
-        // De dónde sale la diferencia: botellas contra botellas y prebatch contra prebatch.
-        const _difPartes = _conBat ? '<div class="s5-exl">botellas ' + _fmtCopSgn(fisico - teorico, fila) + ' · prebatch ' + _fmtCopSgn(_enB.fis - _enB.teo, fila) + '</div>' : '';
+        const pc       = _s5Pct(dif, _usoTotal(ventaCopa + ventaBot * copasBot, prodPBver, prodPBmat), teorico + _enB.ea);
+        // De dónde sale la diferencia: botellas contra botellas y lo que cambió el prebatch (cierre − arranque).
+        const _difPartes = _conBat ? '<div class="s5-exl">botellas ' + _fmtCopSgn(fisico - teorico, fila) + ' · prebatch ' + _fmtCopSgn(_enB.fis - _enB.ea, fila) + '</div>' : '';
         const coctSolo = Math.max(0, ventaCoct - prodPBmat);        // la coctelería sin lo de los batches
         const _fc      = (v) => _fmtCop(v, fila);
         const html = `<tr class="s5-r1">
@@ -11118,7 +11129,7 @@ function _step5TablasArmar(opts) {
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Venta botella', ventaBot > 0 ? ventaBot + ' bot' : '—')}</td>
                 <td class="s5-vc" style="text-align:center;color:var(--accent)">${_s5c2('Venta copa', ventaCopaDir > 0 ? _fc(ventaCopaDir) : '—')}</td>
                 <td style="text-align:center;color:${merma > 0 ? 'var(--red)' : 'inherit'};font-weight:${merma > 0 ? 600 : 400}">${_s5c2('Mermas', (merma > 0 ? _fc(merma) : '—'))}</td>
-                <td style="text-align:center">${_s5c2('Teórico', _conBat ? _s5ExistHTML(teorico, _enB.teo, true, _botTxt, '', 'en botellas', 'total') : teoBotS)}</td>
+                <td style="text-align:center">${_s5c2('Teórico', _conBat ? _botTxt(teorico + _enB.ea) : teoBotS)}</td>
                 <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', _PREBATCH_REPARTE ? fisBotS + _s5Indicador(fila, fisico) + _dentroBat(adj.fis)
                     : _s5ExistHTML(fisico, _enB.fis, _conBat, _botTxt, _s5Indicador(fila, fisico + _enB.fis)))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', difStr + _difPartes + (eqDif ? _s5sub(eqDif) : ''))}</td>
@@ -11130,7 +11141,7 @@ function _step5TablasArmar(opts) {
                 <td style="text-align:center">${_costoOk ? _s5c2('Costo', entDinero > 0 ? '<b>' + _s5dinero(entDinero).replace('+', '') + '</b>' : '—') : ''}</td>
                 <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}</td>
                 <td style="text-align:center">${_s5c2('Cortesías', (cortesia > 0 ? '<b style="color:var(--viol)">' + _fc(cortesia) + '</b>' : '—'))}</td>
-                <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(teorico, fila) + (_conBat ? _s5sub('total ' + _eqCopOz(teorico + _enB.teo, fila)) : ''))}</td>
+                <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(teorico + (_conBat ? _enB.ea : 0), fila))}</td>
                 <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(fisico, fila) + (_conBat ? _s5sub('total ' + _eqCopOz(fisico + _enB.fis, fila)) : ''))}</td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
                 <td style="text-align:right;color:${color};white-space:nowrap">${_costoOk ? _s5c2('A proveedor', '<b style="color:inherit">' + _s5dinero(dif * costoCopa(fila)) + '</b>') : ''}</td>
@@ -11161,7 +11172,7 @@ function _step5TablasArmar(opts) {
         const _enBP     = _enBatches(fila.insumoId);   // total contra total (ver _rowCopa)
         const teorico   = calcExistenciaTeorica(fila) + adjP.teo;
         const fisico    = calcExistencia(fila) + adjP.fis;
-        const dif       = (fisico + _enBP.fis) - (teorico + _enBP.teo);
+        const dif       = (fisico + _enBP.fis) - (teorico + _enBP.ea);   // la fórmula de Edwin
         const difCosto  = dif * (fila.precioCarta || 0);
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctVal    = _pctVarianza(dif, _usoTotal(ventas, prodPBpVer, prodPBpMat));
@@ -11174,10 +11185,10 @@ function _step5TablasArmar(opts) {
         const cortP     = peso ? 0 : (parseFloat(fila.cortesiaCopas) || 0);
         const entDinP   = entTotal * costoCopa(fila);                       // lo que entró, a costo
         const _prodP    = _prodPrebatchUnidades(fila);
-        const pc        = _s5Pct(dif, _usoTotal(ventas, prodPBpVer, prodPBpMat), teorico + _enBP.teo);
+        const pc        = _s5Pct(dif, _usoTotal(ventas, prodPBpVer, prodPBpMat), teorico + _enBP.ea);
         const coctSoloP = Math.max(0, ventaCoct - prodPBpMat);
         // Lo que hay de este insumo dentro de los batches: informativo, con el total.
-        const _conBatP = !_PREBATCH_REPARTE && (Math.abs(_enBP.ea) > 0.005 || Math.abs(_enBP.fis) > 0.005 || Math.abs(_enBP.teo) > 0.005);
+        const _conBatP = !_PREBATCH_REPARTE && (Math.abs(_enBP.ea) > 0.005 || Math.abs(_enBP.fis) > 0.005);
         const html = `<tr class="s5-r1">
                 <td style="min-width:150px">
                     <div class="s5-nom">${etx(insumoTitulo(fila))}</div>
@@ -11188,10 +11199,10 @@ function _step5TablasArmar(opts) {
                 <td style="text-align:center;color:var(--green)">${_s5c2('Entradas', (entTotal>0?'+'+cant(entTotal):'—') + (_prodP>0?'<div class="s5-mini" style="font-size:9.5px;opacity:.85;white-space:nowrap" title="Capturado en el Paso 3 (producción de prebatch). Para el batch es una entrada.">↳ +'+cant(_prodP)+' producido</div>':''))}</td>
                 <td style="text-align:center;color:var(--accent)">${_s5c2('Ventas', ventasDir>0?cant(ventasDir):'—')}</td>
                 <td style="text-align:center;color:${mermaP>0?'var(--red)':'inherit'};font-weight:${mermaP>0?600:400}">${_s5c2('Mermas', (mermaP>0?cant(mermaP):'—'))}</td>
-                <td style="text-align:center">${_s5c2('Teórico', _s5ExistHTML(teorico, _enBP.teo, _conBatP, cant, '', 'en piezas', 'total'))}</td>
+                <td style="text-align:center">${_s5c2('Teórico', cant(teorico + (_conBatP ? _enBP.ea : 0)))}</td>
                 <td style="text-align:center;font-weight:600">${_s5c2('Exist. actual', _s5ExistHTML(fisico, _enBP.fis, _conBatP, cant, _s5Indicador(fila, fisico + _enBP.fis), 'en piezas'))}</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + cant(dif) +
-                    (_conBatP ? '<div class="s5-exl">piezas ' + ((fisico - teorico) >= 0 ? '+' : '') + cant(fisico - teorico) + ' · prebatch ' + ((_enBP.fis - _enBP.teo) >= 0 ? '+' : '') + cant(_enBP.fis - _enBP.teo) + '</div>' : ''))}</td>
+                    (_conBatP ? '<div class="s5-exl">piezas ' + ((fisico - teorico) >= 0 ? '+' : '') + cant(fisico - teorico) + ' · prebatch ' + ((_enBP.fis - _enBP.ea) >= 0 ? '+' : '') + cant(_enBP.fis - _enBP.ea) + '</div>' : ''))}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>
             </tr>
             <tr class="s5-r2">
@@ -11265,7 +11276,7 @@ function _step5TablasArmar(opts) {
         const fisico    = calcExistencia(vf);
         const teorico   = calcExistenciaTeorica(vf);
         // + lo de cada presentación dentro de los batches (total contra total, ver _rowCopa)
-        const dif       = fisico - teorico + members.reduce((t, m) => t + _enBatches(m.insumoId).dif, 0);
+        const dif       = fisico - teorico + members.reduce((t, m) => t + _difEnBatches(m.insumoId), 0);
         /* ══ EL DINERO DEL COMPUESTO SALE DE SUS MIEMBROS ═════════════════
            Esto valuaba TODA la diferencia al precio de la PRIMERA
            presentación. En «La Brü» eso daba −$190 mientras sus cinco
@@ -11280,7 +11291,7 @@ function _step5TablasArmar(opts) {
            único que no la seguía. */
         const difCosto  = members.reduce(function (t, m) {
             var mAj = _repartoDe(m.insumoId);
-            return t + (calcDiferencia(m) + mAj.dif + _enBatches(m.insumoId).dif) * (m.precioCarta || 0);
+            return t + (calcDiferencia(m) + mAj.dif + _difEnBatches(m.insumoId)) * (m.precioCarta || 0);
         }, 0);
         const pctValC   = _pctVarianza(dif, usoComp);
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
@@ -11314,7 +11325,7 @@ function _step5TablasArmar(opts) {
         const cortC  = members.reduce((t, m) => t + (parseFloat(m.cortesiaCopas) || 0), 0);
         const teoBotC = members.reduce((t, m) => { const cb = _uDe(m).copasBot, v = calcExistenciaTeorica(m); return t + (cb > 0 ? v / cb : v); }, 0);
         const entDinC = members.reduce((t, m) => t + getEntradasCopas(m) * costoCopa(m), 0);
-        const difProvC = members.reduce((t, m) => t + (calcDiferencia(m) + _enBatches(m.insumoId).dif) * costoCopa(m), 0);
+        const difProvC = members.reduce((t, m) => t + (calcDiferencia(m) + _difEnBatches(m.insumoId)) * costoCopa(m), 0);
         const prodC  = members.reduce((t, m) => { try { return t + (_consumoBaseProd(m) || 0); } catch (e) { return t; } }, 0);
         const pcC    = _s5Pct(dif, usoComp, teorico);
         const _grupo = (fn, o) => _equivBarraGrupoHTML(members.map(m => ({ fila: m, cantidad: fn(m) })), Object.assign({ impreso: papel }, o)).replace(/<(\/?)div\b/g, '<$1span');
@@ -11520,7 +11531,7 @@ function _step5DesgloseCard(fila, refMap) {
     var ea       = (parseFloat(fila.existenciaAnterior)||0) + adjG.ea; // copas
     var shG      = (esComp || esPB) ? _repZero : _enBatches(fila.insumoId);   // total contra total
     var fisico   = calcExistencia(fila) + adjG.fis + shG.fis;          // copas
-    var teorico  = calcExistenciaTeorica(fila) + adjG.teo + shG.teo;
+    var teorico  = calcExistenciaTeorica(fila) + adjG.teo + shG.ea;   // la fórmula de Edwin
     var dif      = fisico - teorico;
     var color    = esPB ? 'var(--text-dim)' : (Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)'));
     var difCarta = esPB ? 0 : dif * (fila.precioCarta||0);
@@ -11812,7 +11823,7 @@ function verReporteDirectivo(gerencial, modo) {
         const adjO      = esPBo ? _repZero : _repartoDe(f.insumoId);
         const shO       = esPBo ? _repZero : _enBatches(f.insumoId);   // total contra total
         const fisico    = calcExistencia(f) + adjO.fis + shO.fis;
-        const teorico   = calcExistenciaTeorica(f) + adjO.teo + shO.teo;
+        const teorico   = calcExistenciaTeorica(f) + adjO.teo + shO.ea;   // la fórmula de Edwin
         const dif       = fisico - teorico;
         const cc        = costoCopa(f);
         const difCosto  = esPBo ? 0 : dif * (f.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)

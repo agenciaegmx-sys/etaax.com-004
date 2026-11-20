@@ -1100,8 +1100,11 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                hay 2), pero el batch debía tener 1 bot de Campari (3 batches, sin
                Negronis capturados) y tiene 0.67 (1 L de mix): faltan 250 ml EN EL
                PREBATCH, y la diferencia lo dice. */
-            await caso('…y el Campari: total contra total, y la diferencia dice que lo que falta está en el prebatch', async () =>
-                assert.match(camp.uno, /TEÓRICO 2\.00 bot en botellas \+ 1\.00 prebatch = 3\.00 total EXIST\. ACTUAL 2\.00 bot en botellas \+ 0\.67 prebatch = 2\.67 total real[^]*DIFERENCIA -8\.5 cop botellas \+?0 cop · prebatch -8\.5 cop/i, camp.uno));
+            /* LA FÓRMULA DE EDWIN (21-nov): teórico = anterior total (3 + 0) − 1 al
+               batch = 2; existencia total = 2 + 0.67 en el batch = 2.67 → +0.67 bot
+               (+16.9 cop): botellas 0 · prebatch +16.9. */
+            await caso('…y el Campari con la fórmula de Edwin: teórico 2 contra total real 2.67', async () =>
+                assert.match(camp.uno, /TEÓRICO 2\.00 bot EXIST\. ACTUAL 2\.00 bot en botellas \+ 0\.67 prebatch = 2\.67 total real[^]*DIFERENCIA \+16\.9 cop botellas \+?0 cop · prebatch \+16\.9 cop/i, camp.uno));
             await caso('…las dos existencias dicen en botellas, + prebatch y = total real (informativo)', async () =>
                 assert.match(camp.uno, /EXIST\. ACTUAL 2\.00 bot en botellas \+ 0\.67 prebatch = 2\.67 total real/i));
             await caso('…el renglón: límites bajo el nombre, indicador con palabras en las dos existencias, desglose en copas y oz', async () => {

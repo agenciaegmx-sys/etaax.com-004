@@ -22818,7 +22818,7 @@ console.log('\n══ BH44 · Un solo capital ══');
         const i = src.indexOf('// El batch no tiene diferencia propia (es un puente)');
         const b = src.slice(i, i + 500);
         return eq(b.indexOf('if (_esPrebatchRepartido(fila.insumoId) || _esBatchFila(fila)) return;') > -1 &&
-                  b.indexOf('_enBatches(fila.insumoId).dif') > -1, true, 'cada lente en lo suyo');
+                  b.indexOf('_difEnBatches(fila.insumoId)') > -1, true, 'cada lente en lo suyo');
     });
 
     /* ── EL REPORTE DE EXISTENCIAS, LOS DOS BUGS DE SU IMPRESO ── */
@@ -35231,7 +35231,7 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     test('líneas entre columnas, menos entre venta botella y venta copa', () =>
         eq(/tr\.s5-r1>td\+td,.*border-left:1px/.test(h) + '|' + /td class="s5-vc"/.test(h), 'true|true'));
     test('Teórico, Exist. actual y Diferencia, cada uno en su columna', () =>
-        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza en piezas + 1 prebatch = 10 total | Exist. actual 8 pza en piezas + 1 prebatch = 9 total real ' + sq.uno[6].match(/Stock \w+/)[0] + ' | Diferencia -1 pza piezas -1 pza · prebatch +0 pza'));
+        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza en piezas + 1 prebatch = 9 total real ' + sq.uno[6].match(/Stock \w+/)[0] + ' | Diferencia +0 pza piezas -1 pza · prebatch +1 pza'));
     /* La parte del Squirt dentro del batch (8 L de Paloma, 500 ml de Squirt por
        cada 2 L = 2 L = 1 pza) se ENSEÑA con el total, pero no entra a la
        diferencia: producir ya se la descontó (regla del 21-nov). */
@@ -35239,16 +35239,21 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
        haber en prebatch (4 batches × 500 ml = 1 pza, sin cocteles que se lo
        llevaran) y a la existencia lo que HAY (1 pza). La diferencia dice de
        dónde sale: piezas −1 · prebatch 0. Nada se cuenta dos veces. */
-    test('el resultado es total contra total: 10 (9 + 1 en prebatch) contra 9 (8 + 1) = −1', () =>
-        eq(/Diferencia -1 pza piezas -1 pza · prebatch \+0 pza/.test(sq.uno[7]) && /\+ 1 prebatch = 10 total/.test(sq.uno[5]), true, sq.uno[5] + ' | ' + sq.uno[7]));
+    /* LA FÓRMULA DE EDWIN (21-nov, decisión suya): teórico = anterior TOTAL
+       (10 en piezas + 0 en prebatch) − 1 que se fue al batch = 9, sin desglose
+       de prebatch; existencia = TOTAL REAL (8 + 1 en el batch) = 9 → 0. Abajo,
+       de dónde sale: piezas −1 · prebatch +1 (lo que creció el batch). */
+    test('la fórmula de Edwin: teórico 9 (anterior total − lo producido) contra total real 9 = 0', () =>
+        eq(/Diferencia \+0 pza piezas -1 pza · prebatch \+1 pza/.test(sq.uno[7]) && sq.uno[5], 'Teórico 9 pza', sq.uno[5] + ' | ' + sq.uno[7]));
     /* Pasar del máximo es SOBRE STOCK (en amarillo), no «ideal». */
     test('arriba del máximo, el indicador dice «Sobre stock» (en amarillo)', () => {
         const f = filaDe('squirt'), h = P._s5Indicador(f, 12), h10 = P._s5Indicador(f, 10);
         return eq(/Sobre stock/.test(h) + '|' + /--s5-amarillo/.test(h) + '|' + /Stock ideal/.test(h10), 'true|true|true', h + ' // ' + h10);
     });
-    test('…y abajo de la diferencia, su % contra el uso (−1 de 1 usada)', () => eq(sq.dos[7], '% del uso -100.0%'));
+    // El vodka sigue con faltante: −10 copas de 5 vendidas = −200 %; a carta 10 × $80, a proveedor 10 × $15.
+    test('…y abajo de la diferencia, su % contra el uso (vodka: −10 de 5 vendidas)', () => eq(pb.dos[7], '% del uso -200.0%'));
     test('Dif. $: a precio carta arriba, a proveedor abajo', () =>
-        eq(sq.uno[8] + ' | ' + sq.dos[8], 'A carta −$60.00 | A proveedor −$36.00'));
+        eq(pb.uno[9] + ' | ' + pb.dos[8], 'A carta −$800.00 | A proveedor −$150.00'));
     test('abajo del teórico y de la existencia actual, también su desglose en copas y onzas', () =>
         eq(/^Desglose \d+\.\d cop · \d+\.\d oz$/.test(pb.dos[5]) + '·' + pb.dos[6], 'true·Desglose 15.0 cop · 25.4 oz', pb.dos[5] + ' | ' + pb.dos[6]));
     test('la diferencia va en copas, así que su desglose es SOLO botellas y onzas', () =>
@@ -35282,7 +35287,7 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         vm.runInContext('filasCaptura.find(f => f.insumoId === "prePal").pesos = ["16"]; _consumoDirty = true;', P);
         const despues = sqDif();
         vm.runInContext('filasCaptura.find(f => f.insumoId === "prePal").pesos = ["8"]; _consumoDirty = true;', P);
-        return eq(antes + ' → ' + despues, '-1 → +0');
+        return eq(antes + ' → ' + despues, '+0 → +1');
     });
     test('el reporte directivo usa la MISMA cuenta de uso y también deja fuera al batch', () => {
         const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
@@ -35303,8 +35308,9 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         /* Total contra total: producir pasa Squirt de las piezas al batch. Si en
            el batch no está lo de 8 batches (solo hay lo de 4), la diferencia lo
            dice en «prebatch»: piezas 0 · prebatch −1. */
-        return eq(/Teórico 8 pza en piezas \+ 2 prebatch = 10 total/.test(x) && /Uso en prebatch 2 pza/.test(x) &&
-                  /Diferencia -1 pza piezas \+0 pza · prebatch -1 pza/.test(x), true, x);
+        // Fórmula de Edwin: teórico 8 (10 − 2 al batch); existencia 8 + 1 en el batch = 9 → +1.
+        return eq(/Teórico 8 pza Exist/.test(x) && /Uso en prebatch 2 pza/.test(x) &&
+                  /Diferencia \+1 pza piezas \+0 pza · prebatch \+1 pza/.test(x), true, x);
     });
     /* El batch: lo que se hizo, lo que tomó de cada insumo y lo que hay —sin
        diferencia ni dinero— (Edwin, 19-nov). 4 batches de 2 L con 500 ml de
