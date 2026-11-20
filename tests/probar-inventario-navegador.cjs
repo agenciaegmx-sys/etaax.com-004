@@ -1097,12 +1097,12 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             const camp = await page.evaluate(() => { const tr = [...document.querySelectorAll('#step5Tablas tr.s5-r1')].find(t => /Campari/.test(t.textContent));
                 return { uno: tr.innerText.replace(/\s+/g, ' '), dos: tr.nextElementSibling.innerText.replace(/\s+/g, ' ') }; });
             await caso('…y el Campari: 3 bot − 1 al batch = 2 de teórico, 2 contadas → sin diferencia', async () =>
-                assert.match(camp.uno, /TEÓRICO 2\.00 bot EXIST\. ACTUAL 2\.00 bot[^]*DIFERENCIA \+?0 cop[^]*A CARTA \+\$0\.00/i, camp.uno));
-            await caso('…lo que hay en el batch se enseña junto a su existencia, con el total (informativo)', async () =>
-                assert.match(camp.uno, /↳ \+0\.7 bot en batches total 2\.7 bot/));
+                assert.match(camp.uno, /TEÓRICO 2\.00 bot en botellas EXIST\. ACTUAL 2\.00 bot[^]*DIFERENCIA \+?0 cop[^]*A CARTA \+\$0\.00/i, camp.uno));
+            await caso('…las dos existencias dicen en botellas, + prebatch y = total real (informativo)', async () =>
+                assert.match(camp.uno, /EXIST\. ACTUAL 2\.00 bot en botellas \+ 0\.67 prebatch = 2\.67 total real/i));
             await caso('…el renglón: límites bajo el nombre, indicador con palabras en las dos existencias, desglose en copas y oz', async () => {
-                assert.match(camp.uno, /Campari Licores · 750 ml · copa de [\d.]+ ml Stock mín\. 1 · máx\. 3 bot EXIST\. ANTERIOR 3\.0 bot Stock (bajo|medio|ideal)/i);
-                assert.match(camp.uno, /EXIST\. ACTUAL 2\.00 bot Stock (bajo|medio|ideal)/i);
+                assert.match(camp.uno, /Campari Licores · 750 ml · copa de [\d.]+ ml Stock mín\. 1 · máx\. 3 bot EXIST\. ANTERIOR 3\.00 bot en botellas \+ 0\.00 prebatch = 3\.00 total real (Stock (bajo|medio|ideal)|Sobre stock)/i);
+                assert.match(camp.uno, /= 2\.67 total real (Stock (bajo|medio|ideal)|Sobre stock)/i);
                 assert.match(camp.dos, /DESGLOSE [\d.]+ cop · [\d.]+ oz[^]*USO EN PREBATCH 25\.4 cop[^]*DESGLOSE [\d.]+ cop · [\d.]+ oz[^]*DESGLOSE [\d.]+ cop · [\d.]+ oz/i);
             });
             await page.evaluate(() => verReporteDirectivo(false)); await page.waitForTimeout(1500);

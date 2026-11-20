@@ -22111,7 +22111,7 @@ console.log('\n══ BH38 · Decir en qué unidad, y de dónde sale ══');
        al agregarle una línea. Un candado que depende de cuánto texto hay antes
        protege el tamaño, no la conducta. */
     const _dentroSrc = (() => {
-        const i = src.indexOf('const _dentroBat = (copas, total) => {');
+        const i = src.indexOf('const _dentroBat = (copas) => {');
         const fin = src.indexOf('\n        };', i);
         return src.slice(i, fin > 0 ? fin : i + 1200);
     })();
@@ -22132,9 +22132,11 @@ console.log('\n══ BH38 · Decir en qué unidad, y de dónde sale ══');
     /* 21-nov (Edwin): en el modelo de consumo la parte del insumo dentro de
        los batches es INFORMATIVA —sirve para saber cuánto hay en total— y no
        entra a la diferencia (producir ya se la descontó). */
-    test('…y en el modelo de consumo es informativa, con el total', () =>
-        eq(/_dentroBat\(_enB\.ea, ea \+ _enB\.ea\)/.test(src) && /_dentroBat\(_enB\.fis, fisico \+ _enB\.fis\)/.test(src) &&
-           _dentroSrc.indexOf("en batches<br>total ") > -1 && _dentroSrc.indexOf('No entra a la diferencia') > -1, true, 'informativo'));
+    test('…y en el modelo de consumo las DOS existencias lo dicen igual: en botellas, + prebatch, = total real', () => {
+        const f = src.slice(src.indexOf('function _s5ExistHTML('), src.indexOf('function _s5Stock('));
+        return eq(/_s5ExistHTML\(ea, _enB\.ea, _conBat/.test(src) && /_s5ExistHTML\(fisico, _enB\.fis, _conBat/.test(src) &&
+                  /en botellas/.test(f) && /prebatch/.test(f) && /total real/.test(f), true, 'informativo');
+    });
     test('…y no se pinta cuando no hay nada dentro de un batch', () =>
         eq(/if \(!\(Math\.abs\(copas\) > 0\.05\)/.test(_dentroSrc), true, 'solo cuando aplica'));
     /* Y explica POR QUÉ, no solo cuánto: el que mira un faltante necesita
@@ -30528,7 +30530,8 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
        separan, el dueño tiene dos hojas del mismo día que no coinciden y
        ninguna de las dos sirve para nada. */
     test('el neto del reporte cuadra con el del resumen ejecutivo', () => {
-        const k = /(?:Sobrante|Faltante) neto a carta<\/div>[\s\S]{0,160}?([+−])\$([\d,]+)/.exec(RES);
+        // 21-nov: la tarjeta dice el neto a precio carta (primero) y a precio proveedor.
+        const k = /(?:Sobrante neto|Faltante neto|Diferencia neta) — sobrante − faltante<\/div>[\s\S]{0,260}?([+−])\$([\d,]+)/.exec(RES);
         const b = bloqueFS(H);
         const fila = b.slice(b.indexOf('>Neto<'));
         const cel = [...fila.matchAll(/([+−])\$([\d,]+\.\d\d)/g)];
@@ -30538,6 +30541,8 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
     /* Y la hoja tiene que cuadrar CONSIGO MISMA: el total de la lista se suma
        renglón por renglón al pintarla, y el del resumen del pie viene del
        mismo recorrido que alimenta al resumen ejecutivo. Son dos cuentas. */
+    test('…y la tarjeta del neto trae también la cifra a precio proveedor', () =>
+        eq(/a precio de carta<\/div><\/div>\s*<div><div class="rd-kv"[^>]*>[+−]\$[\d,]+<\/div><div class="rd-ks">a precio proveedor/.test(RES), true, 'las dos'));
     test('el total de cada lista cuadra con su renglón del resumen al pie', () => {
         const b = bloqueFS(H);
         const tot = /TOTAL FALTANTE[\s\S]*?\$([\d,]+\.\d\d)/.exec(b);
@@ -35175,6 +35180,7 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     /* El batch ya no sigue esta estructura (19-nov): es una ficha informativa,
        ver BH42. El ejemplo de copa es un vodka. */
     const sq = par('Squirt 2 LTS'), sp = par('Sprite 2 LTS'), pb = par('Vodka Absolut');
+    const filaDe = (id) => vm.runInContext('filasCaptura.find(f => f.insumoId === "' + id + '")', P);
     test('cada producto sale en DOS renglones (el batch no: es ficha informativa)', () =>
         eq((h.match(/class="s5-r1"/g) || []).length + '·' + (h.match(/class="s5-r2"/g) || []).length, '3·3'));
     test('…con las MISMAS columnas los dos (9 en piezas, 10 en copas)', () =>
@@ -35202,9 +35208,9 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
        existencia trae el suyo (cómo arrancó / cómo quedó); abajo, «Desglose»
        en copas y onzas; la diferencia, que ya va en copas, en botellas y onzas. */
     test('…y en la existencia anterior, SOLO el indicador, con sus palabras', () =>
-        eq(/^Exist\. anterior 10 pza Stock (bajo|medio|ideal)$/.test(sq.uno[1]) + '|' + /Mín\./.test(sq.uno[1]), 'true|false', sq.uno[1]));
+        eq(/^Exist\. anterior 10 pza en piezas \+ 0 prebatch = 10 total real (Stock (bajo|medio|ideal)|Sobre stock)$/.test(sq.uno[1]) + '|' + /Mín\./.test(sq.uno[1]), 'true|false', sq.uno[1]));
     test('…y la existencia actual trae el suyo (8 de mín. 2 · máx. 10)', () =>
-        eq(/^Exist\. actual 8 pza Stock (bajo|medio|ideal)/.test(sq.uno[6]), true, sq.uno[6]));
+        eq(/^Exist\. actual 8 pza en piezas \+ 1 prebatch = 9 total real Stock (bajo|medio|ideal)$/.test(sq.uno[6]), true, sq.uno[6]));
     test('…y abajo de la existencia anterior, su desglose en copas y onzas (30 copas de 50 ml)', () =>
         eq(pb.dos[1], 'Desglose 30.0 cop · 50.7 oz'));
     test('…sin repetir la existencia', () => eq(/Disponible/.test(sq.dos[1] + sp.dos[1]), false));
@@ -35223,12 +35229,17 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
     test('líneas entre columnas, menos entre venta botella y venta copa', () =>
         eq(/tr\.s5-r1>td\+td,.*border-left:1px/.test(h) + '|' + /td class="s5-vc"/.test(h), 'true|true'));
     test('Teórico, Exist. actual y Diferencia, cada uno en su columna', () =>
-        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza | Exist. actual 8 pza ' + sq.uno[6].match(/Stock \w+/)[0] + ' ↳ +1 pza en batches total 9 pza | Diferencia -1 pza'));
+        eq([sq.uno[5], sq.uno[6], sq.uno[7]].join(' | '), 'Teórico 9 pza en piezas | Exist. actual 8 pza en piezas + 1 prebatch = 9 total real ' + sq.uno[6].match(/Stock \w+/)[0] + ' | Diferencia -1 pza'));
     /* La parte del Squirt dentro del batch (8 L de Paloma, 500 ml de Squirt por
        cada 2 L = 2 L = 1 pza) se ENSEÑA con el total, pero no entra a la
        diferencia: producir ya se la descontó (regla del 21-nov). */
     test('lo que hay del insumo dentro de los batches es informativo: no mueve la diferencia', () =>
-        eq(/Diferencia -1 pza/.test(sq.uno[7]) && /en batches total 9 pza/.test(sq.uno[6]), true, sq.uno[6] + ' | ' + sq.uno[7]));
+        eq(/Diferencia -1 pza/.test(sq.uno[7]) && /\+ 1 prebatch = 9 total real/.test(sq.uno[6]), true, sq.uno[6] + ' | ' + sq.uno[7]));
+    /* Pasar del máximo es SOBRE STOCK (en amarillo), no «ideal». */
+    test('arriba del máximo, el indicador dice «Sobre stock» (en amarillo)', () => {
+        const f = filaDe('squirt'), h = P._s5Indicador(f, 12), h10 = P._s5Indicador(f, 10);
+        return eq(/Sobre stock/.test(h) + '|' + /--s5-amarillo/.test(h) + '|' + /Stock ideal/.test(h10), 'true|true|true', h + ' // ' + h10);
+    });
     test('…y abajo de la diferencia, su % contra el uso (−1 de 1 usada)', () => eq(sq.dos[7], '% del uso -100.0%'));
     test('Dif. $: a precio carta arriba, a proveedor abajo', () =>
         eq(sq.uno[8] + ' | ' + sq.dos[8], 'A carta −$60.00 | A proveedor −$36.00'));
@@ -35241,7 +35252,6 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
        fue al producir batches = uso a precio proveedor. Un batch es un puente:
        sin uso ni resultado propios. La pantalla y el reporte piden la misma
        función (_usoPeriodo). */
-    const filaDe = (id) => vm.runInContext('filasCaptura.find(f => f.insumoId === "' + id + '")', P);
     test('el uso del Squirt es lo que se fue al producir: 4 batches × 500 ml = 1 pza', () => eq(P._usoPeriodo(filaDe('squirt')), 1));
     test('…el de la Sprite, su merma y su cortesía (2 pza)', () => eq(P._usoPeriodo(filaDe('sprite')), 2));
     test('…el del vodka, sus 5 copas vendidas', () => eq(P._usoPeriodo(filaDe('vodka')), 5));
