@@ -370,6 +370,23 @@ body.etx-modulos-ui :is(.cf-hero-title,.dx-hero-title,#moduloLanding .cf-hero-ti
 body.etx-modulos-ui :is(.cf-hero-title,.dx-hero-title,#moduloLanding .cf-hero-title) .g {color:var(--etx-ui-terra);}
 body.etx-modulos-ui .cf-section-hdr {flex-wrap:wrap;min-width:0;}
 body.etx-modulos-ui .cf-section-title {font-family:inherit;font-size:20px;font-weight:600;letter-spacing:-.3px;line-height:1.35;}
+/* ══ LA PORTADA DE UN MÓDULO, COMPACTA EN TABLET (Edwin, 21-nov) ═════════════
+   En un monitor grande el título respira; en una tablet (1280 px) se comía
+   media pantalla: ~235 px entre la tarjeta del negocio y el primer acceso
+   (en Administrativo el título iba en dos renglones). Aquí: título de un
+   renglón, subtítulo pegado y secciones con menos aire. El `#moduloLanding`
+   entra a propósito: la portada de Recetas trae sus reglas con id. */
+@media (max-width:1440px) {
+  body.etx-modulos-ui :is(.cf-hero,#moduloLanding .cf-hero) {padding:0 0 16px!important;max-width:none!important;}
+  /* «Control<br>Administrativo», «Salud<br>Financiera»: en tablet, un renglón. */
+  body.etx-modulos-ui .cf-hero-title br {display:none;}
+  body.etx-modulos-ui .cf-hero-title br + .g {margin-left:.3em;}
+  body.etx-modulos-ui :is(.cf-hero-eyebrow,#moduloLanding .cf-hero-eyebrow) {margin-bottom:2px!important;}
+  body.etx-modulos-ui :is(.cf-hero-title,#moduloLanding .cf-hero-title) {font-size:clamp(22px,2.4vw,30px)!important;margin-bottom:2px!important;}
+  body.etx-modulos-ui :is(.cf-hero-sub,#moduloLanding .cf-hero-sub) {font-size:12px!important;line-height:1.45!important;}
+  body.etx-modulos-ui :is(.cf-modules,#moduloLanding .cf-modules) {gap:18px!important;}
+  body.etx-modulos-ui :is(.cf-section-hdr,#moduloLanding .cf-section-hdr) {margin-bottom:10px!important;padding-bottom:6px!important;}
+}
 body.etx-modulos-ui :is(.ck-wrap,.ev-wrap) {margin-top:var(--etx-context-h,128px);padding-top:24px;}
 /* EL TÍTULO DE CADA HERRAMIENTA, igual que el de las portadas: mayúsculas, el
    nombre en crema y el final en terracota. Iba entero en el acento, y a ese

@@ -10914,6 +10914,14 @@ function _avisoEnlacesHTML() {
    marcado «fuera del impreso»), sin botones, colores de papel y, en el
    gerencial (sinCostos), sin el costo de las entradas ni la diferencia a
    proveedor. */
+/* La diferencia de un renglón tal como la pinta la tabla (fórmula de Edwin):
+   para elegir faltantes y sobrantes con el MISMO número que se ve. */
+function _difFilaS5(f) { return calcDiferencia(f) + _repartoDe(f.insumoId).dif + _difEnBatches(f.insumoId); }
+function _difCompS5(vf) {
+    var c = getCompuestos().find(function (x) { return x.id === vf.compId; });
+    return calcDiferencia(vf) + _miembrosFila(c).reduce(function (t, m) { return t + _difEnBatches(m.insumoId); }, 0);
+}
+function _pasaSignoS5(d, signo) { return signo === 'falta' ? d < -0.05 : signo === 'sobra' ? d > 0.05 : true; }
 function _step5TablasHTML(opts) {
     var _antes = _s5ModoPapel;
     _s5ModoPapel = !!(opts && opts.papel);
@@ -10926,7 +10934,7 @@ function _step5TablasArmar(opts) {
     const mapaC5 = _compDeInsumo();
     _repCache    = _repartoPrebatch(); // reparto prebatch→insumos (fresco por render)
     const vcomps = _compuestosActivos().map(_virtualFilaCompuesto)
-        .filter(vf => papel ? !esOcultoImpreso(vf.compId || vf.insumoId) : _pasaSeleccionS5(vf));
+        .filter(vf => papel ? (!esOcultoImpreso(vf.compId || vf.insumoId) && (!opts.dif || _pasaSignoS5(_difCompS5(vf), opts.dif))) : _pasaSeleccionS5(vf));
     if (!papel && _step5Modo === 'galeria') return _step5GaleriaHTML(q, mapaC5, vcomps);
 
     // 5.5 · 2.4 · 3 — un decimal cuando hace falta, entero cuando no. El módulo
@@ -10942,7 +10950,11 @@ function _step5TablasArmar(opts) {
     filasCaptura.forEach(f => {
         if (mapaC5[f.insumoId]) return;                 // miembro de compuesto → sale en su compuesto
         if (_esPrebatchRepartido(f.insumoId)) return;   // prebatch → Producción propia
-        if (papel) { if (esOcultoImpreso(f.insumoId)) return; }
+        if (papel) {
+            if (esOcultoImpreso(f.insumoId)) return;
+            // Faltantes / sobrantes del reporte: por el signo de SU diferencia; el batch no tiene.
+            if (opts.dif && (_esBatchFila(f) || !_pasaSignoS5(_difFilaS5(f), opts.dif))) return;
+        }
         else {
             if (q && !(f.nombre||'').toLowerCase().includes(q)) return;
             if (_subcatStep5 && (f.subcategoria||f.categoria) !== _subcatStep5) return;
@@ -11154,7 +11166,8 @@ function _step5TablasArmar(opts) {
         const adjP      = _repartoDe(fila.insumoId);
         const peso      = fila.tipo === 'peso';
         const unidad    = peso ? fila.baseUnit || 'G' : 'PZA';
-        const cant      = v => _fmtEquivalenteBatch(v, unidad);
+        // Dos decimales a la vista: la parte en prebatch da fracciones largas («4.1664 pza»).
+        const cant      = v => _fmtEquivalenteBatch(Math.round((parseFloat(v) || 0) * 100) / 100, unidad);
         /* EA y entradas con su parte del batch, igual que el teórico y el físico de
            abajo. Sin sumarlas, un refresco que además vive dentro de una sub-receta
            enseñaba una existencia anterior más chica que la que su propio teórico
@@ -11493,7 +11506,7 @@ function _step5TablasArmar(opts) {
     }
 
     // Papel: los bloques sueltos, para que el paginador los reparta por hoja.
-    if (papel) return _estiloS5() + _estiloS5Papel() + (cards || '<div style="font-size:10px;color:#888;padding:8px 0">Sin productos.</div>');
+    if (papel) return _estiloS5() + _estiloS5Papel() + (cards || '<div style="font-size:10px;color:#888;padding:8px 0">' + (opts.vacio || 'Sin productos.') + '</div>');
     const sinDatos = !cards && !prodCard
         ? '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos capturados</div>'
         : '';
@@ -11935,7 +11948,14 @@ function verReporteDirectivo(gerencial, modo) {
     const pctActD = capStockMax>0?Math.round(capitalCosto/capStockMax*100):0;
 
     // Rankings y grupos
-    const top10      = [...analisis].sort((a, b) => b.consumo - a.consumo).slice(0, 10).filter(a => a.consumo > 0);
+    /* TOP 10 MÁS VENDIDOS (Edwin, 21-nov): sin porcentajes —confundían—, solo
+       cuánto se vendió y cuánto representa a precio proveedor y a precio carta.
+       Se ordena por lo vendido a carta (a proveedor si no tiene precio de
+       carta): copas, piezas y gramos no se comparan entre sí; el dinero sí. */
+    const _vendU = a => a.f.tipo === 'pza' ? (a.ventaPzaTot || 0) : (a.ventaCopa || 0) + (a.ventaBot || 0) * (a.copasBot || 0);
+    const top10 = analisis.filter(a => !a.esPB && _vendU(a) > 0.001)
+        .map(a => { const v = _vendU(a); return { a, vend: v, prov: v * a.cc, carta: v * (a.f.precioCarta || 0) }; })
+        .sort((x, y) => (y.carta || y.prov) - (x.carta || x.prov)).slice(0, 10);
     const estancados = analisis.filter(a => a.consumo === 0 && a.fisico > 0 && !a.esPB); // prebatch repartido no es "estancado": su consumo vive en sus insumos
     const alertasCrit= analisis.filter(a => !a.esBateo && a.varPct < -25).sort((a, b) => a.varPct - b.varPct);
     const alertasSob = analisis.filter(a => !a.esBateo && a.varPct > 25).sort((a, b) => b.varPct - a.varPct);
@@ -12320,12 +12340,9 @@ function verReporteDirectivo(gerencial, modo) {
             '<table class="rd-t"><thead><tr><th>Insumo</th><th class="tc">Entrada</th><th class="tc">Fecha</th><th>Origen / nota</th><th class="tr">Total insumo</th></tr></thead><tbody>' + rows + '</tbody></table>';
     })();
 
-    const movimientosHTML = `
-      <div class="rd-sec">Movimientos especiales del período</div>
-      ${_cancels.length ? `<div class="rd-grp">${_movTit('🚫 Cancelaciones POS · informativo — '+_cancels.length)}
-        <table class="rd-t"><thead><tr><th>Fecha / Hora</th><th>Producto</th><th class="tc">Cant.</th><th>Autorizó</th><th>Motivo</th><th>Mesero</th></tr></thead>
-          <tbody>${_cancels.map(c=>`<tr><td style="white-space:nowrap;color:#888">${etx(c.fechaHora||'—')}</td><td style="font-weight:500">${etx(c.nombreProducto||'—')}</td><td class="tc" style="font-weight:700">${c.cantidad||'—'}</td><td>${etx(c.autorizo||c.responsable||'—')}</td><td style="color:#888">${etx(c.motivo||'—')}</td><td style="color:#888">${etx(c.mesero||'—')}</td></tr>`).join('')}</tbody></table></div>`
-        : _movTit('🚫 Cancelaciones POS · informativo — 0')+_movVacio}
+    /* Mermas y cortesías, y aparte las cancelaciones (van con los descuentos). */
+    const _mermasCortesiasHTML = `
+      <div class="rd-sec">Mermas y cortesías del período</div>
       ${_mermados.length ? `<div class="rd-grp">${_movTit('🗑️ Productos mermados — '+_mermados.length)}
         <table class="rd-t"><thead><tr><th>Producto</th><th class="tc">Grupo</th><th class="tc">Merma</th><th>Motivo</th><th class="tr">Valor (carta)</th></tr></thead>
           <tbody>${_mermados.map(a=>`<tr><td style="font-weight:600">${etx(a.f.nombre)}</td><td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td><td class="tc" style="color:${cCrit};font-weight:700">${a.merma.toFixed(1)} ${_uMC(a)}</td><td style="color:#888">${etx(a.f.mermaConcepto||'—')}</td><td class="tr" style="font-weight:600">$${_m2(a.merma*(a.f.precioCarta||0))}</td></tr>`).join('')}</tbody></table></div>`
@@ -12334,11 +12351,16 @@ function verReporteDirectivo(gerencial, modo) {
         <table class="rd-t"><thead><tr><th>Producto</th><th class="tc">Grupo</th><th class="tc">Cantidad</th><th>Motivo</th><th class="tr">Valor (carta)</th></tr></thead>
           <tbody>${_cortesias.map(a=>`<tr><td style="font-weight:600">${etx(a.f.nombre)}</td><td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td><td class="tc" style="color:#7d5fa3;font-weight:700">${a.cortesia.toFixed(1)} ${_uMC(a)}</td><td style="color:#888">${etx(a.f.cortesiaConcepto||'—')}</td><td class="tr" style="font-weight:600">$${_m2(a.cortesia*(a.f.precioCarta||0))}</td></tr>`).join('')}</tbody></table></div>`
         : _movTit('🎁 Cortesías — 0')+_movVacio}`;
+    const _cancelacionesHTML = `
+      ${_cancels.length ? `<div class="rd-grp">${_movTit('🚫 Cancelaciones POS · informativo — '+_cancels.length)}
+        <table class="rd-t"><thead><tr><th>Fecha / Hora</th><th>Producto</th><th class="tc">Cant.</th><th>Autorizó</th><th>Motivo</th><th>Mesero</th></tr></thead>
+          <tbody>${_cancels.map(c=>`<tr><td style="white-space:nowrap;color:#888">${etx(c.fechaHora||'—')}</td><td style="font-weight:500">${etx(c.nombreProducto||'—')}</td><td class="tc" style="font-weight:700">${c.cantidad||'—'}</td><td>${etx(c.autorizo||c.responsable||'—')}</td><td style="color:#888">${etx(c.motivo||'—')}</td><td style="color:#888">${etx(c.mesero||'—')}</td></tr>`).join('')}</tbody></table></div>`
+        : _movTit('🚫 Cancelaciones POS · informativo — 0')+_movVacio}`;
     // Descuentos: van al final del inventario (no es movimiento de producto).
     const _descuentosHTML = `${(!ger && (invActual.descuentos || []).length > 0) ? `
-      <div class="rd-sec">Descuentos del período — Total: <span style="color:${cCrit}">$${_m2(totalDesc)}</span></div>
+      <div class="rd-grp">${_movTit('💸 Descuentos del período — Total: $' + _m2(totalDesc))}
       <table class="rd-t"><thead><tr><th>Fecha / Hora</th><th class="tc">%</th><th class="tr">Monto $</th><th>Folio</th><th>Motivo</th><th>Autorizó</th></tr></thead>
-        <tbody>${(invActual.descuentos || []).map(d => `<tr><td style="white-space:nowrap;color:#888">${d.fechaHora||'—'}</td><td class="tc">${d.porcentaje != null ? d.porcentaje + '%' : '—'}</td><td class="tr" style="color:${cCrit};font-weight:700">$${_m2((parseFloat(d.monto)||0))}</td><td>${etx(d.folio||'—')}</td><td style="color:#888">${etx(d.motivo||'—')}</td><td>${etx(d.autorizo||'—')}</td></tr>`).join('')}</tbody></table>` : ''}`;
+        <tbody>${(invActual.descuentos || []).map(d => `<tr><td style="white-space:nowrap;color:#888">${d.fechaHora||'—'}</td><td class="tc">${d.porcentaje != null ? d.porcentaje + '%' : '—'}</td><td class="tr" style="color:${cCrit};font-weight:700">$${_m2((parseFloat(d.monto)||0))}</td><td>${etx(d.folio||'—')}</td><td style="color:#888">${etx(d.motivo||'—')}</td><td>${etx(d.autorizo||'—')}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
     // Inventario completo: todos los grupos (bateo primero). El encabezado grande se repite por
     // hoja automáticamente porque TODO el reporte va dentro de una tabla con <thead> (ver abajo).
     const inventarioHTML = `
@@ -12558,100 +12580,91 @@ function verReporteDirectivo(gerencial, modo) {
   <div class="rd-kgrid" style="grid-template-columns:repeat(${cards.length},1fr);margin-bottom:8px">${cards.join('')}</div>` : '';
   })()}
 
-  <!-- Semáforo de control -->
-  <div class="rd-sec">Control de inventario — ${totalProds} insumos inventariados</div>
-  <div class="rd-sem">
-    <div class="rd-sem-blk">
-      <div class="rd-sem-n" style="color:${cOk}">${conOk}</div>
-      <div class="rd-sem-l">🟢 OK<br>&lt;10% var.</div>
-    </div>
-    <div class="rd-sem-blk">
-      <div class="rd-sem-n" style="color:${cWarn}">${conRiesgo}</div>
-      <div class="rd-sem-l">🟡 Riesgo<br>10–25%</div>
-    </div>
-    <div class="rd-sem-blk">
-      <div class="rd-sem-n" style="color:${cCrit}">${conAlerta}</div>
-      <div class="rd-sem-l">🔴 Crítico<br>&gt;25%</div>
-    </div>
-    <div class="rd-bar">
-      ${totalProds > 0 ? `
-      <div style="width:${(conOk/totalProds*100).toFixed(1)}%;background:${cOk};height:100%"></div>
-      <div style="width:${(conRiesgo/totalProds*100).toFixed(1)}%;background:${cWarn};height:100%"></div>
-      <div style="width:${(conAlerta/totalProds*100).toFixed(1)}%;background:${cCrit};height:100%"></div>
-      ` : ''}
-    </div>
-    <div style="text-align:right;white-space:nowrap">
-      <div style="font-size:22px;font-weight:900;color:${pctControl >= 80 ? cOk : pctControl >= 60 ? cWarn : cCrit}">${pctControl.toFixed(0)}%</div>
-      <div style="font-size:9px;color:#aaa">bajo control<br><span style="color:#bbb">${totalProds} productos</span></div>
-    </div>
-  </div>
-
-  <!-- Recomendaciones -->
-  <div class="rd-sec">Acciones recomendadas para dirección</div>
-  ${recos.map(r => `<div class="rda rda-${r.t}">${r.ico} ${r.txt}</div>`).join('')}
-
-  <div class="rd-break"></div>
-  <!-- Desglose del semáforo: CRÍTICOS (faltante / sobrante > 25%) -->
-  <div class="rd-sec" style="color:${cCrit};border-color:${cCrit}">🔴 Estado crítico — varianza mayor a 25% (${alertasCrit.length + alertasSob.length} insumos · acción inmediata)</div>
-  <div style="font-size:9.5px;color:#888;margin:-4px 0 8px">Faltante = hay <strong>menos</strong> de lo esperado (posible merma, derrame, robo o error de captura). Sobrante = hay <strong>de más</strong> (posible entrada no registrada o existencia anterior mal capturada).</div>
-  <div style="font-size:10px;font-weight:700;color:${cCrit};margin:4px 0 3px">🔻 Faltantes (${alertasCrit.length})</div>
-  ${_rdTablaVar(alertasCrit)}
-  <div style="font-size:10px;font-weight:700;color:${cWarn};margin:6px 0 3px">🔺 Sobrantes (${alertasSob.length})</div>
-  ${_rdTablaVar(alertasSob)}
-
-  <!-- Desglose del semáforo: EN RIESGO (10–25%) -->
-  <div class="rd-sec" style="color:${cWarn};border-color:${cWarn}">🟡 En riesgo — varianza entre 10% y 25% (${riesgos.length} insumos · vigilar)</div>
-  ${_rdTablaVar(riesgos)}
-
-  <div class="rd-break"></div>
-  <!-- Desglose del semáforo: SIN MOVIMIENTO -->
-  ${estancados.length > 0 ? `
-  <div class="rd-sec">🔵 Sin movimiento (${estancados.length}) — sin ventas en el período · evaluar sobre-stock o baja demanda</div>
-  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">
-    ${estancados.map(a => `<span style="font-size:10px;background:#f5f5f0;border:1px solid #e0e0d8;border-radius:4px;padding:2px 8px;color:#666">${etx(a.f.nombre)}</span>`).join('')}
-  </div>` : ''}
+  <!-- ══ EL REPORTE DIRECTIVO, EN EL ORDEN DE EDWIN (21-nov) ═══════════════
+       Sin semáforo (era consumo y no se entendía). Primero el top 10, luego
+       las dos listas que importan —faltantes y sobrantes— con la misma vista
+       del desglose por insumo, y entre ellas sus totales EN DINERO (a precio
+       carta y a precio proveedor: copas, piezas y gramos no se suman).
+       Después mermas y cortesías, insumos sin movimiento, cancelaciones y
+       descuentos, y al final las entradas. En el gerencial no va lo que es a
+       precio proveedor. -->
 
   <!-- Top 10 más vendidos -->
-  <div class="rd-sec">Top 10 productos — mayor movimiento en el período</div>
+  <div class="rd-sec">Top 10 más vendidos del período</div>
   ${top10.length ? `
   <table class="rd-t">
     <thead><tr>
       <th style="width:20px">#</th>
       <th>Producto</th>
-      <th class="tc">Venta copa</th>
-      <th class="tc">Venta bot.</th>
-      <th class="tc">Cortesía</th>
-      <th class="tc">Merma</th>
-      <th class="tc">Cancelac.<br><small>Informativo</small></th>
-      <th class="tc" title="Excluye cancelaciones POS">Total consumo</th>
-      <th class="tr">% consumo</th>
+      <th class="tc">Vendido</th>
+      ${ger ? '' : '<th class="tr">A precio proveedor</th>'}
+      <th class="tr">A precio carta</th>
     </tr></thead>
     <tbody>
-      ${top10.map((a, i) => {
-        const u    = a.f.tipo === 'pza' ? 'pza' : 'cop';
-        const pcc  = a.pctConsumo;
-        const pcol = pcc >= 70 ? cOk : pcc >= 30 ? '#555' : cWarn;
+      ${top10.map((t, i) => {
+        const a = t.a, u = a.f.tipo === 'pza' ? 'pza' : a.f.tipo === 'peso' ? (a.f.baseUnit || 'g').toLowerCase() : 'cop';
+        const n1 = v => (Math.round(v * 10) / 10).toLocaleString('es-MX');
+        const bot = a.f.tipo === 'copa' && a.copasBot > 1 ? ' <span style="color:#888;font-weight:400">· ' + (t.vend / a.copasBot).toFixed(2) + ' bot</span>' : '';
         return `<tr>
           <td><span class="rd-rank">${i+1}</span></td>
           <td style="font-weight:600">${etx(a.f.nombre)}<br><span style="font-size:9px;color:#aaa;font-weight:400">${etx(a.f.categoria||'')}</span></td>
-          <td class="tc">${a.f.tipo==='pza' ? (a.ventaPzaTot>0?a.ventaPzaTot.toFixed(0)+' p':'—') : (a.ventaCopa > 0 ? a.ventaCopa.toFixed(1)+' c' : '—')}</td>
-          <td class="tc">${a.f.tipo==='pza' ? '—' : (a.ventaBot > 0 ? a.ventaBot+' b' : '—')}</td>
-          <td class="tc" style="color:${a.cortesia>0?'#7d5fa3':'#ccc'}">${a.cortesia > 0 ? a.cortesia.toFixed(1) : '—'}</td>
-          <td class="tc" style="color:${a.merma>0?cWarn:'#ccc'}">${a.merma > 0 ? a.merma.toFixed(1) : '—'}</td>
-          <td class="tc" style="color:${a.cancel>0?cCrit:'#ccc'}">${a.cancel > 0 ? a.cancel.toFixed(1) : '—'}</td>
-          <td class="tc" style="font-weight:700">${a.consumo.toFixed(1)} ${u}</td>
-          <td class="tr" style="color:${pcol};font-weight:700">${pcc.toFixed(0)}%</td>
+          <td class="tc" style="font-weight:700">${n1(t.vend)} ${u}${bot}</td>
+          ${ger ? '' : `<td class="tr">$${_m2(t.prov)}</td>`}
+          <td class="tr" style="font-weight:700;color:${cOk}">$${_m2(t.carta)}</td>
         </tr>`;
       }).join('')}
     </tbody>
-  </table>
-  <div style="font-size:9px;color:#aaa;margin-top:5px">% consumo = total consumido ÷ (existencia anterior + entradas). &gt;70% alta rotación · &lt;30% baja rotación.</div>
-  ` : '<div style="font-size:11px;color:#aaa;padding:8px 0">Sin ventas registradas en el período.</div>'}
+  </table>` : '<div style="font-size:11px;color:#aaa;padding:8px 0">Sin ventas registradas en el período.</div>'}
 
+  <!-- Faltantes -->
   <div class="rd-break"></div>
-  ${movimientosHTML}
-  ${_entradasPorInsumoHTML}
+  <div class="rd-sec" style="color:${cCrit};border-bottom-color:${cCrit}">▼ Faltantes del período — lo que no apareció</div>
+  <div style="font-size:11px;color:#1a1916;margin:-4px 0 8px">Total faltante: <b style="color:${cCrit}">−$${_m2(faltCarta)}</b> a precio carta${ger ? '' : ` · <b style="color:${cCrit}">−$${_m2(faltCosto)}</b> a precio proveedor`}</div>
+  ${_step5TablasHTML({ papel: true, sinCostos: ger, dif: 'falta', vacio: 'Sin faltantes en el período.' })}
+
+  <!-- Los totales, en dinero -->
+  <div class="rd-kgrid" style="grid-template-columns:${ger ? '1fr' : '1fr 1fr'};margin:12px 0 4px">
+    <div class="rd-kpi">
+      <div class="rd-kl">A precio carta</div>
+      <div style="display:flex;gap:22px;align-items:flex-end;flex-wrap:wrap">
+        <div><div class="rd-kv" style="color:${cCrit}">−$${_m0(faltCarta)}</div><div class="rd-ks">faltante</div></div>
+        <div><div class="rd-kv" style="color:${cOk}">+$${_m0(sobrCarta)}</div><div class="rd-ks">sobrante</div></div>
+        <div><div class="rd-kv" style="color:${netCarta>=0?cOk:cCrit}">${netCarta>=0?'+':'−'}$${_m0(Math.abs(netCarta))}</div><div class="rd-ks">neto</div></div>
+      </div>
+    </div>
+    ${ger ? '' : `<div class="rd-kpi">
+      <div class="rd-kl">A precio proveedor</div>
+      <div style="display:flex;gap:22px;align-items:flex-end;flex-wrap:wrap">
+        <div><div class="rd-kv" style="color:${cCrit}">−$${_m0(faltCosto)}</div><div class="rd-ks">faltante</div></div>
+        <div><div class="rd-kv" style="color:${cOk}">+$${_m0(sobrCosto)}</div><div class="rd-ks">sobrante</div></div>
+        <div><div class="rd-kv" style="color:${netCosto>=0?cOk:cCrit}">${netCosto>=0?'+':'−'}$${_m0(Math.abs(netCosto))}</div><div class="rd-ks">neto</div></div>
+      </div>
+    </div>`}
+  </div>
+
+  <!-- Sobrantes -->
+  <div class="rd-sec" style="color:${cOk};border-bottom-color:${cOk}">▲ Sobrantes del período — lo que apareció de más</div>
+  <div style="font-size:11px;color:#1a1916;margin:-4px 0 8px">Total sobrante: <b style="color:${cOk}">+$${_m2(sobrCarta)}</b> a precio carta${ger ? '' : ` · <b style="color:${cOk}">+$${_m2(sobrCosto)}</b> a precio proveedor`}</div>
+  ${_step5TablasHTML({ papel: true, sinCostos: ger, dif: 'sobra', vacio: 'Sin sobrantes en el período.' })}
+
+  <!-- Mermas y cortesías -->
+  <div class="rd-break"></div>
+  ${_mermasCortesiasHTML}
+
+  <!-- Insumos sin movimiento -->
+  ${estancados.length > 0 ? `
+  <div class="rd-sec">Insumos sin movimiento (${estancados.length}) — sin uso en el período</div>
+  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">
+    ${estancados.map(a => `<span style="font-size:10px;background:#f5f5f0;border:1px solid #e0e0d8;border-radius:4px;padding:2px 8px;color:#666">${etx(a.f.nombre)}</span>`).join('')}
+  </div>` : ''}
+
+  <!-- Cancelaciones y descuentos -->
+  <div class="rd-sec">Cancelaciones y descuentos</div>
+  ${_cancelacionesHTML}
   ${_descuentosHTML}
+
+  <!-- Entradas -->
+  ${_entradasPorInsumoHTML}
 
   <div class="rd-break"></div>
   ${inventarioHTML}

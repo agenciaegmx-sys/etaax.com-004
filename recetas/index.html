@@ -32,7 +32,7 @@
         html.embed .header button[onclick*="eliminarRecetaActual"] { display:none !important; }
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1c48ab27">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=e08f9762">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 <link rel="stylesheet" href="/recetas/recetas-ui.css?v=e483f18f">
 </head>
@@ -462,14 +462,11 @@
         </div>
         <div class="cf-modules">
 
-            <!-- ══ Costeo ══ -->
-            <div class="cf-section">
-                <div class="cf-section-hdr">
-                    <span class="cf-section-tag">Costeo</span>
-                    <div class="cf-section-title">Recetas</div>
-                    <div class="cf-section-desc">Escandallos con costeo automático y control de márgenes.</div>
-                </div>
-                <div class="cf-grid cf-grid-1">
+            <!-- ══ Recetas e insumos, en 2 × 2 (Edwin, 21-nov): Escandallos e Insumos
+                 arriba, Inventarios y Requisiciones abajo. Las tres de abastecimiento
+                 llevan `cf-abasto`: el modo «catálogo global de recetas» las esconde. -->
+            <div class="cf-section" id="secRecetasInsumos">
+                <div class="cf-grid cf-grid-2">
                     <a href="#" onclick="entrarEscandallos();return false" class="cf-card highlight">
                         <div class="cf-card-hdr">
                             <div class="cf-card-icon">📋</div>
@@ -479,18 +476,7 @@
                         <div class="cf-card-desc">Recetas de cocina y bar con costeo automático, precio sugerido y aplicado, y semáforo de rentabilidad.</div>
                         <div class="cf-card-cta">Abrir →</div>
                     </a>
-                </div>
-            </div>
-
-            <!-- ══ Abastecimiento ══ -->
-            <div class="cf-section" id="secAbastecimiento">
-                <div class="cf-section-hdr">
-                    <span class="cf-section-tag">Abastecimiento</span>
-                    <div class="cf-section-title">Insumos y Compras</div>
-                    <div class="cf-section-desc">Catálogo de materias primas, existencias y pedidos internos.</div>
-                </div>
-                <div class="cf-grid cf-grid-3">
-                    <a href="insumos.html" class="cf-card">
+                    <a href="insumos.html" class="cf-card cf-abasto">
                         <div class="cf-card-hdr">
                             <div class="cf-card-icon">🗄️</div>
                             <span class="cf-badge-active">Activo</span>
@@ -499,7 +485,7 @@
                         <div class="cf-card-desc">Catálogo de materias primas con presentaciones, costos por proveedor y costeo de bebidas.</div>
                         <div class="cf-card-cta">Abrir →</div>
                     </a>
-                    <a href="inventarios.html" class="cf-card">
+                    <a href="inventarios.html" class="cf-card cf-abasto">
                         <div class="cf-card-hdr">
                             <div class="cf-card-icon">📦</div>
                             <span class="cf-badge-active">Activo</span>
@@ -508,7 +494,7 @@
                         <div class="cf-card-desc">Control de existencias por área: entradas, salidas y movimientos con reporte ejecutivo.</div>
                         <div class="cf-card-cta">Abrir →</div>
                     </a>
-                    <a href="requisiciones.html" class="cf-card">
+                    <a href="requisiciones.html" class="cf-card cf-abasto">
                         <div class="cf-card-hdr">
                             <div class="cf-card-icon">📝</div>
                             <span class="cf-badge-active">Activo</span>
@@ -1030,7 +1016,7 @@ function toggleNav() {
 // Modo "catálogo global de recetas": deja SOLO recetas (oculta insumos/inventarios/requisiciones)
 // y abre directo la vista con buscador. Es data global del negocio; cada sucursal usa solo las suyas.
 function _aplicarModoCatalogoGlobalRecetas(){
-    var sec=document.getElementById('secAbastecimiento'); if(sec) sec.style.display='none';
+    document.querySelectorAll('#moduloLanding .cf-abasto').forEach(function(c){ c.style.display='none'; });
     ['insumos.html','inventarios.html','requisiciones.html'].forEach(function(h){
         var a=document.querySelector('#nav a[href="'+h+'"]'); if(a){ var s2=a.closest('.nav-section'); (s2||a).style.display='none'; }
     });

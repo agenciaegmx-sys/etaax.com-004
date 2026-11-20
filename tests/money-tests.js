@@ -22392,7 +22392,7 @@ console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
         const a = src.indexOf('function _step5TablasArmar(');
         const bloque = src.slice(a, src.indexOf('\n    // 5.5 · 2.4 · 3', a));
         const usos = bloque.split('esOcultoImpreso').length - 1;
-        const enPapel = (bloque.match(/papel \? !esOcultoImpreso|if \(papel\) \{ if \(esOcultoImpreso/g) || []).length;
+        const enPapel = (bloque.match(/papel \? \(?!esOcultoImpreso|if \(papel\) \{\s*if \(esOcultoImpreso/g) || []).length;
         return eq(usos > 0 && usos === enPapel, true, 'solo el impreso');
     });
     test('…y el botón dice en cuál de los dos estados está', () => {
@@ -30543,6 +30543,36 @@ console.log('\n══ BH57 · Faltantes y sobrantes: dos listas, una hoja ══
     /* Y la hoja tiene que cuadrar CONSIGO MISMA: el total de la lista se suma
        renglón por renglón al pintarla, y el del resumen del pie viene del
        mismo recorrido que alimenta al resumen ejecutivo. Son dos cuentas. */
+    /* ══ EL REPORTE DIRECTIVO REDISEÑADO (Edwin, 21-nov) ══
+       Sin semáforo; en este orden: top 10 (sin %), faltantes, los totales en
+       dinero, sobrantes, mermas y cortesías, sin movimiento, cancelaciones y
+       descuentos y al final las entradas. Faltantes y sobrantes con la misma
+       vista del desglose por insumo. */
+    const RESUMEN = RES.slice(0, RES.indexOf('Inventario completo por grupo de categoría'));
+    test('el reporte directivo ya no trae el semáforo', () =>
+        eq(/Control de inventario —|Acciones recomendadas|Estado crítico|En riesgo —/.test(RESUMEN), false));
+    test('…y va en el orden pedido: top 10, faltantes, totales, sobrantes, mermas y cortesías, cancelaciones y descuentos', () => {
+        const pos = ['Top 10 más vendidos', 'Faltantes del período', '<div class="rd-kl">A precio carta</div>', 'Sobrantes del período',
+                     'Mermas y cortesías del período', 'Cancelaciones y descuentos'].map(x => RESUMEN.indexOf(x));
+        return eq(pos.every((p, i) => p > -1 && (i === 0 || p > pos[i - 1])), true, pos.join(','));
+    });
+    test('…el top 10 sin porcentajes, con lo vendido a proveedor y a carta', () => {
+        const top = RESUMEN.slice(RESUMEN.indexOf('Top 10 más vendidos'), RESUMEN.indexOf('Faltantes del período'));
+        return eq(/%/.test(top.replace(/<[^>]+>/g, '')) + '|' + /A precio proveedor/.test(top) + '|' + /A precio carta/.test(top), 'false|true|true');
+    });
+    test('…faltantes y sobrantes con la vista del desglose (dos renglones por producto)', () => {
+        const f = RESUMEN.slice(RESUMEN.indexOf('Faltantes del período'), RESUMEN.indexOf('Sobrantes del período'));
+        return eq(/class="s5-tabla s5-papel"/.test(f) && /class="s5-r2/.test(f), true);
+    });
+    test('…y cada producto en la lista que le toca: la Cerveza sobró, solo sale en sobrantes', () => {
+        const f = RESUMEN.slice(RESUMEN.indexOf('Faltantes del período'), RESUMEN.indexOf('Sobrantes del período'));
+        const s = RESUMEN.slice(RESUMEN.indexOf('Sobrantes del período'), RESUMEN.indexOf('Mermas y cortesías del período'));
+        return eq(/s5-nom">Cerveza/.test(f) + '|' + /s5-nom">Cerveza/.test(s) + '|' + /s5-nom">Ron barato/.test(f), 'false|true|true');
+    });
+    test('…y entre las dos listas, los totales en dinero (carta y proveedor), no en copas', () => {
+        const k = RESUMEN.slice(RESUMEN.indexOf('<div class="rd-kl">A precio carta</div>'), RESUMEN.indexOf('Sobrantes del período'));
+        return eq(/A precio proveedor/.test(k) && /faltante/.test(k) && /sobrante/.test(k) && /neto/.test(k) && !/\d cop\b|\d pza\b/.test(k.replace(/<[^>]+>/g, ' ')), true);
+    });
     test('…y la tarjeta del neto trae también la cifra a precio proveedor', () =>
         eq(/a precio de carta<\/div><\/div>\s*<div><div class="rd-kv"[^>]*>[+−]\$[\d,]+<\/div><div class="rd-ks">a precio proveedor/.test(RES), true, 'las dos'));
     test('el total de cada lista cuadra con su renglón del resumen al pie', () => {

@@ -82,7 +82,9 @@ module.exports=function({test,eq,crearContexto,cargarJS,setVar}){
         eq(html.includes('s5-papel'),true,'en versión de papel');
         eq(grupo.includes('1.50 bot · 39.7 oz · 26.1 cp'),true);eq(grupo.includes('+0.05 bot · +1.5 oz'),true);
         // Las presentaciones: sus propios dos renglones, abiertos en papel.
-        eq((html.match(/<tr class="s5-r1 s5-mem compDesg-centenario">/g)||[]).length,2,'las dos presentaciones');
+        // En el desglose (desde «Inventario completo»; el resumen también lo trae en faltantes/sobrantes).
+        const des=html.slice(html.indexOf('Inventario completo por grupo de categoría'));
+        eq((des.match(/<tr class="s5-r1 s5-mem compDesg-centenario">/g)||[]).length,2,'las dos presentaciones');
         eq(/Exist\. actual\s*<\/span>\s*0\.50 bot/.test(html.replace(/<span class="s5-l">/g,'<span>'))||html.includes('0.50 bot'),true);
         eq(/var\(--|cursor:help|title=/.test(C._equivBarraGrupoHTML(fis(filas),{impreso:true})),false);
     });
