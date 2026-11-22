@@ -184,7 +184,11 @@ async function abrir(browser, reloj, opc) {
             const p = path.join(RAIZ, decodeURIComponent(url.pathname));
             if (p.startsWith(RAIZ) && fs.existsSync(p) && fs.statSync(p).isFile())
                 return route.fulfill({ status:200, body:fs.readFileSync(p),
-                    headers:{ 'content-type': TIPOS[path.extname(p)] || 'application/octet-stream' } });
+                    headers: Object.assign({ 'content-type': TIPOS[path.extname(p)] || 'application/octet-stream' },
+                        /* `csp`: la MISMA política de seguridad de producción (netlify.toml)
+                           en las páginas. Sin ella, algo que el navegador bloquea en
+                           etaax.com —como eval— funciona aquí y la prueba miente. */
+                        (opc.csp && path.extname(p) === '.html') ? { 'content-security-policy': opc.csp } : {}) });
             return route.fulfill({ status:404, body:'' });
         }
         if (/supabase-js/.test(url.href))
@@ -212,4 +216,10 @@ async function pestana(ctx, opc) {
 }
 
 
-module.exports = { RAIZ, ORIGEN, chromium, sdkFalso, STAFF, semilla, abrir, pestana };
+/* La CSP de producción, leída de netlify.toml (una sola verdad). */
+function cspProduccion() {
+    const t = fs.readFileSync(path.join(RAIZ, 'netlify.toml'), 'utf8');
+    const m = /Content-Security-Policy = """([\s\S]*?)"""/.exec(t);
+    return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+}
+module.exports = { RAIZ, ORIGEN, chromium, sdkFalso, STAFF, semilla, abrir, pestana, cspProduccion };

@@ -1023,13 +1023,32 @@ function _aPiezas(v, ins, modo){
 function setUmCnt(m){ _UM_CNT = m; _pintarSelEmpaque('cntEmpaque', CNT_SEL, _UM_CNT, 'setUmCnt'); }
 function setUmEnt(m){ _UM_ENT = m; _pintarSelEmpaque('entEmpaque', SEL, _UM_ENT, 'setUmEnt'); }
 
-/* Mismo evaluador que las celdas del sistema: "3*24+5" es como se cuenta de verdad. */
+/* Mismo evaluador que las celdas del sistema: "3*24+5" es como se cuenta de verdad.
+   SIN eval (22-nov): con Function() la política de seguridad de etaax.com (CSP sin
+   'unsafe-eval') lo bloqueaba y toda operación se descartaba. Es la gemela de
+   _evalExpr de recetas/inventarios.js (una prueba las compara: si cambias una,
+   cambia la otra). */
+function _evalExprCnt(t){
+    var i = 0;
+    function ws(){ while (t.charAt(i) === ' ') i++; }
+    function num(){ ws(); var m = /^(\d+\.?\d*|\.\d+)/.exec(t.slice(i)); if (!m) throw 0; i += m[0].length; return parseFloat(m[0]); }
+    function factor(){ ws(); var c = t.charAt(i);
+        if (c === '+'){ i++; return factor(); } if (c === '-'){ i++; return -factor(); }
+        if (c === '('){ i++; var v = expr(); ws(); if (t.charAt(i) !== ')') throw 0; i++; return v; }
+        return num(); }
+    function term(){ var v = factor(); for(;;){ ws(); var c = t.charAt(i);
+        if (c === '*'){ i++; v *= factor(); } else if (c === '/'){ i++; var d = factor(); if (!d) throw 0; v /= d; } else return v; } }
+    function expr(){ var v = term(); for(;;){ ws(); var c = t.charAt(i);
+        if (c === '+'){ i++; v += term(); } else if (c === '-'){ i++; v -= term(); } else return v; } }
+    var v = expr(); ws(); if (i !== t.length) throw 0; return v;
+}
 function _evalCnt(txt){
-    var t = String(txt==null?'':txt).trim();
+    var t = String(txt==null?'':txt).trim().replace(/^=/, '').replace(/[x×X]/g, '*').replace(/÷/g, '/').trim();
     if (!t) return '';
-    if (/^-?\d*\.?\d*$/.test(t)) return parseFloat(t);
+    if (t.indexOf(',') >= 0 && t.indexOf('.') < 0 && /^[0-9+\-*/(), ]+$/.test(t)) t = t.replace(/,/g, '.');
+    if (/^-?\d*\.?\d*$/.test(t)) { var n = parseFloat(t); return isFinite(n) ? n : ''; }
     if (!/^[0-9+\-*/(). ]+$/.test(t) || /[+\-*/]{2,}/.test(t)) return '';
-    try { var v = Function('"use strict";return ('+t+')')(); return (typeof v==='number'&&isFinite(v)) ? Math.round(v*10000)/10000 : ''; }
+    try { var v = _evalExprCnt(t); return (typeof v==='number'&&isFinite(v)) ? Math.round(v*10000)/10000 : ''; }
     catch(e){ return ''; }
 }
 async function enviarConteo(){

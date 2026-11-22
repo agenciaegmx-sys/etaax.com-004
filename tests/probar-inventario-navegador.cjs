@@ -1119,6 +1119,70 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await ctx.close();
         }
+
+        /* ── S · celdas como Excel y las botellas que hagan falta (22-nov) ──────
+           CON LA CSP DE PRODUCCIÓN: las operaciones se resolvían con Function() y
+           etaax.com lo bloquea (sin 'unsafe-eval'). Aquí: «2+3+1» guarda 6 y se
+           queda escrito, «+»/«−» para el teclado de la tablet, «+ Agregar
+           botella», una nueva al llenar la última, y «0.944+0.543» en una casilla
+           se separa en dos botellas (a cada una su cristal). */
+        console.log('\n══ S · Celdas como Excel y botellas abiertas (con la CSP de producción) ══');
+        {
+            const { cspProduccion } = require('./navegador-comun.cjs');
+            const csp = cspProduccion();
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { csp, nube: { negocio_insumos: filasNube(destilados(3)) }, viewport: { width: 1280, height: 800 } }));
+            const violaciones = [];
+            page.on('console', m => { if (/Content Security Policy|EvalError/i.test(m.text())) violaciones.push(m.text()); });
+            await nuevoInv(page);
+            await page.waitForTimeout(600);
+            await page.click('#p1Pend .p12-item'); await page.waitForTimeout(300);
+            await caso('la página corre con la CSP de producción: eval bloqueado, como en etaax.com', async () => {
+                assert.ok(csp.indexOf("script-src 'self'") > -1 && csp.indexOf('unsafe-eval') === -1, csp);
+                // Desde un evento REAL de la página (page.evaluate se salta la CSP).
+                await page.evaluate(() => { const i = document.createElement('input'); i.id = 'pruebaCsp'; document.body.appendChild(i);
+                    i.setAttribute('onblur', "this.dataset.r = (function(){ try { return String(Function('return 1')()); } catch (e) { return 'BLOQUEADO'; } })();"); });
+                await page.focus('#pruebaCsp'); await page.keyboard.press('Tab'); await page.waitForTimeout(100);   // salida REAL del campo
+                assert.equal(await page.evaluate(() => { const i = document.getElementById('pruebaCsp'); const r = i.dataset.r; i.remove(); return r; }), 'BLOQUEADO');
+            });
+            await page.fill('#existCardWrap input[id^="cb-"]', '2+3+1');
+            await page.keyboard.press('Enter'); await page.waitForTimeout(200);
+            await caso('«2+3+1» en cerradas de bodega guarda 6 y la operación se queda escrita, con «= 6» abajo', async () => {
+                const r = await page.evaluate(() => { const i = document.querySelector('#existCardWrap input[id^="cb-"]'), f = filasCaptura.find(x => x.insumoId === _existInsumoId);
+                    return { guardado: f.cerradasBodega, fx: f.fx && f.fx.cerradasBodega, casilla: i.value, res: document.querySelector('#existCardWrap .fx-res').textContent.trim(), rojo: i.classList.contains('calc-err') }; });
+                assert.deepEqual([Number(r.guardado), r.fx, r.casilla, r.res, r.rojo], [6, '2+3+1', '2+3+1', '= 6', false], JSON.stringify(r));
+            });
+            await caso('los botones «+» y «−» escriben el operador en la casilla (el teclado de la tablet no los trae)', async () => {
+                await page.click('#existCardWrap input[id^="cba-"]');
+                await page.keyboard.type('4');
+                await page.dispatchEvent('#existCardWrap .calc-celda:nth-of-type(1) .calc-op', 'pointerdown').catch(() => {});
+                const r = await page.evaluate(() => { const i = document.querySelector('#existCardWrap input[id^="cba-"]'); _celdaOp(i.id, '+'); i.value += '2'; _celdaOp(i.id, '-'); i.value += '1'; return i.value; });
+                assert.equal(r, '4+2-1');
+                await page.keyboard.press('Enter'); await page.waitForTimeout(200);
+                assert.equal(await page.evaluate(() => Number(filasCaptura.find(x => x.insumoId === _existInsumoId).cerradasBarra)), 5);
+            });
+            await caso('«+ Agregar botella» suma casillas (B5, B6…)', async () => {
+                await page.click('#existCardWrap .inv-peso-add'); await page.waitForTimeout(150);
+                await page.click('#existCardWrap .inv-peso-add'); await page.waitForTimeout(150);
+                assert.equal(await page.evaluate(() => document.querySelectorAll('#existCardWrap .inv-peso-input').length), 6);
+            });
+            await caso('…y al llenar la última aparece otra vacía', async () => {
+                const ult = await page.evaluate(() => document.querySelectorAll('#existCardWrap .inv-peso-input').length - 1);
+                await page.fill('#existCardWrap .inv-peso-cell:nth-child(' + (ult + 1) + ') input', '0.9');
+                await page.keyboard.press('Enter'); await page.waitForTimeout(200);
+                assert.equal(await page.evaluate(() => document.querySelectorAll('#existCardWrap .inv-peso-input').length), 7);
+            });
+            await caso('«0.944+0.543» en una casilla se separa en dos botellas y el líquido les resta su cristal a cada una', async () => {
+                await page.evaluate(() => { const f = filasCaptura.find(x => x.insumoId === _existInsumoId); f.pesoCristal = 400; });
+                await page.fill('#existCardWrap .inv-peso-cell:nth-child(1) input', '0.944+0.543');
+                await page.keyboard.press('Enter'); await page.waitForTimeout(300);
+                const r = await page.evaluate(() => { const f = filasCaptura.find(x => x.insumoId === _existInsumoId);
+                    return { p: f.pesos.slice(0, 2).join('|'), casillas: [...document.querySelectorAll('#existCardWrap .inv-peso-input')].slice(0, 2).map(i => i.value).join('|'), ml: Math.round(calcNetLiters(f) * 1000) }; });
+                // (0.944 − 0.4) + (0.543 − 0.4) + (0.9 − 0.4) = 1.187 L
+                assert.deepEqual([r.p, r.casillas, r.ml], ['0.944|0.543', '0.944|0.543', 1187], JSON.stringify(r));
+            });
+            await caso('…y ninguna violación de la CSP en el camino', async () => assert.deepEqual(violaciones, []));
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }

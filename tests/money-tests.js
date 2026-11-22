@@ -1233,6 +1233,51 @@ test('celda incompleta se marca en rojo', () => eq(_celda('5+').err, true));
 test('celda con texto "abc" no toca el modelo', () => eq(_celda('abc').guardado, '__intacto__'));
 test('celda "-" suelto no escribe NaN', () => eq(_celda('-').value, '-'));
 test('celda vacía guarda vacío, no cero', () => eq(_celda('').value, ''));
+/* ══ SIN eval (22-nov) ══ La CSP de etaax.com no permite 'unsafe-eval': con
+   Function() toda operación salía en rojo EN PRODUCCIÓN (en el preview, sin
+   CSP, sí funcionaba). Se simula bloqueando Function y las celdas siguen. */
+test('celdas: las operaciones funcionan aunque la CSP bloquee eval/Function', () => {
+    const r = vm.runInContext(`(function(){ var F = Function; Function = function(){ throw new EvalError('CSP'); };
+        try { return [_evalCelda('2+3+1'), _evalCelda('3*24+5'), _evalCelda('(2+3)*4'), _evalCelda('0,5+0,25'), _evalCelda('=4+1'), _evalCelda('2x3'), _evalCelda('10÷4'), _evalCelda('5+')].join('|'); }
+        finally { Function = F; } })()`, B);
+    return eq(r, '6|77|20|0.75|5|6|2.5|');
+});
+test('celdas: ni las del inventario ni la del celular (entrada.html) usan eval', () => {
+    const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const cuerpo = (src, n) => { const i = src.indexOf('function ' + n + '('); return src.slice(i, src.indexOf('\n}', i)); };
+    return eq(/Function\(/.test(cuerpo(inv, '_evalCelda') + cuerpo(inv, '_evalExpr')) + '|' + /Function\(/.test(cuerpo(ent, '_evalCnt') + cuerpo(ent, '_evalExprCnt')), 'false|false');
+});
+test('celdas: el calculador del celular da lo mismo que el del inventario', () => {
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const i = ent.indexOf('function _evalExprCnt('), j = ent.indexOf('async function enviarConteo');
+    const C = vm.createContext({}); vm.runInContext(ent.slice(i, j), C);
+    const casos = ['2+3+1', '3*24+5', '144/12', '(2+3)*4', '3,5', '2,5*4', '7-2-1', '5+', 'abc', ''];
+    const a = casos.map(x => { const v = B._evalCelda(x); return v === null ? '' : v; }).join('|');
+    const b = casos.map(x => C._evalCnt(x)).join('|');
+    return eq(b, a);
+});
+/* COMO UNA CELDA DE EXCEL: la operación se queda escrita; el número va al modelo. */
+test('celdas: «2+3+1» en cerradas guarda 6 y conserva la operación para verla y corregirla', () => {
+    const f = Object.assign({}, filaCopa, { insumoId: 'xls', cerradasBodega: '', fx: undefined });
+    setVar(B, 'filasCaptura', [f]);
+    const el = { value: '2+3+1', title: '', classList: { c: new Set(), add(x){this.c.add(x);}, remove(x){this.c.delete(x);}, has(x){return this.c.has(x);} } };
+    B.updCerradasCalc(0, 'cerradasBodega', el);
+    const g = vm.runInContext('filasCaptura[0]', B);
+    setVar(B, 'filasCaptura', [filaCopa]);
+    return eq(String(g.cerradasBodega) + '|' + (g.fx && g.fx.cerradasBodega) + '|' + el.value, '6|2+3+1|2+3+1');
+});
+test('botellas: «0.944+0.543» en una casilla se separa en DOS botellas (a cada una su cristal)', () => {
+    const f = Object.assign({}, filaCopa, { insumoId: 'bot', pesos: ['', '', '', ''], pesoCristal: 400 });
+    setVar(B, 'filasCaptura', [f]);
+    const el = { value: '0.944+0.543', title: '', classList: { c: new Set(), add(x){this.c.add(x);}, remove(x){this.c.delete(x);}, has(x){return this.c.has(x);} } };
+    B.updPesoCalc(0, 0, el);
+    const g = vm.runInContext('filasCaptura[0]', B);
+    const lt = B.calcNetLiters(g);
+    setVar(B, 'filasCaptura', [filaCopa]);
+    // (0.944 − 0.4) + (0.543 − 0.4) = 0.687 L; sumadas en una casilla daría 1.087 L.
+    return eq(g.pesos.slice(0, 2).join('|') + '|' + Math.round(lt * 1000), '0.944|0.543|687');
+});
 
 test('compra SÍ suma a compras', () => eq(B.entEsCompra('compra'), true));
 test('sin tipo (legacy) cuenta como compra', () => eq(B.entEsCompra(''), true));
@@ -11580,7 +11625,8 @@ console.log('\n══ BF2 · Conteos del QR que se suman ══');
     test('…pero los pesos NO se suman: cada uno es otra botella', () => {
         const i = inv.indexOf('function _aplicarConteoAFila(fila, c, sumar)');
         const t = inv.slice(i, i + 900);
-        return eq(t.indexOf('fila.pesos = [') > -1 && t.indexOf('+= ps') === -1, true, 'sin acumular');
+        // 22-nov: se toman TODAS las botellas del conteo (antes cortaba en 4); se reemplazan, no se suman.
+        return eq(t.indexOf('fila.pesos = ps.slice()') > -1 && t.indexOf('+= ps') === -1, true, 'sin acumular');
     });
 }
 

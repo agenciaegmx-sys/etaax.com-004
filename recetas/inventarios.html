@@ -358,7 +358,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=886d6916"></script>
+<script src="/recetas/inventarios.js?v=f7ba7e36"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -899,6 +899,20 @@ body .step3-lista .step3-menu-item.has-cnt { background: var(--surface) !importa
 
 /* Pesos botellas abiertas */
 .inv-pesos-row { display: flex; gap: 8px; }
+/* Celda con operaciones: la casilla + «+» y «−» para el teclado de la tablet; abajo, el resultado. */
+.calc-celda { display: flex; gap: 6px; align-items: stretch; }
+.calc-ops { display: flex; flex-direction: column; gap: 4px; }
+.calc-op { width: 42px; flex: 1; min-height: 30px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2);
+    color: var(--text); font: inherit; font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer; touch-action: manipulation; }
+.calc-op:active { background: var(--accent); color: var(--bg); }
+.fx-res { min-height: 16px; margin-top: 4px; font-size: 12.5px; font-weight: 700; color: var(--green); }
+/* Cuatro botellas por renglón, como siempre: con más de cuatro, se baja de renglón
+   en vez de encoger las casillas y cortar el peso. */
+#existCardWrap .inv-pesos-row > .inv-peso-cell, #existCardWrap .inv-pesos-row > .inv-peso-add { flex: 0 0 calc((100% - 24px) / 4); min-width: 0; box-sizing: border-box; }
+#existCardWrap .inv-peso-cell .inv-peso-input { width: 100%; box-sizing: border-box; }
+.inv-peso-add { flex: 1 1 120px; min-height: 64px; border: 1px dashed var(--border2, var(--border)); border-radius: 10px; background: transparent;
+    color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; align-self: flex-end; }
+.inv-peso-add:hover { border-color: var(--accent); }
 .inv-peso-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
 .inv-peso-lbl  { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
 .inv-peso-input {

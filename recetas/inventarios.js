@@ -5262,13 +5262,45 @@ function _cerrAPiezas(fila, v) {
     if (!e) return v;
     return Math.round((parseFloat(v) || 0) * e.factor * 1000) / 1000;
 }
-function updCerradasCalc(idx, campo, el) {
-    var vacio = !String(el.value || '').trim();
-    var fila = filasCaptura[idx];
-    _celdaCalc(el, function (v) { updCaptura(idx, campo, vacio ? '' : _cerrAPiezas(fila, v)); });
-    // La casilla se queda mostrando lo tecleado (cajas), no las piezas.
-    if (!vacio && _porEmpaque(fila)) el.value = _cerrMostrar(fila, filasCaptura[idx][campo]);
+/* COMO UNA CELDA DE EXCEL (Edwin, 22-nov): «2+3+1» se queda escrito en la
+   casilla y abajo dice el resultado («= 6»). El número se guarda donde siempre
+   (cerradasBodega / cerradasBarra); la operación, aparte, en fila.fx, para
+   volver a verla y corregirla. */
+function _fxDe(fila, campo) { return (fila && fila.fx && fila.fx[campo]) || ''; }
+function _fxResHTML(fila, campo, valor) {
+    var fx = _fxDe(fila, campo);
+    return fx ? '= ' + etx(String(valor)) : '';
 }
+function updCerradasCalc(idx, campo, el) {
+    var crudo = String(el.value || '').trim();
+    var vacio = !crudo;
+    var fila = filasCaptura[idx];
+    var ok = false;
+    _celdaCalc(el, function (v) { ok = true; updCaptura(idx, campo, vacio ? '' : _cerrAPiezas(fila, v)); });
+    if (!ok) return;                                      // no se entendió: se queda en rojo, sin tocar nada
+    fila = filasCaptura[idx];
+    if (!fila.fx) fila.fx = {};
+    if (!vacio && _esFormula(crudo)) { fila.fx[campo] = crudo; el.value = crudo; }
+    else {
+        delete fila.fx[campo];
+        // La casilla se queda mostrando lo tecleado (cajas), no las piezas.
+        if (!vacio && _porEmpaque(fila)) el.value = _cerrMostrar(fila, fila[campo]);
+    }
+    var r = document.getElementById('fxr-' + idx + '-' + campo);
+    if (r) r.textContent = fila.fx[campo] ? '= ' + _cerrMostrar(fila, fila[campo]) : '';
+    if (typeof _autoGuardar === 'function') _autoGuardar();
+}
+/* «+» y «−» para el teclado numérico de la tablet, que no los trae. Se escribe
+   al final de la casilla sin quitarle el foco (pointerdown + preventDefault). */
+function _celdaOp(id, op) {
+    var el = document.getElementById(id); if (!el) return;
+    if (document.activeElement !== el) el.focus();
+    var v = String(el.value || '');
+    if (/[+\-*/]$/.test(v)) v = v.slice(0, -1);         // cambiar de operador, no apilarlos
+    el.value = v + op;
+    try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {}
+}
+window._celdaOp = _celdaOp;
 window.updCerradasCalc = updCerradasCalc;
 
 // Sufijo del rótulo: "Cerradas Bodega (cajas)" mientras se cuenta por empaque.
@@ -6155,7 +6187,7 @@ function _regBtnState(fila) {
 }
 
 function updCaptura(idx, campo, val) { filasCaptura[idx][campo] = val; refreshFilaDisplay(idx); _autoGuardar(); }
-function updPeso(idx, pi, val)       { filasCaptura[idx].pesos[pi] = val; refreshFilaDisplay(idx); _autoGuardar(); }
+function updPeso(idx, pi, val)       { var f = filasCaptura[idx]; f.pesos = _pesosDe(f); f.pesos[pi] = val; refreshFilaDisplay(idx); _autoGuardar(); }
 
 // ═══════════════════════════════════════════════════════════════
 // PASO 1 — Existencias físicas
@@ -6437,15 +6469,10 @@ function buildInputsExist(fila, idx) {
     // metodo === 'peso' (default)
     const lts = calcNetLiters(fila);
     return `<div>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Botellas abiertas — peso con cristal (kg)</div>
-        <div class="inv-pesos-row" style="flex-wrap:wrap">
-            ${(fila.pesos||['','','','']).map((p,pi)=>`
-            <div class="inv-peso-cell">
-                <div class="inv-peso-lbl">B${pi+1}</div>
-                <input type="text" inputmode="decimal" class="inv-peso-input" value="${p||''}" placeholder="kg"
-                    title="Puedes escribir operaciones: 0.9+0.75" onkeydown="_celdaKey(event,this)"
-                    onblur="updPesoCalc(${idx},${pi},this)">
-            </div>`).join('')}
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Botellas abiertas — peso con cristal (kg) · una botella por casilla</div>
+        <div class="inv-pesos-row" id="pesos-${idx}" style="flex-wrap:wrap">
+            ${_pesosDe(fila).map((p,pi) => _pesoCeldaHTML(idx, pi, p)).join('')}
+            <button type="button" class="inv-peso-add" onclick="_pesoAgregar(${idx}, true)" title="Agregar otra botella abierta">+ Agregar botella</button>
         </div>
         <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:12px;color:var(--text-dim)">Neto líquido</span>
@@ -6511,17 +6538,27 @@ function renderCardExist() {
             <div style="display:flex;gap:12px;margin-bottom:16px">
                 <div style="flex:1">
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cerradas Bodega${_sufEmpaque(fila)}</div>
-                    <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                        value="${_cerrMostrar(fila, fila.cerradasBodega)}" placeholder="—"
-                        title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
-                        onblur="updCerradasCalc(${idx},'cerradasBodega',this)">
+                    <div class="calc-celda">
+                        <input type="text" inputmode="decimal" class="inv-num-input" id="cb-${idx}" style="width:100%;box-sizing:border-box"
+                            value="${etx(_fxDe(fila, 'cerradasBodega') || _cerrMostrar(fila, fila.cerradasBodega))}" placeholder="—"
+                            title="Suma y resta como en Excel: 2+3+1, 3*24+5" onkeydown="_celdaKey(event,this)"
+                            onblur="updCerradasCalc(${idx},'cerradasBodega',this)">
+                        <div class="calc-ops"><button type="button" class="calc-op" onpointerdown="event.preventDefault();_celdaOp('cb-${idx}','+')" title="Sumar">+</button>
+                            <button type="button" class="calc-op" onpointerdown="event.preventDefault();_celdaOp('cb-${idx}','-')" title="Restar">−</button></div>
+                    </div>
+                    <div class="fx-res" id="fxr-${idx}-cerradasBodega">${_fxResHTML(fila, 'cerradasBodega', _cerrMostrar(fila, fila.cerradasBodega))}</div>
                 </div>
                 <div style="flex:1">
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cerradas Barra${_sufEmpaque(fila)}</div>
-                    <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                        value="${_cerrMostrar(fila, fila.cerradasBarra)}" placeholder="—"
-                        title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
-                        onblur="updCerradasCalc(${idx},'cerradasBarra',this)">
+                    <div class="calc-celda">
+                        <input type="text" inputmode="decimal" class="inv-num-input" id="cba-${idx}" style="width:100%;box-sizing:border-box"
+                            value="${etx(_fxDe(fila, 'cerradasBarra') || _cerrMostrar(fila, fila.cerradasBarra))}" placeholder="—"
+                            title="Suma y resta como en Excel: 2+3+1, 3*24+5" onkeydown="_celdaKey(event,this)"
+                            onblur="updCerradasCalc(${idx},'cerradasBarra',this)">
+                        <div class="calc-ops"><button type="button" class="calc-op" onpointerdown="event.preventDefault();_celdaOp('cba-${idx}','+')" title="Sumar">+</button>
+                            <button type="button" class="calc-op" onpointerdown="event.preventDefault();_celdaOp('cba-${idx}','-')" title="Restar">−</button></div>
+                    </div>
+                    <div class="fx-res" id="fxr-${idx}-cerradasBarra">${_fxResHTML(fila, 'cerradasBarra', _cerrMostrar(fila, fila.cerradasBarra))}</div>
                 </div>
             </div>
 
@@ -9945,7 +9982,7 @@ function _aplicarConteoAFila(fila, c, sumar) {
        —no se tira lo que ya estaba en la tabla— pero no se suman: cada peso es
        UNA botella distinta, no una cantidad que se acumule. */
     var ps = (c.pesos || []).filter(function (x) { return x !== '' && x != null; });
-    if (ps.length) { fila.pesos = ['', '', '', '']; ps.slice(0, 4).forEach(function (v, i) { fila.pesos[i] = v; }); fila.metodoCaptura = 'peso'; }
+    if (ps.length) { fila.pesos = ps.slice(); while (fila.pesos.length < 4) fila.pesos.push(''); fila.metodoCaptura = 'peso'; }
     // Queda escrito de dónde salió el número, y cuántos conteos lo formaron.
     var previo = (fila.conteoQR && sumar) ? (fila.conteoQR.conteos || 1) : 0;
     fila.conteoQR = { por: c.contadoPor || '', fecha: c.fecha || '', hora: c.hora || '',
@@ -10099,9 +10136,50 @@ window.aplicarConteosQR = aplicarConteosQR;
    24 más 5 sueltas" — obligar a sacar la cuenta aparte es donde se cuelan los errores.
    Se evalúa SOLO si el texto trae exclusivamente números y + - * / ( ) . y espacios;
    cualquier otra cosa se ignora. Nunca se ejecuta lo que el usuario escriba tal cual. */
+/* ══ LAS OPERACIONES, SIN eval (22-nov) ═══════════════════════════════════
+   Esto resolvía las operaciones con Function(), y la política de seguridad de
+   etaax.com (CSP sin 'unsafe-eval') lo BLOQUEA: en producción toda operación
+   salía en rojo y no se guardaba; en el preview, sin CSP, funcionaba. Por eso
+   «sumar en la celda» nunca se pudo usar de verdad. Ahora es un calculador
+   propio: + − × ÷ y paréntesis, nada más. */
+function _evalExpr(t) {
+    var i = 0;
+    var ws = function () { while (t.charAt(i) === ' ') i++; };
+    var num = function () {
+        ws(); var m = /^(\d+\.?\d*|\.\d+)/.exec(t.slice(i));
+        if (!m) throw new Error('num'); i += m[0].length; return parseFloat(m[0]);
+    };
+    var factor = function () {
+        ws(); var c = t.charAt(i);
+        if (c === '+') { i++; return factor(); }
+        if (c === '-') { i++; return -factor(); }
+        if (c === '(') { i++; var v = expr(); ws(); if (t.charAt(i) !== ')') throw new Error(')'); i++; return v; }
+        return num();
+    };
+    var term = function () {
+        var v = factor();
+        for (;;) { ws(); var c = t.charAt(i);
+            if (c === '*') { i++; v *= factor(); }
+            else if (c === '/') { i++; var d = factor(); if (!d) throw new Error('/0'); v /= d; }
+            else return v; }
+    };
+    var expr = function () {
+        var v = term();
+        for (;;) { ws(); var c = t.charAt(i);
+            if (c === '+') { i++; v += term(); }
+            else if (c === '-') { i++; v -= term(); }
+            else return v; }
+    };
+    var v = expr(); ws();
+    if (i !== t.length) throw new Error('resto');
+    return v;
+}
 function _evalCelda(txt) {
     var t = String(txt == null ? '' : txt).trim();
     if (!t) return null;                                  // vacío = vacío, no cero
+    // Como en Excel: «=» al inicio se ignora; «x» / «×» multiplican, «÷» divide.
+    t = t.replace(/^=/, '').replace(/[x×X]/g, '*').replace(/÷/g, '/').trim();
+    if (!t) return null;
     /* La coma como decimal. El teclado numérico de una tablet en español pone COMA,
        no punto: "3,5" se caía del filtro, la celda se vaciaba y encima escribía 0.
        Solo se traduce si NO hay puntos, para no romper "1.234,5" ni "3,4" como lista. */
@@ -10113,10 +10191,12 @@ function _evalCelda(txt) {
     if (!/^[0-9+\-*/(). ]+$/.test(t)) return null;        // fuera cualquier otro carácter
     if (/[+\-*/]{2,}/.test(t)) return null;               // "5++3" y similares
     try {
-        var v = Function('"use strict";return (' + t + ')')();
+        var v = _evalExpr(t);
         return (typeof v === 'number' && isFinite(v)) ? Math.round(v * 10000) / 10000 : null;
     } catch (e) { return null; }
 }
+/* «Hay una operación»: algún + − × ÷ que no sea solo el signo del principio. */
+function _esFormula(txt) { return /[+\-*/x×÷]/.test(String(txt || '').trim().replace(/^[=+\-]+/, '')); }
 /* Handler de celda: evalúa al salir (blur) o con Enter, escribe el resultado en la
    ventanilla y lo manda al modelo con el mismo `upd*` de siempre. */
 function _celdaCalc(el, aplicar) {
@@ -10148,7 +10228,56 @@ function updCapturaPesoCalc(idx, campo, el) {
 }
 window.updCapturaPesoCalc = updCapturaPesoCalc;
 // Peso de cada botella abierta: "0.9+0.75" para dos botellas en la misma báscula.
-function updPesoCalc(idx, pi, el) { _celdaCalc(el, function (v) { updPeso(idx, pi, v === 0 && !el.value ? '' : v); }); }
+/* ══ LAS BOTELLAS ABIERTAS QUE HAGA FALTA (Edwin, 22-nov) ═════════════════
+   Eran cuatro casillas fijas. Ahora: «+ Agregar botella» y, al llenar la
+   última, aparece otra vacía. A CADA botella se le resta su cristal (por eso
+   es una por casilla): si se escribe «0.944+0.543» en una, se separan en dos
+   botellas —sumadas en una sola, el cristal se restaba una vez y el líquido
+   salía de más—. */
+function _pesosDe(fila) {
+    var p = (fila.pesos || []).slice();
+    while (p.length < 4) p.push('');
+    return p;
+}
+function _pesoCeldaHTML(idx, pi, p) {
+    return '<div class="inv-peso-cell"><div class="inv-peso-lbl">B' + (pi + 1) + '</div>' +
+        '<input type="text" inputmode="decimal" class="inv-peso-input" value="' + etx(p == null ? '' : String(p)) + '" placeholder="kg"' +
+        ' title="Una botella por casilla. 0.944+0.543 se separa en dos botellas." onkeydown="_celdaKey(event,this)"' +
+        ' onblur="updPesoCalc(' + idx + ',' + pi + ',this)"></div>';
+}
+function _pesoAgregar(idx, enfocar) {
+    var f = filasCaptura[idx]; if (!f) return;
+    f.pesos = _pesosDe(f);
+    f.pesos.push('');
+    var cont = document.getElementById('pesos-' + idx);
+    if (cont) {
+        var btn = cont.querySelector('.inv-peso-add');
+        var tmp = document.createElement('div'); tmp.innerHTML = _pesoCeldaHTML(idx, f.pesos.length - 1, '');
+        var cel = tmp.firstChild;
+        cont.insertBefore(cel, btn);
+        if (enfocar) { var inp = cel.querySelector('input'); if (inp) inp.focus(); }
+    }
+}
+window._pesoAgregar = _pesoAgregar;
+function updPesoCalc(idx, pi, el) {
+    var crudo = String(el.value || '').replace(/^=/, '').trim();
+    var f = filasCaptura[idx]; if (!f) return;
+    var partes = crudo.indexOf('(') < 0 ? crudo.split('+').map(function (x) { return x.trim(); }).filter(Boolean) : [crudo];
+    if (partes.length > 1) {
+        var vals = partes.map(_evalCelda);
+        if (vals.some(function (v) { return v === null; })) { el.classList.add('calc-err'); el.title = 'No se entiende "' + crudo + '". Una botella por casilla: 0.944'; return; }
+        el.classList.remove('calc-err');
+        f.pesos = _pesosDe(f);
+        f.pesos.splice.apply(f.pesos, [pi, 1].concat(vals));
+        refreshFilaDisplay(idx); _autoGuardar();
+        if (typeof renderCardExist === 'function') renderCardExist();
+        return;
+    }
+    var ok = false;
+    _celdaCalc(el, function (v) { ok = true; updPeso(idx, pi, v === 0 && !el.value ? '' : v); });
+    // Al llenar la última botella, aparece otra vacía.
+    if (ok && crudo && pi === _pesosDe(filasCaptura[idx]).length - 1) _pesoAgregar(idx, false);
+}
 window.updPesoCalc = updPesoCalc;
 function updVentasCalc(idx, campo, el)  { _celdaCalc(el, function (v) { updVentasUM(idx, campo, v); }); }
 function updVentasDirCalc(idx, campo, el){
