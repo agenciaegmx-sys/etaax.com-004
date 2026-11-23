@@ -1113,6 +1113,8 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 assert.match(camp.uno, /Campari Licores · 750 ml · copa de [\d.]+ ml Stock mín\. 1 · máx\. 3 bot EXIST\. ANTERIOR 3\.00 bot en botellas \+ 0\.00 prebatch = 3\.00 total real (Stock (bajo|medio|ideal)|Sobre stock)/i);
                 assert.match(camp.uno, /= 2\.67 total real (Stock (bajo|medio|ideal)|Sobre stock)/i);
                 assert.match(camp.dos, /DESGLOSE [\d.]+ cop · [\d.]+ oz[^]*USO EN PREBATCH 25\.4 cop[^]*DESGLOSE [\d.]+ cop · [\d.]+ oz[^]*DESGLOSE [\d.]+ cop · [\d.]+ oz/i);
+                // 23-nov: el uso también en botellas (25.4 cop de una botella de 750 ml).
+                assert.match(camp.dos, /USO EN PREBATCH 25\.4 cop [\d.,]+ (ml|L) · ≈ [\d.]+ bot/i, camp.dos);
             });
             await page.evaluate(() => verReporteDirectivo(false)); await page.waitForTimeout(1500);
             await caso('…y el reporte directivo dice el mismo uso a precio proveedor', async () => {

@@ -17933,6 +17933,24 @@ console.log('\n══ BH83 · Migrar una sucursal: el plan ══');
     });
 }
 
+/* ═══════════ SUITE BH84 · EL USO EN COCTELERÍA, TAMBIÉN EN BOTELLAS ═══════
+   Edwin, 23-nov: «1224.4 cop» no dice de un vistazo cuánto producto se fue;
+   debajo va su equivalente en botellas. */
+console.log('\n══ BH84 · Uso en coctelería y en prebatch, también en botellas ══');
+{
+    const txt = (h) => h.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    test('debajo del uso en coctelería, sus botellas (1224.4 cop de 15 por botella ≈ 81.63 bot)', () =>
+        eq(txt(B._s5Uso(1224.4, 0, x => x + ' cop', null, 1224.4 / 15, null)), 'Uso en coctelería 1224.4 cop ≈ 81.63 bot'));
+    test('…y en el uso en prebatch, junto a los mililitros', () =>
+        eq(txt(B._s5Uso(0, 30, x => x + ' cop', x => (x * 30) + ' ml', null, 2)), 'Uso en coctelería — Uso en prebatch 30 cop 900 ml · ≈ 2.00 bot'));
+    test('sin contenido o sin copa NO se inventan botellas', () =>
+        eq(txt(B._s5Uso(10, 0, x => x + ' cop', null, null, null)), 'Uso en coctelería 10 cop'));
+    test('el renglón por copa y el compuesto le pasan sus botellas (cada presentación con la suya)', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        return eq(/copasBot > 0 \? coctSolo \/ copasBot : null/.test(src) && /_s5Uso\(ventaCoct, prodC, \(x\) => _nc\(x\) \+ ' ' \+ uC\.mov, null, coctBotC, prodBotC\)/.test(src), true);
+    });
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.

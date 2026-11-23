@@ -11076,10 +11076,19 @@ function _s5Pct(dif, uso, teorico) {
 /* Abajo de las ventas: el USO en coctelería y, en el mismo lugar, el uso en
    prebatch. Separados: el cóctel vendido y el batch producido son dos usos
    distintos del insumo, y sumados no se sabía cuánto era de cada uno. */
-function _s5Uso(coct, prebatch, fmt, mlDe) {
+/* …y debajo de cada uso, cuántas BOTELLAS son (Edwin, 23-nov): «1224.4 cop»
+   no dice de un vistazo cuánto producto se fue. botCoct/botPre llegan ya en
+   botellas (en un compuesto, cada presentación con su botella); null = no se
+   sabe (falta contenido o copa) y no se inventa. */
+function _s5UsoBot(b) {
+    if (b == null || !isFinite(b)) return '';
+    return '≈ ' + (Math.round(b * 100) / 100).toFixed(2) + ' bot';
+}
+function _s5Uso(coct, prebatch, fmt, mlDe, botCoct, botPre) {
     var v = function (x) { return '<b style="color:var(--viol)">' + fmt(x) + '</b>'; };
-    return '<div class="s5-uso">' + _s5c2('Uso en coctelería', coct > 0.0001 ? v(coct) : '—') +
-        (prebatch > 0.0001 ? _s5c2('Uso en prebatch', v(prebatch) + (mlDe ? _s5sub(mlDe(prebatch)) : '')) : '') + '</div>';
+    var subPre = [mlDe ? mlDe(prebatch) : '', _s5UsoBot(botPre)].filter(Boolean).join(' · ');
+    return '<div class="s5-uso">' + _s5c2('Uso en coctelería', coct > 0.0001 ? v(coct) + _s5sub(_s5UsoBot(botCoct)) : '—') +
+        (prebatch > 0.0001 ? _s5c2('Uso en prebatch', v(prebatch) + _s5sub(subPre)) : '') + '</div>';
 }
 /* Mililitros para leer el uso en prebatch contra la receta del batch, que
    está en ml: «30.4 cop» sola no dice que fueron 900 ml. */
@@ -11484,7 +11493,8 @@ function _step5TablasArmar(opts) {
                 <td>${_s5Menu(fila.insumoId, true, _s5Comentarios(fila))}</td>
                 <td style="text-align:center">${_s5c2('Desglose', (_eqCopOz(ea, fila) || '—') + (_conBat ? _s5sub('total ' + _eqCopOz(ea + _enB.ea, fila)) : ''))}</td>
                 <td style="text-align:center">${_costoOk ? _s5c2('Costo', entDinero > 0 ? '<b>' + _s5dinero(entDinero).replace('+', '') + '</b>' : '—') : ''}</td>
-                <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}</td>
+                <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null,
+                    copasBot > 0 ? coctSolo / copasBot : null, copasBot > 0 ? prodPBver / copasBot : null)}</td>
                 <td style="text-align:center">${_s5CortCelda(_cortPartes(fila), cortesia, _fc)}</td>
                 <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(teorico + (_conBat ? _enB.ea : 0), fila))}</td>
                 <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(fisico, fila) + (_conBat ? _s5sub('total ' + _eqCopOz(fisico + _enB.fis, fila)) : ''))}</td>
@@ -11673,6 +11683,11 @@ function _step5TablasArmar(opts) {
         const entDinC = members.reduce((t, m) => t + getEntradasCopas(m) * costoCopa(m), 0);
         const difProvC = members.reduce((t, m) => t + (calcDiferencia(m) + _difEnBatches(m.insumoId)) * costoCopa(m), 0);
         const prodC  = members.reduce((t, m) => { try { return t + (_consumoBaseProd(m) || 0); } catch (e) { return t; } }, 0);
+        // En botellas, cada presentación con la SUYA; si a alguna le falta, no se inventa.
+        const _botDe = (fn) => { let t = 0; for (const m of members) { const cb = _uDe(m).copasBot, x = fn(m);
+            if (!(x > 0)) continue; if (!(cb > 0)) return null; t += x / cb; } return t; };
+        const coctBotC = _botDe(m => consumoRecetasFila(m));
+        const prodBotC = _botDe(m => { try { return _consumoBaseProd(m) || 0; } catch (e) { return 0; } });
         const pcC    = _s5Pct(dif, usoComp, teorico);
         const _grupo = (fn, o) => _equivBarraGrupoHTML(members.map(m => ({ fila: m, cantidad: fn(m) })), Object.assign({ impreso: papel }, o)).replace(/<(\/?)div\b/g, '<$1span');
         const _mer = (u) => `<td style="text-align:center;color:${merC>0?'var(--red)':'inherit'};font-weight:${merC>0?600:400}">${_s5c2('Mermas', merC>0 ? _nc(merC)+' '+u : '—')}</td>`;
@@ -11715,7 +11730,7 @@ function _step5TablasArmar(opts) {
             <td>${_menuComp}</td>
             <td></td>
             ${_costo}
-            <td colspan="2" style="text-align:center">${_s5Uso(ventaCoct, prodC, (x) => _nc(x) + ' ' + uC.mov)}</td>
+            <td colspan="2" style="text-align:center">${_s5Uso(ventaCoct, prodC, (x) => _nc(x) + ' ' + uC.mov, null, coctBotC, prodBotC)}</td>
             ${_cort(uC.mov)}
             <td style="text-align:center">${_s5c2('Equivale a', _grupo(calcExistenciaTeorica))}</td>
             <td style="text-align:center">${_s5c2('Equivale a', _grupo(calcExistencia))}</td>${_fin2}
