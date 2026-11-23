@@ -44,7 +44,6 @@ function _exigeInv(sub, msg){
 function _invOcultar(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
 function _aplicarPermisosInv(){
     if(!_puedeInv('capturar')) ['btnNuevoInv','btnPrimerLev','btnIniciarInv'].forEach(_invOcultar);
-    if(!_puedeInv('entradas')) _invOcultar('btnAgregarEntrada');
     if(!_puedeInv('qr'))       _invOcultar('btnQrEntradas');
     if(!_puedeInv('reporte'))  ['btnReporteExistencias','btnRepGerencial','btnRepDirectivo','btnRepDesglose']
                                   .forEach(_invOcultar);
@@ -343,11 +342,10 @@ document.addEventListener('DOMContentLoaded', function(){
                         <div class="brand-title" style="font-size:22px;line-height:1" id="entTitulo">Registro de entradas</div>
                     </div>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center">
-                    <button class="btn-vista" id="btnAgregarEntrada" onclick="abrirRegistroEntradas()">📥 Agregar entrada</button>
-                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
-                        id="btnGuardarEntradas" onclick="guardarEntradas()">💾 Guardar entradas</button>
-                </div>
+                <!-- La barra: la MISMA del Paso 2 (buscador de productos, lista/cuadrícula,
+                     nota / factura y el filtro de lo registrado). Se registra en la columna
+                     izquierda y todo se guarda solo: «Agregar» y «Guardar» sobraban. -->
+                <div id="entHerr" class="paso-herr"></div>
             </div>
 
             <!-- Contenido dinámico (toolbar + tabla/galería) -->
@@ -358,7 +356,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=f7ba7e36"></script>
+<script src="/recetas/inventarios.js?v=9fd5fd95"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -493,7 +491,7 @@ body.etx-modulos-ui #vistaEntradas > .inv-wizard-header { margin-top: -24px; }
 /* La barra del paso alinea a la IZQUIERDA (una regla vieja alineaba a la
    derecha el último hijo del encabezado, que ahora es esta barra). Buscador y
    vistas a la izquierda; los filtros, a la derecha y solo cuando los hay. */
-#pasoHerr.paso-herr { justify-content: flex-start; flex-wrap: nowrap; }
+#pasoHerr.paso-herr, #entHerr.paso-herr { justify-content: flex-start; flex-wrap: nowrap; }
 /* ══ RESULTADO: LA BARRA SUBE AL RENGLÓN DE LOS BOTONES (Edwin, 19-nov) ══════
    En el Paso 5 los botones ocupan dos renglones y el segundo («Desglose ·
    Salir · Finalizar») tenía todo el lado izquierdo vacío; el buscador y los
@@ -509,7 +507,17 @@ body.etx-modulos-ui #vistaEntradas > .inv-wizard-header { margin-top: -24px; }
 .ph-izq, .ph-der { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
 .ph-izq { flex: 0 1 auto; }
 .ph-der { flex: 0 0 auto; margin-left: auto; }
-@media (max-width: 900px) { #pasoHerr.paso-herr { flex-wrap: wrap; } .ph-der { flex: 0 1 auto; } }
+@media (max-width: 900px) { #pasoHerr.paso-herr, #entHerr.paso-herr { flex-wrap: wrap; } .ph-der { flex: 0 1 auto; } }
+/* ENTRADAS (Paso 2 y registro de afuera, 23-nov): a la izquierda van buscador,
+   lista/cuadrícula y «Nota / factura»; a la derecha, el buscador de lo
+   registrado y sus cuatro pestañas. Juntos no caben en una tablet con la barra
+   lateral abierta, y con `nowrap` el grupo de la izquierda se partía en tres
+   renglones mientras las pestañas se salían por la derecha. Ahora cada grupo
+   se queda entero: si no caben juntos, el de la derecha baja a su renglón
+   (alineado a la derecha, sobre lo registrado) y ahí acomoda sus pestañas. */
+#entHerr.paso-herr, #pasoHerr.paso-herr:has(#entBuscador) { flex-wrap: wrap; row-gap: 8px; }
+#entHerr .ph-izq, #pasoHerr:has(#entBuscador) .ph-izq { flex-wrap: nowrap; }
+#entHerr .ph-der, #pasoHerr:has(#entBuscador) .ph-der { flex: 0 1 auto; justify-content: flex-end; }
 .paso-herr { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     padding-top: 8px; margin-top: 2px; border-top: 1px solid var(--border); }
 .paso-herr:empty { display: none; }
@@ -668,6 +676,57 @@ body .step3-lista .step3-menu-item.has-cnt { background: var(--surface) !importa
 .eg-cuerpo .eln-n { display: none; }
 .eg-total { display: flex; justify-content: space-between; padding: 8px 4px 2px; font-size: 12.5px; color: var(--text-muted); border-top: 1px dashed var(--border); margin-top: 6px; }
 @media (max-width: 900px) { .p12-split, .p12-split-ent { grid-template-columns: minmax(0, 1fr); } }
+/* La ficha completa del insumo en lo registrado: nombre arriba, envase y marca abajo. */
+.eg-nom small { display: block; font-size: 11px; font-weight: 400; color: var(--text-dim); margin-top: 2px; }
+.ent-log-nombre .eln-meta { font-size: 11px; font-weight: 400; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; }
+/* ══ NOTA / FACTURA (23-nov): una compra con varios productos ══ */
+.ent-nota { margin-bottom: 12px; border-color: rgba(245,200,66,.55); }
+.ent-nota-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.ent-nota-tit { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 17px; color: var(--text); }
+.ent-nota-sub { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; }
+.ent-nota-cerrar { background: none; border: 0; cursor: pointer; color: var(--text-dim); font-size: 20px; line-height: 1; padding: 0; }
+.ent-nota-datos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.ent-nota-datos label:first-child { grid-column: 1 / -1; }   /* proveedor a lo ancho; folio y fecha abajo (la fecha no se corta) */
+.ent-nota-datos label, .ent-nota-pide-fila label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--text-dim); min-width: 0; }
+.ent-nota-datos input { width: 100%; height: 40px; padding: 0 10px; box-sizing: border-box; min-width: 0; border: 1px solid var(--border);
+    border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; font-size: 13px; outline: none; }
+.ent-nota-datos input:focus, .ent-nota-cant:focus, .ent-nota-pide-fila input:focus { border-color: var(--accent); }
+.ent-nota-items { margin-top: 14px; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: var(--bg); }
+.ent-nota-it { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--border); }
+.ent-nota-it:last-child { border-bottom: 0; }
+.ent-nota-cant { width: 76px; height: 36px; box-sizing: border-box; text-align: center; font: inherit; font-size: 15px; font-weight: 700;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); outline: none; }
+.ent-nota-u { font-size: 12px; color: var(--text-muted); min-width: 34px; }
+.ent-nota-x { background: none; border: 1px solid var(--border); border-radius: 7px; color: var(--text-dim); cursor: pointer; padding: 4px 8px; font-size: 12px; }
+.ent-nota-x:hover { border-color: var(--red); color: var(--red); }
+.ent-nota-vacia { padding: 16px; text-align: center; font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+.ent-nota-lbl { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
+.ent-nota-reg { width: 100%; margin-top: 14px; height: 50px; border: 0; border-radius: 10px; background: var(--green); color: var(--bg);
+    font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.ent-nota-reg:disabled { opacity: .45; cursor: default; }
+.ent-nota-pide { margin-bottom: 12px; }
+.ent-nota-pide-tit { font-weight: 700; font-size: 16px; color: var(--text); }
+.ent-nota-pide-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.ent-nota-pide-ya { font-size: 12px; color: var(--accent-text, var(--accent)); margin-top: 5px; font-weight: 600; }
+.ent-nota-pide-fila { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.ent-nota-pide-fila input { width: 130px; height: 52px; box-sizing: border-box; font-size: 22px; text-align: center; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--bg); color: var(--text); font-family: inherit; outline: none; }
+.ent-nota-sumar { height: 52px; padding: 0 20px; border: 0; border-radius: 10px; background: var(--accent); color: var(--bg);
+    font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.p12-en-nota { color: var(--accent-text, var(--accent)); display: inline-flex; align-items: center; gap: 4px; }
+.ent-nota-badge { display: inline-flex; align-items: center; gap: 4px; margin-left: 5px; padding: 1px 6px; border-radius: 8px; white-space: nowrap;
+    font-size: 9.5px; font-weight: 600; border: 1px solid rgba(245,200,66,.5); color: var(--accent-text, var(--accent)); vertical-align: middle; }
+.ph-nota.on { border-color: var(--accent); color: var(--accent-text, var(--accent)); background: rgba(245,200,66,.12); }
+.eg-nota .eg-nom > svg { vertical-align: -2px; margin-right: 6px; }
+.eg-nota .eg-cuerpo .eln-n { display: inline; }
+.eg-nota .eg-cuerpo .eln-meta { display: block; }
+/* El aviso de «registrada»: abajo al centro y se va solo. */
+.ent-aviso { position: fixed; left: 50%; bottom: 24px; z-index: 9600; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    display: flex; align-items: center; gap: 8px; max-width: min(520px, calc(100vw - 32px)); padding: 11px 16px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--green); color: var(--text); font-size: 13.5px; box-shadow: 0 12px 30px rgba(0,0,0,.3);
+    transition: opacity .18s, transform .18s; }
+.ent-aviso.on { opacity: 1; transform: translate(-50%, 0); }
+.ent-aviso svg { color: var(--green); flex-shrink: 0; }
 .inv-wizard-header .btn-vista { padding: 8px 13px; font-size: 13px; white-space: nowrap; }
 .inv-paso-menu { position: relative; display: inline-flex; }
 #btnPasoMenu { display: inline-flex; align-items: center; gap: 7px; border-color: var(--accent); color: var(--text); font-weight: 600; }
@@ -1172,79 +1231,6 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
     </div>
 </div>
 
-<!-- ── MODAL REGISTRAR ENTRADA (log independiente) ───────────── -->
-<div id="modalEntradaLog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:flex-start;justify-content:center;padding-top:60px">
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;width:min(560px,96vw);max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
-
-        <!-- Header -->
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
-            <div>
-                <div style="font-size:15px;font-weight:600;color:var(--text)">📥 Registrar entrada</div>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Log independiente · sin necesidad de inventario abierto</div>
-            </div>
-            <button onclick="cerrarEntradaLog()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:inherit;font-size:12px">✕ Cerrar</button>
-        </div>
-
-        <div style="overflow-y:auto;flex:1;padding:16px 20px;display:flex;flex-direction:column;gap:14px">
-
-            <!-- Insumo selector -->
-            <div>
-                <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Insumo</div>
-                <div id="entLogInsumoNombre" style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:8px">Selecciona un insumo</div>
-                <input type="hidden" id="entLogInsumoId">
-                <input type="text" id="entLogBusqueda" placeholder="Buscar insumo…" oninput="_renderEntLogChips(this.value)"
-                    style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
-                <div id="entLogChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:120px;overflow-y:auto"></div>
-            </div>
-
-            <!-- Fecha + Tipo -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div>
-                    <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Fecha de entrada</div>
-                    <input type="date" id="entLogFecha"
-                        style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
-                </div>
-                <div>
-                    <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Tipo</div>
-                    <select id="entLogTipo" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
-                        <option value="compra">Compra</option>
-                        <option value="bonificacion">Bonificación</option>
-                        <option value="consignacion">Consignación</option>
-                        <option value="prestamo_pagado">Préstamo pagado</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Cantidad + Costo -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div>
-                    <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Cantidad</div>
-                    <input type="number" id="entLogCantidad" placeholder="0" min="0" step="0.01"
-                        style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
-                </div>
-                <div>
-                    <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Costo unitario</div>
-                    <input type="number" id="entLogCosto" placeholder="$0.00" min="0" step="0.01"
-                        style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
-                </div>
-            </div>
-
-            <!-- Notas -->
-            <div>
-                <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Notas (opcional)</div>
-                <input type="text" id="entLogNotas" placeholder="Proveedor, lote, observaciones…"
-                    style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0">
-            <button onclick="cerrarEntradaLog()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:12px">Cancelar</button>
-            <button id="btnGuardarEntradaLog" onclick="guardarEntradaLog()" style="background:var(--green);color:#0f0e0c;border:none;border-radius:8px;padding:8px 20px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Guardar entrada</button>
-        </div>
-    </div>
-</div>
-
 <!-- ── MODAL AUTORIZACIÓN ADMIN ───────────────────────────────── -->
 <div id="modalAuthClave" style="display:none;position:fixed;inset:0;z-index:3500;
     background:rgba(0,0,0,.8);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
@@ -1407,7 +1393,7 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
 <script src="/nav-pref.js?v=5555aa4b"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
-<script src="/novedades.js?v=70762f79"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=ebb02341"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>

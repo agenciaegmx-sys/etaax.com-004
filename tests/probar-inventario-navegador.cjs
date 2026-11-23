@@ -1183,6 +1183,127 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await caso('…y ninguna violación de la CSP en el camino', async () => assert.deepEqual(violaciones, []));
             await ctx.close();
         }
+
+        /* ── T · entradas: la tarjeta se cierra, afuera es el Paso 2 y la nota (23-nov) ──
+           Edwin: 1) en el Paso 2, al agregar la entrada la tarjeta se cierra
+           sola; 2) «Revisar entradas» (afuera) es la MISMA pantalla del Paso 2 y
+           los renglones dicen el insumo completo («Sprite · 2 LTS», no «Sprite»);
+           3) una NOTA / FACTURA: varios productos, fotos una vez, cantidades que
+           se acumulan y se registran juntas. Con la CSP de producción. */
+        console.log('\n══ T · Entradas: tarjeta que se cierra, registro de afuera y nota / factura ══');
+        {
+            const { cspProduccion } = require('./navegador-comun.cjs');
+            const viejo = { id: 'elv1', insumoId: 'sprite', nombre: 'Sprite', cantidad: 4, tipo: 'compra', fecha: '2026-11-17',
+                            origen: 'manual', sucursalId: 'suc_principal', registrado: '2026-11-17T18:00:00Z' };
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { csp: cspProduccion(),
+                nube: { negocio_insumos: filasNube([SPRITE, SQUIRT, BATCH].concat(destilados(3))),
+                        entradas_log: [{ id: viejo.id, negocio_id: 'n1', datos: viejo }] },
+                viewport: { width: 1280, height: 800 } }));
+            await page.evaluate(() => mostrarVista('vistaEntradas'));
+            await page.waitForTimeout(500);
+            await caso('afuera: la MISMA pantalla del Paso 2 — insumos a la izquierda (sin el batch), lo registrado a la derecha, sin el modal viejo', async () => {
+                const r = await page.evaluate(() => ({ izq: document.querySelectorAll('.ent-hist #entChips .p12-item').length,
+                    der: !!document.querySelector('.ent-hist #entLogList'), barra: !!document.querySelector('#entHerr #entBuscador') && !!document.querySelector('#entHerr #entBuscar'),
+                    nota: !!document.querySelector('#entHerr .ph-nota'), modal: !!document.getElementById('modalEntradaLog'),
+                    viejos: [...document.querySelectorAll('#vistaEntradas .inv-wizard-header button')].map(b => b.textContent.trim()).filter(x => /Agregar entrada|Guardar entradas/.test(x)) }));
+                assert.deepEqual(r, { izq: 5, der: true, barra: true, nota: true, modal: false, viejos: [] });
+            });
+            await caso('…y el renglón dice el insumo completo: «Sprite · 2 LTS», no «Sprite» a secas', async () => {
+                const s = await page.evaluate(() => document.querySelector('#entLogList .eg > summary .eg-nom').innerText.replace(/\s+/g, ' ').trim());
+                assert.match(s, /^Sprite · 2 LTS/);
+            });
+            await page.fill('#entHerr #entBuscador', 'squ'); await page.waitForTimeout(200);
+            await caso('el buscador de arriba reduce la lista', async () =>
+                assert.equal(await page.evaluate(() => document.querySelectorAll('#entChips .p12-item').length), 1));
+            await page.fill('#entHerr #entBuscador', ''); await page.waitForTimeout(200);
+            await page.click('#entChips .p12-item:has-text("Sprite")'); await page.waitForTimeout(250);
+            await caso('tocar un insumo abre su registro (tipo, cantidad, fecha de hoy, evidencia)', async () => {
+                const r = await page.evaluate(() => ({ card: !!document.querySelector('#entFormCard .ent-form-card .ent-tipo-row'), lista: document.querySelectorAll('#entChips .p12-item').length,
+                    fecha: document.getElementById('entRapidaFecha').value, foto: !!document.querySelector('#entFormCard .ent-evid input[type=file]') }));
+                assert.deepEqual(r, { card: true, lista: 0, fecha: '2026-11-18', foto: true });
+            });
+            await page.fill('#entRapidaCant', '6');
+            await page.click('#entFormCard button:has-text("+ Agregar")'); await page.waitForTimeout(400);
+            await caso('«+ Agregar» la guarda en el log de la sucursal, CIERRA la tarjeta y avisa qué entró', async () => {
+                const r = await page.evaluate(() => { const g = getEntradasLog().filter(e => e.insumoId === 'sprite' && e.id !== 'elv1');
+                    return { n: g.length, cant: g[0] && g[0].cantidad, suc: g[0] && g[0].sucursalId, card: document.getElementById('entFormCard').innerHTML.trim(),
+                        lista: document.querySelectorAll('#entChips .p12-item').length, aviso: document.getElementById('entAviso') && document.getElementById('entAviso').classList.contains('on'),
+                        nube: (JSON.parse(localStorage.getItem('__nube')).entradas_log || []).length }; });
+                assert.deepEqual(r, { n: 1, cant: 6, suc: 'suc_principal', card: '', lista: 5, aviso: true, nube: 2 });
+            });
+            await caso('…y en la lista de la izquierda se ve lo que entró hoy', async () =>
+                assert.match(await page.evaluate(() => document.querySelector('#entChips .p12-item.reg').innerText.replace(/\s+/g, ' ')), /\+6 \S+ hoy/));
+
+            // ── La nota / factura ──
+            await page.click('#entHerr .ph-nota'); await page.waitForTimeout(250);
+            await caso('«Nota / factura» abre la nota arriba de la lista: proveedor, folio, fecha, tipo y fotos una sola vez', async () => {
+                const r = await page.evaluate(() => ({ nota: !!document.querySelector('#entNotaCard .ent-nota'), prov: !!document.getElementById('entNotaProv'),
+                    folio: !!document.getElementById('entNotaFolio'), fecha: document.getElementById('entNotaFecha').value, tipos: document.querySelectorAll('#entNotaCard .ent-tipo-btn').length,
+                    foto: !!document.querySelector('#entNotaCard .ent-evid input[type=file]') && !!document.querySelector('#entNotaCard .inv-qr-btn'),
+                    lista: document.querySelectorAll('#entChips .p12-item').length, reg: document.querySelector('#entNotaCard .ent-nota-reg').disabled }));
+                assert.deepEqual(r, { nota: true, prov: true, folio: true, fecha: '2026-11-18', tipos: 4, foto: true, lista: 5, reg: true });
+            });
+            const sumar = async (txt, n) => {
+                await page.click('#entChips .p12-item:has-text("' + txt + '")'); await page.waitForTimeout(200);
+                await page.fill('#entRapidaCant', String(n)); await page.keyboard.press('Enter'); await page.waitForTimeout(250);
+            };
+            await page.click('#entChips .p12-item:has-text("Squirt")'); await page.waitForTimeout(200);
+            await caso('con la nota abierta, tocar un producto solo pide CUÁNTO (tipo, fecha y fotos son de la nota)', async () => {
+                const r = await page.evaluate(() => ({ pide: !!document.querySelector('#entFormCard .ent-nota-pide'), tipos: document.querySelectorAll('#entFormCard .ent-tipo-btn').length,
+                    fecha: !!document.querySelector('#entFormCard input[type=date]') }));
+                assert.deepEqual(r, { pide: true, tipos: 0, fecha: false });
+            });
+            await page.fill('#entRapidaCant', '12'); await page.keyboard.press('Enter'); await page.waitForTimeout(250);
+            await sumar('Sprite', 24); await sumar('Squirt', 6);
+            await caso('las cantidades se ACUMULAN en la nota (Squirt 12 + 6 = 18) y nada se registra todavía', async () => {
+                const r = await page.evaluate(() => ({ items: [...document.querySelectorAll('#entNotaCard .ent-nota-it')].map(x => x.querySelector('.p12-nom').childNodes[0].textContent.trim() + ':' + x.querySelector('.ent-nota-cant').value),
+                    log: getEntradasLog().length, boton: document.querySelector('#entHerr .ph-nota').innerText.replace(/\s+/g, ' ').trim(),
+                    marca: [...document.querySelectorAll('#entChips .p12-en-nota')].length }));
+                assert.deepEqual(r, { items: ['Squirt · 2 LTS:18', 'Sprite · 2 LTS:24'], log: 2, boton: 'Nota abierta · 2', marca: 2 });
+            });
+            await page.fill('#entNotaProv', 'Coca-Cola FEMSA'); await page.fill('#entNotaFolio', 'A-77');
+            await page.screenshot({ path: process.env.CAPTURAS ? process.env.CAPTURAS + '/entradas-nota.png' : '/dev/null' }).catch(() => {});
+            await page.reload(); await page.waitForFunction(() => window._INV_CARGADO === true);
+            await page.evaluate(() => mostrarVista('vistaEntradas')); await page.waitForTimeout(500);
+            await caso('recargar la página a media nota NO la pierde (borrador en el equipo)', async () => {
+                const r = await page.evaluate(() => ({ items: document.querySelectorAll('#entNotaCard .ent-nota-it').length, prov: document.getElementById('entNotaProv').value,
+                    folio: document.getElementById('entNotaFolio').value }));
+                assert.deepEqual(r, { items: 2, prov: 'Coca-Cola FEMSA', folio: 'A-77' });
+            });
+            await page.click('#entNotaCard .ent-nota-reg'); await page.waitForTimeout(500);
+            await caso('«Registrar nota» crea una entrada por producto, con la misma nota, y la nota se cierra', async () => {
+                const r = await page.evaluate(() => { const n = getEntradasLog().filter(e => e.notaId);
+                    return { n: n.length, ids: new Set(n.map(e => e.notaId)).size, prov: n.every(e => e.notaProveedor === 'Coca-Cola FEMSA' && e.notaFolio === 'A-77'),
+                        nota: document.getElementById('entNotaCard').innerHTML.trim(), boton: document.querySelector('#entHerr .ph-nota').innerText.trim() }; });
+                assert.deepEqual(r, { n: 2, ids: 1, prov: true, nota: '', boton: 'Nota / factura' });
+            });
+            await caso('…y en lo registrado la nota se ve como documento («Coca-Cola FEMSA · Folio A-77 · 2 productos»)', async () => {
+                const s = await page.evaluate(() => [...document.querySelectorAll('#entLogList .eg-nota > summary')].map(x => x.innerText.replace(/\s+/g, ' ').trim()));
+                assert.equal(s.length, 1, JSON.stringify(s));
+                assert.match(s[0], /Coca-Cola FEMSA · Folio A-77.*2 productos/);
+            });
+            await caso('…y nada se sale por la derecha', async () => assert.equal(await desborde(page), 0));
+            await page.screenshot({ path: process.env.CAPTURAS ? process.env.CAPTURAS + '/entradas-afuera.png' : '/dev/null', fullPage: false }).catch(() => {});
+
+            // ── Paso 2: la tarjeta se cierra sola ──
+            await page.evaluate(() => mostrarVista('vistaLista')); await page.waitForTimeout(300);
+            await nuevoInv(page); await page.waitForTimeout(600);
+            await page.evaluate(() => irAPaso(2)); await page.waitForTimeout(500);
+            await caso('en el Paso 2 no queda la barra de afuera colgando (mismos ids)', async () =>
+                assert.equal(await page.evaluate(() => document.getElementById('entHerr').innerHTML.trim() + '|' + document.querySelectorAll('#entBuscador').length), '|1'));
+            await page.click('#entChips .p12-item:has-text("Destilado 1")'); await page.waitForTimeout(250);
+            await page.fill('#entRapidaCant', '3');
+            await page.click('#entFormCard button:has-text("+ Agregar")'); await page.waitForTimeout(400);
+            await caso('Paso 2: al agregar la entrada, la tarjeta se CIERRA sola y regresa la lista', async () => {
+                const r = await page.evaluate(() => ({ log: (invActual.entradasLog || []).filter(e => e.cantidad === 3).length, card: document.getElementById('entFormCard').innerHTML.trim(),
+                    lista: document.querySelectorAll('#entChips .p12-item').length > 0 }));
+                assert.deepEqual(r, { log: 1, card: '', lista: true });
+            });
+            await caso('…y la barra del Paso 2 también trae «Nota / factura»', async () =>
+                assert.ok(await page.evaluate(() => !!document.querySelector('#pasoHerr .ph-nota'))));
+            await caso('…sin errores en la página', async () => assert.deepEqual(await page.evaluate(() => window.__errores), []));
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }

@@ -373,7 +373,14 @@ async function _reloadEntradasRT() {
     // abierto (importa las nuevas del QR al momento).
     try {
         var ve = document.getElementById('vistaEntradas');
-        if (ve && ve.style.display !== 'none') { renderVistaEntradas(); return; }
+        if (ve && ve.style.display !== 'none') {
+            /* Solo lo registrado y la lista de insumos: rearmar la pantalla
+               entera le quitaba el foco a la nota a medio escribir con cada
+               entrada que llegaba (el eco de la nuestra incluido). */
+            if (document.getElementById('entLogList')) { renderListadoEntradas(); renderChipsEntrada(); }
+            else renderVistaEntradas();
+            return;
+        }
         if (invActual && !invActual.cerrado) {
             var n = _importarEntradasQR();
             if (n && typeof renderStepContent === 'function') renderStepContent();
@@ -2912,6 +2919,8 @@ function _importarEntradasQR() {
             foto_url: e.foto_url || '',         // evidencia visual del QR (1ª foto)
             foto_urls: e.foto_urls || []        // lote: varias fotos de evidencia
         });
+        // La nota / factura viaja con sus renglones (si vino en una).
+        if (e.notaId) Object.assign(invActual.entradasLog[invActual.entradasLog.length - 1], _entNotaCampos(e));
         e.importadoEnInv = invActual.id;        // marcar el registro global para no re-importar
         try { _sbUpEL(e); } catch(err) {}
         n++;
@@ -2938,6 +2947,7 @@ function _importarEntradasQR() {
                 sucursalId: le.sucursalId || _sucActiva() || 'suc_principal',
                 importadoEnInv: invActual.id, registrado: new Date().toISOString()
             });
+            if (le.notaId) Object.assign(_gl[_gl.length - 1], _entNotaCampos(le));
             _glob[le.id] = 1; _added = true;
             try { _sbUpEL(_gl[_gl.length - 1]); } catch(e) {} // el diff no ve el push → forzar
         });
@@ -3100,6 +3110,7 @@ function mostrarVista(id) {
         if (el) el.style.display = v === id ? 'block' : 'none';
     });
     if (id !== 'vistaCaptura') _vaciarHerrPaso();
+    if (id !== 'vistaEntradas' && typeof _vaciarEntHerr === 'function') _vaciarEntHerr();   // mismos ids que la del paso
     // Al volver a la LISTA, ningún inventario está activo. Blindaje anti-"reabrir el
     // primero": no importa por qué ruta se salga (finalizar, salir, cerrar tour, etc.),
     // aquí se garantiza que no quede un invActual/filasCaptura/soloVista colgando que el
@@ -6043,7 +6054,7 @@ function _herrPasoHTML() {
            servía. Es una sola vista en dos columnas que se ve en LISTA o en
            CUADRÍCULA, con el mismo botón del Paso 1. */
         vistaEntradas2 = 'busqueda';
-        return _herrLados(_herrBuscar('entBuscador', _entRapidaBusqueda, 'Producto para registrar…', 'buscarInsumoEntrada') + _herrVistaToggle(), _filtroTipoHTML(true));
+        return _entHerrHTML(true);   // la MISMA barra que el registro de afuera
     }
     if (paso === 3) {
         const nPb = prebatchesProducibles().length;
@@ -7024,6 +7035,7 @@ function renderStep2() {
     return bannerMovsQR() + `
         <div class="p12-split p12-split-ent">
             <section class="p12-col">
+                <div id="entNotaCard"></div>
                 <div id="entFormCard"></div>
                 <div id="entChips"></div>
             </section>
@@ -7039,9 +7051,10 @@ function initEntradaRapidaUI() {
     if (_entRapidaBusqueda) {
         const inp = document.getElementById('entBuscador');
         if (inp) inp.value = _entRapidaBusqueda;
-        renderChipsEntrada();
     }
-    if (_entRapidaInsumoId) renderFormEntrada();
+    _entPintarNota();
+    renderChipsEntrada();
+    if (_entRapidaInsumoId || _entNota) renderFormEntrada();
     renderListadoEntradas();
 }
 
@@ -13055,128 +13068,346 @@ function eliminarInventario(id) {
 // ═══════════════════════════════════════════════════════════════
 let _entLogInsumoCache = null;
 
+/* ══ «REVISAR ENTRADAS» ES EL MISMO PASO 2 (Edwin, 23-nov) ═════════════════
+   Afuera de un inventario, registrar abría un modal viejo —el insumo en
+   chips, fecha, tipo, cantidad y costo— que no se parecía en nada al Paso 2,
+   y la lista decía solo «Jumex» tres veces sin saber cuál era cuál. Ahora es
+   la MISMA pantalla: a la izquierda todos los insumos de la sucursal (el
+   buscador los reduce; al tocar uno, ese espacio se vuelve el registro), a la
+   derecha lo registrado, agrupado por insumo y con su ficha completa.
+
+   Las mismas funciones pintan las dos. Lo único que cambia es DE DÓNDE salen
+   los insumos (_entFuente) y A DÓNDE va la entrada (_entGuardarNuevas): sin
+   inventario abierto va solo al log global, con el sello de la sucursal, y el
+   inventario que cubra su fecha la jala al abrirse (el import por periodo de
+   siempre). */
+function _entFuente() {
+    if (invActual) return filasCaptura;
+    if (!_entLogInsumoCache) {
+        _entLogInsumoCache = _catalogoUnicoInv()
+            .filter(function (ins) { return ins && !ins.esSubReceta; })   // un prebatch se produce, no se compra
+            .map(function (ins) { return Object.assign({}, ins, { insumoId: _canonInsumoId(ins.id) }); })
+            .sort(function (a, b) {
+                return String(insumoTitulo(a) || a.nombre || '').localeCompare(String(insumoTitulo(b) || b.nombre || ''), 'es');
+            });
+    }
+    return _entLogInsumoCache;
+}
+function _entFilaDe(id) {
+    var l = _entFuente();
+    for (var i = 0; i < l.length; i++) if (l[i] && l[i].insumoId === id) return l[i];
+    return null;
+}
+/* Hoy en la hora de la barra, no en UTC: a las 7 de la noche toISOString ya
+   dice mañana. */
+function _hoyLocalEnt() {
+    var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+}
+function _entFechaDefault() { return invActual ? _fechaSugeridaEntrada() : _hoyLocalEnt(); }
+/* Afuera no hay periodo: lo que sirve para no registrar dos veces es lo que
+   ya entró HOY de cada insumo, en esta sucursal. */
+function _entHoyMapa() {
+    var hoy = _hoyLocalEnt(), suc = _sucActiva(), m = {};
+    getEntradasLog().forEach(function (e) {
+        if (!e || e.borrada || e.concepto === 'merma' || e.concepto === 'salida') return;
+        if (String(e.fecha || '').slice(0, 10) !== hoy) return;
+        if (suc && (e.sucursalId || '') !== suc) return;
+        var k = _canonInsumoId(e.insumoId);
+        m[k] = (m[k] || 0) + (parseFloat(e.cantidad) || 0);
+    });
+    return m;
+}
+
+/* El botón viejo ya no abre un modal: lleva a la pantalla y pone el cursor en
+   el buscador de productos. */
 function abrirRegistroEntradas() {
     if (typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
-    _entLogInsumoCache = _scopeSucInsumos(getInsumos()); // solo insumos de la sucursal activa
-    _entRapidaInsumoId = null;
-    _entRapidaBusqueda = '';
-    _entRapidaTipo     = 'compra';
-    const hoy = new Date().toISOString().split('T')[0];
-    document.getElementById('entLogFecha').value    = hoy;
-    document.getElementById('entLogCantidad').value = '';
-    document.getElementById('entLogCosto').value    = '';
-    document.getElementById('entLogNotas').value    = '';
-    document.getElementById('entLogTipo').value     = 'compra';
-    document.getElementById('entLogInsumoNombre').textContent = 'Selecciona un insumo';
-    document.getElementById('entLogInsumoId').value = '';
-    document.getElementById('entLogBusqueda').value = '';
-    _renderEntLogChips('');
-    document.getElementById('modalEntradaLog').style.display = 'flex';
+    var ve = document.getElementById('vistaEntradas');
+    if (!ve || ve.style.display === 'none') mostrarVista('vistaEntradas');
+    var inp = document.getElementById('entBuscador'); if (inp) inp.focus();
 }
 
-function _renderEntLogChips(q) {
-    const insumos = _entLogInsumoCache || getInsumos();
-    const lista   = q
-        ? insumos.filter(x => x.nombre.toLowerCase().includes(q.toLowerCase()) ||
-                               (x.marca||'').toLowerCase().includes(q.toLowerCase()))
-        : insumos.slice(0, 40);
-    const cont = document.getElementById('entLogChips');
-    if (!cont) return;
-    if (!lista.length) { cont.innerHTML = '<div style="font-size:11px;color:var(--text-dim);padding:8px">Sin resultados</div>'; return; }
-    cont.innerHTML = lista.map(ins =>
-        `<button onclick="seleccionarEntLogInsumo('${ins.id}')"
-            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
-            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit;
-            text-align:left;transition:all .15s"
-            onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
-            ${etx(insumoTitulo(ins))}${(insumoContenido(ins)||ins.marca) ? ` <span style="font-size:10px;color:var(--text-dim)">· ${insumoMetaHTML(ins)}</span>` : ''}
-        </button>`
-    ).join('');
-}
-
-function seleccionarEntLogInsumo(id) {
-    const ins = (_entLogInsumoCache || getInsumos()).find(x => x.id === id);
-    if (!ins) return;
-    _entRapidaInsumoId = id;
-    document.getElementById('entLogInsumoId').value = id;
-    document.getElementById('entLogInsumoNombre').textContent = insumoEtiqueta(ins);
-    // Autocompletar costo desde primera presentación
-    const p0 = (ins.presentaciones||[])[0];
-    if (p0 && p0.precio && !document.getElementById('entLogCosto').value) {
-        document.getElementById('entLogCosto').value = p0.precio;
-    }
-    document.getElementById('entLogChips').innerHTML = '';
-    document.getElementById('entLogBusqueda').value  = '';
-}
-
-function guardarEntradaLog() {
-    if (typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
-    const insumoId = document.getElementById('entLogInsumoId').value;
-    const fecha    = document.getElementById('entLogFecha').value;
-    const cantidad = parseFloat(document.getElementById('entLogCantidad').value);
-    const costo    = parseFloat(document.getElementById('entLogCosto').value) || 0;
-    const tipo     = document.getElementById('entLogTipo').value;
-    const notas    = document.getElementById('entLogNotas').value.trim();
-
-    if (!insumoId) { alert('Selecciona un insumo'); return; }
-    if (!fecha)    { alert('Indica la fecha'); return; }
-    if (!cantidad || cantidad <= 0) { alert('Indica la cantidad'); return; }
-
-    const ins = (_entLogInsumoCache || getInsumos()).find(x => x.id === insumoId);
-
-    // Save to global entradas log
-    const log = getEntradasLog();
-    const _nuevaEnt = {
-        id:       genId(),
-        insumoId,
-        nombre:   ins ? ins.nombre : '—',
-        familia:  ins ? (ins.familia||'') : '',
-        cantidad,
-        costo,
-        tipo,
-        notas,
-        fecha,
-        origen:   'manual',   // entrada capturada a mano en el ERP → se importa al inventario por PERIODO
-        sucursalId: _sucActiva() || 'suc_principal', // sello: el import a otra sucursal la ignora
-        registrado: new Date().toISOString()
-    };
-    log.push(_nuevaEnt);
-    setEntradasLog(log);
-    // FORZAR el upsert a la nube: setEntradasLog no detecta la nueva entrada porque
-    // log === _cacheEL (misma referencia ya mutada por el push). Sin esto, la entrada
-    // solo vivía en localStorage y no sincronizaba entre dispositivos.
-    try { _sbUpEL(_nuevaEnt); } catch(e) { console.warn('[guardarEntradaLog upsert]', e); }
-
-    // Also save to active inventory so it appears in vistaEntradas historial
-    // Copia inmediata al inventario activo (mismo id → el import por periodo no la
-    // duplica). Si su fecha cae fuera del periodo, el import la reubica al inventario correcto.
-    if (invActual && _enPeriodoInvActual(fecha, _nuevaEnt.registrado)) {
+/* UNA O VARIAS ENTRADAS NUEVAS (una suelta, o los renglones de una nota) a
+   sus dos casas, en un solo lugar:
+     · con inventario abierto, a su entradasLog y el espejo al log global
+       (como siempre: así sale también en el registro de afuera);
+     · sin inventario, solo al log global con el sello de la sucursal; el
+       inventario que cubra su fecha la jala solo.
+   Antes cada pantalla armaba el registro a su manera, y por eso el de afuera
+   se guardaba sin fotos. */
+function _entGuardarNuevas(regs) {
+    if (!invActual && typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return false;
+    if (!regs || !regs.length) return false;
+    var suc = _sucActiva() || 'suc_principal', ahora = new Date().toISOString();
+    var armadas = regs.map(function (r) {
+        var ins = _insumoDeEntrada(r.insumoId), fila = _entFilaDe(r.insumoId);
+        var fotos = (r.fotos || []).slice();
+        return { r: r, id: genId() + genId(), ins: ins, fila: fila, fotos: fotos,
+                 etq: ins ? insumoEtiqueta(ins) : (fila ? (insumoEtiqueta(fila) || fila.nombre) : r.insumoId),
+                 nota: _entNotaCampos(r) };
+    });
+    if (invActual) {
         if (!invActual.entradasLog) invActual.entradasLog = [];
-        invActual.entradasLog.push({
-            id: _nuevaEnt.id, insumoId,
-            nombreProducto: ins ? insumoEtiqueta(ins) : '—',
-            cantidad, costo, tipo, notas, fecha, origen: 'manual',
-            sucursalId: _nuevaEnt.sucursalId
+        armadas.forEach(function (a) {
+            invActual.entradasLog.push(Object.assign({
+                id: a.id, insumoId: a.r.insumoId, nombreProducto: a.etq,
+                tipo: a.r.tipo, cantidad: a.r.cantidad, fecha: a.r.fecha,
+                origen: 'manual', sucursalId: suc,
+                foto_urls: a.fotos, foto_url: a.fotos[0] || ''
+            }, a.nota));
         });
         guardarEntradas();
     }
-
-    // Close modal and refresh historial
-    document.getElementById('modalEntradaLog').style.display = 'none';
-    _entLogInsumoCache = null;
+    try {
+        // Sin caché todavía, el push caía en un arreglo suelto y se perdía aquí.
+        if (!_cacheEL) _cacheEL = _cargarELLocal();
+        var gl = getEntradasLog(), nuevas = [];
+        armadas.forEach(function (a) {
+            var g = Object.assign({
+                id: a.id, insumoId: a.r.insumoId,
+                nombre: a.ins ? a.ins.nombre : (a.fila ? (a.fila.nombre || '') : ''),
+                nombreProducto: a.etq,
+                familia: a.ins ? (a.ins.familia || '') : '',
+                cantidad: a.r.cantidad, costo: 0, tipo: a.r.tipo, notas: '',
+                fecha: a.r.fecha, origen: 'manual', sucursalId: suc,
+                foto_urls: a.fotos.slice(), foto_url: a.fotos[0] || '',
+                registrado: ahora
+            }, a.nota);
+            if (invActual) g.importadoEnInv = invActual.id;
+            gl.push(g); nuevas.push(g);
+        });
+        _guardarELLocal();
+        nuevas.forEach(function (g) { try { _sbUpEL(g); } catch (e) { console.warn('[entrada nueva → nube]', e); } }); // el diff no ve el push → forzar
+    } catch (e) { console.warn('[entrada nueva → log global]', e); }
     _invalidarStep5();          // entró producto → el resumen debe rehacerse
-    // Re-render the full view if vistaEntradas is visible, otherwise just the list
-    if (document.getElementById('vistaEntradas')?.style.display !== 'none') {
-        renderVistaEntradas();
-    } else {
-        renderListadoEntradas();
-    }
+    return true;
 }
 
-function cerrarEntradaLog() {
-    document.getElementById('modalEntradaLog').style.display = 'none';
+/* ══ ENTRADA POR NOTA / FACTURA (Edwin, 23-nov) ═══════════════════════════
+   Una compra de refrescos trae seis productos en el mismo ticket. Uno por uno
+   se repetían tipo, fecha y foto seis veces, y la foto del ticket quedaba
+   pegada a un solo producto. Ahora se abre una NOTA: proveedor, folio, fecha,
+   tipo y las fotos van UNA vez, arriba; se tocan los productos de la lista y
+   cada cantidad se va sumando a la nota (el mismo producto dos veces se
+   acumula). «Registrar nota» crea una entrada por producto, todas con la misma
+   nota (notaId), las mismas fotos y los mismos datos.
+
+   Mientras se arma vive como BORRADOR en este equipo, uno por pantalla (el
+   Paso 2 de cada inventario y el registro de afuera de cada sucursal), así que
+   recargar la tablet a media nota no la pierde. Nada entra al inventario
+   hasta registrarla. */
+var _entNota = null, _entNotaQr = false, _entNotaSubiendo = false;
+function _entNotaCampos(o) {
+    return (o && o.notaId) ? { notaId: o.notaId, notaFolio: o.notaFolio || '', notaProveedor: o.notaProveedor || '' } : {};
+}
+function _entNotaCtx() { return invActual ? 'inv:' + invActual.id : 'suc:' + (_sucActiva() || ''); }
+function _entNotaLlave(ctx) { return 'etaax_' + getNegocioActivo() + '_notaEntrada_' + ctx; }
+// La nota de ESTA pantalla (la de otra se queda guardada en su borrador).
+function _entNotaSync() {
+    var ctx = _entNotaCtx();
+    if (_entNota && _entNota.ctx === ctx) return _entNota;
+    if (_entNotaQr) { _entNotaQr = false; _qrEvidCerrar(); }
+    _entNota = null;
+    try {
+        var b = JSON.parse(localStorage.getItem(_entNotaLlave(ctx)) || 'null');
+        if (b && b.ctx === ctx && Array.isArray(b.items)) { if (!Array.isArray(b.fotos)) b.fotos = []; _entNota = b; }
+    } catch (e) {}
+    return _entNota;
+}
+function _entNotaGuardar() {
+    try { if (_entNota) localStorage.setItem(_entNotaLlave(_entNota.ctx), JSON.stringify(_entNota)); } catch (e) {}
+}
+function _entNotaCantDe(id) {
+    if (!_entNota) return 0;
+    for (var i = 0; i < _entNota.items.length; i++) if (_entNota.items[i].insumoId === id) return parseFloat(_entNota.items[i].cant) || 0;
+    return 0;
+}
+function _entBtnNotaHTML() {
+    var n = _entNotaSync();
+    return '<button class="btn-vista ph-nota' + (n ? ' on' : '') + '" onclick="abrirNotaEntrada()" ' +
+        'title="Una compra con varios productos: se arma la nota y se registra completa">' + _icInv('nom-recibo', 15) +
+        (n ? 'Nota abierta · ' + n.items.length : 'Nota / factura') + '</button>';
+}
+function _entPintarFranja() {
+    if (invActual) { if (typeof _pintarHerrPaso === 'function') _pintarHerrPaso(); }
+    else _pintarEntHerr();
+    /* Repintar la barra deja vacías las pestañas de lo registrado (las llena
+       la lista con sus contadores): se vuelven a llenar. */
+    var ch = document.getElementById('entTipoChips');
+    if (ch && !ch.innerHTML.trim()) renderListadoEntradas();
+}
+function _entPintarIzq() { _entPintarNota(); renderFormEntrada(); renderChipsEntrada(); _entPintarFranja(); }
+
+function abrirNotaEntrada() {
+    if (!invActual && typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
+    if (!_entNotaSync()) {
+        _entNota = { id: genId() + genId(), ctx: _entNotaCtx(), proveedor: '', folio: '', fecha: _entFechaDefault(),
+                     tipo: 'compra', fotos: [], items: [], creada: new Date().toISOString() };
+        _entNotaGuardar();
+    }
+    // Lo que se toque ahora va a la nota: el registro suelto que estuviera abierto se cierra.
+    _entRapidaInsumoId = null; _entRapidaFotos = [];
+    if (_entRapidaQr) { _entRapidaQr = false; _qrEvidCerrar(); }
+    _entPintarIzq();
+    var c = document.getElementById('entNotaCard');
+    if (c && c.scrollIntoView) { try { c.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+}
+function _entNotaCampo(campo, val) {
+    if (!_entNotaSync()) return;
+    _entNota[campo] = val;
+    _entNotaGuardar();
+}
+function setTipoNota(t) {
+    if (!_entNotaSync()) return;
+    _entNota.tipo = t; _entNotaGuardar(); _entPintarNota();
+}
+function _entNotaSumar(id, cant) {
+    if (!_entNotaSync()) return;
+    var it = null;
+    for (var i = 0; i < _entNota.items.length; i++) if (_entNota.items[i].insumoId === id) { it = _entNota.items[i]; break; }
+    if (it) it.cant = Math.round(((parseFloat(it.cant) || 0) + cant) * 10000) / 10000;
+    else _entNota.items.push({ insumoId: id, cant: cant });
+    _entNotaGuardar();
+    var f = _entFilaDe(id), u = _unidadCompra({ insumoId: id });
+    _entAviso('+' + fmtBot(cant) + ' ' + u + ' a la nota · ' + (f ? (insumoTitulo(f) || f.nombre) : '') +
+              (it ? ' (van ' + fmtBot(it.cant) + ' ' + u + ')' : ''));
+    _entRapidaInsumoId = null;
+    _entPintarIzq();
+}
+function _entNotaCambiarCant(i, val) {
+    if (!_entNotaSync() || !_entNota.items[i]) return;
+    var n = parseFloat(val);
+    if (!(n > 0)) _entNota.items.splice(i, 1); else _entNota.items[i].cant = n;
+    _entNotaGuardar(); _entPintarNota(); renderChipsEntrada(); _entPintarFranja();
+}
+function _entNotaQuitar(i) {
+    if (!_entNotaSync()) return;
+    _entNota.items.splice(i, 1);
+    _entNotaGuardar(); _entPintarNota(); renderChipsEntrada(); _entPintarFranja();
+}
+function _entNotaDescartar() {
+    if (!_entNotaSync()) return;
+    var n = _entNota.items.length;
+    if (n && !confirm('¿Descartar esta nota con ' + n + ' producto' + (n !== 1 ? 's' : '') + '? No se registra nada.')) return;
+    _entNotaCerrar();
+}
+function _entNotaCerrar() {
+    if (_entNota) { try { localStorage.removeItem(_entNotaLlave(_entNota.ctx)); } catch (e) {} }
+    _entNota = null;
+    if (_entNotaQr) { _entNotaQr = false; _qrEvidCerrar(); }
+    _entRapidaInsumoId = null;
+    _entPintarIzq();
+}
+function _entNotaToggleQr() {
+    if (!_entNotaSync()) return;
+    if (_entNotaQr) { _entNotaQr = false; _qrEvidCerrar(); _entPintarNota(); return; }
+    _entNotaQr = true; _entPintarNota();
+    _qrEvidAbrir('entNotaQrSlot', function (foto) {
+        if (!foto || !foto.url || !_entNota) return;
+        _entNota.fotos.push(foto.url); _entNotaGuardar(); _entNotaPintarFotos();
+    });
+}
+async function _entNotaSubirFotos(input) {
+    if (!input.files || !input.files.length || !_entNotaSync()) return;
+    var files = Array.prototype.slice.call(input.files), nota = _entNota;
+    input.value = '';
+    _entNotaSubiendo = true; _entNotaPintarFotos();
+    for (var i = 0; i < files.length; i++) {
+        try { var url = await _entEdSubirUna(files[i]); if (url) nota.fotos.push(url); } catch (e) { console.warn('[foto nota]', e); }
+    }
+    _entNotaSubiendo = false;
+    if (_entNota === nota) _entNotaGuardar();
+    _entNotaPintarFotos();
+}
+function _entNotaQuitarFoto(i) {
+    if (!_entNotaSync()) return;
+    _entNota.fotos.splice(i, 1); _entNotaGuardar(); _entNotaPintarFotos();
+}
+function _entNotaPintarFotos() {
+    var el = document.getElementById('entNotaFotos'); if (!el || !_entNota) return;
+    el.innerHTML = _entNota.fotos.map(function (u, i) {
+        return '<span class="ent-ed-foto"><img ' + sbAttr(u) + ' onclick="etaaxVerFoto(this.src)">' +
+            '<button title="Quitar foto" onclick="_entNotaQuitarFoto(' + i + ')">✕</button></span>';
+    }).join('') +
+    '<label class="ent-ed-addfoto" title="Subir desde este equipo">' + (_entNotaSubiendo ? '…' : _icInv('adm-subir-archivo', 20)) +
+        '<input type="file" accept="image/*" multiple style="display:none" onchange="_entNotaSubirFotos(this)"></label>';
+}
+function _entPintarNota() {
+    var cont = document.getElementById('entNotaCard'); if (!cont) return;
+    if (!_entNotaSync()) { if (cont.innerHTML) cont.innerHTML = ''; return; }
+    var qrB = _entNotaQr ? _qrEvidApartar() : null;
+    var n = _entNota.items.length, per = _periodoInvActual();
+    var items = n ? _entNota.items.map(function (it, i) {
+        var f = _entFilaDe(it.insumoId) || _insumoDeEntrada(it.insumoId) || { nombre: it.insumoId };
+        var meta = insumoMeta(f) ? insumoMetaHTML(f) : '';
+        return '<div class="ent-nota-it"><span class="p12-nom">' + etx(insumoTitulo(f) || f.nombre || '—') + (meta ? '<small>' + meta + '</small>' : '') + '</span>' +
+            '<input type="number" class="ent-nota-cant" min="0" step="any" inputmode="decimal" value="' + etx(String(it.cant)) + '" ' +
+                'onchange="_entNotaCambiarCant(' + i + ', this.value)" aria-label="Cantidad">' +
+            '<span class="ent-nota-u">' + etx(_unidadCompra({ insumoId: it.insumoId })) + '</span>' +
+            '<button class="ent-nota-x" title="Quitar de la nota" onclick="_entNotaQuitar(' + i + ')">✕</button></div>';
+    }).join('') : '<div class="ent-nota-vacia">Toca los productos en la lista de abajo y escribe cuánto llegó de cada uno. ' +
+        'Si repites un producto, se suma.</div>';
+    cont.innerHTML = '<div class="ent-form-card ent-nota">' +
+        '<div class="ent-nota-cab"><div><div class="ent-nota-tit">' + _icInv('nom-recibo', 18) + 'Nota / factura</div>' +
+            '<div class="ent-nota-sub">' + (n ? n + ' producto' + (n !== 1 ? 's' : '') + ' en la nota' : 'Una sola compra con varios productos') + '</div></div>' +
+            '<button class="ent-nota-cerrar" title="Descartar la nota" onclick="_entNotaDescartar()">✕</button></div>' +
+        '<div class="ent-nota-datos">' +
+            '<label><span>Proveedor</span><input id="entNotaProv" type="text" value="' + etx(_entNota.proveedor || '') + '" placeholder="Ej. Coca-Cola" ' +
+                'oninput="_entNotaCampo(\'proveedor\', this.value)" autocomplete="off"></label>' +
+            '<label><span>Folio</span><input id="entNotaFolio" type="text" value="' + etx(_entNota.folio || '') + '" placeholder="Opcional" ' +
+                'oninput="_entNotaCampo(\'folio\', this.value)" autocomplete="off"></label>' +
+            '<label><span>Fecha</span><input id="entNotaFecha" type="date" value="' + etx(_entNota.fecha || '') + '" ' +
+                'min="' + etx(per.desde || '') + '" max="' + etx(per.hasta || '') + '" onchange="_entNotaCampo(\'fecha\', this.value)"></label>' +
+        '</div>' +
+        '<div class="ent-tipo-row">' + ENT_TIPOS.map(function (t) {
+            return '<button class="ent-tipo-btn ' + (_entNota.tipo === t.id ? 'active' : '') + '" onclick="setTipoNota(\'' + t.id + '\')">' + _icInv(t.ic) + t.lbl + '</button>';
+        }).join('') + '</div>' +
+        '<div class="ent-nota-items">' + items + '</div>' +
+        '<div class="ent-evid"><div class="ent-nota-lbl">Evidencia de la nota: foto del ticket o la factura (vale para todos sus productos)</div>' +
+            '<div class="ent-ed-fotos" id="entNotaFotos"></div>' +
+            '<div style="margin-top:8px">' + _qrEvidBoton(_entNotaQr, '_entNotaToggleQr()') + '</div><div id="entNotaQrSlot"></div></div>' +
+        '<button class="ent-nota-reg" onclick="registrarNotaEntrada()"' + (n ? '' : ' disabled') + '>' +
+            (n ? 'Registrar nota · ' + n + ' producto' + (n !== 1 ? 's' : '') : 'Registrar nota') + '</button>' +
+    '</div>';
+    _entNotaPintarFotos();
+    if (qrB) _qrEvidReponer(qrB, 'entNotaQrSlot');
+}
+function registrarNotaEntrada() {
+    if (!invActual && typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
+    if (!_entNotaSync()) return;
+    var nota = _entNota;
+    var items = nota.items.filter(function (it) { return (parseFloat(it.cant) || 0) > 0; });
+    if (!items.length) { alert('La nota no tiene productos todavía: tócalos en la lista y escribe cuánto llegó de cada uno.'); return; }
+    if (_entNotaSubiendo) { alert('Espera a que terminen de subir las fotos de la nota.'); return; }
+    var fecha = nota.fecha || _entFechaDefault();
+    // El mismo candado que la entrada suelta: fuera del periodo no se guarda.
+    var fuera = _fechaFueraDePeriodo(fecha);
+    if (fuera) { alert(fuera); var fe = document.getElementById('entNotaFecha'); if (fe) fe.focus(); return; }
+    var prov = String(nota.proveedor || '').trim(), folio = String(nota.folio || '').trim();
+    var regs = items.map(function (it) {
+        return { insumoId: it.insumoId, cantidad: parseFloat(it.cant), tipo: nota.tipo || 'compra', fecha: fecha,
+                 fotos: nota.fotos || [], notaId: nota.id, notaFolio: folio, notaProveedor: prov };
+    });
+    if (!_entGuardarNuevas(regs)) return;
+    _entNotaCerrar();
+    _entAviso('Nota registrada: ' + regs.length + ' producto' + (regs.length !== 1 ? 's' : '') + (prov ? ' · ' + prov : ''));
     renderListadoEntradas();
 }
+/* Lo que se acaba de guardar, dicho en un aviso que se va solo: la tarjeta
+   se cierra y sin esto no quedaba claro si entró. */
+function _entAviso(txt) {
+    var el = document.getElementById('entAviso');
+    if (!el) {
+        el = document.createElement('div'); el.id = 'entAviso'; el.className = 'ent-aviso';
+        el.setAttribute('role', 'status'); document.body.appendChild(el);
+    }
+    el.innerHTML = _icInv('adm-pagado', 16) + '<span>' + etx(txt) + '</span>';
+    el.classList.add('on');
+    clearTimeout(_entAviso._t);
+    _entAviso._t = setTimeout(function () { el.classList.remove('on'); }, 2600);
+}
+window.abrirNotaEntrada = abrirNotaEntrada; window.registrarNotaEntrada = registrarNotaEntrada;
 
 
 /* ── TIPOS DE ENTRADA · una sola verdad ───────────────────────────────────
@@ -13229,17 +13460,26 @@ function renderChipsEntrada() {
        espacio es del formulario. */
     if (cont.closest('.p12-split-ent')) {
         if (_entRapidaInsumoId) { cont.innerHTML = ''; return; }
+        _entNotaSync();
         const q2 = String(_entRapidaBusqueda || '').trim().toLowerCase();
-        const lista = filasCaptura.filter(f => !q2 || String(f.nombre || '').toLowerCase().indexOf(q2) > -1 || String(insumoTitulo(f) || '').toLowerCase().indexOf(q2) > -1);
+        /* En el Paso 2, lo del periodo; afuera, lo que ya entró hoy. Se busca
+           en la ficha completa (también envase y marca). */
+        const hoyM = invActual ? null : _entHoyMapa();
+        const lista = _entFuente().filter(f => !q2 || String(f.nombre || '').toLowerCase().indexOf(q2) > -1 || String(insumoEtiqueta(f) || '').toLowerCase().indexOf(q2) > -1);
         // Lista o cuadrícula, con el mismo botón (y la misma preferencia) que el Paso 1.
         cont.className = 'p12-lista' + (modoListaCapt === 'galeria' ? ' p12-iconos' : '');
         cont.innerHTML = lista.length ? lista.map(f => {
-            const ya = getEntradasBottles(f.insumoId);
+            const ya = invActual ? getEntradasBottles(f.insumoId) : (hoyM[f.insumoId] || 0);
+            const enNota = _entNotaCantDe(f.insumoId);
             const meta = insumoMeta(f) ? insumoMetaHTML(f) : (f.categoria ? etx(f.categoria) : '');
-            return `<button class="p12-item ${ya > 0 ? 'reg' : ''}" onclick="seleccionarProductoEntrada('${f.insumoId}')">
+            const der = enNota > 0 ? `<b class="p12-ok p12-en-nota">${_icInv('nom-recibo', 13)}+${fmtBot(Math.round(enNota * 100) / 100)} ${_unidadCompra(f)}</b>`
+                : ya > 0 ? `<b class="p12-ok">+${fmtBot(Math.round(ya * 100) / 100)} ${_unidadCompra(f)}${invActual ? '' : ' hoy'}</b>`
+                : `<span class="p12-ant">${_entNota ? '+ a la nota' : '+ registrar'}</span>`;
+            return `<button class="p12-item ${ya > 0 || enNota > 0 ? 'reg' : ''}" onclick="seleccionarProductoEntrada('${f.insumoId}')">
                 <span class="p12-nom">${etx(insumoTitulo(f))}${meta ? `<small>${meta}</small>` : ''}</span>
-                ${ya > 0 ? `<b class="p12-ok">+${fmtBot(Math.round(ya * 100) / 100)} ${_unidadCompra(f)}</b>` : '<span class="p12-ant">+ registrar</span>'}</button>`;
-        }).join('') : `<div class="p12-vacio">Sin insumos con «${etx(_entRapidaBusqueda)}»</div>`;
+                ${der}</button>`;
+        }).join('') : (q2 ? `<div class="p12-vacio">Sin insumos con «${etx(_entRapidaBusqueda)}»</div>`
+            : `<div class="p12-vacio">${(!invActual && !_INV_CARGADO) ? '⏳ Cargando el catálogo…' : 'No hay insumos en esta sucursal'}</div>`);
         return;
     }
     const q = _entRapidaBusqueda.trim().toLowerCase();
@@ -13257,7 +13497,9 @@ function renderChipsEntrada() {
 }
 
 function seleccionarProductoEntrada(insumoId) {
-    if (_entRapidaInsumoId !== insumoId) { _entRapidaFotos = []; _entRapidaQr = false; _qrEvidCerrar(); }
+    /* Solo se cierra el QR de la entrada suelta: si el abierto es el de la
+       nota, sigue esperando la foto del ticket mientras se suman productos. */
+    if (_entRapidaInsumoId !== insumoId) { _entRapidaFotos = []; if (_entRapidaQr) { _entRapidaQr = false; _qrEvidCerrar(); } }
     _entRapidaInsumoId = insumoId;
     renderChipsEntrada();
     renderFormEntrada();
@@ -13296,18 +13538,46 @@ function _entRapidaPintarFotos() {
 function renderFormEntrada() {
     const cont = document.getElementById('entFormCard');
     if (!cont) return;
+    /* Con una nota abierta, tocar un producto solo pide CUÁNTO: tipo, fecha y
+       fotos son de la nota. Va ANTES de apartar el QR: si hay uno abierto es
+       el de la nota, y vive en su tarjeta. */
+    if (_entNotaSync()) {
+        const fN = _entRapidaInsumoId ? _entFilaDe(_entRapidaInsumoId) : null;
+        if (!fN) { cont.innerHTML = ''; return; }
+        const yaN = _entNotaCantDe(_entRapidaInsumoId), uN = _unidadCompra({ insumoId: _entRapidaInsumoId });
+        cont.innerHTML = `
+        <div class="ent-form-card ent-nota-pide">
+            <div class="ent-nota-cab">
+                <div>
+                    <div class="ent-nota-pide-tit">${etx(insumoTitulo(fN) || fN.nombre || '—')}</div>
+                    ${insumoMeta(fN) ? `<div class="ent-nota-pide-meta">${insumoMetaHTML(fN)}</div>` : ''}
+                    ${yaN > 0 ? `<div class="ent-nota-pide-ya">Ya va en la nota: +${fmtBot(Math.round(yaN * 100) / 100)} ${uN} · lo que escribas se suma</div>` : ''}
+                </div>
+                <button class="ent-nota-cerrar" title="Cancelar" onclick="limpiarSeleccionEntrada()">✕</button>
+            </div>
+            <div class="ent-nota-pide-fila">
+                <label><span>Cantidad (${uN})</span>
+                    <input type="number" id="entRapidaCant" placeholder="0" min="0" step="any" inputmode="decimal"
+                        onkeydown="if(event.key==='Enter')agregarEntradaRapida()"></label>
+                <button class="ent-nota-sumar" onclick="agregarEntradaRapida()">+ Agregar a la nota</button>
+            </div>
+        </div>`;
+        document.getElementById('entRapidaCant')?.focus();
+        return;
+    }
     const _qrB = _qrEvidApartar();
     if (!_entRapidaInsumoId) { cont.innerHTML = ''; if (_qrB) _qrEvidCerrar(); _entRapidaQr = false; return; }
-    const fila = filasCaptura.find(f => f.insumoId === _entRapidaInsumoId);
+    const fila = _entFilaDe(_entRapidaInsumoId);
     if (!fila) { cont.innerHTML = ''; return; }
-    const totalBot = getEntradasBottles(_entRapidaInsumoId);
+    // En el Paso 2, lo del periodo; afuera (sin periodo), lo que ya entró hoy.
+    const totalBot = invActual ? getEntradasBottles(_entRapidaInsumoId) : (_entHoyMapa()[_entRapidaInsumoId] || 0);
     cont.innerHTML = `
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
                 <div>
                     <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
                     ${insumoMeta(fila) ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${insumoMetaHTML(fila)}</div>` : ''}
-                    ${totalBot > 0 ? `<div style="font-size:12px;color:var(--green);margin-top:5px;font-weight:600">Ya registrado este período: +${totalBot % 1 ? totalBot.toFixed(1) : totalBot} bot</div>` : ''}
+                    ${totalBot > 0 ? `<div style="font-size:12px;color:var(--green);margin-top:5px;font-weight:600">${invActual ? 'Ya registrado este período' : 'Ya entró hoy'}: +${fmtBot(Math.round(totalBot * 100) / 100)} ${_unidadCompra({ insumoId: _entRapidaInsumoId })}</div>` : ''}
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
                     <button class="btn-ver-prod" onclick="abrirFichaTecnica('${_entRapidaInsumoId}')">${_icInv('rec-ficha', 14)}Ver</button>
@@ -13331,7 +13601,7 @@ function renderFormEntrada() {
                 </div>
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Fecha</div>
-                    <input type="date" id="entRapidaFecha" value="${_fechaSugeridaEntrada()}"
+                    <input type="date" id="entRapidaFecha" value="${_entFechaDefault()}"
                         min="${_periodoInvActual().desde || ''}" max="${_periodoInvActual().hasta || ''}"
                         style="height:52px;padding:0 10px;border:1px solid var(--border);border-radius:10px;
                                background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
@@ -13363,7 +13633,7 @@ function setTipoEntrada(tipo) {
 
 function limpiarSeleccionEntrada() {
     _entRapidaInsumoId = null;
-    _entRapidaFotos = []; _entRapidaQr = false; _qrEvidCerrar();
+    _entRapidaFotos = []; if (_entRapidaQr) { _entRapidaQr = false; _qrEvidCerrar(); }
     /* En dos columnas se regresa a la lista CON el filtro que había: se sigue
        registrando entre lo que se buscó. */
     if (!document.querySelector('.p12-split-ent')) {
@@ -13376,56 +13646,27 @@ function limpiarSeleccionEntrada() {
 }
 
 function agregarEntradaRapida() {
-    if (!_entRapidaInsumoId || !invActual) return;
+    if (!_entRapidaInsumoId) return;
     const cant = parseFloat(document.getElementById('entRapidaCant')?.value) || 0;
     if (cant <= 0) { document.getElementById('entRapidaCant')?.focus(); return; }
-    const fecha = document.getElementById('entRapidaFecha')?.value || new Date().toISOString().slice(0,10);
+    // Con una nota abierta, la cantidad se SUMA a la nota; se registra al final.
+    if (_entNotaSync()) { _entNotaSumar(_entRapidaInsumoId, cant); return; }
+    const fecha = document.getElementById('entRapidaFecha')?.value || _entFechaDefault();
     /* Fuera del periodo NO se guarda: es el disparador del bucle. Ver
        _fechaFueraDePeriodo — la entrada se sale sola en el siguiente render, eso
        muta y guarda el inventario, el guardado dispara realtime, realtime
-       repinta, y vuelve a empezar. */
+       repinta, y vuelve a empezar. (Afuera, sin inventario, no hay periodo.) */
     const _fueraR = _fechaFueraDePeriodo(fecha);
     if (_fueraR) { alert(_fueraR); document.getElementById('entRapidaFecha')?.focus(); return; }
-    const fila  = filasCaptura.find(f => f.insumoId === _entRapidaInsumoId);
-    const ins   = (typeof window._insumoResolver === 'function') ? window._insumoResolver(_entRapidaInsumoId) : null;
-    const _id   = genId() + genId();
-    const _suc  = _sucActiva() || 'suc_principal';
-    if (!invActual.entradasLog) invActual.entradasLog = [];
-    invActual.entradasLog.push({
-        id:             _id,
-        insumoId:       _entRapidaInsumoId,
-        nombreProducto: ins ? insumoEtiqueta(ins) : (fila?.nombre || _entRapidaInsumoId),
-        tipo:           _entRapidaTipo,
-        cantidad:       cant,
-        fecha,
-        origen:         'manual',
-        sucursalId:     _suc,
-        foto_urls:      _entRapidaFotos.slice(),
-        foto_url:       _entRapidaFotos[0] || ''
-    });
-    guardarEntradas();
-    // ESPEJO al log global (fuente maestra) → aparece también en el "Registro de entradas".
-    // Antes la búsqueda rápida del inventario solo escribía aquí y ambas vistas divergían.
-    try {
-        const _gl = getEntradasLog();
-        _gl.push({
-            id: _id, insumoId: _entRapidaInsumoId,
-            nombre: ins ? ins.nombre : (fila?.nombre || ''),
-            familia: ins ? (ins.familia || '') : '',
-            cantidad: cant, costo: 0, tipo: _entRapidaTipo, notas: '',
-            fecha, origen: 'manual', sucursalId: _suc,
-            foto_urls: _entRapidaFotos.slice(), foto_url: _entRapidaFotos[0] || '',
-            importadoEnInv: invActual.id, registrado: new Date().toISOString()
-        });
-        _guardarELLocal(); _sbUpEL(_gl[_gl.length - 1]); // diff no ve el push → forzar
-    } catch(e) { console.warn('[entRapida espejo global]', e); }
-    const cantEl = document.getElementById('entRapidaCant');
-    if (cantEl) { cantEl.value = ''; cantEl.focus(); }
-    // La evidencia era de ESTA entrada: la siguiente arranca sin fotos.
-    _entRapidaFotos = [];
-    renderFormEntrada();
+    const id = _entRapidaInsumoId, fila = _entFilaDe(id);
+    if (!_entGuardarNuevas([{ insumoId: id, cantidad: cant, tipo: _entRapidaTipo, fecha: fecha, fotos: _entRapidaFotos }])) return;
+    /* LA TARJETA SE CIERRA SOLA (Edwin, 23-nov): ya registrada, cerrarla a
+       mano en cada insumo era un clic de más. Regresa a la lista con lo que se
+       había buscado, y un aviso dice qué entró. La evidencia era de ESTA
+       entrada: la siguiente arranca sin fotos (limpiarSeleccionEntrada). */
+    _entAviso('Registrada: +' + fmtBot(cant) + ' ' + _unidadCompra({ insumoId: id }) + (fila ? ' · ' + (insumoTitulo(fila) || fila.nombre) : ''));
+    limpiarSeleccionEntrada();
     renderListadoEntradas();
-    renderChipsEntrada();
 }
 
 function eliminarEntradaRapida(idx) {
@@ -13516,6 +13757,8 @@ function _entTextoBusca(e) {
     return [e.nombreProducto, e.nombre, e.notas, MOT[e.motivo] || e.motivo, e.registradoPor,
             e.area, e.fecha, e.salidaTipo === 'prestamo' ? 'préstamo' : (e.concepto === 'salida' ? 'cortesía' : ''),
             e.concepto === 'merma' ? 'merma' : '',
+            e.notaProveedor, e.notaFolio, e.notaId ? 'nota factura' : '',
+            (e.insumoId && typeof _entMetaHTML === 'function') ? _entTituloTxt(e) + ' ' + String(_entMetaHTML(e)).replace(/<[^>]*>/g, '') : '',
             (typeof tipoEntradaLabel === 'function' && e.tipo) ? tipoEntradaLabel(e.tipo) : '']
         .join(' ').toLowerCase();
 }
@@ -13642,9 +13885,27 @@ function _entAvisoInsumo(e) {
             'padding:1px 8px;font-size:10px;cursor:pointer;font-family:inherit">Elegir el correcto</button>' : '') +
     '</span>';
 }
+/* LA FICHA COMPLETA del insumo en cada renglón (Edwin, 23-nov): el log
+   global guarda solo `nombre` («Jumex»), y tres Jumex distintos se veían
+   iguales. El insumo se resuelve por su id al pintar —nombre y variedad, y
+   abajo envase, contenido y marca, como en la lista de la izquierda—; lo
+   guardado queda de respaldo para el que ya no está en el catálogo. */
+function _entInsDe(e) { return (e && e.insumoId) ? _insumoDeEntrada(_canonInsumoId(e.insumoId)) : null; }
+function _entTituloTxt(e) {
+    var ins = _entInsDe(e);
+    return ins ? (insumoTitulo(ins) || ins.nombre || '—') : ((e && (e.nombreProducto || e.nombre)) || '—');
+}
+function _entMetaHTML(e) { var ins = _entInsDe(e); return (ins && insumoMeta(ins)) ? insumoMetaHTML(ins) : ''; }
+function _entNotaBadgeHTML(e) {
+    if (!e || !e.notaId) return '';
+    var t = [e.notaProveedor, e.notaFolio ? 'folio ' + e.notaFolio : ''].filter(Boolean).join(' · ');
+    return '<span class="ent-nota-badge" title="Registrada en una nota / factura">' + _icInv('nom-recibo', 12) + 'Nota' + (t ? ' · ' + etx(t) : '') + '</span>';
+}
 function _entNombreCell(e, nombre, extraInline) {
+    var meta = _entMetaHTML(e);
     return '<span class="ent-log-nombre" style="display:flex;flex-direction:column;gap:2px">' +
-        '<span><span class="eln-n">' + nombre + '</span>' + (extraInline || '') + _qrOrigenHTML(e) + '</span>' +
+        '<span><span class="eln-n">' + nombre + '</span>' + (extraInline || '') + _qrOrigenHTML(e) + _entNotaBadgeHTML(e) + '</span>' +
+        (meta ? '<span class="eln-n eln-meta">' + meta + '</span>' : '') +
         _entAvisoInsumo(e) +
         (e && e.notas ? '<span style="font-size:10.5px;color:var(--text-dim);font-style:italic">📝 ' + etx(e.notas) + '</span>' : '') +
     '</span>';
@@ -13721,7 +13982,7 @@ function renderListadoEntradas() {
     } catch(err) {}
     const rowHTML = (e) => {
         const color   = tipoEntradaColor(e.tipo);
-        const nombre  = etx(e.nombreProducto || e.nombre || '—');
+        const nombre  = etx(_entTituloTxt(e));
         const cant    = (e.cantidad||0) % 1 ? (e.cantidad||0).toFixed(1) : (e.cantidad||0);
         // MERMA del QR: se muestra distinta (badge rojo, cantidad negativa, área);
         // NO entra al stock del inventario — es log/auditoría del turno.
@@ -13786,8 +14047,12 @@ const fotoTh = _fotosThumbHTML(e);
            existencia que se contó en el Paso 1; al abrirlo, cada movimiento
            con su cantidad, tipo, fecha y ✏️. En el historial de afuera, la
            lista corrida de siempre. */
-        const _bloque = (arr, tipo) => invActual ? _entGruposHTML(arr, tipo, _safeRow) : arr.map(_safeRow).join('');
+        /* El registro de afuera es el mismo Paso 2 (23-nov): también agrupado
+           por insumo. Arriba, las notas / facturas como documento. */
+        const _bloque = (arr, tipo) => _entGruposHTML(arr, tipo, _safeRow);
+        const notasHTML = _entNotasHTML(entradasArr, _safeRow);
         cont.innerHTML =
+            (notasHTML ? secHdr(_icInv('nom-recibo', 14) + 'Notas / facturas') + notasHTML : '') +
             (entradasArr.length ? secHdr(_icInv('mod-inventarios', 14) + 'Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(entradasArr, 'entrada') : '') +
             (mermasArr.length   ? secHdr(_icInv('rec-alerta', 14) + 'Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(mermasArr, 'merma') : '') +
             (salidasArr.length  ? secHdr(_icInv('nom-bono', 14) + 'Cortesías / Préstamos' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + _bloque(salidasArr, 'salida') : '') +
@@ -13823,12 +14088,34 @@ function _entGruposHTML(arr, tipo, fila) {
         const tot = (tipo === 'entrada' ? '+' : '−') + fmtBot(Math.round(total * 100) / 100) + ' ' + unidad;
         const key = tipo + '|' + k;
         return '<details class="eg" data-k="' + etx(key) + '"' + (_entGruposAbiertos[key] ? ' open' : '') + ' ontoggle="_entGrupoToggle(this)">' +
-            '<summary><span class="eg-nom">' + etx(e0.nombreProducto || e0.nombre || '—') + '</span>' +
+            '<summary><span class="eg-nom">' + etx(_entTituloTxt(e0)) + (_entMetaHTML(e0) ? '<small>' + _entMetaHTML(e0) + '</small>' : '') + '</span>' +
             '<span class="eg-n">' + es.length + ' ' + lbl[es.length === 1 ? 0 : 1] + '</span>' +
             (f ? '<span class="eg-ex" title="Registrada en el Paso 1">Existencia actual <b>' + exist + '</b></span>' : '') +
             '<b class="eg-tot ' + tipo + '">' + tot + '</b></summary>' +
             '<div class="eg-cuerpo">' + es.map(fila).join('') +
             '<div class="eg-total"><span>Total</span><b class="' + tipo + '">' + tot + '</b></div></div></details>';
+    }).join('');
+}
+
+/* Las notas / facturas como DOCUMENTO: cada una en un renglón que se abre con
+   todos sus productos, como llegó la compra. Sus renglones siguen también en
+   la lista por insumo de abajo —ahí se suman al total de cada uno—. */
+function _entNotasHTML(arr, fila) {
+    var grupos = {}, orden = [];
+    (arr || []).forEach(function (e) {
+        if (!e || !e.notaId) return;
+        if (!grupos[e.notaId]) { grupos[e.notaId] = []; orden.push(e.notaId); }
+        grupos[e.notaId].push(e);
+    });
+    return orden.map(function (k) {
+        var es = grupos[k], e0 = es[0], key = 'nota|' + k;
+        var tit = [e0.notaProveedor, e0.notaFolio ? 'Folio ' + e0.notaFolio : ''].filter(Boolean).join(' · ') || 'Nota sin proveedor';
+        return '<details class="eg eg-nota" data-k="' + etx(key) + '"' + (_entGruposAbiertos[key] ? ' open' : '') + ' ontoggle="_entGrupoToggle(this)">' +
+            '<summary><span class="eg-nom">' + _icInv('nom-recibo', 14) + etx(tit) +
+                '<small>' + etx(e0.fecha || '—') + ' · ' + etx(tipoEntradaLabel(e0.tipo)) + '</small></span>' +
+            _fotosThumbHTML(e0) +
+            '<b class="eg-tot entrada">' + es.length + ' producto' + (es.length !== 1 ? 's' : '') + '</b></summary>' +
+            '<div class="eg-cuerpo">' + es.map(fila).join('') + '</div></details>';
     }).join('');
 }
 
@@ -14152,16 +14439,6 @@ function renderVistaEntradas() {
         }
     }
 
-    const searchSection = invActual ? `
-        <div>
-            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
-            <input type="text" id="entBuscador" class="ent-buscador"
-                placeholder="Escribe el nombre del producto…"
-                oninput="buscarInsumoEntrada(this.value)" autocomplete="off">
-            <div id="entChips" class="ent-chips"></div>
-        </div>
-        <div id="entFormCard"></div>` : '';
-
     /* El contador del encabezado lo RELLENA renderListadoEntradas con lo que de
        verdad se pinta. Aquí solo va un valor de arranque, y antes era
        getEntradasLog().length —el cache crudo, con los borrados y con las
@@ -14171,34 +14448,61 @@ function renderVistaEntradas() {
     const _perTab = (p, lbl) => `<button onclick="setEntPeriodo('${p}')" style="border:1px solid ${_entPeriodo===p?'var(--accent)':'var(--border)'};background:${_entPeriodo===p?'rgba(245,200,66,.12)':'transparent'};color:${_entPeriodo===p?'var(--accent)':'var(--text-muted)'};border-radius:20px;padding:5px 14px;font-family:inherit;font-size:12px;cursor:pointer;font-weight:${_entPeriodo===p?'700':'500'}">${lbl}</button>`;
     const _inpDate = 'background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:12px';
     const filtroFechas = invActual ? '' : `
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
             ${_perTab('todos','Todas')}${_perTab('dia','Hoy')}${_perTab('semana','Semana')}${_perTab('mes','Mes')}${_perTab('rango','Rango')}
             ${_entPeriodo==='rango' ? `<input type="date" id="entDesde" value="${_entDesde}" onchange="setEntRango()" style="${_inpDate}">
                 <span style="color:var(--text-dim);font-size:12px">a</span>
                 <input type="date" id="entHasta" value="${_entHasta}" onchange="setEntRango()" style="${_inpDate}">` : ''}
         </div>`;
-    const filtroTipo = _filtroTipoHTML();
-    cont.innerHTML = `
-        <div class="ent-rapida-wrap${invActual ? '' : ' ent-ancho'}">
-            ${searchSection}
-            <div>
-                ${filtroFechas}
-                ${filtroTipo}
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                    <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">
-                        ${invActual ? 'Entradas del período' : 'Historial de entradas'}
-                    </span>
-                    <span id="entLogCount" style="font-size:13px;font-weight:700;color:var(--text)">${
-                        (!invActual && !_INV_CARGADO) ? '<span style="color:var(--text-dim);font-weight:500">cargando…</span>'
-                        : (logLen + ' registro' + (logLen !== 1 ? 's' : ''))}</span>
-                </div>
-                <div id="entLogList"></div>
-            </div>
-        </div>`;
-
-    if (invActual) initEntradaRapidaUI();
-    else renderListadoEntradas();
+    /* LA MISMA PANTALLA QUE EL PASO 2 (Edwin, 23-nov): a la izquierda los
+       insumos para registrar (y la nota, si hay una abierta); a la derecha lo
+       registrado. El buscador, lista/cuadrícula, la nota y el filtro de lo
+       registrado van en la barra fija de arriba (_pintarEntHerr), la misma del
+       Paso 2. Sin permiso de registrar, solo la lista. */
+    _entLogInsumoCache = null;          // el catálogo pudo llegar o cambiar
+    const puedeReg = (typeof _puedeInv !== 'function') || _puedeInv('entradas');
+    const lista = `${filtroFechas}
+                <div class="p12-cab"><span>${invActual ? 'Entradas del período' : 'Historial de entradas'}</span>
+                    <b id="entLogCount">${(!invActual && !_INV_CARGADO) ? '<span style="color:var(--text-dim);font-weight:500">cargando…</span>'
+                        : (logLen + ' registro' + (logLen !== 1 ? 's' : ''))}</b></div>
+                <div id="entLogList"></div>`;
+    cont.innerHTML = puedeReg ? `
+        <div class="p12-split p12-split-ent ent-hist">
+            <section class="p12-col">
+                <div id="entNotaCard"></div>
+                <div id="entFormCard"></div>
+                <div id="entChips"></div>
+            </section>
+            <section class="p12-col">${lista}</section>
+        </div>` : `
+        <div class="ent-rapida-wrap ent-ancho"><div>${lista}</div></div>`;
+    _pintarEntHerr();
+    initEntradaRapidaUI();
 }
+
+/* La barra de arriba: la MISMA en el Paso 2 y en el registro de afuera. A la
+   izquierda, el buscador de productos, lista/cuadrícula y la nota; a la
+   derecha, el buscador de lo registrado y sus pestañas. */
+function _entHerrHTML(puedeReg) {
+    return _herrLados(puedeReg
+        ? _herrBuscar('entBuscador', _entRapidaBusqueda, 'Producto para registrar…', 'buscarInsumoEntrada') + _herrVistaToggle() + _entBtnNotaHTML()
+        : '', _filtroTipoHTML(true));
+}
+var _entHerrUltimo = null;
+function _pintarEntHerr() {
+    var el = document.getElementById('entHerr'); if (!el) return;
+    var html = '';
+    try { html = _entHerrHTML((typeof _puedeInv !== 'function') || _puedeInv('entradas')); } catch (e) { console.warn('[inv] barra de entradas:', e); }
+    // Igual que la del paso: si solo cambió lo tecleado, no se repinta (no se pierde el foco).
+    var llave = html.replace(/ value="[^"]*"/g, '');
+    if (llave === _entHerrUltimo && el.innerHTML) return;
+    var act = document.activeElement, fid = (act && el.contains(act) && act.id) ? act.id : '', s0 = null, s1 = null;
+    if (fid) { try { s0 = act.selectionStart; s1 = act.selectionEnd; } catch (e) {} }
+    el.innerHTML = html; _entHerrUltimo = llave;
+    if (fid) { var n = document.getElementById(fid); if (n) { n.focus(); try { if (s0 !== null) n.setSelectionRange(s0, s1); } catch (e) {} } }
+    if (typeof _ajustarStickyInv === 'function') _ajustarStickyInv();
+}
+function _vaciarEntHerr() { var el = document.getElementById('entHerr'); if (el) el.innerHTML = ''; _entHerrUltimo = null; }
 
 function guardarEntradas() {
     if (!invActual) return;

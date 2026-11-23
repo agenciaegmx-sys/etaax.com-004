@@ -10868,7 +10868,8 @@ console.log('\n══ BE6 · Inventarios, Requisiciones y la regla compartida �
         return src.slice(abre + 1, abre + 261).indexOf("'" + clave + "'") > -1;
     };
     [['nuevoInventario','capturar'], ['nuevoPrimerLev','capturar'], ['iniciarInventario','capturar'],
-     ['abrirRegistroEntradas','entradas'], ['guardarEntradaLog','entradas'],
+     ['abrirRegistroEntradas','entradas'], ['_entGuardarNuevas','entradas'],
+     ['abrirNotaEntrada','entradas'], ['registrarNotaEntrada','entradas'],
      ['abrirQrEntradas','qr'], ['abrirReporteExistencias','reporte'],
      ['cerrarInventario','cerrar'], ['finalizarInventarioActual','cerrar'], ['finalizarPrimerLev','cerrar']]
     .forEach(function (par) {
@@ -10898,10 +10899,18 @@ console.log('\n══ BE6 · Inventarios, Requisiciones y la regla compartida �
         eq(inv.indexOf("classList.toggle('inv-sin-costos', !_puedeInv('verCostos'))") > -1, true, 'marcado'));
     test('…y el CSS quita los importes en cada repintado', () =>
         eq(inv.indexOf('body.inv-sin-costos .inv-col-dinero') > -1, true, 'por CSS'));
-    ['btnNuevoInv','btnPrimerLev','btnQrEntradas','btnAgregarEntrada',
+    ['btnNuevoInv','btnPrimerLev','btnQrEntradas',
      'btnReporteExistencias','btnFinalizarInv'].forEach(function (id) {
         test('inventarios: el botón ' + id + ' se puede esconder', () =>
             eq(inv.indexOf('id="' + id + '"') > -1, true, 'con id'));
+    });
+    /* «Agregar entrada» ya no es un botón (23-nov): se registra en la columna
+       izquierda del registro de afuera, igual que en el Paso 2. Sin el permiso,
+       esa columna y el buscador para registrar no se pintan. */
+    test('inventarios: sin permiso de entradas, afuera no sale la columna para registrar', () => {
+        const cuerpo = (n) => { const i = ijs.indexOf('function ' + n + '('); return ijs.slice(i, ijs.indexOf('\nfunction ', i + 10)); };
+        return eq(cuerpo('renderVistaEntradas').indexOf("_puedeInv('entradas')") > -1 &&
+                  cuerpo('_pintarEntHerr').indexOf("_puedeInv('entradas')") > -1, true, 'sin registrar');
     });
 
     /* ── Requisiciones ── */
@@ -17488,8 +17497,12 @@ console.log('\n══ BH16 · Buscar en el historial de entradas ══');
            dI('_entPintaChips').indexOf('entBuscar') === -1, true, 'separados'));
     /* El filtro va también DENTRO de un inventario: el Paso 2 junta las mismas
        tres listas y es donde más estorba bajar leyendo. */
+    /* Desde el 23-nov la pantalla de afuera es la del Paso 2: el filtro de lo
+       registrado va en su barra fija (_pintarEntHerr) y el de periodo arriba
+       de la lista. */
     test('el filtro está en la vista, junto a los de periodo', () =>
-        eq(inv.indexOf('${filtroFechas}\n                ${filtroTipo}') > -1, true, 'siempre'));
+        eq(dI('renderVistaEntradas').indexOf('${filtroFechas}') > -1 &&
+           dI('renderVistaEntradas').indexOf('_pintarEntHerr();') > -1, true, 'siempre'));
     test('el texto escrito sobrevive al repintado', () =>
         eq(dI('_filtroTipoHTML').indexOf("value=\"' + etx(_entBusca) + '\"") > -1, true, 'con valor'));
     /* El historial de afuera y el Paso 2 del inventario enseñan la misma lista:
@@ -17497,7 +17510,9 @@ console.log('\n══ BH16 · Buscar en el historial de entradas ══');
     /* Desde el 19-nov el del Paso 2 vive en la barra fija del encabezado,
        pero sale del MISMO bloque (versión compacta). */
     test('las dos pantallas usan el MISMO bloque de filtro', () =>
-        eq(inv.indexOf('const filtroTipo = _filtroTipoHTML();') > -1 && dI('_herrPasoHTML').indexOf('_filtroTipoHTML(true)') > -1, true, 'uno solo'));
+        eq(dI('_entHerrHTML').indexOf('_filtroTipoHTML(true)') > -1 &&
+           dI('_herrPasoHTML').indexOf('_entHerrHTML(true)') > -1 &&
+           dI('_pintarEntHerr').indexOf('_entHerrHTML(') > -1, true, 'uno solo'));
 
     /* ── EL PASO 2, con todo lo del periodo ── */
     /* Las mermas y cortesías del QR vivían SOLO en el panel rojo de arriba:
@@ -17563,6 +17578,156 @@ console.log('\n══ BH16 · Buscar en el historial de entradas ══');
                   t.indexOf('const visibles = _f.visibles;') > -1 &&
                   t.indexOf('_entPintaChips(_f.cta)') > -1, true, 'una sola cadena');
     });
+}
+
+/* ═══════════ SUITE BH80 · ENTRADAS: TARJETA, REGISTRO DE AFUERA Y NOTA ═══════
+   Edwin, 23-nov. Tres cosas:
+     1) en el Paso 2, al agregar la entrada la tarjeta se cierra sola;
+     2) «Revisar entradas» (afuera, sin inventario) es la MISMA pantalla del
+        Paso 2 y cada renglón dice el insumo completo, no solo «Jumex»;
+     3) una NOTA / FACTURA: varios productos de una compra, con sus fotos una
+        vez, que se van acumulando y se registran juntos.
+   Se corre el código de verdad (suite B) con datos en la mano. */
+console.log('\n══ BH80 · Entradas: tarjeta que se cierra, registro de afuera y nota / factura ══');
+{
+    const INS = [
+        { id: 'cc355', nombre: 'Coca-Cola', empaque: 'Lata', contenido: 355, unidadContenido: 'ml', marca: 'Coca-Cola', activo: '1', sucursalId: 'suc_principal' },
+        { id: 'jmx1', nombre: 'Jumex', variedad: 'Mango', empaque: 'Lata', contenido: 335, unidadContenido: 'ml', marca: 'Jumex', activo: '1', sucursalId: 'suc_principal' },
+        { id: 'jmx2', nombre: 'Jumex', variedad: 'Durazno', empaque: 'Lata', contenido: 335, unidadContenido: 'ml', marca: 'Jumex', activo: '1', sucursalId: 'suc_principal' },
+        { id: 'preX', nombre: 'Prebatch X', esSubReceta: true, activo: '1', sucursalId: 'suc_principal' },
+    ];
+    const antes = { inv: vm.runInContext('invActual', B), filas: vm.runInContext('filasCaptura', B),
+                    el: B._cacheEL, ins: vm.runInContext('_cacheInsumosInv', B) };
+    const reset = (inv) => {
+        setVar(B, '_cacheInsumosInv', INS.map(x => Object.assign({}, x)));
+        setVar(B, 'invActual', inv || null);
+        setVar(B, 'filasCaptura', inv ? INS.filter(x => !x.esSubReceta).map(x => Object.assign({ insumoId: x.id }, x)) : []);
+        B._cacheEL = [];
+        setVar(B, '_entLogInsumoCache', null);
+        setVar(B, '_entRapidaInsumoId', null);
+        B._entNota = null; B._entNotaQr = false;
+        Object.keys(B._storage).filter(k => k.indexOf('_notaEntrada_') > -1).forEach(k => delete B._storage[k]);
+    };
+    try {
+        /* ── 2) Afuera: de dónde salen los insumos y a dónde va la entrada ── */
+        reset(null);
+        test('afuera, la lista para registrar son los insumos de la sucursal (sin prebatch: se produce, no se compra)', () =>
+            eq(B._entFuente().map(f => f.insumoId).sort().join(','), 'cc355,jmx1,jmx2'));
+        test('…y la entrada va SOLO al log global, con su sucursal, sus fotos y sin inventario', () => {
+            const ok = B._entGuardarNuevas([{ insumoId: 'jmx1', cantidad: 12, tipo: 'compra', fecha: '2026-11-23', fotos: ['f1.jpg'] }]);
+            const g = B._cacheEL[0];
+            return eq([ok, B._cacheEL.length, g.insumoId, g.cantidad, g.origen, !!g.sucursalId, g.foto_url, g.importadoEnInv === undefined].join('|'),
+                      'true|1|jmx1|12|manual|true|f1.jpg|true');
+        });
+        test('cada renglón dice el insumo COMPLETO: «Jumex · Mango» con su lata y marca, no «Jumex» a secas', () => {
+            const e = { insumoId: 'jmx1', nombre: 'Jumex' };
+            const meta = B._entMetaHTML(e).replace(/<[^>]*>/g, '');
+            return eq(B._entTituloTxt(e) + ' | ' + /335/.test(meta) + ' | ' + /Jumex/.test(meta), 'Jumex · Mango | true | true');
+        });
+        test('…y dos Jumex distintos ya no se ven iguales', () =>
+            eq(B._entTituloTxt({ insumoId: 'jmx1', nombre: 'Jumex' }) !== B._entTituloTxt({ insumoId: 'jmx2', nombre: 'Jumex' }), true));
+        test('el que ya no está en el catálogo conserva el nombre guardado', () =>
+            eq(B._entTituloTxt({ insumoId: 'borrado', nombreProducto: 'Mezcal Viejo' }), 'Mezcal Viejo'));
+        test('afuera la fecha que se propone es la de HOY en la hora del negocio (no la de UTC)', () => {
+            const d = new Date(); const loc = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            return eq(B._entFechaDefault(), loc);
+        });
+
+        /* ── 3) La nota / factura ── */
+        reset(null);
+        B.abrirNotaEntrada();
+        test('«Nota / factura» abre una nota vacía de compra, con fecha', () =>
+            eq([!!B._entNota, B._entNota.items.length, B._entNota.tipo, !!B._entNota.fecha].join('|'), 'true|0|compra|true'));
+        B._entNotaSumar('cc355', 24); B._entNotaSumar('jmx1', 12); B._entNotaSumar('cc355', 6);
+        test('las cantidades se van ACUMULANDO: el mismo producto dos veces se suma', () =>
+            eq(B._entNota.items.map(i => i.insumoId + ':' + i.cant).join(','), 'cc355:30,jmx1:12'));
+        test('…y nada entra al registro mientras se arma la nota', () => eq(B._cacheEL.length, 0));
+        test('la nota a medio armar se guarda como borrador en el equipo (recargar no la pierde)', () => {
+            const k = Object.keys(B._storage).find(x => x.indexOf('_notaEntrada_') > -1);
+            const b = k ? JSON.parse(B._storage[k]) : null;
+            B._entNota = null;                          // como si se recargara la página
+            const vuelve = B._entNotaSync();
+            return eq(!!b + '|' + (vuelve && vuelve.items.length), 'true|2');
+        });
+        B._entNotaCampo('proveedor', 'Coca-Cola FEMSA'); B._entNotaCampo('folio', 'A-123');
+        B._entNota.fotos = ['ticket1.jpg', 'ticket2.jpg'];
+        B.registrarNotaEntrada();
+        const nota = B._cacheEL.filter(e => e.notaId);
+        test('«Registrar nota» crea UNA entrada por producto, con la misma nota', () =>
+            eq(nota.length + '|' + new Set(nota.map(e => e.notaId)).size + '|' + nota.map(e => e.insumoId + ':' + e.cantidad).join(','),
+               '2|1|cc355:30,jmx1:12'));
+        test('…todas con el proveedor, el folio, la fecha, el tipo y las fotos de la nota', () =>
+            eq(nota.every(e => e.notaProveedor === 'Coca-Cola FEMSA' && e.notaFolio === 'A-123' && e.tipo === 'compra' &&
+                               e.foto_urls.join(',') === 'ticket1.jpg,ticket2.jpg' && e.fecha === nota[0].fecha), true));
+        test('…y cada una con su PROPIA lista de fotos (editar una no le cambia las fotos a las demás)', () =>
+            eq(nota[0].foto_urls !== nota[1].foto_urls, true));
+        test('registrada, la nota se cierra y su borrador se borra', () =>
+            eq(B._entNota === null && !Object.keys(B._storage).some(k => k.indexOf('_notaEntrada_') > -1), true));
+        test('el buscador de lo registrado encuentra la nota por proveedor o folio', () =>
+            eq(/coca-cola femsa/.test(B._entTextoBusca(nota[0])) && /a-123/.test(B._entTextoBusca(nota[0])), true));
+        test('en la lista, la nota se ve como documento: un renglón con sus productos', () => {
+            const h = B._entNotasHTML(B._cacheEL, e => '<i>' + e.insumoId + '</i>');
+            return eq((h.match(/class="eg eg-nota"/g) || []).length + '|' + /Coca-Cola FEMSA · Folio A-123/.test(h) + '|' + /2 productos/.test(h) +
+                      '|' + (h.match(/<i>/g) || []).length, '1|true|true|2');
+        });
+        test('una nota sin productos no se registra', () => {
+            reset(null); B.abrirNotaEntrada(); B.registrarNotaEntrada();
+            return eq(B._cacheEL.length + '|' + !!B._entNota, '0|true');
+        });
+
+        /* ── En el Paso 2 (con inventario): las dos casas y el periodo ── */
+        reset({ id: 'invN', fecha: '2026-11-23', entradasLog: [], filas: [] });
+        B.abrirNotaEntrada();
+        test('la nota del Paso 2 es OTRA que la de afuera (cada pantalla tiene su borrador)', () =>
+            eq(B._entNota.ctx, 'inv:invN'));
+        B._entNotaSumar('jmx2', 6);
+        B._entNota.fecha = '2026-11-23';
+        B.registrarNotaEntrada();
+        test('en el Paso 2 la nota va al inventario Y al log global, con el mismo id y la nota', () => {
+            const a = vm.runInContext('invActual.entradasLog', B), g = B._cacheEL;
+            return eq(a.length + '|' + g.length + '|' + (a[0].id === g[0].id) + '|' + (a[0].notaId === g[0].notaId && !!a[0].notaId) + '|' + g[0].importadoEnInv,
+                      '1|1|true|true|invN');
+        });
+        test('…y respeta el candado del periodo: con fecha después del cierre no se registra', () => {
+            B.abrirNotaEntrada(); B._entNotaSumar('cc355', 3); B._entNota.fecha = '2026-12-30';
+            B.registrarNotaEntrada();
+            return eq(vm.runInContext('invActual.entradasLog.length', B) + '|' + !!B._entNota, '1|true');
+        });
+
+        /* ── 1) La tarjeta del Paso 2 se cierra sola al agregar ── */
+        reset({ id: 'invC', fecha: '2026-11-23', entradasLog: [], filas: [] });
+        setVar(B, '_entRapidaInsumoId', 'cc355');
+        B.document.getElementById('entRapidaCant').value = '4';
+        B.document.getElementById('entRapidaFecha').value = '2026-11-23';
+        B.agregarEntradaRapida();
+        test('al agregar una entrada en el Paso 2 se guarda y la tarjeta se CIERRA sola', () =>
+            eq(vm.runInContext('invActual.entradasLog.length', B) + '|' + vm.runInContext('_entRapidaInsumoId', B), '1|null'));
+        test('…con una nota abierta, «Agregar» suma a la nota y no registra todavía', () => {
+            B.abrirNotaEntrada();
+            setVar(B, '_entRapidaInsumoId', 'jmx1');
+            B.document.getElementById('entRapidaCant').value = '5';
+            B.agregarEntradaRapida();
+            return eq(vm.runInContext('invActual.entradasLog.length', B) + '|' + B._entNotaCantDe('jmx1') + '|' + vm.runInContext('_entRapidaInsumoId', B), '1|5|null');
+        });
+
+        /* ── La nota viaja al inventario cuando se importa del log global ── */
+        test('el import por periodo y el back-fill se llevan los datos de la nota', () => {
+            const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+            return eq(src.indexOf('if (e.notaId) Object.assign(invActual.entradasLog[invActual.entradasLog.length - 1], _entNotaCampos(e));') > -1 &&
+                      src.indexOf('if (le.notaId) Object.assign(_gl[_gl.length - 1], _entNotaCampos(le));') > -1, true);
+        });
+        test('el modal viejo de «Registrar entrada» ya no existe', () => {
+            const h = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+            const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+            return eq(/modalEntradaLog|guardarEntradaLog/.test(h + src), false);
+        });
+    } finally {
+        setVar(B, 'invActual', antes.inv); setVar(B, 'filasCaptura', antes.filas);
+        B._cacheEL = antes.el; setVar(B, '_cacheInsumosInv', antes.ins);
+        setVar(B, '_entLogInsumoCache', null); setVar(B, '_entRapidaInsumoId', null);
+        B._entNota = null;
+        Object.keys(B._storage).filter(k => k.indexOf('_notaEntrada_') > -1).forEach(k => delete B._storage[k]);
+    }
 }
 
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
