@@ -2782,7 +2782,17 @@ function _recomputarMovsQR() {
             }
             if (!esMerma) concQR.push((e.salidaTipo === 'prestamo' ? '🔁 Préstamo' : '🎁 Cortesía') + (e.notas ? ': ' + e.notas : ''));
         });
-        if (concQR.length) f.cortesiaConcepto = concQR.join(' · '); // concepto de cortesías/préstamos del QR
+        /* Concepto de las cortesías/préstamos del QR. Antes se escribía encima
+           SIEMPRE, y el concepto elegido a mano («Consumo interno») se perdía en
+           el siguiente repintado. Ahora solo si el campo está vacío o lo había
+           puesto el propio QR. */
+        if (concQR.length) {
+            var _qrTxt = concQR.join(' · ');
+            var _eraQR = f.cortesiaConcepto && (f.cortesiaConcepto === f._qrCortConcepto ||
+                (f._qrCortConcepto === undefined && /^(🎁 Cortesía|🔁 Préstamo)/.test(f.cortesiaConcepto)));
+            if (!f.cortesiaConcepto || _eraQR) f.cortesiaConcepto = _qrTxt;
+            f._qrCortConcepto = _qrTxt;
+        }
         // Derivar el MANUAL quitando la contribución PREVIA del QR. En la 1ª pasada (migración)
         // el QR previo aún no existe → se usa el FRESCO (= lo que la vieja lógica ya había sumado),
         // así NO se duplica lo antes importado y SÍ reaparece lo que se había perdido/atorado.
@@ -2871,6 +2881,7 @@ function _importarEntradasQR() {
            (eso contaría doble, que es justo lo que el editor vino a evitar). */
         if (e.id && yaEnInv[e.id]) {
             if (_reconciliarEntradaEnInv(e)) { n++; try { _invalidarStep5(); } catch (x) {} }
+            if (_entSyncNotaEnInv(e)) n++;      // la nota armada (o deshecha) afuera
             return;
         }
         if (e.borrada) return; // borrada a propósito por el usuario (flag explícito).
@@ -7041,7 +7052,8 @@ function renderStep2() {
             </section>
             <section class="p12-col">
                 <div class="p12-cab"><span>Movimientos del período</span>
-                    <b id="entLogCount">${logCount} registro${logCount !== 1 ? 's' : ''}</b></div>
+                    <b id="entLogCount">${logCount} registro${logCount !== 1 ? 's' : ''}</b>${_entBtnAgruparHTML()}</div>
+                <div id="entSelBar"></div>
                 <div id="entLogList"></div>
             </section>
         </div>`;
@@ -7408,8 +7420,8 @@ function _step3VentasInner() {
             '<span>Entradas <b>' + (ent > 0 ? '+' + fmtBot(Math.round(ent * 100) / 100) + ' ' + _unidadCompra(fila) : '—') + '</b></span></div>';
         const vV = _copAUm(fila, fila.ventasCopasDirectas, 'ventasCopasDirectas') || 0;
         const campo = (lbl, html) => '<div class="s3i-campo"><span class="s3i-l">' + lbl + '</span>' + html + '</div>';
-        const num = (val, onblur, extra) => `<input type="text" inputmode="decimal" class="inv-num-input" value="${val || ''}" placeholder="—"
-            title="Puedes escribir operaciones: 6+4" onkeydown="_celdaKey(event,this)" onblur="${onblur}" ${extra || ''}>`;
+        // Como Excel (23-nov): la operación se queda escrita, «= n» abajo y «+»/«−».
+        const num = (campoNom, val, onblur, estilo) => _celdaS3('s3i-' + campoNom + '-' + idx, idx, campoNom, val, onblur, estilo, true);
         const coment = (campoNom, val, ph) => `<input type="text" class="inv-num-input s3i-coment" value="${etx(val || '')}" placeholder="${ph}"
             oninput="updVentasConcepto(${idx},'${campoNom}',this.value)">`;
         const botSalida = (campoCop) => {
@@ -7430,23 +7442,24 @@ function _step3VentasInner() {
             <td class="s3i-blq">
                 <div class="s3i-tit">Venta</div>
                 <div class="s3i-par">
-                    ${campo(umSel('ventasCopasDirectas'), num(vV, `updVentasCalc(${idx},'ventasCopasDirectas',this)`))}
-                    ${esCopa ? campo('Botellas', num(fila.ventasBotella, `updVentasDirCalc(${idx},'ventasBotella',this)`)) : campo('bot', '<div class="s3i-na">—</div>')}
+                    ${campo(umSel('ventasCopasDirectas'), num('ventasCopasDirectas', vV, `updVentasCalc(${idx},'ventasCopasDirectas',this)`))}
+                    ${esCopa ? campo('Botellas', num('ventasBotella', fila.ventasBotella, `updVentasDirCalc(${idx},'ventasBotella',this)`)) : campo('bot', '<div class="s3i-na">—</div>')}
                 </div>
                 ${coment('ventasComentario', fila.ventasComentario, 'Comentario de venta…')}
             </td>
             <td class="s3i-blq">
-                <div class="s3i-tit cort">Cortesía</div>
+                <div class="s3i-tit cort">Cortesía y consumo interno</div>
                 <div class="s3i-par">
-                    ${campo(umSel('cortesiaCopas'), num(_salidaCaptura(fila, 'cortesiaCopas') || 0, `updVentasCalc(${idx},'cortesiaCopas',this)`, 'style="border-color:rgba(155,141,232,.45)"'))}
+                    ${campo(umSel('cortesiaCopas'), num('cortesiaCopas', _salidaCaptura(fila, 'cortesiaCopas') || 0, `updVentasCalc(${idx},'cortesiaCopas',this)`, 'border-color:rgba(155,141,232,.45)'))}
                     ${botSalida('cortesiaCopas')}
                 </div>
-                ${coment('cortesiaConcepto', fila.cortesiaConcepto, 'ej. VIP, degustación…')}
+                ${_cortConceptoHTML(idx, 'cortesiaConcepto', fila.cortesiaConcepto, true)}
+                ${_cortesia2HTML(idx, true)}
             </td>
             <td class="s3i-blq">
                 <div class="s3i-tit merm">Merma</div>
                 <div class="s3i-par">
-                    ${campo(umSel('mermaCopas'), num(_salidaCaptura(fila, 'mermaCopas') || 0, `updVentasCalc(${idx},'mermaCopas',this)`, 'style="border-color:rgba(224,90,58,.4)"'))}
+                    ${campo(umSel('mermaCopas'), num('mermaCopas', _salidaCaptura(fila, 'mermaCopas') || 0, `updVentasCalc(${idx},'mermaCopas',this)`, 'border-color:rgba(224,90,58,.4)'))}
                     ${botSalida('mermaCopas')}
                 </div>
                 ${coment('mermaConcepto', fila.mermaConcepto, 'ej. derrame, rotura…')}
@@ -8223,6 +8236,7 @@ function renderCardVentas() {
         ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
         : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
     const esCopa = fila.tipo !== 'pza';
+    const SEL = "background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px;margin-left:6px";
     cont.innerHTML = `
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
@@ -8240,22 +8254,16 @@ function renderCardVentas() {
                 </div>
             </div>
 
-            <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Ventas</div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px">
-                <div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center">
-                        <span>Vendidas</span>${esCopa ? _selUM(idx, 'ventasCopasDirectas', "background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px;margin-left:6px") : ''}</div>
-                    <input type="text" inputmode="decimal" id="venta-copas-${idx}" class="inv-num-input"
-                        style="width:100px" value="${_copAUm(fila, fila.ventasCopasDirectas, 'ventasCopasDirectas')||''}" placeholder="—"
-                        title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
-                        onblur="updVentasCalc(${idx},'ventasCopasDirectas',this);renderResumenVentas()">
+            <div class="s3c-tit">Ventas</div>
+            <div class="s3c-fila">
+                <div class="s3c-campo">
+                    <div class="s3c-l"><span>Vendidas</span>${esCopa ? _selUM(idx, 'ventasCopasDirectas', SEL) : ''}</div>
+                    ${_celdaS3('venta-copas-' + idx, idx, 'ventasCopasDirectas', _copAUm(fila, fila.ventasCopasDirectas, 'ventasCopasDirectas'),
+                        `updVentasCalc(${idx},'ventasCopasDirectas',this);renderResumenVentas()`)}
                 </div>
-                ${esCopa ? `<div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Botellas vendidas</div>
-                    <input type="text" inputmode="decimal" id="venta-bot-${idx}" class="inv-num-input"
-                        style="width:100px" value="${fila.ventasBotella||''}" placeholder="—"
-                        title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
-                        onblur="updVentasDirCalc(${idx},'ventasBotella',this);renderResumenVentas()">
+                ${esCopa ? `<div class="s3c-campo">
+                    <label class="s3c-l" for="venta-bot-${idx}">Botellas vendidas</label>
+                    ${_celdaS3('venta-bot-' + idx, idx, 'ventasBotella', fila.ventasBotella, `updVentasDirCalc(${idx},'ventasBotella',this);renderResumenVentas()`)}
                 </div>` : ''}
                 <div class="inv-sale-comment">
                     <label for="venta-comentario-${idx}">Comentarios de venta</label>
@@ -8265,40 +8273,27 @@ function renderCardVentas() {
                 </div>
             </div>
 
-            <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:14px">
-                <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Cortesía</div>
-                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-                    <div>
-                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center">
-                            <span>Cantidad</span>${esCopa ? _selUM(idx, 'cortesiaCopas', "background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px;margin-left:6px") : ''}</div>
-                        <input type="text" inputmode="decimal" class="inv-num-input"
-                            style="width:100px;border-color:rgba(155,141,232,.5)" placeholder="—"
-                            value="${_salidaCaptura(fila, 'cortesiaCopas')||''}"
-                            title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
-                            onblur="updVentasCalc(${idx},'cortesiaCopas',this);renderResumenVentas()">
+            <div class="s3c-blq">
+                <div class="s3c-tit">Cortesía y consumo interno</div>
+                <div class="s3c-fila">
+                    <div class="s3c-campo">
+                        <div class="s3c-l"><span>Cantidad</span>${esCopa ? _selUM(idx, 'cortesiaCopas', SEL) : ''}</div>
+                        ${_celdaS3('cort-cop-' + idx, idx, 'cortesiaCopas', _salidaCaptura(fila, 'cortesiaCopas'),
+                            `updVentasCalc(${idx},'cortesiaCopas',this);renderResumenVentas()`, 'border-color:rgba(155,141,232,.5)')}
                     </div>
                     ${_inputSalidaBotella(idx, 'cortesiaCopas', false)}
-                    <div class="inv-sale-comment">
-                        <label for="cortesia-concepto-${idx}">Concepto</label>
-                        <input id="cortesia-concepto-${idx}" type="text" class="inv-num-input inv-comment-input"
-                            style="border-color:rgba(155,141,232,.5)"
-                            value="${etx(fila.cortesiaConcepto||'')}" placeholder="ej. VIP, degustación…"
-                            oninput="updVentasConcepto(${idx},'cortesiaConcepto',this.value)">
-                    </div>
+                    ${_cortConceptoHTML(idx, 'cortesiaConcepto', fila.cortesiaConcepto)}
                 </div>
+                ${_cortesia2HTML(idx, false)}
             </div>
 
-            <div style="border-top:1px solid var(--border);padding-top:14px">
-                <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Merma</div>
-                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-                    <div>
-                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center">
-                            <span>Cantidad</span>${esCopa ? _selUM(idx, 'mermaCopas', "background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px;margin-left:6px") : ''}</div>
-                        <input type="text" inputmode="decimal" class="inv-num-input"
-                            style="width:100px;border-color:rgba(224,90,58,.4)" placeholder="—"
-                            value="${_salidaCaptura(fila, 'mermaCopas')||''}"
-                            title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
-                            onblur="updVentasCalc(${idx},'mermaCopas',this);renderResumenVentas()">
+            <div class="s3c-blq">
+                <div class="s3c-tit">Merma</div>
+                <div class="s3c-fila">
+                    <div class="s3c-campo">
+                        <div class="s3c-l"><span>Cantidad</span>${esCopa ? _selUM(idx, 'mermaCopas', SEL) : ''}</div>
+                        ${_celdaS3('merm-cop-' + idx, idx, 'mermaCopas', _salidaCaptura(fila, 'mermaCopas'),
+                            `updVentasCalc(${idx},'mermaCopas',this);renderResumenVentas()`, 'border-color:rgba(224,90,58,.4)')}
                     </div>
                     ${_inputSalidaBotella(idx, 'mermaCopas', false)}
                     <div class="inv-sale-comment">
@@ -8343,8 +8338,13 @@ function renderResumenVentas() {
         const partes = [];
         if ((fila.ventasCopasDirectas||0)>0)  partes.push(`${_u(fila.ventasCopasDirectas,'ventasCopasDirectas')} ${_lb('ventasCopasDirectas')}`);
         if (!esComp && (fila.ventasBotella||0)>0) partes.push(`${fila.ventasBotella} bot`);
-        if (_salidaSuelta(fila,'cortesiaCopas')>0) partes.push(`${_u(_salidaSuelta(fila,'cortesiaCopas'),'cortesiaCopas')} ${_lb('cortesiaCopas')} cortesía`);
-        if ((fila.cortesiaBotella||0)>0) partes.push(`${fila.cortesiaBotella} bot cortesía`);
+        // Cada parte de la cortesía con SU concepto (23-nov).
+        const _cc = (t, def) => { t = String(t || '').trim(); return (t && t.length <= 28 && !/[\u{1F300}-\u{1FAFF}]/u.test(t)) ? t.toLowerCase() : def; };
+        const _c1 = _cc(fila.cortesiaConcepto, 'cortesía'), _c2 = _cc(fila.cortesia2Concepto, 'otro concepto');
+        if (_salidaSuelta(fila,'cortesiaCopas')>0) partes.push(`${_u(_salidaSuelta(fila,'cortesiaCopas'),'cortesiaCopas')} ${_lb('cortesiaCopas')} ${etx(_c1)}`);
+        if ((fila.cortesiaBotella||0)>0) partes.push(`${fila.cortesiaBotella} bot ${etx(_c1)}`);
+        if ((parseFloat(fila.cortesia2Copas)||0)>0) partes.push(`${_u(fila.cortesia2Copas,'cortesiaCopas')} ${_lb('cortesiaCopas')} ${etx(_c2)}`);
+        if ((parseFloat(fila.cortesia2Botella)||0)>0) partes.push(`${fila.cortesia2Botella} bot ${etx(_c2)}`);
         if (_salidaSuelta(fila,'mermaCopas')>0) partes.push(`${_u(_salidaSuelta(fila,'mermaCopas'),'mermaCopas')} ${_lb('mermaCopas')} merma`);
         if ((fila.mermaBotella||0)>0) partes.push(`${fila.mermaBotella} bot merma`);
         return `<div class="ent-log-fila" onclick="seleccionarProductoVentas('${fila.insumoId}')" style="cursor:pointer">
@@ -8362,8 +8362,24 @@ function updCoctelVendido(id, val) {
 // en copas. La captura separa botellas y sueltos sin descontar dos veces la salida.
 function _camposSalida(campo) {
     var p = campo === 'mermaCopas' || campo === 'mermaBotella' ? 'merma' : 'cortesia';
-    return { total:p+'Copas', manual:p+'Manual', botella:p+'Botella', previo:'_'+p+'BotCopas', qr:p === 'merma' ? '_qrMerma' : '_qrCort' };
+    return { total:p+'Copas', manual:p+'Manual', botella:p+'Botella', previo:'_'+p+'BotCopas', qr:p === 'merma' ? '_qrMerma' : '_qrCort', c2:p === 'cortesia' };
 }
+/* ══ LA CORTESÍA EN DOS CONCEPTOS (Edwin, 23-nov) ═══════════════════════════
+   En el mismo renglón: 56 de cortesía y 6 de consumo interno (o producción del
+   restaurante, consumo personal…). Los dos SALEN del inventario, cada uno con
+   su concepto y su cantidad.
+
+   `cortesiaCopas` sigue siendo el TOTAL: es lo que leen el teórico, el
+   Resultado, los reportes y el candado, y así ninguna fórmula cambia. El
+   segundo concepto es una PARTE de ese total (cortesia2Copas sueltas +
+   cortesia2Botella), y `_c2Previo` guarda cuánto se le sumó la última vez
+   —igual que `_cortesiaBotCopas` con las botellas— para que cambiar el
+   contenido o la copa del insumo no lo cuente dos veces. */
+function _c2Copas(f) {
+    if (!f || f.tipo === 'peso') return 0;
+    return Math.max(0, parseFloat(f.cortesia2Copas) || 0) + _salidaBotellasCopas(f, f.cortesia2Botella);
+}
+function _c2Previo(f) { return (f && f._c2Previo !== undefined) ? (parseFloat(f._c2Previo) || 0) : _c2Copas(f); }
 function _salidaBotellasCopas(f, cantidad) {
     return f.tipo === 'copa' ? EtaaxCore.cantidadFilaInventario(Math.max(0, parseFloat(cantidad)||0), 'PZA', f) : 0;
 }
@@ -8372,7 +8388,7 @@ function _aporteBotellaAnterior(f, k) {
 }
 function _salidaSuelta(f, campo) {
     var k = _camposSalida(campo);
-    return Math.max(0, (parseFloat(f[k.total])||0) - _aporteBotellaAnterior(f, k));
+    return Math.max(0, (parseFloat(f[k.total])||0) - _aporteBotellaAnterior(f, k) - (k.c2 ? _c2Previo(f) : 0));
 }
 function _salidaCaptura(f, campo) {
     // Solo presentación: evita 3.0000000000000036 después de separar la botella.
@@ -8386,22 +8402,31 @@ function _actualizarSalida(f, campo, cambio) {
     if (cambio.sueltas !== undefined) manual = Math.max(0, cambio.sueltas - qr);
     if (cambio.botellas !== undefined) f[k.botella] = Math.max(0, parseFloat(cambio.botellas)||0);
     var botCopas = _salidaBotellasCopas(f, f[k.botella]);
+    var c2 = k.c2 ? _c2Copas(f) : 0;                  // el segundo concepto de la cortesía (parte del total)
     f[k.manual] = manual;
     f[k.qr] = qr;
     f[k.previo] = botCopas;
-    f[k.total] = manual + qr + botCopas;
+    if (k.c2) f._c2Previo = c2;
+    f[k.total] = manual + qr + botCopas + c2;
+}
+// Captura del segundo concepto: sueltas (ya en copas) o botellas completas.
+function updCortesia2(idx, campo, val) {
+    var f = filasCaptura[idx]; if (!f || f.tipo === 'peso') return;
+    if (campo === 'cortesia2Botella' && (f.tipo !== 'copa' || !(f.contNeto > 0 && f.copaML > 0))) return;
+    f[campo] = (val === '' || val == null) ? '' : Math.max(0, parseFloat(val) || 0);
+    _actualizarSalida(f, 'cortesiaCopas', {});
+    _autoGuardar();
 }
 function _inputSalidaBotella(idx, campo, compacto) {
     var f = filasCaptura[idx];
     if (!f || f.tipo !== 'copa') return '';
     var k = _camposSalida(campo), valida = f.contNeto > 0 && f.copaML > 0;
-    var id = k.botella + '-' + idx;
+    var id = k.botella + '-' + idx, color = campo === 'mermaCopas' ? 'rgba(224,90,58,.4)' : 'rgba(155,141,232,.5)';
+    // Como Excel (23-nov): la operación se queda, «= n» abajo y «+»/«−» al lado.
     return `<div class="inv-bottle-out${compacto ? ' is-compact' : ''}">
         <label for="${id}">Botellas${compacto ? '' : ' de ' + (campo === 'mermaCopas' ? 'merma' : 'cortesía')}</label>
-        <input id="${id}" type="text" inputmode="decimal" class="inv-num-input" value="${etx(f[k.botella]||'')}" placeholder="—"
-            style="border-color:${campo === 'mermaCopas' ? 'rgba(224,90,58,.4)' : 'rgba(155,141,232,.5)'}"
-            ${valida ? '' : 'disabled'} title="${valida ? 'Botellas completas; se suman a las copas u onzas' : 'Define contenido y tamaño de copa en el insumo'}"
-            onkeydown="_celdaKey(event,this)" onblur="updVentasDirCalc(${idx},'${k.botella}',this);renderResumenVentas()">
+        ${valida ? _celdaS3(id, idx, k.botella, f[k.botella], `updVentasDirCalc(${idx},'${k.botella}',this);renderResumenVentas()`, 'border-color:' + color, compacto)
+            : `<input id="${id}" type="text" class="inv-num-input" value="${etx(f[k.botella]||'')}" placeholder="—" style="border-color:${color}" disabled title="Define contenido y tamaño de copa en el insumo">`}
         ${valida ? '' : '<small>Falta contenido o tamaño de copa</small>'}
     </div>`;
 }
@@ -10292,11 +10317,165 @@ function updPesoCalc(idx, pi, el) {
     if (ok && crudo && pi === _pesosDe(filasCaptura[idx]).length - 1) _pesoAgregar(idx, false);
 }
 window.updPesoCalc = updPesoCalc;
-function updVentasCalc(idx, campo, el)  { _celdaCalc(el, function (v) { updVentasUM(idx, campo, v); }); }
+function updVentasCalc(idx, campo, el)  { _celdaFx(idx, campo, el, function (v) { updVentasUM(idx, campo, v); }); }
 function updVentasDirCalc(idx, campo, el){
     var vacio = !String(el.value || '').trim();
-    _celdaCalc(el, function (v) { updVentasDirectas(idx, campo, vacio ? '' : v); });
+    _celdaFx(idx, campo, el, function (v) { updVentasDirectas(idx, campo, vacio ? '' : v); });
 }
+function updCortesia2Calc(idx, campo, el) {
+    var vacio = !String(el.value || '').trim();
+    _celdaFx(idx, campo, el, function (v) {
+        updCortesia2(idx, campo, vacio ? '' : (campo === 'cortesia2Copas' ? _umACop(filasCaptura[idx], v, 'cortesiaCopas') : v));
+    });
+}
+/* ══ EL PASO 3 COMO EXCEL (Edwin, 23-nov) ══════════════════════════════════
+   Las casillas ya resolvían «6+4», pero la operación se borraba al salir y el
+   teclado numérico de la tablet no trae «+» ni «−». Ahora, igual que las
+   cerradas del Paso 1: la operación se queda escrita (fila.fx), abajo dice
+   «= 10», y junto a la casilla van «+» y «−».
+
+   La operación solo se enseña mientras siga dando lo que hay guardado: si
+   después llega una cortesía del QR o se cambia de copas a onzas, el número
+   ya es otro y se enseña el número (una operación que no cuadra miente). */
+function _fmtFx(v) { v = Math.round((parseFloat(v) || 0) * 100) / 100; return String(v); }
+function _fxVigente(fila, campo, mostrado) {
+    var fx = _fxDe(fila, campo); if (!fx) return '';
+    var v = _evalCelda(fx);
+    return (v !== null && Math.abs(v - (parseFloat(mostrado) || 0)) < 0.006) ? fx : '';
+}
+function _celdaFx(idx, campo, el, aplicar) {
+    var crudo = String(el.value == null ? '' : el.value).trim(), ok = false, val = 0;
+    _celdaCalc(el, function (v) { ok = true; val = v; aplicar(v); });
+    if (!ok) return;                                   // no se entendió: se queda en rojo, sin tocar nada
+    var fila = filasCaptura[idx]; if (!fila) return;
+    if (!fila.fx) fila.fx = {};
+    if (crudo && _esFormula(crudo)) { fila.fx[campo] = crudo; el.value = crudo; }
+    else delete fila.fx[campo];
+    var r = document.getElementById('fxr-' + idx + '-' + campo);
+    if (r) r.textContent = fila.fx[campo] ? '= ' + _fmtFx(val) : '';
+    if (typeof _autoGuardar === 'function') _autoGuardar();
+}
+function _celdaS3(id, idx, campo, mostrado, onblur, estilo, compacto) {
+    var fila = filasCaptura[idx];
+    var fx = _fxVigente(fila, campo, mostrado);
+    var num = parseFloat(mostrado) || 0;
+    var op = function (o, t, l) {
+        return '<button type="button" class="calc-op" tabindex="-1" onpointerdown="event.preventDefault();_celdaOp(\'' + id + '\',\'' + o + '\')" title="' + t + '">' + l + '</button>';
+    };
+    return '<div class="calc-wrap' + (compacto ? ' is-compact' : '') + '"><div class="calc-celda">' +
+        '<input type="text" inputmode="decimal" class="inv-num-input" id="' + id + '" value="' + etx(fx || (num ? _fmtFx(num) : '')) + '" placeholder="—"' +
+            ' title="Suma y resta como en Excel: 6+4, 2*12-1" onkeydown="_celdaKey(event,this)" onblur="' + onblur + '"' +
+            (estilo ? ' style="' + estilo + '"' : '') + '>' +
+        '<div class="calc-ops">' + op('+', 'Sumar', '+') + op('-', 'Restar', '−') + '</div></div>' +
+        '<div class="fx-res" id="fxr-' + idx + '-' + campo + '">' + (fx ? '= ' + etx(_fmtFx(num)) : '') + '</div></div>';
+}
+
+/* El concepto de la cortesía: se escribe lo que sea o se toca uno de los de
+   siempre. */
+var _CORT_CONCEPTOS = ['Cortesía', 'Consumo interno', 'Producción del restaurante', 'Consumo personal'];
+function _cortConceptoHTML(idx, campo, val, compacto) {
+    var id = campo + '-' + idx, v = String(val || '').trim().toLowerCase();
+    var inp = '<input id="' + id + '" type="text" list="cortConceptos" autocomplete="off" class="inv-num-input ' + (compacto ? 's3i-coment' : 'inv-comment-input') + '"' +
+        ' style="border-color:rgba(155,141,232,.5)" value="' + etx(val || '') + '" placeholder="' + (campo === 'cortesia2Concepto' ? 'Segundo concepto…' : 'Cortesía, consumo interno…') + '"' +
+        ' oninput="_setCortConcepto(' + idx + ',\'' + campo + '\',this.value,true)">';
+    if (compacto) return inp;
+    return '<div class="inv-sale-comment s3-cort-conc"><label for="' + id + '">Concepto</label>' + inp +
+        '<div class="s3-conc-chips">' + _CORT_CONCEPTOS.map(function (c) {
+            return '<button type="button" class="s3-conc-chip' + (v === c.toLowerCase() ? ' on' : '') + '" onclick="_setCortConcepto(' + idx + ',\'' + campo + '\',\'' + c + '\')">' + c + '</button>';
+        }).join('') + '</div></div>';
+}
+function _setCortConcepto(idx, campo, txt, tecleado) {
+    var el = document.getElementById(campo + '-' + idx);
+    if (el && !tecleado) el.value = txt;
+    updVentasConcepto(idx, campo, txt);
+    var chips = el && el.parentNode && el.parentNode.querySelector('.s3-conc-chips');
+    if (chips) Array.prototype.forEach.call(chips.children, function (b) {
+        b.classList.toggle('on', b.textContent.toLowerCase() === String(txt || '').trim().toLowerCase());
+    });
+}
+var _c2Abiertas = {};
+function _c2Visible(f) {
+    return !!(f && f.tipo !== 'peso' && (_c2Abiertas[f.insumoId] || String(f.cortesia2Concepto || '').trim() ||
+        (parseFloat(f.cortesia2Copas) || 0) > 0 || (parseFloat(f.cortesia2Botella) || 0) > 0));
+}
+function abrirCortesia2(idx) {
+    var f = filasCaptura[idx]; if (!f) return;
+    _c2Abiertas[f.insumoId] = true;
+    _repintarVentasFila();
+    var el = document.getElementById('c2-cop-' + idx); if (el) el.focus();
+}
+function quitarCortesia2(idx) {
+    var f = filasCaptura[idx]; if (!f) return;
+    delete _c2Abiertas[f.insumoId];
+    f.cortesia2Copas = ''; f.cortesia2Botella = ''; f.cortesia2Concepto = '';
+    if (f.fx) { delete f.fx.cortesia2Copas; delete f.fx.cortesia2Botella; }
+    _actualizarSalida(f, 'cortesiaCopas', {});
+    _autoGuardar();
+    _repintarVentasFila();
+}
+// Repinta lo que esté a la vista en el Paso 3 (la tarjeta o la lista).
+function _repintarVentasFila() {
+    if (document.getElementById('ventasCardWrap') && _ventasInsumoId) renderCardVentas();
+    else if (typeof renderStepContent === 'function') renderStepContent();
+    if (typeof renderResumenVentas === 'function') renderResumenVentas();
+}
+function _cortesia2HTML(idx, compacto) {
+    var f = filasCaptura[idx]; if (!f || f.tipo === 'peso') return '';
+    if (!_c2Visible(f)) return '<button type="button" class="s3-c2-add' + (compacto ? ' is-compact' : '') + '" onclick="abrirCortesia2(' + idx + ')">+ Otro concepto' + (compacto ? '' : ' en este renglón') + '</button>';
+    var esCopa = f.tipo === 'copa', valida = esCopa && f.contNeto > 0 && f.copaML > 0;
+    var ud = _umCapLbl(f, false, 'cortesiaCopas'), est = 'border-color:rgba(155,141,232,.5)';
+    var cant = _celdaS3('c2-cop-' + idx, idx, 'cortesia2Copas', _copAUm(f, f.cortesia2Copas, 'cortesiaCopas'),
+        'updCortesia2Calc(' + idx + ',\'cortesia2Copas\',this);renderResumenVentas()', est, compacto);
+    var bot = !esCopa ? '' : (valida
+        ? _celdaS3('c2-bot-' + idx, idx, 'cortesia2Botella', f.cortesia2Botella,
+            'updCortesia2Calc(' + idx + ',\'cortesia2Botella\',this);renderResumenVentas()', est, compacto)
+        : '<input type="text" class="inv-num-input" disabled placeholder="—" style="' + est + '" title="Define contenido y tamaño de copa en el insumo">');
+    var x = '<button type="button" class="s3-c2-x" title="Quitar este concepto" onclick="quitarCortesia2(' + idx + ')">✕</button>';
+    if (compacto) {
+        return '<div class="s3-c2 is-compact"><div class="s3i-par">' +
+            '<div class="s3i-campo"><span class="s3i-l">' + ud + '</span>' + cant + '</div>' +
+            '<div class="s3i-campo"><span class="s3i-l">' + (esCopa ? 'Botellas' : 'bot') + '</span>' + (esCopa ? bot : '<div class="s3i-na">—</div>') + '</div>' +
+            '</div><div class="s3-c2-conc">' + _cortConceptoHTML(idx, 'cortesia2Concepto', f.cortesia2Concepto, true) + x + '</div></div>';
+    }
+    return '<div class="s3-c2"><div class="s3c-fila">' +
+        '<div class="s3c-campo"><label class="s3c-l" for="c2-cop-' + idx + '">Cantidad (' + ud + ')</label>' + cant + '</div>' +
+        (esCopa ? '<div class="s3c-campo"><label class="s3c-l" for="c2-bot-' + idx + '">Botellas</label>' + bot + '</div>' : '') +
+        _cortConceptoHTML(idx, 'cortesia2Concepto', f.cortesia2Concepto) + x +
+    '</div></div>';
+}
+/* Las partes de la cortesía, cada una con su concepto (el Resultado y el
+   reporte las enseñan juntas en el lugar de las cortesías). */
+function _cortPartes(f) {
+    if (!f || f.tipo === 'peso') return [];
+    if (f.esCompuesto) {
+        var c = (typeof getCompuestos === 'function') ? getCompuestos().find(function (x) { return x.id === f.compId; }) : null;
+        return _cortPartesJuntas(((c && c.miembros) || []).map(_filaDeMiembro).filter(Boolean));
+    }
+    var tot = parseFloat(f.cortesiaCopas) || 0, c2 = Math.min(tot, _c2Previo(f)), r = [];
+    if (tot - c2 > 1e-9) r.push({ concepto: String(f.cortesiaConcepto || '').trim() || 'Cortesía', copas: tot - c2 });
+    if (c2 > 1e-9) r.push({ concepto: String(f.cortesia2Concepto || '').trim() || 'Otro concepto', copas: c2 });
+    return r;
+}
+function _cortPartesJuntas(filas) {
+    var porC = {}, orden = [];
+    (filas || []).forEach(function (m) {
+        _cortPartes(m).forEach(function (p) {
+            var k = p.concepto.toLowerCase();
+            if (!porC[k]) { porC[k] = { concepto: p.concepto, copas: 0 }; orden.push(k); }
+            porC[k].copas += p.copas;
+        });
+    });
+    return orden.map(function (k) { return porC[k]; });
+}
+function _s5CortHTML(partes, total, fmt) {
+    if (!(total > 0)) return '—';
+    var h = '<b style="color:var(--viol)">' + fmt(total) + '</b>';
+    var ver = partes.length > 1 || (partes.length === 1 && partes[0].concepto.toLowerCase() !== 'cortesía');
+    if (ver) h += partes.map(function (p) { return '<div class="s5-exl s5-cort">' + etx(p.concepto) + ' <b>' + fmt(p.copas) + '</b></div>'; }).join('');
+    return h;
+}
+window.updCortesia2Calc = updCortesia2Calc; window.abrirCortesia2 = abrirCortesia2; window.quitarCortesia2 = quitarCortesia2;
+window._setCortConcepto = _setCortConcepto;
 function _celdaKey(ev, el) {
     // Enter = terminar la celda. blur() dispara el mismo onblur que ya evalúa, así
     // que Enter y salir de la celda se comportan idénticos (antes Enter en algunos
@@ -10545,6 +10724,7 @@ function _estiloS5() {
         '.s5-lim{font-size:12.5px;color:var(--text-muted);margin-top:4px}' +
         '.s5-tabla{--s5-amarillo:#f5c842}[data-theme="light"] .s5-tabla{--s5-amarillo:#b38600}' +
         '.s5-tabla .s5-exl{font-size:10.5px;font-weight:400;color:var(--text-dim);margin-top:1px;white-space:normal!important}' +
+        '.s5-tabla .s5-cort b{white-space:nowrap}' +   /* cortesía en dos conceptos: la cantidad no se parte */
         '.s5-exb{font-size:12.5px;font-weight:600;color:var(--viol);margin-top:4px;white-space:normal}' +
         '.s5-ext{font-size:13px;font-weight:700;color:var(--text);margin-top:1px;white-space:normal;border-top:1px solid var(--border);padding-top:2px}' +
         // En su propio renglón, centrado bajo la cifra (display:table encoge al texto).
@@ -10713,7 +10893,7 @@ function _batchInfoHTML(fila) {
         '</div>';
 }
 function _s5Comentarios(f) {
-    var c = [['Venta', f.ventasComentario], ['Cortesía', f.cortesiaConcepto], ['Merma', f.mermaConcepto]]
+    var c = [['Venta', f.ventasComentario], ['Cortesía', (parseFloat(f.cortesiaCopas) || 0) > 0 ? '' : f.cortesiaConcepto], ['Merma', f.mermaConcepto]]
         .filter(function (x) { return x[1] && String(x[1]).trim(); });
     if (!c.length) return '';
     return '<div class="s5-coms"><span class="s5-l">Comentarios</span>' +
@@ -11294,7 +11474,7 @@ function _step5TablasArmar(opts) {
                 <td style="text-align:center">${_s5c2('Desglose', (_eqCopOz(ea, fila) || '—') + (_conBat ? _s5sub('total ' + _eqCopOz(ea + _enB.ea, fila)) : ''))}</td>
                 <td style="text-align:center">${_costoOk ? _s5c2('Costo', entDinero > 0 ? '<b>' + _s5dinero(entDinero).replace('+', '') + '</b>' : '—') : ''}</td>
                 <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}</td>
-                <td style="text-align:center">${_s5c2('Cortesías', (cortesia > 0 ? '<b style="color:var(--viol)">' + _fc(cortesia) + '</b>' : '—'))}</td>
+                <td style="text-align:center">${_s5c2('Cortesías', _s5CortHTML(_cortPartes(fila), cortesia, _fc))}</td>
                 <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(teorico + (_conBat ? _enB.ea : 0), fila))}</td>
                 <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(fisico, fila) + (_conBat ? _s5sub('total ' + _eqCopOz(fisico + _enB.fis, fila)) : ''))}</td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
@@ -11365,7 +11545,7 @@ function _step5TablasArmar(opts) {
                 <td></td>
                 <td style="text-align:center">${_costoOk ? _s5c2('Costo', entDinP > 0 ? '<b>' + _s5dinero(entDinP).replace('+', '') + '</b>' : '—') : ''}</td>
                 <td style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${_s5Uso(coctSoloP, prodPBpVer, cant)}</td>
-                <td style="text-align:center">${peso ? '' : _s5c2('Cortesías', (cortP>0 ? '<b style="color:var(--viol)">' + cant(cortP) + '</b>' : '—'))}</td>
+                <td style="text-align:center">${peso ? '' : _s5c2('Cortesías', _s5CortHTML(_cortPartes(fila), cortP, cant))}</td>
                 <td></td>
                 <td></td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
@@ -11488,7 +11668,7 @@ function _step5TablasArmar(opts) {
         const _fin1 = `
             <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + _nc(dif) + ' ' + (esPzaComp0 ? 'pza' : uC.mov) + (esPzaComp0 ? '' : _s5sub(_grupo(calcDiferencia, {signo:true, sinCopas:true}))))}</td>
             <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>`;
-        const _cort = (u) => `<td style="text-align:center">${_s5c2('Cortesías', cortC > 0 ? '<b style="color:var(--viol)">' + _nc(cortC) + ' ' + u + '</b>' : '—')}</td>`;
+        const _cort = (u) => `<td style="text-align:center">${_s5c2('Cortesías', _s5CortHTML(_cortPartesJuntas(members), cortC, (x) => _nc(x) + ' ' + u))}</td>`;
         const _fin2 = `
             <td style="text-align:center;color:${color}">${_s5c2(pcC.lbl, pcC.html)}</td>
             <td style="text-align:right;color:${color};white-space:nowrap">${_costoOk ? _s5c2('A proveedor', '<b style="color:inherit">' + _s5dinero(difProvC) + '</b>') : ''}</td>`;
@@ -12490,8 +12670,8 @@ function verReporteDirectivo(gerencial, modo) {
           <tbody>${_mermados.map(a=>`<tr><td style="font-weight:600">${etx(a.f.nombre)}</td><td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td><td class="tc" style="color:${cCrit};font-weight:700">${a.merma.toFixed(1)} ${_uMC(a)}</td><td style="color:#888">${etx(a.f.mermaConcepto||'—')}</td><td class="tr" style="font-weight:600">$${_m2(a.merma*(a.f.precioCarta||0))}</td></tr>`).join('')}</tbody></table></div>`
         : _movTit('🗑️ Productos mermados — 0')+_movVacio}
       ${_cortesias.length ? `<div class="rd-grp">${_movTit('🎁 Cortesías — '+_cortesias.length)}
-        <table class="rd-t"><thead><tr><th>Producto</th><th class="tc">Grupo</th><th class="tc">Cantidad</th><th>Motivo</th><th class="tr">Valor (carta)</th></tr></thead>
-          <tbody>${_cortesias.map(a=>`<tr><td style="font-weight:600">${etx(a.f.nombre)}</td><td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td><td class="tc" style="color:#7d5fa3;font-weight:700">${a.cortesia.toFixed(1)} ${_uMC(a)}</td><td style="color:#888">${etx(a.f.cortesiaConcepto||'—')}</td><td class="tr" style="font-weight:600">$${_m2(a.cortesia*(a.f.precioCarta||0))}</td></tr>`).join('')}</tbody></table></div>`
+        <table class="rd-t"><thead><tr><th>Producto</th><th class="tc">Grupo</th><th class="tc">Cantidad</th><th>Concepto</th><th class="tr">Valor (carta)</th></tr></thead>
+          <tbody>${_cortesias.map(a=>{ const ps=_cortPartes(a.f); return (ps.length ? ps : [{concepto:a.f.cortesiaConcepto||'—', copas:a.cortesia}]).map((p,i)=>`<tr><td style="font-weight:600">${i ? '' : etx(a.f.nombre)}</td><td class="tc" style="color:#888">${i ? '' : _grupoCategoria(a.f)}</td><td class="tc" style="color:#7d5fa3;font-weight:700">${p.copas.toFixed(1)} ${_uMC(a)}</td><td style="color:#888">${etx(p.concepto)}</td><td class="tr" style="font-weight:600">$${_m2(p.copas*(a.f.precioCarta||0))}</td></tr>`).join(''); }).join('')}</tbody></table></div>`
         : _movTit('🎁 Cortesías — 0')+_movVacio}`;
     const _cancelacionesHTML = `
       ${_cancels.length ? `<div class="rd-grp">${_movTit('🚫 Cancelaciones POS · informativo — '+_cancels.length)}
@@ -14050,6 +14230,16 @@ const fotoTh = _fotosThumbHTML(e);
         /* El registro de afuera es el mismo Paso 2 (23-nov): también agrupado
            por insumo. Arriba, las notas / facturas como documento. */
         const _bloque = (arr, tipo) => _entGruposHTML(arr, tipo, _safeRow);
+        /* Marcando para agrupar en una nota: las entradas en una lista corrida
+           (la más reciente arriba), cada una con su casilla; mermas y cortesías
+           no van en una nota de compra. */
+        if (_entSelVigente()) {
+            cont.innerHTML = secHdr(_icInv('nom-recibo', 14) + 'Marca las entradas de la misma nota o factura') +
+                (entradasArr.length ? entradasArr.map(e => _entSelFilaHTML(e, _safeRow)).join('') : _entVacioHTML());
+            _entSelPintarBarra();
+            return;
+        }
+        _entSelPintarBarra();
         const notasHTML = _entNotasHTML(entradasArr, _safeRow);
         cont.innerHTML =
             (notasHTML ? secHdr(_icInv('nom-recibo', 14) + 'Notas / facturas') + notasHTML : '') +
@@ -14113,11 +14303,130 @@ function _entNotasHTML(arr, fila) {
         return '<details class="eg eg-nota" data-k="' + etx(key) + '"' + (_entGruposAbiertos[key] ? ' open' : '') + ' ontoggle="_entGrupoToggle(this)">' +
             '<summary><span class="eg-nom">' + _icInv('nom-recibo', 14) + etx(tit) +
                 '<small>' + etx(e0.fecha || '—') + ' · ' + etx(tipoEntradaLabel(e0.tipo)) + '</small></span>' +
-            _fotosThumbHTML(e0) +
+            _fotosThumbHTML({ foto_urls: _entFotosUnion(es) }) +
             '<b class="eg-tot entrada">' + es.length + ' producto' + (es.length !== 1 ? 's' : '') + '</b></summary>' +
-            '<div class="eg-cuerpo">' + es.map(fila).join('') + '</div></details>';
+            '<div class="eg-cuerpo">' + es.map(fila).join('') +
+            '<div class="eg-nota-pie"><button type="button" class="ent-nota-desag" onclick="_entNotaDesagrupar(\'' + etx(k) + '\')">Desagrupar</button></div>' +
+            '</div></details>';
     }).join('');
 }
+
+/* Las fotos de evidencia de varias entradas, juntas y sin repetir. */
+function _entFotosUnion(es) {
+    var vistas = {}, r = [];
+    (es || []).forEach(function (e) {
+        var arr = (e && e.foto_urls && e.foto_urls.length) ? e.foto_urls : ((e && e.foto_url) ? [e.foto_url] : []);
+        arr.forEach(function (u) { if (u && !vistas[u]) { vistas[u] = 1; r.push(u); } });
+    });
+    return r;
+}
+
+/* ══ AGRUPAR EN NOTA LO YA REGISTRADO (Edwin, 23-nov) ══════════════════════
+   Lo que se registró suelto —seis refrescos uno por uno, cada cual con su
+   foto— se puede juntar después en una nota: «Agrupar en nota», se marcan las
+   entradas, proveedor y folio, y listo. Cada entrada se queda igual (cantidad,
+   fecha, sus fotos); solo se le pone la nota. La nota enseña juntas TODAS las
+   fotos de sus entradas. Si alguna marcada ya era de una nota, las demás se
+   suman a ESA nota (y la nota entera toma el proveedor y el folio nuevos). */
+var _entSel = null;
+function _entSelVigente() { return !!(_entSel && _entSel.ctx === _entNotaCtx()); }
+function _entSelIds() { return _entSelVigente() ? Object.keys(_entSel.ids).filter(function (k) { return _entSel.ids[k]; }) : []; }
+function _entBtnAgruparHTML() {
+    var on = _entSelVigente();
+    return '<button type="button" class="ent-agrupar-btn' + (on ? ' on' : '') + '" id="entAgruparBtn" onclick="_entSelModo()" ' +
+        'title="Juntar en una nota o factura entradas que ya están registradas">' + _icInv('nom-recibo', 13) + (on ? 'Cancelar' : 'Agrupar en nota') + '</button>';
+}
+function _entSelModo() {
+    if (!_entSelVigente() && !invActual && typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
+    _entSel = _entSelVigente() ? null : { ctx: _entNotaCtx(), ids: {}, proveedor: '', folio: '' };
+    var b = document.getElementById('entAgruparBtn'); if (b) b.outerHTML = _entBtnAgruparHTML();
+    renderListadoEntradas();
+}
+function _entSelFilaHTML(e, fila) {
+    var on = !!(e && e.id && _entSel.ids[e.id]);
+    return '<label class="ent-sel-fila' + (on ? ' on' : '') + '"><input type="checkbox"' + (on ? ' checked' : '') +
+        ' onchange="_entSelMarcar(\'' + etx(e.id) + '\', this.checked, this)">' + fila(e) + '</label>';
+}
+function _entSelMarcar(id, on, el) {
+    if (!_entSelVigente()) return;
+    _entSel.ids[id] = !!on;
+    var lab = el && el.closest && el.closest('.ent-sel-fila'); if (lab) lab.classList.toggle('on', !!on);
+    // Si la marcada ya trae nota, sus datos se proponen (no se pisa lo escrito).
+    var e = on ? _entBuscarPorId(id) : null;
+    if (e && e.notaId) {
+        if (!_entSel.proveedor && e.notaProveedor) _entSel.proveedor = e.notaProveedor;
+        if (!_entSel.folio && e.notaFolio) _entSel.folio = e.notaFolio;
+    }
+    _entSelPintarBarra();
+}
+function _entSelPintarBarra() {
+    var el = document.getElementById('entSelBar'); if (!el) return;
+    if (!_entSelVigente()) { if (el.innerHTML) el.innerHTML = ''; return; }
+    var es = _entSelIds().map(_entBuscarPorId).filter(Boolean), n = es.length, fotos = _entFotosUnion(es);
+    el.innerHTML = '<div class="ent-sel-bar">' +
+        '<div class="ent-sel-tit">' + _icInv('nom-recibo', 16) + '<b>Agrupar en una nota</b><span>' +
+            (n ? n + ' entrada' + (n !== 1 ? 's' : '') + ' marcada' + (n !== 1 ? 's' : '') +
+                 (fotos.length ? ' · se juntan ' + fotos.length + ' foto' + (fotos.length !== 1 ? 's' : '') + ' de evidencia' : '')
+               : 'Marca abajo las entradas que llegaron en la misma nota o factura') + '</span></div>' +
+        '<div class="ent-sel-datos">' +
+            '<input id="entSelProv" type="text" autocomplete="off" placeholder="Proveedor" value="' + etx(_entSel.proveedor || '') + '" oninput="_entSel.proveedor=this.value">' +
+            '<input id="entSelFolio" type="text" autocomplete="off" placeholder="Folio (opcional)" value="' + etx(_entSel.folio || '') + '" oninput="_entSel.folio=this.value">' +
+            '<button type="button" class="ent-sel-ok" onclick="_entSelAgrupar()"' + (n ? '' : ' disabled') + '>Agrupar' + (n ? ' ' + n : '') + '</button>' +
+        '</div>' +
+        (fotos.length ? '<div class="ent-sel-fotos">' + _fotosThumbHTML({ foto_urls: fotos }) + '</div>' : '') +
+    '</div>';
+}
+function _entSelAgrupar() {
+    if (!invActual && typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
+    if (!_entSelVigente()) return;
+    var es = _entSelIds().map(_entBuscarPorId).filter(Boolean);
+    if (!es.length) { alert('Marca las entradas que llegaron en la misma nota o factura.'); return; }
+    var conNota = es.filter(function (e) { return e.notaId; });
+    var notaId = conNota.length ? conNota[0].notaId : genId() + genId();
+    var prov = String(_entSel.proveedor || '').trim(), folio = String(_entSel.folio || '').trim();
+    // La nota entera (también las de esa nota que no se marcaron) con los mismos datos.
+    var ids = {};
+    es.forEach(function (e) { ids[e.id] = 1; });
+    ((invActual ? invActual.entradasLog : getEntradasLog()) || []).forEach(function (e) { if (e && e.notaId === notaId) ids[e.id] = 1; });
+    Object.keys(ids).forEach(function (id) { _entAplicarCambios(id, { notaId: notaId, notaFolio: folio, notaProveedor: prov }, null); });
+    _entSel = null;
+    var b = document.getElementById('entAgruparBtn'); if (b) b.outerHTML = _entBtnAgruparHTML();
+    _entAviso('Nota armada: ' + es.length + ' entrada' + (es.length !== 1 ? 's' : '') + (prov ? ' · ' + prov : ''));
+    _entGruposAbiertos['nota|' + notaId] = true;     // se abre para verla
+    renderListadoEntradas();
+}
+/* Deshacer una nota: sus entradas se quedan, sin nota. En el log global se
+   deja `notaId: ''` (vacío a propósito) para que el inventario que ya tenga la
+   copia también la suelte (ver _entSyncNotaEnInv). */
+function _entNotaDesagrupar(notaId) {
+    if (!invActual && typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
+    if (!notaId || !confirm('¿Desagrupar esta nota? Las entradas se quedan igual, solo sin nota.')) return;
+    var cambio = false;
+    if (invActual) (invActual.entradasLog || []).forEach(function (e) {
+        if (e && e.notaId === notaId) { delete e.notaId; delete e.notaFolio; delete e.notaProveedor; cambio = true; }
+    });
+    if (cambio) guardarEntradas();
+    var gl = getEntradasLog(), sube = [];
+    gl.forEach(function (g) { if (g && g.notaId === notaId) { g.notaId = ''; delete g.notaFolio; delete g.notaProveedor; sube.push(g); } });
+    if (sube.length) { _guardarELLocal(); sube.forEach(function (g) { try { _sbUpEL(g); } catch (e) {} }); }
+    renderListadoEntradas();
+}
+/* La nota que se armó (o se deshizo) afuera llega a la copia que ya tiene el
+   inventario: el log global manda. Solo si el global la nombra (o la quitó
+   con `notaId: ''`): una entrada que nunca tuvo nota no toca nada. */
+function _entSyncNotaEnInv(e) {
+    if (!invActual || !e || !e.id || !('notaId' in e)) return false;
+    var c = null;
+    (invActual.entradasLog || []).forEach(function (x) { if (x && x.id === e.id) c = x; });
+    if (!c) return false;
+    if ((c.notaId || '') === (e.notaId || '') && (c.notaFolio || '') === (e.notaFolio || '') &&
+        (c.notaProveedor || '') === (e.notaProveedor || '')) return false;
+    if (e.notaId) Object.assign(c, _entNotaCampos(e));
+    else { delete c.notaId; delete c.notaFolio; delete c.notaProveedor; }
+    return true;
+}
+window._entSelModo = _entSelModo; window._entSelMarcar = _entSelMarcar; window._entSelAgrupar = _entSelAgrupar;
+window._entNotaDesagrupar = _entNotaDesagrupar;
 
 function eliminarEntradaPorId(id) {
     _pedirClaveAdmin('Eliminar entrada', function() {
@@ -14464,7 +14773,8 @@ function renderVistaEntradas() {
     const lista = `${filtroFechas}
                 <div class="p12-cab"><span>${invActual ? 'Entradas del período' : 'Historial de entradas'}</span>
                     <b id="entLogCount">${(!invActual && !_INV_CARGADO) ? '<span style="color:var(--text-dim);font-weight:500">cargando…</span>'
-                        : (logLen + ' registro' + (logLen !== 1 ? 's' : ''))}</b></div>
+                        : (logLen + ' registro' + (logLen !== 1 ? 's' : ''))}</b>${puedeReg ? _entBtnAgruparHTML() : ''}</div>
+                <div id="entSelBar"></div>
                 <div id="entLogList"></div>`;
     cont.innerHTML = puedeReg ? `
         <div class="p12-split p12-split-ent ent-hist">

@@ -107,7 +107,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
        RENGLÓN la use: un motor correcto que la pantalla no llama se ve igual de
        verde. Así que se corre `_rowCopa`, el constructor real de la fila de
        barra, y se lee lo que deja en el HTML. */
-    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch','_s5c2','_s5sub','_s5Comentarios','_s5ExistHTML','_s5dinero','_s5Pct','_s5Uso','_mlTxt','_eqCopOz']);
+    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch','_s5c2','_s5sub','_s5Comentarios','_s5ExistHTML','_s5CortHTML','_cortPartes','_cortPartesJuntas','_c2Copas','_c2Previo','_salidaBotellasCopas','_s5dinero','_s5Pct','_s5Uso','_mlTxt','_eqCopOz']);
     /* Lo que la fila pide del resto del módulo y no es asunto de esta prueba.
        Todo en cero para que los números que se afirman abajo sean los del
        fixture y no el resultado de otra cosa. */
@@ -324,7 +324,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
        reconciliación. Un motor correcto que nadie invoca se ve igual de verde
        —es la trampa que este proyecto ya lleva anotada—. Así que se corre
        `_importarEntradasQR`, que es quien recorre el log en cada render. */
-    cargar('recetas/inventarios.js',['_importarEntradasQR']);
+    cargar('recetas/inventarios.js',['_importarEntradasQR','_entSyncNotaEnInv','_entNotaCampos']);
     test('el importador reconcilia lo ya importado en vez de saltárselo',()=>{
         let invalidado=0;
         Object.assign(c,{

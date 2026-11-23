@@ -1051,7 +1051,9 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                     const m = [...document.querySelectorAll('tr.s5-mem.s5-r1')], comp = m[0] && m[0].parentElement.querySelector('tr.s5-r1:not(.s5-mem)');
                     const ipa = m.find(x => /IPA/.test(x.textContent));
                     return { n: m.length, vis: m.filter(x => x.offsetParent).length, celdas: m.map(x => x.children.length), compCeldas: comp && comp.children.length,
-                             cortesia: ipa && /Cortesías\s*1 pza/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')), coment: ipa && /Comentarios\s*Cortesía\s*Músicos/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')),
+                             cortesia: ipa && /Cortesías\s*1 pza\s*Músicos\s*1 pza/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')),
+                             /* 23-nov: el concepto va en la celda de cortesías, con su cantidad; ya no se repite en comentarios. */
+                             coment: ipa && !/Comentarios[^]*Músicos/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')),
                              tablaVieja: !!document.querySelector('#step5Tablas tr[id^="compDesg-"]') }; });
                 assert.equal(r.n, 3); assert.equal(r.vis, 3);
                 assert.ok(r.celdas.every(c => c === r.compCeldas), JSON.stringify(r));
@@ -1302,6 +1304,100 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await caso('…y la barra del Paso 2 también trae «Nota / factura»', async () =>
                 assert.ok(await page.evaluate(() => !!document.querySelector('#pasoHerr .ph-nota'))));
             await caso('…sin errores en la página', async () => assert.deepEqual(await page.evaluate(() => window.__errores), []));
+            await ctx.close();
+        }
+
+        /* ── U · Paso 3 como Excel, la cortesía en dos conceptos y agrupar en nota (23-nov) ──
+           Edwin: 1) venta, cortesía y merma (copas y botellas) suman y restan
+           como Excel, con «+»/«−»; 2) la cortesía con concepto editable y DOS
+           conceptos en el mismo renglón (cortesía y consumo interno), que salen
+           juntos en el lugar de las cortesías del Resultado y del impreso;
+           3) agrupar en nota lo ya registrado, juntando sus fotos. Con la CSP. */
+        console.log('\n══ U · Paso 3 como Excel, cortesía en dos conceptos y agrupar en nota ══');
+        {
+            const { cspProduccion } = require('./navegador-comun.cjs');
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { csp: cspProduccion(),
+                nube: { negocio_insumos: filasNube(destilados(3).concat([SPRITE, SQUIRT])) }, viewport: { width: 1280, height: 800 } }));
+            const violaciones = [];
+            page.on('console', m => { if (/Content Security Policy|EvalError/i.test(m.text())) violaciones.push(m.text()); });
+            await nuevoInv(page); await page.waitForTimeout(600);
+            const idx = await page.evaluate(() => { irAPaso(3); setVistaVentas('busqueda'); seleccionarProductoVentas('d001'); return filasCaptura.findIndex(f => f.insumoId === 'd001'); });
+            await page.waitForTimeout(400);
+            const fila = () => page.evaluate((i) => { const f = filasCaptura[i]; return { venta: f.ventasCopasDirectas, cort: f.cortesiaCopas, sueltas: _salidaSuelta(f, 'cortesiaCopas'),
+                bot: f.cortesiaBotella, c2: f.cortesia2Copas, conc: f.cortesiaConcepto, conc2: f.cortesia2Concepto, fx: f.fx || {} }; }, idx);
+            await page.click('#venta-copas-' + idx); await page.keyboard.type('2+3'); await page.keyboard.press('Tab'); await page.waitForTimeout(200);
+            await caso('Paso 3: «2+3» en venta guarda 5, la operación se queda y abajo dice «= 5» (con la CSP de producción)', async () => {
+                const r = await fila();
+                const v = await page.evaluate((i) => ({ val: document.getElementById('venta-copas-' + i).value, res: document.getElementById('fxr-' + i + '-ventasCopasDirectas').textContent.trim() }), idx);
+                assert.deepEqual([r.venta, v.val, v.res], [5, '2+3', '= 5']);
+            });
+            await caso('…cada casilla trae sus botones «+» y «−» (venta, botellas, cortesía, merma)', async () =>
+                assert.equal(await page.evaluate(() => document.querySelectorAll('#ventasCardWrap .calc-celda .calc-op').length), 12));
+            await page.click('#cort-cop-' + idx); await page.keyboard.type('4');
+            await page.dispatchEvent('#cort-cop-' + idx + ' + .calc-ops .calc-op', 'pointerdown');
+            await page.keyboard.type('2'); await page.keyboard.press('Tab'); await page.waitForTimeout(200);
+            await caso('…«4», el botón «+» y «2» en la cortesía: 6', async () => {
+                const r = await fila(); assert.deepEqual([r.sueltas, r.fx.cortesiaCopas], [6, '4+2']);
+            });
+            await page.click('#ventasCardWrap .s3-cort-conc .s3-conc-chip:has-text("Consumo interno")'); await page.waitForTimeout(150);
+            await caso('el concepto de la cortesía se elige con un toque (o se escribe)', async () =>
+                assert.equal((await fila()).conc, 'Consumo interno'));
+            await page.click('#ventasCardWrap .s3-c2-add'); await page.waitForTimeout(250);
+            await caso('«+ Otro concepto» abre un segundo concepto en el MISMO renglón', async () =>
+                assert.ok(await page.evaluate((i) => !!document.getElementById('c2-cop-' + i) && !!document.getElementById('cortesia2Concepto-' + i), idx)));
+            await page.click('#c2-cop-' + idx); await page.keyboard.type('10-7'); await page.keyboard.press('Tab'); await page.waitForTimeout(200);
+            await page.click('.s3-c2 .s3-conc-chip:has-text("Cortesía")'); await page.waitForTimeout(150);
+            await caso('…con su cantidad y su concepto, y el total de cortesía suma los dos (6 + 3 = 9)', async () => {
+                const r = await fila(); assert.deepEqual([r.c2, r.conc2, r.cort], [3, 'Cortesía', 9]);
+            });
+            await caso('…y la columna de lo capturado dice cada concepto', async () =>
+                assert.match(await page.evaluate(() => document.getElementById('ventasResumen').innerText.replace(/\s+/g, ' ')), /6 cop consumo interno · 3 cop cortesía/));
+            await page.screenshot({ path: process.env.CAPTURAS ? process.env.CAPTURAS + '/paso3-cortesia.png' : '/dev/null' }).catch(() => {});
+            await page.evaluate(() => irAPaso(5)); await page.waitForTimeout(900);
+            // textContent: el grupo puede estar plegado (innerText de lo oculto es vacío).
+            const celdaCort = () => page.evaluate(() => { const tr = [...document.querySelectorAll('#step5Tablas tr.s5-r1')].find(r => /Destilado 1(?!\d)/.test(r.textContent));
+                const r2 = tr && tr.nextElementSibling; const td = r2 && [...r2.querySelectorAll('td')].find(x => /Cortesías/.test(x.textContent)); return td ? td.textContent.replace(/\s+/g, ' ').trim() : ''; });
+            await caso('Resultado: en el lugar de las cortesías, el total y cada concepto con su cantidad', async () =>
+                assert.match(await celdaCort(), /^Cortesías\s*9(\.0)? cop.*Consumo interno 6(\.0)? cop.*Cortesía 3(\.0)? cop/i));
+            await page.evaluate(() => verReporteDirectivo(false, 'desglose')); await page.waitForTimeout(1500);
+            await caso('…y el impreso (desglose) dice lo mismo', async () =>
+                assert.match(await page.evaluate(() => document.getElementById('rd-pages').innerText.replace(/\s+/g, ' ')), /Cortesías 9(\.0)? cop Consumo interno 6(\.0)? cop Cortesía 3(\.0)? cop/i));
+            await page.evaluate(() => { const o = document.getElementById('rdOverlay'); if (o) o.remove(); verReporteDirectivo(false); }); await page.waitForTimeout(1500);
+            await caso('…y en el reporte directivo, la tabla de cortesías trae un renglón por concepto', async () => {
+                const txt = await page.evaluate(() => document.getElementById('rd-pages').innerText.replace(/\s+/g, ' '));
+                assert.match(txt, /Destilado 1 \S+ 6\.0 cop Consumo interno \$[\d.,]+ 3\.0 cop Cortesía \$[\d.,]+/);
+            });
+            await page.evaluate(() => { const o = document.getElementById('rdOverlay'); if (o) o.remove(); });
+
+            // ── Agrupar en nota lo ya registrado ──
+            await page.evaluate(() => { mostrarVista('vistaLista'); }); await page.waitForTimeout(300);
+            await page.evaluate(() => { const suc = 'suc_principal';
+                const mk = (id, ins, n, fotos) => ({ id, insumoId: ins, nombre: ins, cantidad: n, tipo: 'compra', fecha: '2026-11-17', origen: 'manual', sucursalId: suc, foto_urls: fotos, registrado: '2026-11-17T18:00:00Z' });
+                getEntradasLog().push(mk('g1', 'sprite', 12, ['ev1.jpg']), mk('g2', 'squirt', 6, ['ev2.jpg', 'ev1.jpg']), mk('g3', 'd000', 2, []));
+                mostrarVista('vistaEntradas'); });
+            await page.waitForTimeout(500);
+            await page.click('#entAgruparBtn'); await page.waitForTimeout(250);
+            await caso('lo registrado: «Agrupar en nota» pone una casilla en cada entrada', async () =>
+                assert.equal(await page.evaluate(() => document.querySelectorAll('#entLogList .ent-sel-fila input[type=checkbox]').length), 3));
+            await page.click('.ent-sel-fila:has-text("Sprite") input'); await page.click('.ent-sel-fila:has-text("Squirt") input'); await page.waitForTimeout(200);
+            await caso('…al marcar, la barra dice cuántas y que se juntan sus fotos (sin repetir)', async () =>
+                assert.match(await page.evaluate(() => document.querySelector('#entSelBar .ent-sel-bar').innerText.replace(/\s+/g, ' ')), /2 entradas marcadas · se juntan 2 fotos/));
+            await page.fill('#entSelProv', 'Coca-Cola FEMSA'); await page.fill('#entSelFolio', 'Z-1');
+            await page.screenshot({ path: process.env.CAPTURAS ? process.env.CAPTURAS + '/agrupar-nota.png' : '/dev/null' }).catch(() => {});
+            await page.click('#entSelBar .ent-sel-ok'); await page.waitForTimeout(400);
+            await caso('«Agrupar»: las dos quedan en una nota con proveedor y folio, y la nota enseña las 2 fotos', async () => {
+                const r = await page.evaluate(() => { const g = getEntradasLog().filter(e => e.notaId); const s = document.querySelector('#entLogList .eg-nota > summary');
+                    return { n: g.length, ids: new Set(g.map(e => e.notaId)).size, prov: g.every(e => e.notaProveedor === 'Coca-Cola FEMSA' && e.notaFolio === 'Z-1'),
+                        resumen: s ? s.innerText.replace(/\s+/g, ' ').trim() : '', fotos: s ? s.querySelectorAll('img').length : 0,
+                        nube: (JSON.parse(localStorage.getItem('__nube')).entradas_log || []).filter(x => x.datos && x.datos.notaId).length }; });
+                assert.deepEqual([r.n, r.ids, r.prov, r.fotos, r.nube], [2, 1, true, 2, 2]);
+                assert.match(r.resumen, /Coca-Cola FEMSA · Folio Z-1.*2 productos/);
+            });
+            await page.screenshot({ path: process.env.CAPTURAS ? process.env.CAPTURAS + '/agrupada.png' : '/dev/null' }).catch(() => {});
+            await caso('…sin violaciones de la CSP ni errores', async () => {
+                assert.deepEqual(violaciones, []);
+                assert.deepEqual(await page.evaluate(() => window.__errores), []);
+            });
             await ctx.close();
         }
     } finally {

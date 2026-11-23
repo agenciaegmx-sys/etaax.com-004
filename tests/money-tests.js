@@ -17730,6 +17730,91 @@ console.log('\n══ BH80 · Entradas: tarjeta que se cierra, registro de afuer
     }
 }
 
+/* ═══════════ SUITE BH81 · AGRUPAR EN NOTA LO REGISTRADO Y EL PASO 3 COMO EXCEL ═══
+   Edwin, 23-nov: lo que ya se registró suelto se junta después en una nota
+   (con todas sus fotos), y las casillas de venta, cortesía y merma del Paso 3
+   suman y restan como las cerradas del Paso 1. */
+console.log('\n══ BH81 · Agrupar en nota lo registrado · Paso 3 como Excel ══');
+{
+    const antes = { inv: vm.runInContext('invActual', B), filas: vm.runInContext('filasCaptura', B), el: B._cacheEL };
+    const cel = (v) => ({ value: v, title: '', classList: { c: new Set(), add(x){this.c.add(x);}, remove(x){this.c.delete(x);}, contains(x){return this.c.has(x);} } });
+    try {
+        setVar(B, 'invActual', null); setVar(B, 'filasCaptura', []);
+        B._cacheEL = [
+            { id: 'a1', insumoId: 'x', cantidad: 6,  tipo: 'compra', fecha: '2026-11-20', foto_urls: ['f1', 'f2'] },
+            { id: 'a2', insumoId: 'y', cantidad: 12, tipo: 'compra', fecha: '2026-11-20', foto_url: 'f2' },
+            { id: 'a3', insumoId: 'z', cantidad: 3,  tipo: 'compra', fecha: '2026-11-20', foto_urls: ['f3'] },
+            { id: 'n1', insumoId: 'w', cantidad: 1,  tipo: 'compra', fecha: '2026-11-19', notaId: 'NOTA0', notaProveedor: 'Viejo', notaFolio: '1' },
+        ];
+        B._entSel = null;
+        B._entSelModo();
+        test('«Agrupar en nota» entra al modo de marcar entradas', () => eq(B._entSelVigente(), true));
+        B._entSelMarcar('a1', true); B._entSelMarcar('a2', true);
+        test('las fotos de las marcadas se juntan, sin repetir', () =>
+            eq(B._entFotosUnion(B._entSelIds().map(B._entBuscarPorId)).join(','), 'f1,f2'));
+        B._entSel.proveedor = 'Coca-Cola'; B._entSel.folio = 'B-9';
+        B._entSelAgrupar();
+        const [a1, a2, a3] = B._cacheEL;
+        test('«Agrupar» les pone la MISMA nota con proveedor y folio, y nada más cambia', () =>
+            eq([!!a1.notaId, a1.notaId === a2.notaId, a1.notaProveedor, a2.notaFolio, a1.cantidad, a2.cantidad, a3.notaId === undefined, B._entSelVigente()].join('|'),
+               'true|true|Coca-Cola|B-9|6|12|true|false'));
+        test('la nota enseña JUNTAS las fotos de todas sus entradas', () => {
+            const h = B._entNotasHTML(B._cacheEL.filter(e => e.notaId === a1.notaId), () => '');
+            return eq((h.match(/<img/g) || []).length + '|' + /Desagrupar/.test(h), '2|true');
+        });
+        B._entSelModo(); B._entSelMarcar('a3', true); B._entSelMarcar('n1', true);
+        test('al marcar una que ya era de una nota, se proponen su proveedor y folio', () =>
+            eq(B._entSel.proveedor + '|' + B._entSel.folio, 'Viejo|1'));
+        B._entSel.proveedor = 'Nuevo'; B._entSelAgrupar();
+        test('…y las demás se suman a ESA nota, que toma el proveedor nuevo', () =>
+            eq(B._cacheEL[2].notaId + '|' + B._cacheEL[3].notaProveedor + '|' + B._cacheEL[2].notaProveedor, 'NOTA0|Nuevo|Nuevo'));
+        const idA = a1.notaId;
+        B._entNotaDesagrupar(idA);
+        test('«Desagrupar» las deja sin nota (en el log global, `notaId` vacío a propósito)', () =>
+            eq(JSON.stringify([a1.notaId, a2.notaId, a1.notaProveedor === undefined, a1.cantidad]), '["","",true,6]'));
+        test('…y ya no salen como nota', () => eq(B._entNotasHTML([a1, a2], () => ''), ''));
+        /* La nota armada (o deshecha) afuera llega a la copia del inventario. */
+        setVar(B, 'invActual', { id: 'iS', entradasLog: [{ id: 'c1', notaId: 'X', notaFolio: '1', notaProveedor: 'P' }, { id: 'c2' }], filas: [] });
+        test('el inventario suelta la nota que se deshizo afuera', () => {
+            const r = B._entSyncNotaEnInv({ id: 'c1', notaId: '' });
+            const c = vm.runInContext('invActual.entradasLog[0]', B);
+            return eq(r + '|' + (c.notaId === undefined), 'true|true');
+        });
+        test('…toma la que se armó afuera', () => {
+            const r = B._entSyncNotaEnInv({ id: 'c2', notaId: 'Y', notaFolio: '7', notaProveedor: 'Q' });
+            const c = vm.runInContext('invActual.entradasLog[1]', B);
+            return eq(r + '|' + c.notaId + '|' + c.notaProveedor, 'true|Y|Q');
+        });
+        test('…y una entrada que nunca tuvo nota no toca nada', () =>
+            eq(B._entSyncNotaEnInv({ id: 'c2', cantidad: 1 }) + '|' + B._entSyncNotaEnInv({ id: 'c2', notaId: 'Y', notaFolio: '7', notaProveedor: 'Q' }), 'false|false'));
+
+        /* ── El Paso 3 como Excel ── */
+        const f = { insumoId: 'ron', tipo: 'copa', contNeto: 750, copaML: 50, existenciaAnterior: 30 };
+        setVar(B, 'invActual', { id: 'iX', entradasLog: [], filas: [] }); setVar(B, 'filasCaptura', [f]);
+        const e1 = cel('2+3');
+        B.updVentasCalc(0, 'ventasCopasDirectas', e1);
+        test('Paso 3: «2+3» en venta guarda 5 y la operación se queda escrita', () =>
+            eq([f.ventasCopasDirectas, f.fx && f.fx.ventasCopasDirectas, e1.value].join('|'), '5|2+3|2+3'));
+        test('…y la casilla la vuelve a enseñar con «= 5» abajo y los botones + y −', () => {
+            const h = B._celdaS3('v', 0, 'ventasCopasDirectas', 5, 'x()');
+            return eq(/value="2\+3"/.test(h) + '|' + /= 5/.test(h) + '|' + (h.match(/class="calc-op"/g) || []).length, 'true|true|2');
+        });
+        test('…pero si el número ya es otro (llegó algo del QR, cambió la unidad), enseña el número', () =>
+            eq(B._fxVigente(f, 'ventasCopasDirectas', 6) + '|' + /value="6"/.test(B._celdaS3('v', 0, 'ventasCopasDirectas', 6, 'x()')), '|true'));
+        B.updVentasDirCalc(0, 'cortesiaBotella', cel('1+1'));
+        B.updVentasCalc(0, 'cortesiaCopas', cel('4-1'));
+        B.updCortesia2Calc(0, 'cortesia2Copas', cel('3+3'));
+        test('…en cortesía (copas y botellas) y en el segundo concepto también suma y resta', () =>
+            eq([f.cortesiaBotella, B._salidaSuelta(f, 'cortesiaCopas'), f.cortesia2Copas, f.cortesiaCopas].join('|'), '2|3|6|' + (3 + 2 * 15 + 6)));
+        const e2 = cel('5+');
+        B.updVentasCalc(0, 'mermaCopas', e2);
+        test('…y lo que no se entiende se queda en rojo, sin tocar lo guardado', () =>
+            eq(e2.classList.contains('calc-err') + '|' + (parseFloat(f.mermaCopas) || 0), 'true|0'));
+    } finally {
+        setVar(B, 'invActual', antes.inv); setVar(B, 'filasCaptura', antes.filas); B._cacheEL = antes.el; B._entSel = null;
+    }
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.
@@ -35463,11 +35548,13 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         eq(sq.dos[3], 'Uso en coctelería — Uso en prebatch 1 pza'));
     test('Mermas arriba, y ya SIN columna de cancelaciones', () =>
         eq(sp.uno[4] + ' | ' + /Cancelaciones/.test(h), 'Mermas 1 pza | false'));
-    test('…y las cortesías abajo de las mermas', () => eq(sp.dos[4], 'Cortesías 1 pza'));
+    /* 23-nov (Edwin): el concepto de la cortesía va en SU celda, con su
+       cantidad (puede haber dos: cortesía y consumo interno, por ejemplo). */
+    test('…y las cortesías abajo de las mermas, con su concepto y su cantidad', () => eq(sp.dos[4], 'Cortesías 1 pza Cumpleaños mesa 4 1 pza'));
     /* 19-nov (Edwin): los comentarios ensuciaban las columnas de números; van
        juntos en el hueco junto al ⋯, cada uno con su nombre. */
-    test('los comentarios de merma y cortesía van juntos junto al ⋯', () =>
-        eq(/Comentarios Cortesía Cumpleaños mesa 4 Merma Botella rota/.test(sp.dos[0]), true, sp.dos[0]));
+    test('los comentarios van juntos junto al ⋯ (el de la cortesía ya no: va en su celda)', () =>
+        eq(/Comentarios Merma Botella rota/.test(sp.dos[0]) + '|' + /Cumpleaños/.test(sp.dos[0]), 'true|false', sp.dos[0]));
     test('…y sin comentarios no se pinta el bloque', () => eq(/Comentarios/.test(sq.dos[0]), false, sq.dos[0]));
     test('líneas entre columnas, menos entre venta botella y venta copa', () =>
         eq(/tr\.s5-r1>td\+td,.*border-left:1px/.test(h) + '|' + /td class="s5-vc"/.test(h), 'true|true'));

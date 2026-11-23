@@ -356,7 +356,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=a88c0cd1"></script>
-<script src="/recetas/inventarios.js?v=9fd5fd95"></script>
+<script src="/recetas/inventarios.js?v=cb137b3d"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -726,6 +726,32 @@ body .step3-lista .step3-menu-item.has-cnt { background: var(--surface) !importa
     background: var(--surface); border: 1px solid var(--green); color: var(--text); font-size: 13.5px; box-shadow: 0 12px 30px rgba(0,0,0,.3);
     transition: opacity .18s, transform .18s; }
 .ent-aviso.on { opacity: 1; transform: translate(-50%, 0); }
+/* Agrupar en nota lo ya registrado (23-nov). */
+.ent-agrupar-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 11.5px; font-weight: 600; text-transform: none;
+    letter-spacing: 0; cursor: pointer; white-space: nowrap; }
+.ent-agrupar-btn:hover { border-color: var(--accent); color: var(--accent-text, var(--accent)); }
+.ent-agrupar-btn.on { border-color: var(--accent); color: var(--accent-text, var(--accent)); background: rgba(245,200,66,.1); }
+.ent-sel-bar { border: 1px solid rgba(245,200,66,.55); border-radius: 12px; background: var(--surface); padding: 12px 14px; margin-bottom: 10px; }
+.ent-sel-tit { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 13.5px; color: var(--text); }
+.ent-sel-tit span { font-size: 12px; color: var(--text-dim); }
+.ent-sel-datos { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.ent-sel-datos input { flex: 1 1 140px; min-width: 0; height: 40px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border);
+    border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; font-size: 13px; outline: none; }
+.ent-sel-datos input:focus { border-color: var(--accent); }
+.ent-sel-ok { height: 40px; padding: 0 18px; border: 0; border-radius: 9px; background: var(--green); color: var(--bg); font: inherit; font-size: 14px;
+    font-weight: 700; cursor: pointer; }
+.ent-sel-ok:disabled { opacity: .45; cursor: default; }
+.ent-sel-fotos { margin-top: 8px; }
+.ent-sel-fila { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.ent-sel-fila > input { width: 22px; height: 22px; flex-shrink: 0; accent-color: var(--accent); cursor: pointer; }
+.ent-sel-fila > .ent-log-fila { flex: 1; min-width: 0; }
+.ent-sel-fila.on > .ent-log-fila { border-color: var(--accent); background: rgba(245,200,66,.06); }
+.ent-sel-fila .ent-log-del { display: none; }
+.eg-nota-pie { display: flex; justify-content: flex-end; padding-top: 6px; }
+.ent-nota-desag { background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 7px; padding: 4px 10px; font: inherit;
+    font-size: 11.5px; cursor: pointer; }
+.ent-nota-desag:hover { border-color: var(--red); color: var(--red); }
 .ent-aviso svg { color: var(--green); flex-shrink: 0; }
 .inv-wizard-header .btn-vista { padding: 8px 13px; font-size: 13px; white-space: nowrap; }
 .inv-paso-menu { position: relative; display: inline-flex; }
@@ -965,6 +991,34 @@ body .step3-lista .step3-menu-item.has-cnt { background: var(--surface) !importa
     color: var(--text); font: inherit; font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer; touch-action: manipulation; }
 .calc-op:active { background: var(--accent); color: var(--bg); }
 .fx-res { min-height: 16px; margin-top: 4px; font-size: 12.5px; font-weight: 700; color: var(--green); }
+/* ══ PASO 3 (23-nov): las casillas como Excel y la cortesía en dos conceptos ══ */
+.s3c-tit { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-weight: 600; }
+.s3c-blq { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 4px; margin-bottom: 10px; }
+.s3c-fila { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 6px; }
+.s3c-fila .s3c-l, .s3c-fila .inv-bottle-out label, .s3c-fila .inv-sale-comment label { display: flex; align-items: center; min-height: 24px;
+    margin-bottom: 6px; font-size: 11px; color: var(--text-dim); }
+.calc-wrap .calc-celda .inv-num-input { width: 100px; }
+.calc-wrap.is-compact .calc-ops { gap: 3px; }
+.calc-wrap.is-compact .calc-op { width: 26px; min-height: 0; font-size: 15px; border-radius: 6px; }
+.calc-wrap.is-compact .fx-res { font-size: 11px; margin-top: 2px; min-height: 0; text-align: center; }
+.s3i-campo .calc-wrap { width: 100%; }
+.s3i-campo .calc-celda .inv-num-input { width: auto !important; flex: 1 1 0; min-width: 0; }
+.s3-cort-conc { flex: 1 1 220px; }
+.s3-conc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.s3-conc-chip { border: 1px solid var(--border); background: transparent; color: var(--text-muted); border-radius: 14px; padding: 4px 10px;
+    font: inherit; font-size: 11.5px; cursor: pointer; touch-action: manipulation; }
+.s3-conc-chip.on { border-color: #9b7fe0; color: #9b7fe0; background: rgba(124,95,211,.12); font-weight: 600; }
+.s3-c2 { border-top: 1px dashed rgba(155,141,232,.45); padding-top: 10px; margin-top: 6px; }
+.s3-c2-add { background: none; border: 1px dashed rgba(155,141,232,.6); color: #9b7fe0; border-radius: 9px; padding: 7px 12px; font: inherit;
+    font-size: 12.5px; cursor: pointer; margin-top: 2px; }
+.s3-c2-add.is-compact { width: 100%; margin-top: 8px; padding: 5px 8px; font-size: 11.5px; }
+.s3-c2-x { align-self: flex-start; margin-top: 30px; background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 8px;
+    padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.s3-c2-x:hover { border-color: var(--red); color: var(--red); }
+.s3-c2.is-compact { margin-top: 8px; padding-top: 8px; }
+.s3-c2-conc { display: flex; gap: 6px; align-items: flex-start; }
+.s3-c2-conc input.inv-num-input.s3i-coment { flex: 1; min-width: 0; }
+.s3-c2-conc .s3-c2-x { margin-top: 8px; height: 36px; }
 /* Cuatro botellas por renglón, como siempre: con más de cuatro, se baja de renglón
    en vez de encoger las casillas y cortar el peso. */
 #existCardWrap .inv-pesos-row > .inv-peso-cell, #existCardWrap .inv-pesos-row > .inv-peso-add { flex: 0 0 calc((100% - 24px) / 4); min-width: 0; box-sizing: border-box; }
@@ -1230,6 +1284,13 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
         </div>
     </div>
 </div>
+
+<!-- Conceptos de cortesía de siempre (se puede escribir cualquiera). -->
+<datalist id="cortConceptos">
+    <option value="Cortesía"></option><option value="Consumo interno"></option>
+    <option value="Producción del restaurante"></option><option value="Consumo personal"></option>
+    <option value="Degustación"></option><option value="Evento"></option>
+</datalist>
 
 <!-- ── MODAL AUTORIZACIÓN ADMIN ───────────────────────────────── -->
 <div id="modalAuthClave" style="display:none;position:fixed;inset:0;z-index:3500;

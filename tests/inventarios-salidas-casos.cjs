@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 module.exports=function({test,eq,crearContexto,cargarJS}){
     const c=crearContexto();cargarJS(c,'etaax-core.js');
     const src=fs.readFileSync(path.resolve(__dirname,'../recetas/inventarios.js'),'utf8');
-    ['_camposSalida','_salidaBotellasCopas','_aporteBotellaAnterior','_salidaSuelta','_actualizarSalida','updVentasDirectas','_recomputarMovsQR','calcExistenciaTeorica','_filaConDatos','_comentarioVentaHTML','_umCampo','_capturaOZ','_copAUm','_umACop','updVentasUM'].forEach(n=>{
+    ['_camposSalida','_c2Copas','_c2Previo','updCortesia2','_cortPartes','_cortPartesJuntas','_s5CortHTML','_salidaBotellasCopas','_aporteBotellaAnterior','_salidaSuelta','_actualizarSalida','updVentasDirectas','_recomputarMovsQR','calcExistenciaTeorica','_filaConDatos','_comentarioVentaHTML','_umCampo','_capturaOZ','_copAUm','_umACop','updVentasUM'].forEach(n=>{
         const a=src.indexOf('function '+n+'(');let i=src.indexOf('{',a),d=0;
         if(a<0)throw Error(n);
         for(;i<src.length;i++){if(src[i]==='{')d++;else if(src[i]==='}'&&!--d)break;}
@@ -63,5 +63,61 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         const f={ventasComentario:'Mesa 4 <img src=x onerror=alert(1)> "evento"'};
         eq(c._filaConDatos(f),true);eq(c._filaConDatos({ventasComentario:''}),true);eq(c._filaConDatos({mermaBotella:0,mermaCopas:0}),true);eq(c._filaConDatos({}),false);
         for(const papel of [true,false]){const h=c._comentarioVentaHTML(f,papel);eq(h.includes('<img'),false);eq(h.includes('&lt;img'),true);eq(h.includes('&quot;evento&quot;'),true);}
+    });
+    /* ══ CORTESÍA EN DOS CONCEPTOS (Edwin, 23-nov) ══ 56 de cortesía y 6 de
+       consumo interno en el mismo renglón. cortesiaCopas sigue siendo el TOTAL
+       (lo que leen el teórico y los reportes); el segundo concepto es una parte
+       de ese total que no se revuelve con el primero ni con el QR. */
+    test('cortesía en dos conceptos: el total suma los dos y el teórico descuenta los dos',()=>{
+        const f={insumoId:'ron',tipo:'copa',contNeto:750,copaML:50,existenciaAnterior:30};c.filasCaptura=[f];c.getEntradasLog=()=>[];
+        c.updVentasDirectas(0,'cortesiaCopas',4);c.updCortesia2(0,'cortesia2Copas',2);c.updCortesia2(0,'cortesia2Botella',1);
+        near(f.cortesiaCopas,4+2+15);near(c._salidaSuelta(f,'cortesiaCopas'),4);near(c.calcExistenciaTeorica(f),30-21);
+        c.updVentasDirectas(0,'cortesiaCopas',6);near(f.cortesiaCopas,23);near(c._salidaSuelta(f,'cortesiaCopas'),6);
+    });
+    test('…el QR suma al primer concepto sin tocar el segundo, y repetir no duplica',()=>{
+        const f={insumoId:'ron',tipo:'copa',contNeto:750,copaML:50};c.filasCaptura=[f];c.getEntradasLog=()=>[];
+        c.updVentasDirectas(0,'cortesiaCopas',6);c.updCortesia2(0,'cortesia2Copas',2);c.updCortesia2(0,'cortesia2Botella',1);
+        c.getEntradasLog=()=>[{insumoId:'ron',sucursalId:'matriz',concepto:'salida',unidad:'copa',cantidad:3}];
+        for(let i=0;i<5;i++)c._recomputarMovsQR();
+        near(f.cortesiaCopas,6+3+17);near(c._salidaSuelta(f,'cortesiaCopas'),9);
+    });
+    test('…cambiar contenido/copa recalcula las botellas del segundo concepto sin duplicarlas',()=>{
+        const f={insumoId:'ron',tipo:'copa',contNeto:750,copaML:50};c.filasCaptura=[f];c.getEntradasLog=()=>[];
+        c.updVentasDirectas(0,'cortesiaCopas',6);c.updCortesia2(0,'cortesia2Copas',2);c.updCortesia2(0,'cortesia2Botella',1);
+        f.contNeto=1000;c._actualizarSalida(f,'cortesiaCopas',{});near(f.cortesiaCopas,6+2+20);
+        c._actualizarSalida(f,'cortesiaCopas',{});near(f.cortesiaCopas,28);near(c._salidaSuelta(f,'cortesiaCopas'),6);
+    });
+    test('…quitar el segundo concepto deja solo el primero',()=>{
+        const f={insumoId:'ron',tipo:'copa',contNeto:750,copaML:50};c.filasCaptura=[f];c.getEntradasLog=()=>[];
+        c.updVentasDirectas(0,'cortesiaCopas',6);c.updCortesia2(0,'cortesia2Copas',2);
+        c.updCortesia2(0,'cortesia2Copas','');near(f.cortesiaCopas,6);
+    });
+    test('…por pieza también (cerveza): 56 de cortesía y 6 de consumo interno',()=>{
+        const f={insumoId:'cer',tipo:'pza',contNeto:355,existenciaAnterior:100};c.filasCaptura=[f];c.getEntradasLog=()=>[];
+        c.updVentasDirectas(0,'cortesiaCopas',56);c.updCortesia2(0,'cortesia2Copas',6);c.updCortesia2(0,'cortesia2Botella',1);
+        near(f.cortesiaCopas,62);near(c.calcExistenciaTeorica(f),38);eq(f.cortesia2Botella,undefined);
+    });
+    test('el Resultado enseña cada concepto con su cantidad en el lugar de las cortesías',()=>{
+        const f={insumoId:'cer',tipo:'pza',contNeto:355,cortesiaConcepto:'Cortesía',cortesia2Concepto:'Consumo interno'};c.filasCaptura=[f];c.getEntradasLog=()=>[];
+        c.updVentasDirectas(0,'cortesiaCopas',56);c.updCortesia2(0,'cortesia2Copas',6);
+        const ps=c._cortPartes(f);eq(ps.map(p=>p.concepto+':'+p.copas).join(','),'Cortesía:56,Consumo interno:6');
+        const h=c._s5CortHTML(ps,f.cortesiaCopas,x=>x+' pza').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        eq(h,'62 pza Cortesía 56 pza Consumo interno 6 pza');
+    });
+    test('…con un solo concepto de cortesía «normal», solo el total (sin ruido)',()=>{
+        eq(c._s5CortHTML([{concepto:'Cortesía',copas:3}],3,x=>x+' cop').replace(/<[^>]*>/g,''),'3 cop');
+        eq(c._s5CortHTML([],0,x=>x),'—');
+    });
+    test('…y en un compuesto, los conceptos de sus presentaciones se juntan por nombre',()=>{
+        const a={tipo:'pza',cortesiaCopas:4,cortesiaConcepto:'Cortesía'},b={tipo:'pza',cortesiaCopas:5,_c2Previo:2,cortesia2Copas:2,cortesiaConcepto:'cortesía',cortesia2Concepto:'Consumo interno'};
+        eq(c._cortPartesJuntas([a,b]).map(p=>p.concepto+':'+p.copas).join(','),'Cortesía:7,Consumo interno:2');
+    });
+    test('el QR ya no le pisa a la cortesía el concepto elegido a mano',()=>{
+        const f={insumoId:'ron',tipo:'copa',contNeto:750,copaML:50,cortesiaConcepto:'Consumo interno'};c.filasCaptura=[f];
+        c.getEntradasLog=()=>[{insumoId:'ron',sucursalId:'matriz',concepto:'salida',unidad:'copa',cantidad:1,notas:'VIP'}];
+        c._recomputarMovsQR();eq(f.cortesiaConcepto,'Consumo interno');
+        const g={insumoId:'ron',tipo:'copa',contNeto:750,copaML:50};c.filasCaptura=[g];c._recomputarMovsQR();eq(g.cortesiaConcepto,'🎁 Cortesía: VIP');
+        c.getEntradasLog=()=>[{insumoId:'ron',sucursalId:'matriz',concepto:'salida',unidad:'copa',cantidad:2,notas:'Cumple'}];
+        c._recomputarMovsQR();eq(g.cortesiaConcepto,'🎁 Cortesía: Cumple');
     });
 };
