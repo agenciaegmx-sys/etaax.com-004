@@ -48,6 +48,7 @@ async function mundo() {
       ${MigSuc.DOCS.map(t => `CREATE TABLE ${t} (negocio_id TEXT PRIMARY KEY REFERENCES negocios(id), datos JSONB NOT NULL DEFAULT '{}', updated_at TIMESTAMPTZ DEFAULT now());`).join('\n')}
     `);
     await db.exec(fs.readFileSync(path.join(RAIZ, 'supabase-migration-v86.sql'), 'utf8'));
+    await db.exec(fs.readFileSync(path.join(RAIZ, 'supabase-migration-v87.sql'), 'utf8'));
     const ins = (t, id, neg, d) => q(`INSERT INTO ${t} (id, negocio_id, datos) VALUES ($1, $2, $3)`, [id, neg, JSON.stringify(Object.assign({ id }, d))]);
     const insI = (neg, id, d) => q(`INSERT INTO negocio_insumos (negocio_id, insumo_id, datos) VALUES ($1, $2, $3)`, [neg, id, JSON.stringify(Object.assign({ id }, d))]);
     const insDoc = (t, neg, d) => q(`INSERT INTO ${t} (negocio_id, datos) VALUES ($1, $2)`, [neg, JSON.stringify(d)]);
@@ -73,7 +74,7 @@ async function mundo() {
     await ins('cortes', 'c2', 'A', { negocioId: 'A', fecha: '2026-11-20' });                 // Matriz (sin sello)
     await ins('cortes', 'c3', 'A', { negocioId: 'A', sucursalId: 'suc_tul', fecha: '2026-11-20' });
     await ins('inventarios', 'inv1', 'A', { sucursalId: S, filas: [{ insumoId: 'i1' }, { insumoId: 'i5' }], cocktailsVendidos: { r1: 3, r5: 2 },
-        entradasLog: [{ id: 'x', sucursalId: S, insumoId: 'i2' }] });
+        entradasLog: [{ id: 'e1', sucursalId: S, insumoId: 'i3' }] });
     await ins('entradas_log', 'e1', 'A', { sucursalId: S, insumoId: 'i3', foto_urls: ['priv:A/entradas/f2.jpg'] });
     await ins('entradas_log', 'e2', 'A', { insumoId: 'i1' });
     await ins('staff', 'st1', 'A', { sucursalId: S, nombre: 'Ana', usuario: 'ana' });
@@ -262,6 +263,179 @@ const insumo = async (q, neg, id) => ((await q(`SELECT datos FROM negocio_insumo
         const d2 = await leer(q, 'A', 'C');   // C ya tiene registros
         const p2 = MigSuc.planear({ origen: d2.origen, destino: d2.destino, sucursal: 'suc_tul', llegaComo: 'matriz' });
         assert.match(p2.bloqueos.join(' '), /tiene que estar vacío/);
+    });
+}
+
+/* ══ 4) EL FLUJO NUEVO (23-nov): COPIAR → revisar → ELIMINAR del original → RESTAURAR ══
+   La copia la ejecuta el navegador (MigSuc.ejecutarCopia); aquí corre contra
+   este Postgres por un adaptador mínimo con la misma forma que supabase-js. */
+function sbDe(q, copias) {
+    async function correr(st) {
+        try {
+            if (st.op) {
+                for (const r of st.rows) {
+                    const cols = Object.keys(r), vals = cols.map(c => c === 'datos' ? JSON.stringify(r[c]) : r[c]);
+                    const llave = st.conf.split(',').map(x => x.trim());
+                    const conf = st.op === 'upsert' ? ` ON CONFLICT (${llave.join(',')}) DO UPDATE SET ` +
+                        cols.filter(c => llave.indexOf(c) < 0).map(c => c + ' = EXCLUDED.' + c).join(', ') : '';
+                    await q(`INSERT INTO ${st.t} (${cols.join(',')}) VALUES (${cols.map((_, i) => '$' + (i + 1)).join(',')})${conf}`, vals);
+                }
+                return { data: null, error: null };
+            }
+            const sel = st.cols === '*' ? '*' : st.cols.split(',').map(c => c.trim() === 'updated_at' ? 'updated_at::text AS updated_at' : c.trim()).join(', ');
+            const where = st.filtros.map((f, i) => f[0] + ' = $' + (i + 1)).join(' AND ');
+            const rows = await q(`SELECT ${sel} FROM ${st.t}${where ? ' WHERE ' + where : ''}`, st.filtros.map(f => f[1]));
+            return { data: st.single ? (rows[0] || null) : rows, error: null };
+        } catch (e) { return { data: null, error: { message: e.message } }; }
+    }
+    return {
+        from(t) {
+            const st = { t, filtros: [], cols: '*', single: false, op: null, rows: [], conf: 'id' };
+            const b = {
+                select(c) { st.cols = c || '*'; return b; },
+                eq(k, v) { st.filtros.push([k, v]); return b; },
+                maybeSingle() { st.single = true; return b; },
+                upsert(rows, o) { st.op = 'upsert'; st.rows = [].concat(rows); st.conf = (o && o.onConflict) || 'id'; return b; },
+                insert(rows) { st.op = 'insert'; st.rows = [].concat(rows); return b; },
+                then(res, rej) { return correr(st).then(res, rej); }
+            };
+            return b;
+        },
+        storage: { from(bk) { return { copy: async (a, z) => { copias.push(bk + ':' + a + '>' + z); return { error: null }; } }; } }
+    };
+}
+const TABLAS_SUC = MigSuc.POR_SUCURSAL.map(x => x.t).concat(MigSuc.HIJOS.map(h => h.t), ['menu_publico']);
+async function foto(q, neg) {
+    const o = {};
+    for (const t of TABLAS_SUC) o[t] = await q(`SELECT id, negocio_id, datos, created_at::text AS c FROM ${t} WHERE negocio_id = $1 ORDER BY id`, [neg]);
+    o.insumos = await q(`SELECT insumo_id, datos FROM negocio_insumos WHERE negocio_id = $1 ORDER BY insumo_id`, [neg]);
+    o.recetas = await q(`SELECT id, datos FROM recetas WHERE negocio_id = $1 ORDER BY id`, [neg]);
+    for (const t of MigSuc.DOCS) o[t] = ((await q(`SELECT datos FROM ${t} WHERE negocio_id = $1`, [neg]))[0] || {}).datos || null;
+    return JSON.parse(JSON.stringify(o));
+}
+{
+    const { q, S } = await mundo();
+    await q(`SELECT set_config('req.admin', '1', false)`);
+    const fotoA = await foto(q, 'A');
+    const datos = await leer(q, 'A', 'B');
+    const plan = MigSuc.planearCopia({ origen: datos.origen, destino: datos.destino, sucursal: S });
+    const copias = [];
+    const res = await MigSuc.ejecutarCopia(sbDe(q, copias), plan);
+    const suf = (id) => plan.remap[id];
+    await ok('copiar: el negocio original queda EXACTAMENTE igual', async () => assert.deepEqual(await foto(q, 'A'), fotoA));
+    await ok('copiar: la copia lleva ids nuevos, la sucursal y el negocio del destino', async () => {
+        const c = await uno(q, 'cortes', suf('c1'));
+        assert.notEqual(suf('c1'), 'c1');
+        assert.deepEqual([c.negocio_id, c.datos.sucursalId, c.datos.negocioId, c.datos.id, c.datos.foto], ['B', S, 'B', suf('c1'), 'priv:B/cortes/f1.jpg']);
+        assert.equal(await uno(q, 'cortes', suf('c2')), undefined);       // la Matriz no
+    });
+    await ok('…y lo que nombraba a un registro copiado nombra a su copia (entradas, respuestas)', async () => {
+        const i = await uno(q, 'inventarios', suf('inv1'));
+        assert.equal(i.datos.entradasLog[0].id, suf('e1'));
+        assert.ok(await uno(q, 'entradas_log', suf('e1')));
+        assert.equal((await uno(q, 'evaluacion_respuestas', suf('er1'))).datos.evaluacionId, suf('ev1'));
+        assert.deepEqual(Object.keys(i.datos.cocktailsVendidos).sort(), [MigSuc.idRecetaNueva('r1', 'B', S), MigSuc.idRecetaNueva('r5', 'B', S)].sort());
+    });
+    await ok('…horario con su id del destino, carta pública B|sucursal, fotos copiadas', async () => {
+        assert.ok(await uno(q, 'horarios', MigSuc.idHorario('B', S, '2026-W47')));
+        assert.ok(await uno(q, 'horarios', 'hor_1_A_suc_mia_2026-W47'));      // el original sigue
+        assert.ok(await uno(q, 'menu_publico', 'B|' + S));
+        assert.ok(copias.some(c => c === 'evidencias-priv:A/cortes/f1.jpg>B/cortes/f1.jpg'));
+    });
+    await ok('…el staff NO se copia (su usuario es único) y se avisa', async () => {
+        assert.equal((await q(`SELECT count(*)::int AS n FROM staff WHERE negocio_id = 'B'`))[0].n, 0);
+        assert.ok(plan.avisos.some(a => /no se copia/.test(a)));
+    });
+    await ok('…en el destino, la sucursal dice de dónde viene (copiaDe)', async () => {
+        const b = (await q(`SELECT datos FROM negocio_sucursales WHERE negocio_id = 'B'`))[0].datos;
+        const s = b.sucursales.find(x => x.id === S);
+        assert.deepEqual([s.nombre, s.copiaDe.negocio, s.copiaDe.sucursal], ['El Miami', 'A', S]);
+    });
+    await ok('volver a copiar ACTUALIZA la misma copia (mismos ids, nada duplicado)', async () => {
+        const n0 = (await q(`SELECT count(*)::int AS n FROM cortes WHERE negocio_id = 'B'`))[0].n;
+        const d2 = await leer(q, 'A', 'B');
+        const p2 = MigSuc.planearCopia({ origen: d2.origen, destino: d2.destino, sucursal: S });
+        assert.equal(p2.recopia, true);
+        assert.equal(p2.remap.c1, plan.remap.c1);
+        await MigSuc.ejecutarCopia(sbDe(q, []), p2);
+        assert.equal((await q(`SELECT count(*)::int AS n FROM cortes WHERE negocio_id = 'B'`))[0].n, n0);
+        assert.equal((await q(`SELECT datos FROM negocio_sucursales WHERE negocio_id = 'B'`))[0].datos.sucursales.filter(x => x.id === S).length, 1);
+    });
+
+    // ── Eliminar del original, pasando el staff al destino ──
+    const fotoB = await foto(q, 'B');
+    const arc = (await q(`SELECT admin_archivar_sucursal('A', $1, 'B', $1) AS r`, [S]))[0].r;
+    await ok('eliminar del original: sus registros salen de las tablas vivas y van al archivo', async () => {
+        assert.equal(await uno(q, 'cortes', 'c1'), undefined);
+        assert.equal(await uno(q, 'inventarios', 'inv1'), undefined);
+        assert.equal(await uno(q, 'menu_publico', 'A|' + S), undefined);
+        assert.ok((await uno(q, 'cortes', 'c2')));                       // la Matriz sigue
+        const n = (await q(`SELECT count(*)::int AS n FROM admin_archivo_filas WHERE archivo_id = $1`, [arc.id]))[0].n;
+        assert.ok(n >= 7, String(n));
+    });
+    await ok('…el staff pasa al destino (con sus recibos), en la sucursal copiada', async () => {
+        const st = await uno(q, 'staff', 'st1'), nr = await uno(q, 'nomina_recibos', 'nr1');
+        assert.deepEqual([st.negocio_id, st.datos.sucursalId, nr.negocio_id], ['B', S, 'B']);
+        assert.equal((await uno(q, 'staff', 'st2')).negocio_id, 'A');
+    });
+    await ok('…la sucursal sale de su lista y el catálogo solo pierde la sucursal', async () => {
+        const a = (await q(`SELECT datos FROM negocio_sucursales WHERE negocio_id = 'A'`))[0].datos;
+        assert.deepEqual(a.sucursales.map(s => s.id), ['suc_principal', 'suc_tul']);
+        assert.deepEqual((await insumo(q, 'A', 'i1')).sucursales, ['suc_principal']);
+        const r2 = await uno(q, 'recetas', 'r2');
+        assert.deepEqual([r2.datos.sucursales, r2.datos._global], [[], true]);
+    });
+    await ok('…y el destino (la copia) no se tocó, salvo el staff que llegó', async () => {
+        const ahora = await foto(q, 'B');
+        assert.deepEqual(ahora.cortes, fotoB.cortes);
+        assert.deepEqual(ahora.inventarios, fotoB.inventarios);
+        assert.equal(ahora.staff.length, 1);
+    });
+
+    // ── Restaurar en el original ──
+    await q(`SELECT admin_restaurar_sucursal($1)`, [arc.id]);
+    await ok('restaurar: el original queda IDÉNTICO a como estaba (mismos ids, datos y fechas)', async () => {
+        const ahora = await foto(q, 'A');
+        for (const t of TABLAS_SUC.concat(['insumos', 'recetas']))
+            assert.deepEqual(ahora[t], fotoA[t], 'tabla ' + t);
+        assert.deepEqual(ahora.negocio_sucursales.sucursales.map(s => s.id).sort(), fotoA.negocio_sucursales.sucursales.map(s => s.id).sort());
+        assert.deepEqual(ahora.negocio_sucursales.cfg[S], { color: 'azul' });
+        assert.deepEqual(ahora.inv_ajustes.compuestos[S], fotoA.inv_ajustes.compuestos[S]);
+        assert.deepEqual(ahora.gf_nomina_params.porSucursal[S], { jornadaHoras: 6 });
+    });
+    await ok('…el staff regresó del destino', async () => {
+        assert.equal((await uno(q, 'staff', 'st1')).negocio_id, 'A');
+        assert.equal((await q(`SELECT count(*)::int AS n FROM staff WHERE negocio_id = 'B'`))[0].n, 0);
+    });
+    await ok('…y no se restaura dos veces', () => falla(() => q(`SELECT admin_restaurar_sucursal($1)`, [arc.id]), /ya se restauró/));
+
+    // ── Eliminar y restaurar la COPIA del destino ──
+    const fB = await foto(q, 'B');
+    const arcB = (await q(`SELECT admin_archivar_sucursal('B', $1) AS r`, [S]))[0].r;
+    await ok('la copia del destino también se elimina (si salió mal)…', async () => {
+        assert.equal(await uno(q, 'cortes', plan.remap.c1), undefined);
+        assert.ok(!(await q(`SELECT datos FROM negocio_sucursales WHERE negocio_id = 'B'`))[0].datos.sucursales.some(s => s.id === S));
+    });
+    await q(`SELECT admin_restaurar_sucursal($1)`, [arcB.id]);
+    await ok('…y se restaura igual', async () => {
+        const ahora = await foto(q, 'B');
+        assert.deepEqual(ahora.cortes, fB.cortes);
+        assert.deepEqual(ahora.inventarios, fB.inventarios);
+        assert.ok(ahora.negocio_sucursales.sucursales.some(s => s.id === S && s.copiaDe));
+    });
+    await ok('las puertas: solo el admin, la Matriz no, el staff a OTRO negocio', async () => {
+        await q(`SELECT set_config('req.admin', '0', false)`);
+        await falla(() => q(`SELECT admin_archivar_sucursal('A', $1)`, [S]), /Solo el admin/);
+        await falla(() => q(`SELECT admin_restaurar_sucursal($1)`, [arc.id]), /Solo el admin/);
+        await q(`SELECT set_config('req.admin', '1', false)`);
+        await falla(() => q(`SELECT admin_archivar_sucursal('A', 'suc_principal')`), /Matriz/);
+        await falla(() => q(`SELECT admin_archivar_sucursal('A', $1, 'A', $1)`, [S]), /OTRO negocio/);
+        await falla(() => q(`SELECT admin_archivar_sucursal('A', $1, 'B', 'no_existe')`, [S]), /no existe en el negocio/);
+    });
+    await ok('si al restaurar ya hay una sucursal con ese id, no se restaura encima', async () => {
+        const a2 = (await q(`SELECT admin_archivar_sucursal('A', $1) AS r`, [S]))[0].r;
+        await q(`UPDATE negocio_sucursales SET datos = jsonb_set(datos, '{sucursales}', datos->'sucursales' || '[{"id":"suc_mia","nombre":"Otra"}]') WHERE negocio_id = 'A'`);
+        await falla(() => q(`SELECT admin_restaurar_sucursal($1)`, [a2.id]), /ya tiene una sucursal con ese id/);
     });
 }
 

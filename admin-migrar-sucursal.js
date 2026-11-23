@@ -35,6 +35,13 @@
        carpeta del destino; su dueño nuevo no puede leer la del anterior.
      · Lo que es del negocio (cuentas y tarjetas, categorías de gasto, perfiles
        de puesto, permisos, metas) → se queda en el negocio original.
+
+   MODO COPIA (Edwin, 23-nov) — el que usa el panel: la sucursal se COPIA al
+   destino y el negocio original NO se toca, para revisar que todo llegó antes
+   de eliminarla. Los registros copiados llevan id nuevo (su llave es global) y
+   todo lo que los nombra se cambia con ellos (remap). El staff NO se copia: su
+   usuario es único en ETAAX; pasa al destino cuando la sucursal se elimina del
+   original (admin_archivar_sucursal, v87), y regresa si se restaura.
    ============================================================================ */
 (function (root) {
     'use strict';
@@ -132,13 +139,15 @@
         e = e || {};
         var O = e.origen || {}, D = e.destino || {};
         var orig = O.negocio && O.negocio.id, dest = D.negocio && D.negocio.id, S = e.sucursal;
-        var conStaff = e.conStaff !== false, comoMatriz = e.llegaComo === 'matriz';
+        var modoCopia = e.modo === 'copia';
+        var conStaff = modoCopia ? false : e.conStaff !== false, comoMatriz = e.llegaComo === 'matriz';
         var avisos = [], bloqueos = [];
         var plan = {
             version: 1, origen: orig, destino: dest, sucursal: S, sucursalNueva: S,
             sucursalNombre: '', llegaComo: comoMatriz ? 'matriz' : 'nueva', conStaff: conStaff,
             tablas: [], hijos: [], docs: [], insumos: [], recetas: [], quitarInsumos: [], quitarRecetas: [],
-            filas: [], remap: {}, fotos: [], resumen: [], seQueda: DEL_NEGOCIO.slice(), avisos: avisos, bloqueos: bloqueos
+            filas: [], remap: {}, fotos: [], resumen: [], seQueda: DEL_NEGOCIO.slice(), avisos: avisos, bloqueos: bloqueos,
+            modo: modoCopia ? 'copia' : 'mover', recopia: false, filasCopia: [], catalogoCopia: { insumos: [], recetas: [] }
         };
         if (!orig || !dest) { bloqueos.push('Elige el negocio de origen y el de destino.'); return plan; }
         if (orig === dest) { bloqueos.push('El destino tiene que ser otro negocio.'); return plan; }
@@ -156,13 +165,16 @@
         if (!fichaS) { bloqueos.push('Esa sucursal no está en la lista del negocio de origen.'); return plan; }
         plan.sucursalNombre = fichaS.nombre || S;
         var S2 = S;
-        if (comoMatriz) S2 = MATRIZ;
+        // Si ya hay una copia de esta sucursal en el destino, se ACTUALIZA (mismos ids).
+        var previa = modoCopia ? listaD.filter(function (s) { return s && s.copiaDe && s.copiaDe.negocio === orig && s.copiaDe.sucursal === S; })[0] : null;
+        if (previa) { S2 = previa.id; plan.recopia = true; }
+        else if (comoMatriz) S2 = MATRIZ;
         else if (listaD.some(function (s) { return s && s.id === S; })) S2 = S + '_' + hash(dest).slice(0, 4);
         plan.sucursalNueva = S2;
         if (S2 !== S) plan.remap[S] = S2;
 
         // Llegar como Matriz solo si el destino no tiene operación todavía.
-        if (comoMatriz) {
+        if (comoMatriz && !plan.recopia) {
             var ocupado = POR_SUCURSAL.filter(function (x) { return filas(D, x.t).length > 0; }).map(function (x) { return x.lbl; });
             if (ocupado.length) bloqueos.push('Para llegar como la Matriz, el destino tiene que estar vacío, y ya tiene: ' + ocupado.join(', ') + '.');
         }
@@ -188,9 +200,12 @@
         var menu = filas(O, 'menu_publico').filter(function (r) { return r.id === orig + '|' + S; })[0];
         if (menu) { plan.filas.push({ tabla: 'menu_publico', id: menu.id, nuevo_id: dest + '|' + S2 }); contenido.push(menu.datos); }
         // Sin staff, sus colaboradores se quedan: se dice.
-        if (!conStaff) {
-            var nStaff = filas(O, 'staff').filter(function (r) { return r.datos.sucursalId === S; }).length;
-            if (nStaff) avisos.push(nStaff + ' colaborador' + (nStaff !== 1 ? 'es' : '') + ' de esta sucursal se quedan en el negocio original (con sus recibos de nómina).');
+        var nStaff = filas(O, 'staff').filter(function (r) { return r.datos.sucursalId === S; }).length;
+        if (modoCopia) {
+            if (nStaff) avisos.push(nStaff + ' colaborador' + (nStaff !== 1 ? 'es' : '') + ' no se copia' + (nStaff !== 1 ? 'n' : '') +
+                ': su usuario es único en ETAAX. Pasa' + (nStaff !== 1 ? 'n' : '') + ' al negocio nuevo cuando elimines la sucursal del original.');
+        } else if (!conStaff && nStaff) {
+            avisos.push(nStaff + ' colaborador' + (nStaff !== 1 ? 'es' : '') + ' de esta sucursal se quedan en el negocio original (con sus recibos de nómina).');
         }
 
         // ── 2) Catálogo: qué usa la sucursal ──
@@ -255,9 +270,11 @@
             plan.remap[c] = nuevo;
             if (desde !== c) plan.remap[desde] = nuevo;
         });
-        // En el origen, a lo que vivía en la sucursal se le quita.
-        insO.forEach(function (r) { if (vive(r.datos, S)) plan.quitarInsumos.push(r.insumo_id || r.datos.id); });
-        recO.forEach(function (r) { if (vive(r.datos, S)) plan.quitarRecetas.push(r.id || r.datos.id); });
+        // En el origen, a lo que vivía en la sucursal se le quita (al COPIAR, el origen no se toca).
+        if (!modoCopia) {
+            insO.forEach(function (r) { if (vive(r.datos, S)) plan.quitarInsumos.push(r.insumo_id || r.datos.id); });
+            recO.forEach(function (r) { if (vive(r.datos, S)) plan.quitarRecetas.push(r.id || r.datos.id); });
+        }
         if (yaEnDestino) avisos.push(yaEnDestino + ' insumo' + (yaEnDestino !== 1 ? 's' : '') + ' ya existía' + (yaEnDestino !== 1 ? 'n' : '') +
             ' en el destino (mismo id): se conserva su ficha del destino y solo se le suma la sucursal.');
 
@@ -272,6 +289,50 @@
             plan.fotos.push({ bucket: BUCKET_PRIV, desde: orig + '/' + resto, hacia: dest + '/' + resto });
         });
 
+        // ── 3b) COPIA: cada registro con id nuevo, y lo que lo nombra cambia con él ──
+        if (modoCopia) {
+            var suf = hash(dest + '|' + S2).slice(0, 5), mapaFilas = {};
+            var idCopia = function (t, r) {
+                if (t === 'horarios') return idHorario(dest, S2, r.datos.semana || r.id);   // lleva el negocio adentro
+                return (r.id || r.datos.id) + '-c' + suf;
+            };
+            Object.keys(mudan).forEach(function (t) { (mudan[t] || []).forEach(function (r) { mapaFilas[r.id || r.datos.id] = idCopia(t, r); }); });
+            if (menu) mapaFilas[menu.id] = dest + '|' + S2;
+            Object.keys(mapaFilas).forEach(function (k) { plan.remap[k] = mapaFilas[k]; });
+            var copiar = function (t, r, id2) {
+                var d = remapear(clon(r.datos), plan.remap);
+                d.sucursalId = S2;
+                if (Object.prototype.hasOwnProperty.call(d, 'negocioId')) d.negocioId = dest;
+                if (Object.prototype.hasOwnProperty.call(d, 'id')) d.id = id2;
+                plan.filasCopia.push({ tabla: t, id: id2, datos: d });
+            };
+            Object.keys(mudan).forEach(function (t) { (mudan[t] || []).forEach(function (r) { copiar(t, r, mapaFilas[r.id || r.datos.id]); }); });
+            if (menu) copiar('menu_publico', menu, dest + '|' + S2);
+            plan.filas = [];
+            // El catálogo, ya armado: sin lazos con el origen.
+            var fichaCat = function (datos, id, sucs, global) {
+                var d = remapear(clon(datos), plan.remap);
+                delete d.origenId; delete d._global; delete d.inactivoEn; delete d.inactivaEn;
+                d.id = id; d.sucursales = sucs.slice();
+                if (sucs.length) d.sucursalId = sucs[0]; else delete d.sucursalId;
+                if (global) d._global = true;
+                return d;
+            };
+            var insDatosD = {}; filas(D, 'negocio_insumos').forEach(function (r) { insDatosD[r.insumo_id || r.datos.id] = r.datos; });
+            plan.insumos.forEach(function (x) {
+                var ya = insDatosD[x.id], d;
+                if (ya) {   // el destino ya lo tenía: se queda su ficha y solo suma la sucursal
+                    d = clon(ya);
+                    var m = memb(d); x.sucursales.forEach(function (s2) { if (m.indexOf(s2) < 0) m.push(s2); });
+                    d.sucursales = m;
+                } else d = fichaCat(insPorId[x.desde].datos, x.id, x.sucursales, false);
+                plan.catalogoCopia.insumos.push({ insumo_id: x.id, datos: d });
+            });
+            plan.recetas.forEach(function (x) {
+                plan.catalogoCopia.recetas.push({ id: x.id, datos: fichaCat(recPorId[x.desde].datos, x.id, x.sucursales, x.global) });
+            });
+        }
+
         // ── 4) Documentos de un renglón ──
         var remap = plan.remap;
         // Sucursales.
@@ -280,16 +341,19 @@
         datosSucO.sucursales = listaO.filter(function (s) { return s && s.id !== S; });
         if (datosSucO.cfg) delete datosSucO.cfg[S];
         var fichaNueva = Object.assign(clon(fichaS), { id: S2 });
+        if (modoCopia) fichaNueva.copiaDe = { negocio: orig, sucursal: S, en: new Date().toISOString() };
         var listaNueva = listaD.slice();
         if (!listaNueva.length) listaNueva.push({ id: MATRIZ, nombre: 'Matriz', activa: true });
-        if (comoMatriz) {
+        if (previa) {
+            listaNueva = listaNueva.map(function (s) { return (s && s.id === S2) ? Object.assign({}, s, fichaNueva) : s; });
+        } else if (comoMatriz) {
             var hayM = false;
             listaNueva = listaNueva.map(function (s) { if (s && s.id === MATRIZ) { hayM = true; return Object.assign({}, s, fichaNueva); } return s; });
             if (!hayM) listaNueva.unshift(fichaNueva);
         } else listaNueva.push(fichaNueva);
         datosSucD.sucursales = listaNueva;
         if (cfgS) { datosSucD.cfg = datosSucD.cfg || {}; datosSucD.cfg[S2] = remapear(clon(cfgS), remap); }
-        plan.docs.push({ tabla: 'negocio_sucursales', negocio_id: orig, datos: datosSucO, si_updated_at: docSucO ? (docSucO.updated_at || null) : null });
+        if (!modoCopia) plan.docs.push({ tabla: 'negocio_sucursales', negocio_id: orig, datos: datosSucO, si_updated_at: docSucO ? (docSucO.updated_at || null) : null });
         plan.docs.push({ tabla: 'negocio_sucursales', negocio_id: dest, datos: datosSucD, si_updated_at: docSucD ? (docSucD.updated_at || null) : null });
         // Compuestos y bateo de inventarios ({compuestos:{[suc]:[]}, bateo:{[suc]:[]}}).
         var ajD = doc(D, 'inv_ajustes');
@@ -301,7 +365,7 @@
                 aD[k][S2] = remapear(aO[k][S], remap);
                 delete aO[k][S];
             });
-            plan.docs.push({ tabla: 'inv_ajustes', negocio_id: orig, datos: aO, si_updated_at: invAj.updated_at || null });
+            if (!modoCopia) plan.docs.push({ tabla: 'inv_ajustes', negocio_id: orig, datos: aO, si_updated_at: invAj.updated_at || null });
             plan.docs.push({ tabla: 'inv_ajustes', negocio_id: dest, datos: aD, si_updated_at: ajD ? (ajD.updated_at || null) : null });
         }
         // Parámetros de nómina por sucursal ({…, porSucursal:{[suc]:{…}}}).
@@ -311,7 +375,7 @@
             pD.porSucursal = pD.porSucursal || {};
             pD.porSucursal[S2] = pO.porSucursal[S];
             delete pO.porSucursal[S];
-            plan.docs.push({ tabla: 'gf_nomina_params', negocio_id: orig, datos: pO, si_updated_at: npO.updated_at || null });
+            if (!modoCopia) plan.docs.push({ tabla: 'gf_nomina_params', negocio_id: orig, datos: pO, si_updated_at: npO.updated_at || null });
             plan.docs.push({ tabla: 'gf_nomina_params', negocio_id: dest, datos: pD, si_updated_at: npD ? (npD.updated_at || null) : null });
         }
 
@@ -319,10 +383,10 @@
         POR_SUCURSAL.forEach(function (x) {
             if (x.opcion === 'conStaff' && !conStaff) return;
             var n = (mudan[x.t] || []).length;
-            if (n) plan.resumen.push({ mod: x.mod, lbl: x.lbl, mueve: n });
+            if (n) plan.resumen.push(modoCopia ? { mod: x.mod, lbl: x.lbl, copia: n } : { mod: x.mod, lbl: x.lbl, mueve: n });
         });
-        HIJOS.forEach(function (h) { var n = (mudan[h.t] || []).length; if (n) plan.resumen.push({ mod: h.mod, lbl: h.lbl, mueve: n }); });
-        if (menu) plan.resumen.push({ mod: 'Administración', lbl: 'Carta pública (QR de las mesas)', mueve: 1 });
+        HIJOS.forEach(function (h) { var n = (mudan[h.t] || []).length; if (n) plan.resumen.push(modoCopia ? { mod: h.mod, lbl: h.lbl, copia: n } : { mod: h.mod, lbl: h.lbl, mueve: n }); });
+        if (menu) plan.resumen.push(modoCopia ? { mod: 'Administración', lbl: 'Carta pública (QR de las mesas)', copia: 1 } : { mod: 'Administración', lbl: 'Carta pública (QR de las mesas)', mueve: 1 });
         var nInsAsig = plan.insumos.filter(function (x) { return x.sucursales.length; }).length;
         var nRecAsig = plan.recetas.filter(function (x) { return x.sucursales.length; }).length;
         plan.resumen.push({ mod: 'Catálogo', lbl: 'Insumos', copia: plan.insumos.length,
@@ -333,7 +397,11 @@
 
         // ── 6) Lo que hay que saber ──
         avisos.push('Los QR impresos de esta sucursal (carta, entradas, portal del staff) hay que volver a generarlos desde el negocio nuevo.');
-        avisos.push('Después de migrar, el dueño del negocio original debe recargar ETAAX en sus equipos para que la sucursal ya no le aparezca.');
+        if (modoCopia) {
+            avisos.unshift('El negocio original NO se toca: la sucursal sigue ahí hasta que la elimines (y se puede restaurar).');
+            if (plan.recopia) avisos.push('Ya había una copia de esta sucursal en el destino: se ACTUALIZA con lo de hoy (lo que se haya cambiado en la copia se reemplaza).');
+            else avisos.push('Si la sucursal sigue trabajando en el original mientras revisas, vuelve a copiarla antes de eliminarla: la copia se actualiza.');
+        } else avisos.push('Después de migrar, el dueño del negocio original debe recargar ETAAX en sus equipos para que la sucursal ya no le aparezca.');
         if (listaO.filter(function (s) { return s && s.id !== S && s.activa !== false; }).length === 0)
             avisos.push('El negocio original se queda sin sucursales activas además de la Matriz.');
         return plan;
@@ -406,9 +474,76 @@
         };
     }
 
+    /* ══ EJECUTAR LA COPIA ══════════════════════════════════════════════════
+       Desde el navegador, con la sesión del admin, por lotes. Copiar solo
+       AGREGA y los ids nuevos son fijos (hash del destino): si se corta a la
+       mitad, se vuelve a correr y termina donde se quedó, sin duplicar. La
+       sucursal aparece en el destino al FINAL (su documento va al último), así
+       que una copia a medias no se ve como sucursal. */
+    function mismoInstante(a, b) {
+        if (!a && !b) return true;
+        if (!a || !b) return false;
+        if (String(a) === String(b)) return true;
+        return Date.parse(a) === Date.parse(b);
+    }
+    async function lotes(sb, t, rows, conflicto, avance, etiqueta) {
+        var TAM = 100;
+        for (var i = 0; i < rows.length; i += TAM) {
+            avance(etiqueta, Math.min(i + TAM, rows.length), rows.length);
+            var r = await sb.from(t).upsert(rows.slice(i, i + TAM), { onConflict: conflicto });
+            if (r && r.error) throw new Error(etiqueta + ': ' + r.error.message);
+        }
+    }
+    async function ejecutarCopia(sb, plan, avance) {
+        avance = avance || function () {};
+        if (!plan || plan.modo !== 'copia' || plan.bloqueos.length) throw new Error('El plan no es una copia lista para aplicar.');
+        // 0) Los documentos del destino siguen como se revisaron.
+        for (var i = 0; i < plan.docs.length; i++) {
+            var d = plan.docs[i];
+            var rv = await sb.from(d.tabla).select('updated_at').eq('negocio_id', d.negocio_id).maybeSingle();
+            if (rv.error) throw new Error(d.tabla + ': ' + rv.error.message);
+            if (!mismoInstante(rv.data ? rv.data.updated_at : null, d.si_updated_at))
+                throw new Error('El negocio destino cambió mientras revisabas (' + d.tabla + '). Vuelve a revisar la copia.');
+        }
+        // 1) Fotos privadas a la carpeta del destino.
+        for (var f = 0; f < plan.fotos.length; f++) {
+            avance('Fotos de evidencia', f + 1, plan.fotos.length);
+            var c = await sb.storage.from(plan.fotos[f].bucket).copy(plan.fotos[f].desde, plan.fotos[f].hacia);
+            if (c && c.error && !/exist/i.test(c.error.message || '')) throw new Error('No se pudo copiar la foto «' + plan.fotos[f].desde + '»: ' + c.error.message);
+        }
+        // 2) Catálogo.
+        await lotes(sb, 'negocio_insumos', plan.catalogoCopia.insumos.map(function (x) { return { negocio_id: plan.destino, insumo_id: x.insumo_id, datos: x.datos }; }),
+            'negocio_id,insumo_id', avance, 'Insumos');
+        await lotes(sb, 'recetas', plan.catalogoCopia.recetas.map(function (x) { return { id: x.id, negocio_id: plan.destino, datos: x.datos }; }),
+            'id', avance, 'Recetas');
+        // 3) Registros, tabla por tabla.
+        var porTabla = {}, orden = [], cuenta = { insumos: plan.catalogoCopia.insumos.length, recetas: plan.catalogoCopia.recetas.length, fotos: plan.fotos.length };
+        plan.filasCopia.forEach(function (x) { if (!porTabla[x.tabla]) { porTabla[x.tabla] = []; orden.push(x.tabla); } porTabla[x.tabla].push({ id: x.id, negocio_id: plan.destino, datos: x.datos }); });
+        var LBL = {}; POR_SUCURSAL.concat(HIJOS).forEach(function (x) { LBL[x.t] = x.lbl; }); LBL.menu_publico = 'Carta pública';
+        for (var o = 0; o < orden.length; o++) {
+            await lotes(sb, orden[o], porTabla[orden[o]], 'id', avance, LBL[orden[o]] || orden[o]);
+            cuenta[orden[o]] = porTabla[orden[o]].length;
+        }
+        // 4) Al final, los documentos: ahí aparece la sucursal en el destino.
+        for (var k = 0; k < plan.docs.length; k++) {
+            var dd = plan.docs[k];
+            avance('Configuración de la sucursal', k + 1, plan.docs.length);
+            var rd = await sb.from(dd.tabla).upsert({ negocio_id: dd.negocio_id, datos: dd.datos, updated_at: new Date().toISOString() }, { onConflict: 'negocio_id' });
+            if (rd && rd.error) throw new Error(dd.tabla + ': ' + rd.error.message);
+        }
+        // 5) Bitácora (si falla, la copia ya quedó: no se revierte por esto).
+        var id = 'cop_' + Date.now().toString(36) + '_' + hash(plan.destino + plan.sucursalNueva).slice(0, 4);
+        try {
+            await sb.from('admin_migraciones').insert({ id: id, datos: { tipo: 'copia', origen: plan.origen, destino: plan.destino, sucursal: plan.sucursal,
+                sucursalNueva: plan.sucursalNueva, nombre: plan.sucursalNombre, cuenta: cuenta, recopia: plan.recopia, en: new Date().toISOString() } });
+        } catch (e) {}
+        return { ok: true, id: id, cuenta: cuenta };
+    }
+
     root.MigSuc = {
         MATRIZ: MATRIZ, POR_SUCURSAL: POR_SUCURSAL, HIJOS: HIJOS, DEL_NEGOCIO: DEL_NEGOCIO, DOCS: DOCS,
-        planear: planear, paraServidor: paraServidor, cargar: cargar, respaldo: respaldo,
+        planear: planear, paraServidor: paraServidor, cargar: cargar, respaldo: respaldo, ejecutarCopia: ejecutarCopia,
+        planearCopia: function (e) { return planear(Object.assign({}, e, { modo: 'copia' })); }, memb: memb,
         remapear: remapear, idRecetaNueva: idRecetaNueva, idHorario: idHorario, nombreNeg: nombreNeg
     };
 })(typeof window !== 'undefined' ? window : globalThis);

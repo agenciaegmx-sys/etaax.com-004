@@ -17927,6 +17927,32 @@ console.log('\n══ BH83 · Migrar una sucursal: el plan ══');
         const sql = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v86.sql'), 'utf8');
         return eq(/SECURITY DEFINER/.test(sql) && /IF NOT is_platform_admin\(\)/.test(sql) && /v_suc = 'suc_principal'/.test(sql) && /cambió mientras revisabas/.test(sql), true);
     });
+    /* 23-nov (2ª vuelta): COPIAR → revisar → eliminar del original (v87, con restaurar). */
+    const pc = Mig.planearCopia({ origen: datos().origen, destino: datos().destino, sucursal: S });
+    test('copiar: el original NO se toca (ni sus documentos ni su catálogo)', () =>
+        eq(pc.docs.every(d => d.negocio_id === 'B') && pc.quitarInsumos.length === 0 && pc.quitarRecetas.length === 0 && pc.modo === 'copia', true));
+    test('copiar: cada registro lleva id nuevo y lo que lo nombra cambia con él', () => {
+        const c = pc.filasCopia.find(x => x.tabla === 'cortes');
+        return eq(c.id !== 'c1' && pc.remap.c1 === c.id && c.datos.id === c.id && c.datos.sucursalId === S && pc.filasCopia.filter(x => x.tabla === 'cortes').length, 1);
+    });
+    test('copiar: el staff NO se copia (su usuario es único en ETAAX) y se avisa', () =>
+        eq(pc.filasCopia.some(x => x.tabla === 'staff' || x.tabla === 'nomina_recibos') + '|' + pc.avisos.some(a => /no se copia/.test(a)), 'false|true'));
+    test('copiar: la sucursal llega al destino diciendo de dónde viene (copiaDe)', () => {
+        const b = pc.docs.find(d => d.tabla === 'negocio_sucursales');
+        const f = b.datos.sucursales.find(s => s.id === S);
+        return eq(f.copiaDe.negocio + '|' + f.copiaDe.sucursal, 'A|' + S);
+    });
+    test('copiar otra vez sobre una copia previa la ACTUALIZA (mismos ids)', () => {
+        const d = datos();
+        d.destino.docs.negocio_sucursales = { datos: { sucursales: [{ id: 'suc_principal' }, { id: S, nombre: 'El Miami', copiaDe: { negocio: 'A', sucursal: S } }] }, updated_at: 't9' };
+        const p2 = Mig.planearCopia({ origen: d.origen, destino: d.destino, sucursal: S });
+        return eq(p2.recopia + '|' + (p2.remap.c1 === pc.remap.c1) + '|' + p2.docs[0].datos.sucursales.filter(s => s.id === S).length, 'true|true|1');
+    });
+    test('la v87 archiva (no borra) y restaura, solo para el admin, sin la Matriz', () => {
+        const sql = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v87.sql'), 'utf8');
+        return eq(/INSERT INTO admin_archivo_filas/.test(sql) && /jsonb_populate_record/.test(sql) && (sql.match(/IF NOT is_platform_admin\(\)/g) || []).length === 2 &&
+                  /p_suc = 'suc_principal'/.test(sql), true);
+    });
     test('el panel admin ofrece la herramienta (ya no «Próximamente») y carga el motor', () => {
         const h = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
         return eq(/id:'migrar', tipo:'panel'/.test(h) && /<script src="\/admin-migrar-sucursal\.js\?v=/.test(h) && /id="tab-migrar"/.test(h), true);

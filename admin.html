@@ -282,6 +282,15 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
 .btn-prim.mig-peligro{background:var(--red);color:#fff;}
 .btn-prim:disabled{opacity:.45;cursor:default;}
 .mig-hecho{border-color:rgba(61,190,122,.5);}
+.mig-intro{margin-bottom:6px;}
+.mig-pasos{display:flex;gap:10px;flex-wrap:wrap;}
+.mig-pasos span{flex:1 1 220px;display:flex;align-items:flex-start;gap:9px;font-size:12.5px;color:var(--muted);line-height:1.5;}
+.mig-pasos b{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--cyan);color:var(--cyan);display:inline-flex;align-items:center;justify-content:center;font-size:11.5px;flex-shrink:0;}
+.mig-bloque-tit{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;margin:26px 0 12px;color:var(--text);}
+.mig-bloque-tit .etx-ic{color:var(--cyan);}
+.mig-avance{font-size:12.5px;color:var(--muted);}
+.mig-ok-nota{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text);}
+.mig-ok-nota .etx-ic{color:var(--green);}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
 .fade-up{animation:fadeUp .4s ease both;}
@@ -691,7 +700,7 @@ async function betaAppCopiar() {
 <script src="/etaax-core.js?v=a88c0cd1"></script><!-- importeLetra para recibos y presupuestos -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script><!-- los iconos de la app (SVG) -->
 <script src="/etaax-header.js?v=15a5a6ef"></script><!-- la barra de arriba, la misma de todo el sistema -->
-<script src="/admin-migrar-sucursal.js?v=27bf7715"></script><!-- migrar una sucursal: el plan (lo aplica la v86) -->
+<script src="/admin-migrar-sucursal.js?v=450ad494"></script><!-- migrar una sucursal: el plan (lo aplica la v86) -->
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -973,7 +982,7 @@ async function cargarDatos() {
         var activas = (d.sucursales || []).filter(function(s){ return s && s.activa !== false; });
         _data.sucsNeg[r.negocio_id] = activas.length;
         _data.sucursales[r.negocio_id] = activas.map(function(s){
-            return { id: s.id, nombre: s.nombre || s.id, logo: (cfg[s.id] || {})._logo || '' };
+            return { id: s.id, nombre: s.nombre || s.id, logo: (cfg[s.id] || {})._logo || '', copiaDe: s.copiaDe || null };
         });
     });
 
@@ -2817,7 +2826,7 @@ var ADM_BLOQUES = [
     { id:'auditar', tipo:'accion', ic:'adm-buscar', tit:'Auditar cruces', desc:'Busca recetas que quedaron en el negocio equivocado. Solo lectura.', cta:'Revisar →' },
     { id:'app', tipo:'panel', ic:'adm-celular', tit:'App móvil (beta)', desc:'El enlace único de la app de registro, para probarla en una barra real.' },
     { id:'papelera', tipo:'pagina', ic:'mov-eliminar', tit:'Papelera', desc:'Lo que se eliminó en la plataforma, para revisarlo o recuperarlo.' },
-    { id:'migrar', tipo:'panel', ic:'adm-sucursal', tit:'Migrar sucursal', desc:'Pasar una sucursal con toda su información a otra cuenta o negocio, y quitarla del anterior.' },
+    { id:'migrar', tipo:'panel', ic:'adm-sucursal', tit:'Migrar sucursal', desc:'Copiar una sucursal a otro negocio, revisarla y eliminarla del original. Lo eliminado se puede restaurar.' },
     { id:'auditores', prox:true, ic:'stf-admin', tit:'Staff ETAAX', desc:'Accesos para el equipo de ETAAX: auditorías de escandallos, insumos e inventarios en varios negocios.' }
   ]}
 ];
@@ -2961,16 +2970,31 @@ if (window.addEventListener) window.addEventListener('popstate', function () {
     if (h && _admTarjeta(h)) switchTab(h, true); else admInicio(true);
 });
 
-/* ══ MIGRAR UNA SUCURSAL A OTRO NEGOCIO (23-nov) ═══════════════════════════
-   Tres pasos: elegir (qué sucursal, a qué negocio y cómo llega), revisar el
-   plan (qué se muda, qué se copia, qué se queda) y migrar. Antes de migrar hay
-   que descargar el respaldo y escribir el nombre de la sucursal: es una
-   operación que mueve la historia completa de una sucursal entre dos dueños.
-   El plan lo arma MigSuc (admin-migrar-sucursal.js) y lo aplica en UNA
-   transacción la función admin_migrar_sucursal (supabase-migration-v86.sql). */
-var _mig = { datos: null, plan: null, respaldo: false, sel: {} };
+/* ══ PASAR UNA SUCURSAL A OTRO NEGOCIO (Edwin, 23-nov, 2ª vuelta) ═════════
+   COPIAR → REVISAR → ELIMINAR DEL ORIGINAL, con RESTAURAR.
+     · Copiar (MigSuc.ejecutarCopia): el original no se toca. La copia lleva
+       ids nuevos; volver a copiar la actualiza sin duplicar.
+     · Eliminar (admin_archivar_sucursal, v87): no borra, guarda en el archivo
+       y saca de las tablas vivas. El staff pasa al negocio de la copia (su
+       usuario es único en ETAAX) o se archiva con la sucursal.
+     · Restaurar (admin_restaurar_sucursal): la regresa idéntica.
+   Eliminar y restaurar sirven para cualquier negocio: el original después de
+   revisar, o el destino si la copia salió mal. */
+var _mig = { datos: null, plan: null, sel: {}, arc: {}, hecho: '', hechoArc: '' };
 function _migNeg(id) { return (_data.negocios || []).find(function (n) { return n.id === id; }) || null; }
 function _migNombreNeg(id) { var n = _migNeg(id); return (n && n.datos && n.datos.nombre) || id || '—'; }
+function _migSucs(neg) { return ((_data.sucursales || {})[neg] || []).filter(function (x) { return x.id !== MigSuc.MATRIZ; }); }
+function _migNombreSuc(neg, suc) { var f = ((_data.sucursales || {})[neg] || []).find(function (x) { return x.id === suc; }); return (f && f.nombre) || suc || '—'; }
+// ¿En qué otro negocio hay una copia de esta sucursal? (ahí es a donde pasa su staff)
+function _migCopiaDe(neg, suc) {
+    var r = null;
+    Object.keys(_data.sucursales || {}).forEach(function (n) {
+        (_data.sucursales[n] || []).forEach(function (x) {
+            if (!r && x.copiaDe && x.copiaDe.negocio === neg && x.copiaDe.sucursal === suc) r = { negocio: n, sucursal: x.id };
+        });
+    });
+    return r;
+}
 function _migOpcionesNeg(sel, excepto) {
     return '<option value="">— Elige un negocio —</option>' + (_data.negocios || [])
         .filter(function (n) { return n.id !== excepto; })
@@ -2981,22 +3005,28 @@ function _migOpcionesNeg(sel, excepto) {
                 (u && u.nombre ? ' · ' + esc(u.nombre) : '') + '</option>';
         }).join('');
 }
+function _migOpcionesSuc(neg, sel) {
+    var otras = _migSucs(neg);
+    return '<option value="">' + (!neg ? '— Primero el negocio —' : (otras.length ? '— Elige la sucursal —' : 'Solo tiene la Matriz')) + '</option>' +
+        otras.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.nombre || x.id) + (x.copiaDe ? ' (copia)' : '') + '</option>'; }).join('');
+}
 function renderMigrar() {
     var el = document.getElementById('tab-migrar'); if (!el) return;
     if (!window.MigSuc) { el.innerHTML = '<div class="empty-state">No cargó el módulo de migración. Recarga la página.</div>'; return; }
-    var s = _mig.sel, sucs = (_data.sucursales || {})[s.origen] || [];
-    var otras = sucs.filter(function (x) { return x.id !== MigSuc.MATRIZ; });
+    var s = _mig.sel;
     el.innerHTML =
+        '<div class="adm-caja mig-intro"><div class="mig-pasos">' +
+            '<span><b>1</b> Copia la sucursal al negocio nuevo (el original no se toca)</span>' +
+            '<span><b>2</b> Revisa en el negocio nuevo que todo llegó</span>' +
+            '<span><b>3</b> Elimínala del original (queda en el archivo y se puede restaurar)</span></div></div>' +
+        '<h3 class="mig-bloque-tit">' + _admIc('sto-copiar', 18) + 'Copiar a otro negocio</h3>' +
         '<div class="adm-caja mig-paso">' +
             '<div class="mig-tit"><span class="mig-num">1</span>Qué sucursal y a dónde</div>' +
             '<div class="form-grid">' +
                 '<div><label class="form-label" for="migOrig">Negocio de origen</label>' +
                     '<select id="migOrig" class="form-select" onchange="_migSel(\'origen\', this.value)">' + _migOpcionesNeg(s.origen) + '</select></div>' +
                 '<div><label class="form-label" for="migSuc">Sucursal</label>' +
-                    '<select id="migSuc" class="form-select" onchange="_migSel(\'sucursal\', this.value)"' + (s.origen ? '' : ' disabled') + '>' +
-                        '<option value="">' + (!s.origen ? '— Primero el negocio —' : (otras.length ? '— Elige la sucursal —' : 'Solo tiene la Matriz')) + '</option>' +
-                        otras.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === s.sucursal ? ' selected' : '') + '>' + esc(x.nombre || x.id) + '</option>'; }).join('') +
-                    '</select></div>' +
+                    '<select id="migSuc" class="form-select" onchange="_migSel(\'sucursal\', this.value)"' + (s.origen ? '' : ' disabled') + '>' + _migOpcionesSuc(s.origen, s.sucursal) + '</select></div>' +
                 '<div><label class="form-label" for="migDest">Negocio destino</label>' +
                     '<select id="migDest" class="form-select" onchange="_migSel(\'destino\', this.value)">' + _migOpcionesNeg(s.destino, s.origen) + '</select></div>' +
                 '<div><label class="form-label" for="migComo">Llega como</label>' +
@@ -3005,18 +3035,22 @@ function renderMigrar() {
                         '<option value="matriz"' + (s.como === 'matriz' ? ' selected' : '') + '>La Matriz del destino (solo si está vacío)</option>' +
                     '</select></div>' +
             '</div>' +
-            '<label class="mig-check"><input type="checkbox" id="migStaff"' + (s.conStaff === false ? '' : ' checked') + ' onchange="_migSel(\'conStaff\', this.checked)">' +
-                '<span>Los colaboradores de la sucursal se van con ella, con sus recibos de nómina</span></label>' +
-            (s.origen && !otras.length ? '<div class="adm-nota" style="margin-top:10px">La Matriz no se migra con esta herramienta: sus registros de antes de las sucursales no traen sello y no se pueden separar del resto del negocio.</div>' : '') +
-            '<button class="btn-prim" style="margin-top:14px" onclick="migRevisar()"' + (s.origen && s.sucursal && s.destino ? '' : ' disabled') + '>Revisar la migración</button>' +
+            (s.origen && !_migSucs(s.origen).length ? '<div class="adm-nota" style="margin-top:10px">La Matriz no se pasa con esta herramienta: sus registros de antes de las sucursales no traen sello y no se pueden separar del resto del negocio.</div>' : '') +
+            '<button class="btn-prim" style="margin-top:14px" onclick="migRevisar()"' + (s.origen && s.sucursal && s.destino ? '' : ' disabled') + '>Revisar la copia</button>' +
         '</div>' +
-        '<div id="migPlan"></div>';
+        '<div id="migPlan">' + (_mig.hecho || '') + '</div>' +
+        '<h3 class="mig-bloque-tit">' + _admIc('mov-eliminar', 18) + 'Eliminar una sucursal</h3>' +
+        '<div id="migEliminar"></div>' +
+        '<h3 class="mig-bloque-tit">' + _admIc('mov-movimientos', 18) + 'Sucursales eliminadas</h3>' +
+        '<div id="migArchivo"><div class="empty-state">Cargando…</div></div>';
     if (_mig.plan) renderMigPlan();
+    renderMigEliminar();
+    cargarArchivoMig();
 }
 function _migSel(k, v) {
     _mig.sel[k] = v;
     if (k === 'origen') { _mig.sel.sucursal = ''; if (_mig.sel.destino === v) _mig.sel.destino = ''; }
-    _mig.plan = null; _mig.datos = null; _mig.respaldo = false;   // cambió algo: el plan de antes ya no vale
+    _mig.plan = null; _mig.datos = null; _mig.hecho = '';   // cambió algo: el plan de antes ya no vale
     renderMigrar();
 }
 async function migRevisar() {
@@ -3026,9 +3060,9 @@ async function migRevisar() {
     try { _mig.datos = await MigSuc.cargar(_supabase, nO, nD); }
     catch (e) { cerrar(); admAlert('No se pudo leer la información: ' + esc(e.message || e), { icon:'⚠️', title:'Error' }); return; }
     cerrar();
-    _mig.plan = MigSuc.planear({ origen: _mig.datos.origen, destino: _mig.datos.destino, sucursal: s.sucursal,
-                                 llegaComo: s.como === 'matriz' ? 'matriz' : 'nueva', conStaff: s.conStaff !== false });
-    _mig.respaldo = false;
+    _mig.plan = MigSuc.planearCopia({ origen: _mig.datos.origen, destino: _mig.datos.destino, sucursal: s.sucursal,
+                                      llegaComo: s.como === 'matriz' ? 'matriz' : 'nueva' });
+    _mig.hecho = '';
     renderMigPlan();
     var c = document.getElementById('migPlan'); if (c && c.scrollIntoView) { try { c.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} }
 }
@@ -3037,97 +3071,150 @@ function renderMigPlan() {
     var bloq = p.bloqueos.length > 0;
     var filas = p.resumen.map(function (r) {
         return '<tr><td class="text-dim">' + esc(r.mod) + '</td><td><b>' + esc(r.lbl) + '</b>' + (r.nota ? '<div class="text-dim" style="font-size:11.5px">' + esc(r.nota) + '</div>' : '') + '</td>' +
-            '<td class="mig-n">' + (r.mueve ? '<b class="text-green">' + r.mueve + '</b>' : '—') + '</td>' +
-            '<td class="mig-n">' + (r.copia ? '<b style="color:var(--cyan)">' + r.copia + '</b>' : '—') + '</td></tr>';
+            '<td class="mig-n">' + ((r.copia || r.mueve) ? '<b style="color:var(--cyan)">' + (r.copia || r.mueve) + '</b>' : '—') + '</td></tr>';
     }).join('');
     el.innerHTML =
         '<div class="adm-caja mig-paso">' +
-            '<div class="mig-tit"><span class="mig-num">2</span>Revisa el plan</div>' +
+            '<div class="mig-tit"><span class="mig-num">2</span>Revisa lo que se va a copiar</div>' +
             '<div class="mig-ruta"><b>' + esc(p.sucursalNombre || p.sucursal) + '</b> · de <b>' + esc(_migNombreNeg(p.origen)) + '</b> → a <b>' +
-                esc(_migNombreNeg(p.destino)) + '</b> <span class="adm-chip">' + (p.llegaComo === 'matriz' ? 'como su Matriz' : 'como sucursal nueva') + '</span></div>' +
+                esc(_migNombreNeg(p.destino)) + '</b> <span class="adm-chip">' + (p.llegaComo === 'matriz' ? 'como su Matriz' : 'como sucursal nueva') + '</span>' +
+                (p.recopia ? ' <span class="adm-chip aviso">ya hay una copia: se actualiza</span>' : '') + '</div>' +
             (bloq ? '<div class="mig-bloqueo">' + p.bloqueos.map(esc).join('<br>') + '</div>' :
-            '<div class="table-wrap" style="margin-top:14px"><table class="admin-table"><thead><tr><th>Módulo</th><th>Qué</th><th style="text-align:right">Se muda</th><th style="text-align:right">Se copia</th></tr></thead>' +
-                '<tbody>' + (filas || '<tr><td colspan="4" class="empty-state">La sucursal no tiene registros todavía.</td></tr>') + '</tbody></table></div>' +
-            '<div class="mig-sub">Se queda en el negocio original</div>' +
+            '<div class="table-wrap" style="margin-top:14px"><table class="admin-table"><thead><tr><th>Módulo</th><th>Qué</th><th style="text-align:right">Se copia</th></tr></thead>' +
+                '<tbody>' + (filas || '<tr><td colspan="3" class="empty-state">La sucursal no tiene registros todavía.</td></tr>') + '</tbody></table></div>' +
+            '<div class="mig-sub">Lo del negocio, que no se copia</div>' +
             '<div class="mig-chips">' + p.seQueda.map(function (x) { return '<span class="adm-chip">' + esc(x) + '</span>'; }).join('') + '</div>' +
             '<div class="mig-sub">Lo que hay que saber</div>' +
             '<ul class="mig-avisos">' + p.avisos.map(function (a) { return '<li>' + esc(a) + '</li>'; }).join('') + '</ul>') +
         '</div>' +
         (bloq ? '' :
         '<div class="adm-caja mig-paso">' +
-            '<div class="mig-tit"><span class="mig-num">3</span>Migrar</div>' +
-            '<div class="adm-nota">Primero descarga el respaldo: es todo lo que la migración toca, como está ahora. Luego escribe el nombre de la sucursal para confirmar. ' +
-                'La migración corre en una sola operación: si algo falla, no se mueve nada.</div>' +
-            '<div class="mig-acciones">' +
-                '<button class="btn-mini' + (_mig.respaldo ? ' mig-ok' : '') + '" onclick="migDescargarRespaldo()">' + (_mig.respaldo ? '✓ Respaldo descargado' : '⬇ Descargar respaldo') + '</button>' +
-                '<input id="migConfirma" class="form-input" style="max-width:280px" autocomplete="off" placeholder="Escribe: ' + esc(p.sucursalNombre || p.sucursal) + '" oninput="_migChequeo()">' +
-                '<button class="btn-prim mig-peligro" id="migBtn" onclick="migAplicar()" disabled>Migrar ahora</button>' +
-            '</div>' +
+            '<div class="mig-tit"><span class="mig-num">3</span>' + (p.recopia ? 'Actualizar la copia' : 'Copiar') + '</div>' +
+            '<div class="adm-nota">El negocio original no se toca. Si se corta a la mitad, vuelve a darle: la copia termina donde se quedó, sin duplicar.</div>' +
+            '<div class="mig-acciones"><button class="btn-prim" id="migBtn" onclick="migCopiar()">' + (p.recopia ? 'Actualizar la copia' : 'Copiar ahora') + '</button>' +
+                '<span id="migAvance" class="mig-avance"></span></div>' +
         '</div>');
-    _migChequeo();
 }
-function _migChequeo() {
-    var b = document.getElementById('migBtn'), i = document.getElementById('migConfirma'), p = _mig.plan;
-    if (!b || !p) return;
-    var nombre = String(p.sucursalNombre || p.sucursal).trim().toLowerCase();
-    b.disabled = !(_mig.respaldo && i && String(i.value || '').trim().toLowerCase() === nombre && !p.bloqueos.length);
-}
-function migDescargarRespaldo() {
-    if (!_mig.plan || !_mig.datos) return;
-    var r = MigSuc.respaldo(_mig.datos, _mig.plan);
-    var slug = String(_mig.plan.sucursalNombre || 'sucursal').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'sucursal';
-    var blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' });
-    var url = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = url; a.download = 'respaldo_migracion_' + slug + '_' + new Date().toISOString().slice(0, 10) + '.json';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-    _mig.respaldo = true;
-    var v = document.getElementById('migConfirma') ? document.getElementById('migConfirma').value : '';
-    renderMigPlan();
-    var i = document.getElementById('migConfirma'); if (i) { i.value = v; _migChequeo(); }
-}
-async function migAplicar() {
-    var p = _mig.plan; if (!p || p.bloqueos.length || !_mig.respaldo) return;
-    admConfirm('¿Migrar «' + esc(p.sucursalNombre) + '»?',
-        'Se muda de <b>' + esc(_migNombreNeg(p.origen)) + '</b> a <b>' + esc(_migNombreNeg(p.destino)) + '</b> con toda su información. ' +
-        'Desde aquí no se deshace (con el respaldo sí se puede reconstruir).', async function () {
-        // 1) Las fotos privadas, a la carpeta del destino. Copiar no borra nada:
-        //    si después falla la migración, solo quedan copias de más.
-        var cerrar = _admLoading('Copiando fotos de evidencia (0 de ' + p.fotos.length + ')…');
-        for (var i = 0; i < p.fotos.length; i++) {
-            var f = p.fotos[i];
-            var r = await _supabase.storage.from(f.bucket).copy(f.desde, f.hacia);
-            if (r.error && !/exist/i.test(r.error.message || '')) {
-                cerrar();
-                admAlert('No se pudo copiar la foto «' + esc(f.desde) + '»: ' + esc(r.error.message) + '<br><br>No se movió nada.', { icon:'⚠️', title:'Migración detenida' });
-                return;
-            }
+async function migCopiar() {
+    var p = _mig.plan; if (!p || p.bloqueos.length) return;
+    admConfirm((p.recopia ? '¿Actualizar la copia de «' : '¿Copiar «') + esc(p.sucursalNombre) + '»?',
+        'Se copia a <b>' + esc(_migNombreNeg(p.destino)) + '</b>. El negocio original <b>no se toca</b>.', async function () {
+        var b = document.getElementById('migBtn'), av = document.getElementById('migAvance');
+        if (b) b.disabled = true;
+        try {
+            var res = await MigSuc.ejecutarCopia(_supabase, p, function (que, i, n) { if (av) av.textContent = que + ' · ' + i + ' de ' + n + '…'; });
+            var c = res.cuenta || {}, regs = Object.keys(c).filter(function (k) { return ['insumos', 'recetas', 'fotos'].indexOf(k) < 0; })
+                .reduce(function (t, k) { return t + (c[k] || 0); }, 0);
+            _mig.hecho = '<div class="adm-caja mig-paso mig-hecho"><div class="mig-tit">' + _admIc('adm-pagado', 20) + 'Copia hecha</div>' +
+                '<div class="adm-nota"><b>' + esc(p.sucursalNombre) + '</b> ya está en <b>' + esc(_migNombreNeg(p.destino)) + '</b>: ' + regs + ' registros, ' +
+                    (c.insumos || 0) + ' insumos y ' + (c.recetas || 0) + ' recetas' + (c.fotos ? ', ' + c.fotos + ' fotos' : '') + '. El original sigue igual.</div>' +
+                '<ul class="mig-avisos"><li>Revisa la sucursal en el negocio nuevo (desde Negocios → entrar al negocio).</li>' +
+                    '<li>Cuando esté bien, elimínala del original aquí abajo: su staff pasa al negocio nuevo.</li></ul></div>';
+            _mig.arc = { negocio: p.origen, sucursal: p.sucursal };
+            _mig.plan = null; _mig.datos = null;
+            await cargarDatos();
+            renderMigrar();
+        } catch (e) {
+            if (b) b.disabled = false;
+            if (av) av.textContent = '';
+            admAlert(esc(e.message || e) + '<br><br>Lo que alcanzó a copiarse se queda; vuelve a darle a copiar y termina donde se quedó. El original no se tocó.',
+                { icon:'⚠️', title:'La copia no terminó' });
         }
+    }, { icon: '📋', yesLabel: p.recopia ? 'Sí, actualizar' : 'Sí, copiar', danger: false });
+}
+
+/* ── Eliminar (archivar) una sucursal ── */
+function renderMigEliminar() {
+    var el = document.getElementById('migEliminar'); if (!el) return;
+    var a = _mig.arc, otras = _migSucs(a.negocio), ficha = otras.find(function (x) { return x.id === a.sucursal; });
+    var copia = ficha ? _migCopiaDe(a.negocio, a.sucursal) : null;
+    el.innerHTML = '<div class="adm-caja mig-paso">' +
+        '<div class="form-grid">' +
+            '<div><label class="form-label" for="migArcNeg">Negocio</label>' +
+                '<select id="migArcNeg" class="form-select" onchange="_migArcSel(\'negocio\', this.value)">' + _migOpcionesNeg(a.negocio) + '</select></div>' +
+            '<div><label class="form-label" for="migArcSuc">Sucursal</label>' +
+                '<select id="migArcSuc" class="form-select" onchange="_migArcSel(\'sucursal\', this.value)"' + (a.negocio ? '' : ' disabled') + '>' + _migOpcionesSuc(a.negocio, a.sucursal) + '</select></div>' +
+            (ficha ? '<div><label class="form-label" for="migArcStaff">Su staff</label>' +
+                '<select id="migArcStaff" class="form-select">' +
+                    (copia ? '<option value="' + esc(copia.negocio + '|' + copia.sucursal) + '" selected>Pasa a «' + esc(_migNombreNeg(copia.negocio)) + '» (donde está la copia)</option>' : '') +
+                    '<option value="">Se guarda en el archivo con la sucursal</option>' +
+                '</select></div>' : '') +
+        '</div>' +
+        (ficha ? '<div class="adm-nota" style="margin-top:12px">' +
+            (copia ? 'Hay una copia de esta sucursal en <b>' + esc(_migNombreNeg(copia.negocio)) + '</b>. ' : '') +
+            (ficha.copiaDe ? 'Esta sucursal es una copia que vino de <b>' + esc(_migNombreNeg(ficha.copiaDe.negocio)) + '</b>. ' : '') +
+            'Sus registros salen del negocio y se guardan en el archivo, tal cual: se pueden restaurar. El catálogo no se borra (solo pierde la sucursal).</div>' +
+            '<div class="mig-acciones">' +
+                '<input id="migArcConfirma" class="form-input" style="max-width:280px" autocomplete="off" placeholder="Escribe: ' + esc(ficha.nombre || ficha.id) + '" oninput="_migArcChequeo()">' +
+                '<button class="btn-prim mig-peligro" id="migArcBtn" onclick="migArchivar()" disabled>Eliminar sucursal</button>' +
+            '</div>' : '') +
+        (_mig.hechoArc || '') +
+    '</div>';
+}
+function _migArcSel(k, v) {
+    _mig.arc[k] = v;
+    if (k === 'negocio') _mig.arc.sucursal = '';
+    _mig.hechoArc = '';
+    renderMigEliminar();
+}
+function _migArcChequeo() {
+    var b = document.getElementById('migArcBtn'), i = document.getElementById('migArcConfirma');
+    if (!b) return;
+    var nombre = String(_migNombreSuc(_mig.arc.negocio, _mig.arc.sucursal)).trim().toLowerCase();
+    b.disabled = !(i && String(i.value || '').trim().toLowerCase() === nombre);
+}
+async function migArchivar() {
+    var a = _mig.arc, nombre = _migNombreSuc(a.negocio, a.sucursal);
+    var st = (document.getElementById('migArcStaff') || {}).value || '';
+    var staffA = st ? st.split('|')[0] : null, staffSuc = st ? st.split('|').slice(1).join('|') : null;
+    admConfirm('¿Eliminar «' + esc(nombre) + '» de ' + esc(_migNombreNeg(a.negocio)) + '?',
+        'Sale del negocio y se guarda en el archivo (se puede restaurar).' + (staffA ? ' Su staff pasa a <b>' + esc(_migNombreNeg(staffA)) + '</b>.' : ''), async function () {
+        var cerrar = _admLoading('Eliminando «' + nombre + '»…');
+        var res = await _supabase.rpc('admin_archivar_sucursal', { p_neg: a.negocio, p_suc: a.sucursal, p_staff_a: staffA, p_staff_suc: staffSuc });
         cerrar();
-        // 2) La migración, en una sola transacción.
-        cerrar = _admLoading('Migrando «' + p.sucursalNombre + '»…');
-        var res = await _supabase.rpc('admin_migrar_sucursal', { p_plan: MigSuc.paraServidor(p) });
-        cerrar();
-        if (res.error) {
-            var m = res.error.message || String(res.error);
-            if (/admin_migrar_sucursal|function|schema cache/i.test(m) && /not|no existe|could not find/i.test(m))
-                m = 'Falta correr supabase-migration-v86.sql en Supabase → SQL Editor. ' + m;
-            admAlert(esc(m) + '<br><br>No se movió nada.', { icon:'⚠️', title:'La migración no se aplicó' });
-            return;
-        }
-        var c = (res.data && res.data.cuenta) || {};
-        var mov = Object.keys(c).filter(function (k) { return !/copiad|desvinc/.test(k); }).reduce(function (t, k) { return t + (parseInt(c[k], 10) || 0); }, 0);
-        _mig.plan = null; _mig.datos = null; _mig.respaldo = false; _mig.sel = {};
+        if (res.error) { admAlert(_migErrorRPC(res.error, 'v87') + '<br><br>No se eliminó nada.', { icon:'⚠️', title:'No se eliminó' }); return; }
+        var c = (res.data && res.data.cuenta) || {}, n = Object.keys(c).filter(function (k) { return k !== 'staff_pasado'; }).reduce(function (t, k) { return t + (parseInt(c[k], 10) || 0); }, 0);
+        _mig.hechoArc = '<div class="adm-nota mig-ok-nota">' + _admIc('adm-pagado', 16) + '«' + esc(nombre) + '» se eliminó: ' + n + ' registros guardados en el archivo' +
+            (c.staff_pasado ? ', ' + c.staff_pasado + ' colaborador' + (c.staff_pasado !== 1 ? 'es pasaron' : ' pasó') + ' a ' + esc(_migNombreNeg(staffA)) : '') + '. Se puede restaurar abajo.</div>';
+        _mig.arc = { negocio: a.negocio };
         await cargarDatos();
         renderMigrar();
-        document.getElementById('migPlan').innerHTML =
-            '<div class="adm-caja mig-paso mig-hecho"><div class="mig-tit">' + _admIc('adm-pagado', 20) + 'Migración hecha</div>' +
-            '<div class="adm-nota"><b>' + esc(p.sucursalNombre) + '</b> ya es de <b>' + esc(_migNombreNeg(p.destino)) + '</b>: ' +
-                mov + ' registros mudados, ' + (c.insumos_copiados || 0) + ' insumos y ' + (c.recetas_copiadas || 0) + ' recetas copiados' +
-                (p.fotos.length ? ', ' + p.fotos.length + ' fotos copiadas' : '') + '. Quedó escrita en la bitácora (' + esc((res.data && res.data.id) || '') + ').</div>' +
-            '<ul class="mig-avisos"><li>Vuelve a generar e imprimir los QR de la sucursal desde el negocio nuevo.</li>' +
-                '<li>Pídele al dueño del negocio original que recargue ETAAX en sus equipos.</li></ul></div>';
-    }, { icon: '🔀', yesLabel: 'Sí, migrar' });
+    }, { icon: '🗄️', yesLabel: 'Sí, eliminar' });
+}
+
+/* ── El archivo: sucursales eliminadas, con restaurar ── */
+function _migErrorRPC(err, ver) {
+    var m = (err && err.message) || String(err);
+    if (/function|schema cache|relation|does not exist|could not find/i.test(m) && /not|no existe|could not find|does not exist/i.test(m))
+        return 'Falta correr supabase-migration-' + ver + '.sql en Supabase → SQL Editor. (' + esc(m) + ')';
+    return esc(m);
+}
+async function cargarArchivoMig() {
+    var el = document.getElementById('migArchivo'); if (!el) return;
+    var r = await _supabase.from('admin_sucursales_archivo').select('*').order('created_at', { ascending: false });
+    if (r.error) { el.innerHTML = '<div class="adm-nota">' + _migErrorRPC(r.error, 'v87') + '</div>'; return; }
+    var lista = (r.data || []).filter(function (x) { return !x.restaurada_at; });
+    if (!lista.length) { el.innerHTML = '<div class="adm-caja"><div class="adm-nota">No hay sucursales eliminadas.</div></div>'; return; }
+    el.innerHTML = '<div class="table-wrap"><table class="admin-table"><thead><tr><th>Sucursal</th><th>Negocio</th><th>Eliminada</th><th style="text-align:right">Registros</th><th>Staff</th><th></th></tr></thead><tbody>' +
+        lista.map(function (x) {
+            var d = x.datos || {}, c = d.cuenta || {};
+            var n = Object.keys(c).filter(function (k) { return k !== 'staff_pasado'; }).reduce(function (t, k) { return t + (parseInt(c[k], 10) || 0); }, 0);
+            var f = x.created_at ? new Date(x.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+            return '<tr><td><b>' + esc(d.nombre || x.sucursal_id) + '</b></td><td>' + esc(_migNombreNeg(x.negocio_id)) + '</td><td class="text-dim">' + f + '</td>' +
+                '<td class="mig-n">' + n + '</td><td class="text-dim">' + (d.staffA ? 'pasó a ' + esc(_migNombreNeg(d.staffA)) : ((c.staff || 0) ? 'en el archivo' : '—')) + '</td>' +
+                '<td style="text-align:right"><button class="btn-mini" onclick="migRestaurar(\'' + etaaxJsArg(x.id) + '\')">Restaurar</button></td></tr>';
+        }).join('') + '</tbody></table></div>';
+}
+function migRestaurar(id) {
+    admConfirm('¿Restaurar esta sucursal?', 'Regresa a su negocio idéntica a como estaba (y su staff, si pasó a otro negocio, regresa también).', async function () {
+        var cerrar = _admLoading('Restaurando…');
+        var res = await _supabase.rpc('admin_restaurar_sucursal', { p_id: id });
+        cerrar();
+        if (res.error) { admAlert(_migErrorRPC(res.error, 'v87') + '<br><br>No se restauró nada.', { icon:'⚠️', title:'No se restauró' }); return; }
+        _mig.hechoArc = '<div class="adm-nota mig-ok-nota">' + _admIc('adm-pagado', 16) + 'Sucursal restaurada.</div>';
+        await cargarDatos();
+        renderMigrar();
+    }, { icon: '↩️', yesLabel: 'Sí, restaurar', danger: false });
 }
 
 /* ── LOGOUT ── */
