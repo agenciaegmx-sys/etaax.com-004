@@ -1400,6 +1400,60 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             });
             await ctx.close();
         }
+
+        /* ── V · la nota de una entrada ya registrada (23-nov) ────────────────
+           Edwin: en el Paso 2, meter una entrada suelta a una nota que ya
+           existe, y sacar o cambiar de nota una entrada registrada. */
+        console.log('\n══ V · Meter, sacar y cambiar de nota una entrada registrada ══');
+        {
+            const { cspProduccion } = require('./navegador-comun.cjs');
+            const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV, { csp: cspProduccion(),
+                nube: { negocio_insumos: filasNube(destilados(3)) }, viewport: { width: 1280, height: 800 } }));
+            await nuevoInv(page); await page.waitForTimeout(600);
+            await page.evaluate(() => {
+                const mk = (id, ins, n, nota) => Object.assign({ id, insumoId: ins, nombreProducto: ins, tipo: 'compra', cantidad: n, fecha: '2026-11-17', origen: 'manual' },
+                    nota ? { notaId: 'NA', notaProveedor: 'Coca-Cola', notaFolio: 'A1' } : {});
+                invActual.entradasLog = [mk('v1', 'd000', 6), mk('v2', 'd001', 4, true), mk('v3', 'd002', 2, true)];
+                invActual.entradasLog.forEach(e => getEntradasLog().push(Object.assign({}, e, { nombre: e.insumoId, sucursalId: 'suc_principal' })));
+                irAPaso(2);
+            });
+            await page.waitForTimeout(500);
+            const notaResumen = () => page.evaluate(() => { const s = document.querySelector('#entLogList .eg-nota > summary'); return s ? s.innerText.replace(/\s+/g, ' ').trim() : ''; });
+            await caso('Paso 2: la nota «Coca-Cola · Folio A1» arranca con 2 productos', async () => assert.match(await notaResumen(), /Coca-Cola · Folio A1.*2 productos/));
+            await page.evaluate(() => { const g = [...document.querySelectorAll('#entLogList details.eg:not(.eg-nota)')].find(d => /Destilado 0/.test(d.textContent)); g.open = true; });
+            await page.click('#entLogList details.eg:not(.eg-nota)[open] button[title="Agregar a una nota / factura"]'); await page.waitForTimeout(250);
+            await caso('cada entrada trae su botón de nota: abre la lista de notas (suelta, las que hay y una nueva)', async () => {
+                const ops = await page.evaluate(() => [...document.querySelectorAll('#entNPOv .ent-np-op b')].map(b => b.textContent.trim()));
+                assert.deepEqual(ops, ['Suelta (sin nota)', 'Coca-Cola · Folio A1', '+ Nota nueva']);
+            });
+            await page.screenshot({ path: process.env.CAPTURAS ? process.env.CAPTURAS + '/nota-entrada.png' : '/dev/null' }).catch(() => {});
+            await page.click('#entNPOv .ent-np-op:has-text("Coca-Cola")'); await page.click('#entNPOv .ent-ed-btn.ok'); await page.waitForTimeout(400);
+            await caso('una entrada SUELTA se mete a la nota que ya existe: ahora son 3 productos', async () => {
+                const r = await page.evaluate(() => ({ inv: invActual.entradasLog[0].notaId, glob: getEntradasLog().find(e => e.id === 'v1').notaId, modal: !!document.getElementById('entNPOv') }));
+                assert.deepEqual([r.inv, r.glob, r.modal], ['NA', 'NA', false]);
+                assert.match(await notaResumen(), /Coca-Cola · Folio A1.*3 productos/);
+            });
+            await page.evaluate(() => { document.querySelector('#entLogList .eg-nota').open = true; });
+            await page.click('#entLogList .eg-nota .ent-log-fila:has-text("Destilado 1") button[title="Cambiar de nota o sacarla de la nota"]'); await page.waitForTimeout(250);
+            await page.click('#entNPOv .ent-np-op:has-text("Suelta")'); await page.click('#entNPOv .ent-ed-btn.ok'); await page.waitForTimeout(400);
+            await caso('…y una entrada se SACA de la nota: quedan 2, y la sacada sigue registrada igual', async () => {
+                const r = await page.evaluate(() => { const e = invActual.entradasLog.find(x => x.id === 'v2'); return { nota: e.notaId || '', cant: e.cantidad, n: invActual.entradasLog.length }; });
+                assert.deepEqual([r.nota, r.cant, r.n], ['', 4, 3]);
+                assert.match(await notaResumen(), /2 productos/);
+            });
+            await page.evaluate(() => { const g = [...document.querySelectorAll('#entLogList details.eg:not(.eg-nota)')].find(d => /Destilado 1/.test(d.textContent)); g.open = true; });
+            await page.click('#entLogList details.eg:not(.eg-nota)[open] .ent-log-fila:has-text("Destilado 1") button[title="Agregar a una nota / factura"]').catch(() =>
+                page.evaluate(() => abrirNotaDeEntrada('v2')));
+            await page.waitForTimeout(250);
+            await page.click('#entNPOv .ent-np-op:has-text("Nota nueva")'); await page.waitForTimeout(150);
+            await page.fill('#entNPProv', 'Jumex'); await page.click('#entNPOv .ent-ed-btn.ok'); await page.waitForTimeout(400);
+            await caso('…o se abre una NOTA NUEVA con ella (y ya son dos notas)', async () => {
+                const r = await page.evaluate(() => ({ prov: invActual.entradasLog.find(x => x.id === 'v2').notaProveedor, notas: document.querySelectorAll('#entLogList .eg-nota').length }));
+                assert.deepEqual([r.prov, r.notas], ['Jumex', 2]);
+            });
+            await caso('…sin errores en la página', async () => assert.deepEqual(await page.evaluate(() => window.__errores), []));
+            await ctx.close();
+        }
     } finally {
         await browser.close();
     }

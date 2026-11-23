@@ -17815,6 +17815,59 @@ console.log('\n══ BH81 · Agrupar en nota lo registrado · Paso 3 como Excel
     }
 }
 
+/* ═══════════ SUITE BH82 · LA NOTA DE UNA ENTRADA YA REGISTRADA ═════════════
+   Edwin, 23-nov: desde cada entrada del Paso 2, meter una suelta a una nota
+   que ya existe, sacarla de su nota o cambiarla a otra (o abrir una nueva). */
+console.log('\n══ BH82 · Meter, sacar y cambiar de nota una entrada registrada ══');
+{
+    const antes = { inv: vm.runInContext('invActual', B), filas: vm.runInContext('filasCaptura', B), el: B._cacheEL };
+    const mk = () => [
+        { id: 'e1', insumoId: 'x', cantidad: 6, tipo: 'compra', fecha: '2026-11-20' },
+        { id: 'e2', insumoId: 'y', cantidad: 4, tipo: 'compra', fecha: '2026-11-20', notaId: 'NA', notaProveedor: 'Coca-Cola', notaFolio: 'A1' },
+        { id: 'e3', insumoId: 'z', cantidad: 2, tipo: 'compra', fecha: '2026-11-21', notaId: 'NB', notaProveedor: 'Pepsi', notaFolio: '' },
+    ];
+    const elegir = (id, sel, prov, folio) => { B.abrirNotaDeEntrada(id); B._entNP.sel = sel; if (prov !== undefined) B._entNP.prov = prov; if (folio !== undefined) B._entNP.folio = folio; B.guardarNotaDeEntrada(); };
+    try {
+        setVar(B, 'invActual', null); setVar(B, 'filasCaptura', []);
+        B._cacheEL = mk();
+        test('las notas que se pueden elegir: cada una una vez, con sus productos', () =>
+            eq(B._entNotasDisponibles().map(n => n.id + ':' + n.prov + ':' + n.n).join(','), 'NB:Pepsi:1,NA:Coca-Cola:1'));
+        elegir('e1', 'NA');
+        test('una entrada SUELTA se mete a una nota que ya existe (toma su proveedor y folio)', () => {
+            const e = B._cacheEL[0]; return eq([e.notaId, e.notaProveedor, e.notaFolio, e.cantidad].join('|'), 'NA|Coca-Cola|A1|6');
+        });
+        test('…y la nota ya cuenta 2 productos', () => eq(B._entNotasDisponibles().find(n => n.id === 'NA').n, 2));
+        elegir('e2', 'NB');
+        test('una entrada se CAMBIA de una nota a otra', () => eq(B._cacheEL[1].notaId + '|' + B._cacheEL[1].notaProveedor, 'NB|Pepsi'));
+        elegir('e3', '');
+        test('una entrada se SACA de su nota (en el log global queda `notaId` vacío, a propósito)', () =>
+            eq(JSON.stringify([B._cacheEL[2].notaId, B._cacheEL[2].cantidad]), '["",2]'));
+        const antesN = B._cacheEL[2].notaId;
+        elegir('e3', '__nueva__', '', '');
+        test('una nota nueva sin proveedor ni folio no se crea', () => eq(B._cacheEL[2].notaId, antesN));
+        elegir('e3', '__nueva__', 'Jumex', 'J-9');
+        test('…con proveedor, se abre la nota nueva con esa entrada', () =>
+            eq(!!B._cacheEL[2].notaId && B._cacheEL[2].notaId !== 'NA' && B._cacheEL[2].notaId !== 'NB' && B._cacheEL[2].notaProveedor === 'Jumex' && B._cacheEL[2].notaFolio === 'J-9', true));
+        /* En el Paso 2: las dos casas, con el mismo cambio. */
+        const enInv = mk();
+        setVar(B, 'invActual', { id: 'iN', entradasLog: JSON.parse(JSON.stringify(enInv)), filas: [] });
+        B._cacheEL = JSON.parse(JSON.stringify(enInv));
+        elegir('e1', 'NB');
+        test('en el Paso 2 el cambio va al inventario Y al log global', () =>
+            eq(vm.runInContext('invActual.entradasLog[0].notaId', B) + '|' + B._cacheEL[0].notaId, 'NB|NB'));
+        elegir('e2', '');
+        test('…y sacarla también, en las dos', () =>
+            eq((vm.runInContext('invActual.entradasLog[1].notaId', B) || '') + '|' + B._cacheEL[1].notaId + '|' + B._entNotasHTML(B._cacheEL.filter(e => e.id === 'e2'), () => ''), '||'));
+        test('cada entrada trae su botón de nota (las mermas y cortesías no)', () => {
+            const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+            const i = src.indexOf('function renderListadoEntradas('), j = src.indexOf('\nfunction ', i + 10), cuerpo = src.slice(i, j);
+            return eq((cuerpo.match(/onclick="abrirNotaDeEntrada\(/g) || []).length, 1);
+        });
+    } finally {
+        setVar(B, 'invActual', antes.inv); setVar(B, 'filasCaptura', antes.filas); B._cacheEL = antes.el; B._entNP = null;
+    }
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.

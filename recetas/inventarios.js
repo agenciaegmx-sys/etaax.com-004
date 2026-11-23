@@ -14209,6 +14209,7 @@ const fotoTh = _fotosThumbHTML(e);
             <span class="ent-log-fecha">${e.fecha || '—'}${_horaCapHTML(e)}</span>
             <span class="ent-log-cant">+${cant} ${_unidadCompra(e)}</span>
             ${fotoTh}
+            <button class="ent-log-del" title="${e.notaId ? 'Cambiar de nota o sacarla de la nota' : 'Agregar a una nota / factura'}" onclick="abrirNotaDeEntrada('${e.id}')">${_icInv('nom-recibo')}</button>
             <button class="ent-log-del" title="Editar registro completo" onclick="abrirEditorEntrada('${e.id}')">${_icInv('rec-editar')}</button>
             <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')"
                 onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">${_icInv('mov-eliminar')}</button>
@@ -14425,6 +14426,115 @@ function _entNotaDesagrupar(notaId) {
 /* La nota que se armó (o se deshizo) afuera llega a la copia que ya tiene el
    inventario: el log global manda. Solo si el global la nombra (o la quitó
    con `notaId: ''`): una entrada que nunca tuvo nota no toca nada. */
+/* ══ LA NOTA DE UNA ENTRADA YA REGISTRADA (Edwin, 23-nov) ══════════════════
+   Desde cada entrada (el botón de nota, junto al lápiz): meter una entrada
+   suelta a una nota que ya existe, sacarla de su nota o cambiarla a otra, o
+   abrir una nota nueva con ella. Solo cambia la nota: cantidad, fecha y fotos
+   se quedan. Escribe en las dos casas (inventario y log global); al soltarla,
+   el global se queda con `notaId: ''` para que las copias también la suelten. */
+var _entNP = null;   // { id, sel, prov, folio }
+function _entNotasDisponibles() {
+    var fuente = invActual ? (invActual.entradasLog || []) : getEntradasLog();
+    var suc = invActual ? '' : _sucActiva(), por = {}, orden = [];
+    (fuente || []).forEach(function (e) {
+        if (!e || e.borrada || !e.notaId) return;
+        if (suc && (e.sucursalId || '') !== suc) return;
+        if (!por[e.notaId]) { por[e.notaId] = { id: e.notaId, prov: e.notaProveedor || '', folio: e.notaFolio || '', fecha: e.fecha || '', n: 0 }; orden.push(e.notaId); }
+        var o = por[e.notaId]; o.n++;
+        if (String(e.fecha || '') > String(o.fecha || '')) o.fecha = e.fecha;
+    });
+    return orden.map(function (k) { return por[k]; })
+        .sort(function (a, b) { return String(b.fecha || '').localeCompare(String(a.fecha || '')); });
+}
+function _entNotaNombre(n) {
+    return [n.prov, n.folio ? 'Folio ' + n.folio : ''].filter(Boolean).join(' · ') || 'Nota sin proveedor';
+}
+function abrirNotaDeEntrada(id) {
+    if (!invActual && typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
+    var e = _entBuscarPorId(id);
+    if (!e) { alert('No se encontró la entrada.'); return; }
+    _entNP = { id: id, sel: e.notaId || '', prov: '', folio: '' };
+    _entNPPintar();
+}
+function cerrarNotaDeEntrada() {
+    _entNP = null;
+    var ov = document.getElementById('entNPOv'); if (ov) ov.remove();
+}
+function _entNPElegir(v) { if (!_entNP) return; _entNP.sel = v; _entNPPintar(); }
+function _entNPPintar() {
+    if (!_entNP) return;
+    var e = _entBuscarPorId(_entNP.id); if (!e) { cerrarNotaDeEntrada(); return; }
+    var ov = document.getElementById('entNPOv');
+    if (!ov) {
+        ov = document.createElement('div'); ov.id = 'entNPOv'; ov.className = 'ent-ed-ov';
+        ov.onclick = function (ev) { if (ev.target === ov) cerrarNotaDeEntrada(); };
+        document.body.appendChild(ov);
+    }
+    var actual = e.notaId || '', notas = _entNotasDisponibles();
+    var op = function (v, tit, sub, chip) {
+        var on = _entNP.sel === v;
+        return '<button type="button" class="ent-np-op' + (on ? ' on' : '') + '" onclick="_entNPElegir(\'' + etaaxJsArgInv(v) + '\')">' +
+            '<span class="ent-np-radio"></span><span class="ent-np-txt"><b>' + etx(tit) + '</b>' + (sub ? '<small>' + etx(sub) + '</small>' : '') + '</span>' +
+            (chip ? '<span class="ent-np-chip">' + etx(chip) + '</span>' : '') + '</button>';
+    };
+    var meta = _entMetaHTML(e);
+    ov.innerHTML = '<div class="ent-ed-card ent-np-card">' +
+        '<div class="ent-ed-hd"><span>' + _icInv('nom-recibo', 18) + 'Nota / factura</span><button onclick="cerrarNotaDeEntrada()" aria-label="Cerrar">✕</button></div>' +
+        '<div class="ent-ed-body">' +
+            '<div class="ent-np-ent"><b>' + etx(_entTituloTxt(e)) + '</b>' + (meta ? '<small>' + meta + '</small>' : '') +
+                '<span>+' + etx(String(parseFloat(e.cantidad) || 0)) + ' ' + etx(_unidadCompra(e)) + ' · ' + etx(e.fecha || '—') + '</span></div>' +
+            '<div class="ent-ed-lbl" style="margin-top:14px">¿En qué nota va?</div>' +
+            '<div class="ent-np-lista">' +
+                op('', 'Suelta (sin nota)', actual ? 'La saca de su nota; la entrada se queda igual' : '', actual ? '' : 'Ahora') +
+                notas.map(function (n) {
+                    return op(n.id, _entNotaNombre(n), (n.fecha || '—') + ' · ' + n.n + ' producto' + (n.n !== 1 ? 's' : ''), n.id === actual ? 'Ahora' : '');
+                }).join('') +
+                op('__nueva__', '+ Nota nueva', 'Con esta entrada; después le puedes sumar otras', '') +
+            '</div>' +
+            (_entNP.sel === '__nueva__' ? '<div class="ent-np-nueva">' +
+                '<input id="entNPProv" class="ent-ed-inp" type="text" autocomplete="off" placeholder="Proveedor" value="' + etx(_entNP.prov) + '" oninput="_entNP.prov=this.value">' +
+                '<input id="entNPFolio" class="ent-ed-inp" type="text" autocomplete="off" placeholder="Folio (opcional)" value="' + etx(_entNP.folio) + '" oninput="_entNP.folio=this.value">' +
+            '</div>' : '') +
+            (!notas.length ? '<div class="ent-np-vacio">Todavía no hay notas registradas' + (invActual ? ' en este periodo' : '') + '. Puedes abrir una nueva con esta entrada.</div>' : '') +
+            '<div class="ent-ed-acc">' +
+                '<button class="ent-ed-btn" onclick="cerrarNotaDeEntrada()">Cancelar</button>' +
+                '<button class="ent-ed-btn ok" onclick="guardarNotaDeEntrada()">Guardar</button>' +
+            '</div>' +
+        '</div></div>';
+    if (_entNP.sel === '__nueva__') { var pi = document.getElementById('entNPProv'); if (pi && !_entNP.prov) pi.focus(); }
+}
+function guardarNotaDeEntrada() {
+    if (!_entNP) return;
+    if (!invActual && typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
+    var e = _entBuscarPorId(_entNP.id); if (!e) { cerrarNotaDeEntrada(); return; }
+    var sel = _entNP.sel, campos, aviso;
+    if (sel === '') {
+        if (!e.notaId) { cerrarNotaDeEntrada(); return; }
+        campos = { notaId: '', notaFolio: '', notaProveedor: '' };
+        aviso = 'Entrada sacada de la nota';
+    } else if (sel === '__nueva__') {
+        var prov = String(_entNP.prov || '').trim(), folio = String(_entNP.folio || '').trim();
+        if (!prov && !folio) { alert('Escribe el proveedor o el folio de la nota nueva.'); return; }
+        campos = { notaId: genId() + genId(), notaFolio: folio, notaProveedor: prov };
+        aviso = 'Nota nueva: ' + _entNotaNombre({ prov: prov, folio: folio });
+    } else {
+        if (sel === (e.notaId || '')) { cerrarNotaDeEntrada(); return; }
+        var n = null; _entNotasDisponibles().forEach(function (x) { if (x.id === sel) n = x; });
+        if (!n) { alert('Esa nota ya no existe.'); return; }
+        campos = { notaId: n.id, notaFolio: n.folio, notaProveedor: n.prov };
+        aviso = 'Agregada a la nota ' + _entNotaNombre(n);
+    }
+    _entAplicarCambios(_entNP.id, campos, null);
+    if (campos.notaId) _entGruposAbiertos['nota|' + campos.notaId] = true;   // se abre para verla
+    cerrarNotaDeEntrada();
+    _entAviso(aviso);
+    renderListadoEntradas();
+}
+// Un id de nota dentro de un onclick: es un dato, no código.
+function etaaxJsArgInv(v) { return (typeof window.etaaxJsArg === 'function') ? window.etaaxJsArg(v) : String(v).replace(/[^A-Za-z0-9_-]/g, ''); }
+window.abrirNotaDeEntrada = abrirNotaDeEntrada; window.guardarNotaDeEntrada = guardarNotaDeEntrada;
+window.cerrarNotaDeEntrada = cerrarNotaDeEntrada; window._entNPElegir = _entNPElegir;
+
 function _entSyncNotaEnInv(e) {
     if (!invActual || !e || !e.id || !('notaId' in e)) return false;
     var c = null;
