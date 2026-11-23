@@ -17868,6 +17868,71 @@ console.log('\n══ BH82 · Meter, sacar y cambiar de nota una entrada registr
     }
 }
 
+/* ═══════════ SUITE BH83 · MIGRAR UNA SUCURSAL: EL PLAN ════════════════════
+   Edwin, 23-nov. El plan lo arma admin-migrar-sucursal.js y lo aplica la
+   función de la v86 (la prueba de punta a punta contra Postgres está en
+   tests/probar-sql-v86.mjs). Aquí, las reglas del plan, en cada push. */
+console.log('\n══ BH83 · Migrar una sucursal: el plan ══');
+{
+    const M = vm.createContext({ console, JSON, Object, Array, String, Math });
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'admin-migrar-sucursal.js'), 'utf8'), M);
+    const Mig = M.MigSuc, S = 'suc_mia';
+    const r = (id, d) => ({ id, datos: Object.assign({ id }, d) });
+    const ri = (id, d) => ({ insumo_id: id, datos: Object.assign({ id }, d) });
+    const datos = () => ({
+        origen: { negocio: { id: 'A' }, docs: {
+            negocio_sucursales: { datos: { sucursales: [{ id: 'suc_principal', nombre: 'Matriz' }, { id: S, nombre: 'El Miami' }], cfg: { [S]: { color: 'azul' } } }, updated_at: 't1' } },
+          tablas: {
+            cortes: [r('c1', { sucursalId: S, foto: 'priv:A/cortes/f.jpg' }), r('c2', {}), r('c3', { sucursalId: 'suc_tul' })],
+            staff: [r('st1', { sucursalId: S })], nomina_recibos: [r('nr1', { staffId: 'st1' })],
+            negocio_insumos: [ri('i1', { sucursales: ['suc_principal', S] }), ri('i3', { sucursales: ['suc_principal'] }), ri('i3c', { origenId: 'i3', sucursales: [S] }), ri('i9', { sucursales: ['suc_tul'] })],
+            recetas: [r('r1', { sucursales: [S], ingredientes: [{ insumoId: 'i3' }] }), r('r2', { sucursales: ['suc_tul'] })],
+            inventarios: [r('inv1', { sucursalId: S, cocktailsVendidos: { r1: 2 } })] } },
+        destino: { negocio: { id: 'B' }, docs: { negocio_sucursales: null }, tablas: { negocio_insumos: [] } }
+    });
+    const plan = (o) => Mig.planear(Object.assign({ origen: datos().origen, destino: datos().destino, sucursal: S }, o || {}));
+    test('la Matriz no se migra con esto (sus registros viejos no traen sello)', () =>
+        eq(/Matriz/.test(plan({ sucursal: 'suc_principal' }).bloqueos[0] || ''), true));
+    test('origen y destino tienen que ser distintos', () =>
+        eq(/otro negocio/.test(Mig.planear({ origen: datos().origen, destino: datos().origen, sucursal: S }).bloqueos[0] || ''), true));
+    const p = plan();
+    test('se mudan las tablas de la sucursal (con su staff) y sus recibos lo siguen', () =>
+        eq(p.tablas.indexOf('cortes') > -1 && p.tablas.indexOf('staff') > -1 && p.hijos.some(h => h.tabla === 'nomina_recibos' && h.padre === 'staff'), true));
+    test('el resumen cuenta solo lo de la sucursal (no la Matriz ni Tulum)', () =>
+        eq(p.resumen.find(x => x.lbl === 'Cortes de caja').mueve, 1));
+    test('el catálogo se COPIA: la versión de la sucursal bajo el id canónico; nada de otras sucursales', () =>
+        eq(p.insumos.map(x => x.desde + '>' + x.id).sort().join(','), 'i1>i1,i3c>i3'));
+    test('…y en el origen solo pierde la sucursal (nada se borra)', () =>
+        eq(p.quitarInsumos.sort().join(',') + '|' + p.quitarRecetas.join(','), 'i1,i3c|r1'));
+    test('las recetas llevan id NUEVO y lo que las nombra se cambia (remap)', () =>
+        eq(p.remap.r1 === Mig.idRecetaNueva('r1', 'B', S) && p.recetas.length === 1, true));
+    test('…el id nuevo es estable (armar el plan otra vez da el mismo)', () =>
+        eq(plan().recetas[0].id, p.recetas[0].id));
+    test('las fotos privadas cambian a la carpeta del destino', () =>
+        eq(p.remap['priv:A/cortes/f.jpg'] + '|' + p.fotos[0].hacia, 'priv:B/cortes/f.jpg|B/cortes/f.jpg'));
+    test('la sucursal sale del documento del origen y entra al del destino (que la crea con su Matriz)', () => {
+        const a = p.docs.find(d => d.negocio_id === 'A'), b = p.docs.find(d => d.negocio_id === 'B');
+        return eq(a.datos.sucursales.map(s => s.id).join(',') + '|' + b.datos.sucursales.map(s => s.id).join(',') + '|' + b.datos.cfg[S].color + '|' + a.si_updated_at,
+                  'suc_principal|suc_principal,' + S + '|azul|t1');
+    });
+    test('sin staff: no va su tabla ni sus recibos, y se avisa', () => {
+        const q = plan({ conStaff: false });
+        return eq(q.tablas.indexOf('staff') + '|' + q.hijos.length + '|' + q.avisos.some(x => /se quedan/.test(x)), '-1|1|true');
+    });
+    test('lo que viaja al servidor no lleva la pantalla (avisos, bloqueos)', () => {
+        const s = Mig.paraServidor(p);
+        return eq(['origen', 'destino', 'sucursal', 'tablas', 'docs', 'insumos', 'recetas', 'remap'].every(k => k in s) && !('avisos' in s) && !('bloqueos' in s), true);
+    });
+    test('la migración v86 corre en UNA transacción, solo para el admin, y la Matriz no', () => {
+        const sql = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v86.sql'), 'utf8');
+        return eq(/SECURITY DEFINER/.test(sql) && /IF NOT is_platform_admin\(\)/.test(sql) && /v_suc = 'suc_principal'/.test(sql) && /cambió mientras revisabas/.test(sql), true);
+    });
+    test('el panel admin ofrece la herramienta (ya no «Próximamente») y carga el motor', () => {
+        const h = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
+        return eq(/id:'migrar', tipo:'panel'/.test(h) && /<script src="\/admin-migrar-sucursal\.js\?v=/.test(h) && /id="tab-migrar"/.test(h), true);
+    });
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.
