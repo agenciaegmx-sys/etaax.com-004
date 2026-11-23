@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 module.exports=function({test,eq,crearContexto,cargarJS}){
     const c=crearContexto();cargarJS(c,'etaax-core.js');
     const src=fs.readFileSync(path.resolve(__dirname,'../recetas/inventarios.js'),'utf8');
-    ['_camposSalida','_c2Copas','_c2Previo','updCortesia2','_cortPartes','_cortPartesJuntas','_s5CortHTML','_salidaBotellasCopas','_aporteBotellaAnterior','_salidaSuelta','_actualizarSalida','updVentasDirectas','_recomputarMovsQR','calcExistenciaTeorica','_filaConDatos','_comentarioVentaHTML','_umCampo','_capturaOZ','_copAUm','_umACop','updVentasUM'].forEach(n=>{
+    ['_camposSalida','_c2Copas','_c2Previo','updCortesia2','_cortPartes','_cortPartesJuntas','_s5CortCelda','_s5c2','_salidaBotellasCopas','_aporteBotellaAnterior','_salidaSuelta','_actualizarSalida','updVentasDirectas','_recomputarMovsQR','calcExistenciaTeorica','_filaConDatos','_comentarioVentaHTML','_umCampo','_capturaOZ','_copAUm','_umACop','updVentasUM'].forEach(n=>{
         const a=src.indexOf('function '+n+'(');let i=src.indexOf('{',a),d=0;
         if(a<0)throw Error(n);
         for(;i<src.length;i++){if(src[i]==='{')d++;else if(src[i]==='}'&&!--d)break;}
@@ -101,12 +101,14 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         const f={insumoId:'cer',tipo:'pza',contNeto:355,cortesiaConcepto:'Cortesía',cortesia2Concepto:'Consumo interno'};c.filasCaptura=[f];c.getEntradasLog=()=>[];
         c.updVentasDirectas(0,'cortesiaCopas',56);c.updCortesia2(0,'cortesia2Copas',6);
         const ps=c._cortPartes(f);eq(ps.map(p=>p.concepto+':'+p.copas).join(','),'Cortesía:56,Consumo interno:6');
-        const h=c._s5CortHTML(ps,f.cortesiaCopas,x=>x+' pza').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-        eq(h,'62 pza Cortesía 56 pza Consumo interno 6 pza');
+        const h=c._s5CortCelda(ps,f.cortesiaCopas,x=>x+' pza').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        // Sin el título fijo: cada concepto con su cantidad y abajo el total (23-nov, 2ª vuelta).
+        eq(h,'Cortesía 56 pza Consumo interno 6 pza Total 62 pza');
     });
-    test('…con un solo concepto de cortesía «normal», solo el total (sin ruido)',()=>{
-        eq(c._s5CortHTML([{concepto:'Cortesía',copas:3}],3,x=>x+' cop').replace(/<[^>]*>/g,''),'3 cop');
-        eq(c._s5CortHTML([],0,x=>x),'—');
+    test('…con un solo concepto, el concepto ES el título, con su cantidad (sin «Cortesías» fijo)',()=>{
+        eq(c._s5CortCelda([{concepto:'Producción del restaurante',copas:3}],3,x=>x+' cop').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),'Producción del restaurante 3 cop');
+        eq(c._s5CortCelda([],0,x=>x).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),'Cortesías —');
+        eq(/&lt;b&gt;/.test(c._s5CortCelda([{concepto:'<b>',copas:1}],1,x=>x)),true);
     });
     test('…y en un compuesto, los conceptos de sus presentaciones se juntan por nombre',()=>{
         const a={tipo:'pza',cortesiaCopas:4,cortesiaConcepto:'Cortesía'},b={tipo:'pza',cortesiaCopas:5,_c2Previo:2,cortesia2Copas:2,cortesiaConcepto:'cortesía',cortesia2Concepto:'Consumo interno'};

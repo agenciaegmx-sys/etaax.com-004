@@ -107,7 +107,7 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
        RENGLÓN la use: un motor correcto que la pantalla no llama se ve igual de
        verde. Así que se corre `_rowCopa`, el constructor real de la fila de
        barra, y se lee lo que deja en el HTML. */
-    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch','_s5c2','_s5sub','_s5Comentarios','_s5ExistHTML','_s5CortHTML','_cortPartes','_cortPartesJuntas','_c2Copas','_c2Previo','_salidaBotellasCopas','_s5dinero','_s5Pct','_s5Uso','_mlTxt','_eqCopOz']);
+    cargar('recetas/inventarios.js',['_equivBarra','_nEquiv','_equivBarraHTML','_fmtBase','_fmtCop','_fmtCopSgn','_fmtContenido','_rowCopa','_pctVarianza','_usoTotal','_medidaInsumo','_fmtEquivalenteBatch','_s5c2','_s5sub','_s5Comentarios','_s5ExistHTML','_s5CortCelda','_cortPartes','_cortPartesJuntas','_c2Copas','_c2Previo','_salidaBotellasCopas','_s5dinero','_s5Pct','_s5Uso','_mlTxt','_eqCopOz']);
     /* Lo que la fila pide del resto del módulo y no es asunto de esta prueba.
        Todo en cero para que los números que se afirman abajo sean los del
        fixture y no el resultado de otra cosa. */

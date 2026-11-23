@@ -10467,12 +10467,16 @@ function _cortPartesJuntas(filas) {
     });
     return orden.map(function (k) { return porC[k]; });
 }
-function _s5CortHTML(partes, total, fmt) {
-    if (!(total > 0)) return '—';
-    var h = '<b style="color:var(--viol)">' + fmt(total) + '</b>';
-    var ver = partes.length > 1 || (partes.length === 1 && partes[0].concepto.toLowerCase() !== 'cortesía');
-    if (ver) h += partes.map(function (p) { return '<div class="s5-exl s5-cort">' + etx(p.concepto) + ' <b>' + fmt(p.copas) + '</b></div>'; }).join('');
-    return h;
+/* La celda de las cortesías en el Resultado (Edwin, 23-nov, 2ª vuelta): sin el
+   título fijo «Cortesías». El título ES el concepto (el de la primera opción)
+   con su cantidad; con dos conceptos, cada uno con la suya y abajo el TOTAL,
+   que es lo que entra al resultado. Sin cortesía, «Cortesías —» como siempre. */
+function _s5CortCelda(partes, total, fmt) {
+    if (!(total > 0)) return _s5c2('Cortesías', '—');
+    if (partes.length <= 1) return _s5c2(etx(partes.length ? partes[0].concepto : 'Cortesía'), '<b class="s5-cv">' + fmt(total) + '</b>');
+    return '<div class="s5-c2 s5-cort2">' + partes.map(function (p, i) {
+        return '<span class="' + (i ? 's5-cl' : 's5-l') + '">' + etx(p.concepto) + '</span><b class="s5-cv">' + fmt(p.copas) + '</b>';
+    }).join('') + '<div class="s5-ct"><span class="s5-cl">Total</span><b>' + fmt(total) + '</b></div></div>';
 }
 window.updCortesia2Calc = updCortesia2Calc; window.abrirCortesia2 = abrirCortesia2; window.quitarCortesia2 = quitarCortesia2;
 window._setCortConcepto = _setCortConcepto;
@@ -10724,7 +10728,12 @@ function _estiloS5() {
         '.s5-lim{font-size:12.5px;color:var(--text-muted);margin-top:4px}' +
         '.s5-tabla{--s5-amarillo:#f5c842}[data-theme="light"] .s5-tabla{--s5-amarillo:#b38600}' +
         '.s5-tabla .s5-exl{font-size:10.5px;font-weight:400;color:var(--text-dim);margin-top:1px;white-space:normal!important}' +
-        '.s5-tabla .s5-cort b{white-space:nowrap}' +   /* cortesía en dos conceptos: la cantidad no se parte */
+        /* Cortesías: el concepto es el título; con dos, cada uno y abajo el total. */
+        '.s5-tabla .s5-c2 b.s5-cv{color:var(--viol);white-space:nowrap}' +
+        '.s5-c2 .s5-cl{display:block;font-size:10.5px;font-weight:500;letter-spacing:.3px;line-height:1.25;text-transform:uppercase;color:var(--text-dim);margin:7px 0 2px;white-space:normal}' +
+        '.s5-c2 .s5-ct{border-top:1px dashed var(--border);margin-top:7px;padding-top:5px}' +
+        '.s5-c2 .s5-ct .s5-cl{margin-top:0}' +
+        '.s5-c2 .s5-ct b{white-space:nowrap}' +
         '.s5-exb{font-size:12.5px;font-weight:600;color:var(--viol);margin-top:4px;white-space:normal}' +
         '.s5-ext{font-size:13px;font-weight:700;color:var(--text);margin-top:1px;white-space:normal;border-top:1px solid var(--border);padding-top:2px}' +
         // En su propio renglón, centrado bajo la cifra (display:table encoge al texto).
@@ -10764,6 +10773,8 @@ function _estiloS5Papel() {
         '.s5-papel .s5-r1 .s5-nom{font-size:11px!important}' +
         '.s5-papel .s5-r1 .s5-cont{font-size:8.5px!important}' +
         '.s5-papel .s5-c2 .s5-l,.s5-papel .s5-l{font-size:7px!important;letter-spacing:.2px!important;margin-bottom:1px!important}' +
+        '.s5-papel .s5-c2 .s5-cl{font-size:7px!important;letter-spacing:.2px!important;margin:3px 0 1px!important}' +
+        '.s5-papel .s5-c2 .s5-ct{margin-top:3px!important;padding-top:2px!important}' +
         '.s5-papel .s5-sub,.s5-papel .s5-mini{font-size:8px!important}' +
         '.s5-papel .s5-coms{font-size:8.5px;flex-basis:100px}' +
         '.s5-papel .s5-lim{font-size:8px!important}' +
@@ -11474,7 +11485,7 @@ function _step5TablasArmar(opts) {
                 <td style="text-align:center">${_s5c2('Desglose', (_eqCopOz(ea, fila) || '—') + (_conBat ? _s5sub('total ' + _eqCopOz(ea + _enB.ea, fila)) : ''))}</td>
                 <td style="text-align:center">${_costoOk ? _s5c2('Costo', entDinero > 0 ? '<b>' + _s5dinero(entDinero).replace('+', '') + '</b>' : '—') : ''}</td>
                 <td colspan="2" style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${_s5Uso(coctSolo, prodPBver, _fc, parseFloat(fila.copaML) > 0 ? (x) => _mlTxt(x * parseFloat(fila.copaML)) : null)}</td>
-                <td style="text-align:center">${_s5c2('Cortesías', _s5CortHTML(_cortPartes(fila), cortesia, _fc))}</td>
+                <td style="text-align:center">${_s5CortCelda(_cortPartes(fila), cortesia, _fc)}</td>
                 <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(teorico + (_conBat ? _enB.ea : 0), fila))}</td>
                 <td style="text-align:center">${_s5c2('Desglose', _eqCopOz(fisico, fila) + (_conBat ? _s5sub('total ' + _eqCopOz(fisico + _enB.fis, fila)) : ''))}</td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
@@ -11545,7 +11556,7 @@ function _step5TablasArmar(opts) {
                 <td></td>
                 <td style="text-align:center">${_costoOk ? _s5c2('Costo', entDinP > 0 ? '<b>' + _s5dinero(entDinP).replace('+', '') + '</b>' : '—') : ''}</td>
                 <td style="text-align:center;cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${_s5Uso(coctSoloP, prodPBpVer, cant)}</td>
-                <td style="text-align:center">${peso ? '' : _s5c2('Cortesías', _s5CortHTML(_cortPartes(fila), cortP, cant))}</td>
+                <td style="text-align:center">${peso ? '' : _s5CortCelda(_cortPartes(fila), cortP, cant)}</td>
                 <td></td>
                 <td></td>
                 <td style="text-align:center;color:${color}">${_s5c2(pc.lbl, pc.html)}</td>
@@ -11668,7 +11679,7 @@ function _step5TablasArmar(opts) {
         const _fin1 = `
             <td style="text-align:center;font-weight:700;color:${color}">${_s5c2('Diferencia', (dif>=0?'+':'') + _nc(dif) + ' ' + (esPzaComp0 ? 'pza' : uC.mov) + (esPzaComp0 ? '' : _s5sub(_grupo(calcDiferencia, {signo:true, sinCopas:true}))))}</td>
             <td style="text-align:right;font-weight:600;color:${color}">${_s5c2('A carta', _s5dinero(difCosto))}</td>`;
-        const _cort = (u) => `<td style="text-align:center">${_s5c2('Cortesías', _s5CortHTML(_cortPartesJuntas(members), cortC, (x) => _nc(x) + ' ' + u))}</td>`;
+        const _cort = (u) => `<td style="text-align:center">${_s5CortCelda(_cortPartesJuntas(members), cortC, (x) => _nc(x) + ' ' + u)}</td>`;
         const _fin2 = `
             <td style="text-align:center;color:${color}">${_s5c2(pcC.lbl, pcC.html)}</td>
             <td style="text-align:right;color:${color};white-space:nowrap">${_costoOk ? _s5c2('A proveedor', '<b style="color:inherit">' + _s5dinero(difProvC) + '</b>') : ''}</td>`;

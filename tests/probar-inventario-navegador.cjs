@@ -1051,7 +1051,7 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                     const m = [...document.querySelectorAll('tr.s5-mem.s5-r1')], comp = m[0] && m[0].parentElement.querySelector('tr.s5-r1:not(.s5-mem)');
                     const ipa = m.find(x => /IPA/.test(x.textContent));
                     return { n: m.length, vis: m.filter(x => x.offsetParent).length, celdas: m.map(x => x.children.length), compCeldas: comp && comp.children.length,
-                             cortesia: ipa && /Cortesías\s*1 pza\s*Músicos\s*1 pza/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')),
+                             cortesia: ipa && /Músicos\s*1 pza/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')) && !/Cortesías/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')),
                              /* 23-nov: el concepto va en la celda de cortesías, con su cantidad; ya no se repite en comentarios. */
                              coment: ipa && !/Comentarios[^]*Músicos/i.test(ipa.nextElementSibling.innerText.replace(/\s+/g, ' ')),
                              tablaVieja: !!document.querySelector('#step5Tablas tr[id^="compDesg-"]') }; });
@@ -1356,12 +1356,12 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await page.evaluate(() => irAPaso(5)); await page.waitForTimeout(900);
             // textContent: el grupo puede estar plegado (innerText de lo oculto es vacío).
             const celdaCort = () => page.evaluate(() => { const tr = [...document.querySelectorAll('#step5Tablas tr.s5-r1')].find(r => /Destilado 1(?!\d)/.test(r.textContent));
-                const r2 = tr && tr.nextElementSibling; const td = r2 && [...r2.querySelectorAll('td')].find(x => /Cortesías/.test(x.textContent)); return td ? td.textContent.replace(/\s+/g, ' ').trim() : ''; });
-            await caso('Resultado: en el lugar de las cortesías, el total y cada concepto con su cantidad', async () =>
-                assert.match(await celdaCort(), /^Cortesías\s*9(\.0)? cop.*Consumo interno 6(\.0)? cop.*Cortesía 3(\.0)? cop/i));
+                const r2 = tr && tr.nextElementSibling; const td = r2 && [...r2.querySelectorAll('td')].find(x => x.querySelector('.s5-cv')); return td ? td.textContent.replace(/\s+/g, ' ').trim() : ''; });
+            await caso('Resultado: sin título fijo, cada concepto con su cantidad y abajo el total', async () =>
+                assert.match(await celdaCort(), /^Consumo interno\s*6(\.0)? cop\s*Cortesía\s*3(\.0)? cop\s*Total\s*9(\.0)? cop$/i));
             await page.evaluate(() => verReporteDirectivo(false, 'desglose')); await page.waitForTimeout(1500);
             await caso('…y el impreso (desglose) dice lo mismo', async () =>
-                assert.match(await page.evaluate(() => document.getElementById('rd-pages').innerText.replace(/\s+/g, ' ')), /Cortesías 9(\.0)? cop Consumo interno 6(\.0)? cop Cortesía 3(\.0)? cop/i));
+                assert.match(await page.evaluate(() => document.getElementById('rd-pages').innerText.replace(/\s+/g, ' ')), /Consumo interno 6(\.0)? cop Cortesía 3(\.0)? cop Total 9(\.0)? cop/i));
             await page.evaluate(() => { const o = document.getElementById('rdOverlay'); if (o) o.remove(); verReporteDirectivo(false); }); await page.waitForTimeout(1500);
             await caso('…y en el reporte directivo, la tabla de cortesías trae un renglón por concepto', async () => {
                 const txt = await page.evaluate(() => document.getElementById('rd-pages').innerText.replace(/\s+/g, ' '));

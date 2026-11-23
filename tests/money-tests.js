@@ -35550,7 +35550,7 @@ console.log('\n══ BH76 · El resultado en dos renglones, por columnas ══
         eq(sp.uno[4] + ' | ' + /Cancelaciones/.test(h), 'Mermas 1 pza | false'));
     /* 23-nov (Edwin): el concepto de la cortesía va en SU celda, con su
        cantidad (puede haber dos: cortesía y consumo interno, por ejemplo). */
-    test('…y las cortesías abajo de las mermas, con su concepto y su cantidad', () => eq(sp.dos[4], 'Cortesías 1 pza Cumpleaños mesa 4 1 pza'));
+    test('…y las cortesías abajo de las mermas: su concepto es el título, con su cantidad', () => eq(sp.dos[4], 'Cumpleaños mesa 4 1 pza'));
     /* 19-nov (Edwin): los comentarios ensuciaban las columnas de números; van
        juntos en el hueco junto al ⋯, cada uno con su nombre. */
     test('los comentarios van juntos junto al ⋯ (el de la cortesía ya no: va en su celda)', () =>
