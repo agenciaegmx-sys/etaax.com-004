@@ -7,7 +7,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>etaax – Acceso</title>
 <script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
-<script src="/page-guard.js?v=4c811fa3"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
+<script src="/page-guard.js?v=b4c13e80"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
 <script src="/precios.js?v=f98b43e7"></script>
 <script src="/datos-pago.js?v=6d6c3543"></script><!-- datos de transferencia y contacto: fuente única -->
 <script src="/etaax-core.js?v=a88c0cd1"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
@@ -613,6 +613,20 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 .priv-check-label{font-size:12px;color:var(--muted);line-height:1.5;}
 .priv-check-label a{color:var(--green);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--greend);}
 .priv-check-label a:hover{color:var(--green2);}
+
+/* ── STAFF ETAAX (v88): lo que es del dueño no se le ofrece ──────────────────
+   Configurar sucursales, abrir una nueva, el precio del plan. Los globales
+   (catálogos y financiero de todas las sucursales) solo con acceso a todas. */
+body.etx-staff .hub-suc-ajustes,
+body.etx-staff #btnNuevaSucWrap,
+body.etx-staff #formNuevaSuc,
+body.etx-staff #planLimitMsgSuc,
+body.etx-staff #negViewUserPlan,
+body.etx-staff #brandInfoBar .user-badge,
+body.etx-staff .hub-guide { display:none !important; }
+/* Sin el botón de ajustes, el de entrar ocupa todo el renglón. */
+body.etx-staff .hub-suc-actions { grid-template-columns:minmax(0,1fr) !important; }
+body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
 </style>
 <link rel="stylesheet" href="/hub-paleta.css?v=0ae181b1">
 <link rel="stylesheet" href="/hub-globales.css?v=e52b7f71">
@@ -893,6 +907,7 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
         <button class="btn-cambiar-neg ic-fila" id="btnInfoSuc" onclick="abrirInfoSucursal()" title="Ver información de la sucursal" style="display:none"><span id="icInfoSucursal" aria-hidden="true"></span>Información de sucursal</button>
         <button class="btn-cambiar-neg" id="btnCatGlobal" onclick="abrirCatalogosGlobales()" title="Catálogos globales de todas las sucursales" style="display:none">🌐 Catálogos Globales</button>
         <button class="btn-cambiar-neg" id="btnVolverAdmin" onclick="volverAlAdmin()" style="display:none;border-color:var(--gold);color:var(--gold)">← Panel Admin</button>
+        <button class="btn-cambiar-neg" id="btnEtxSucursales" onclick="_etxVerSucursales()" style="display:none">← Sucursales</button>
         <!-- Salir ya no vive aquí: está en el menú de la cuenta, arriba. Tenerlo en
              los dos sitios era ofrecer la misma salida dos veces en la misma
              pantalla, y la de arriba está siempre a la vista porque la barra es
@@ -1161,6 +1176,7 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 <script src="/etaax-store.js?v=3bbcc75c"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="staff-auth.js"></script>
+<script src="/staff-etaax.js?v=9c3b389b"></script><!-- Staff ETAAX: el equipo de ETAAX en varios negocios (v88) -->
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -1295,6 +1311,7 @@ async function _leerSuscripcion(negId) {
 async function _gateSuscripcion(neg) {
     if (!neg || !neg.id) return;                              // hub general / sin negocio
     if (_sesion && _sesion.isAdmin) return;                  // admin maestro en modo negocio → libre
+    if (_sesion && _sesion.etx) return;                      // Staff ETAAX → libre (es de la plataforma)
     var sub = await _leerSuscripcion(neg.id);
     /* El recordatorio de "tu próximo cobro en N días" queda APAGADO a propósito:
        salía en cada entrada al hub aunque faltaran tres semanas, y a esa distancia
@@ -1671,6 +1688,7 @@ var ROLES_STAFF = {
     mesero:         { label:'Mesero',          color:'#9b8de8' },
     administrativo: { label:'Administrativo',  color:'#f5c842' },
     otro:           { label:'Colaborador',     color:'#7a7570' },
+    etaax_staff:    { label:'Staff ETAAX',     color:'#8ce4ee' },   // el equipo de ETAAX (staff-etaax.js)
 };
 
 /* ════════════════════════════════════════════════════════
@@ -1762,6 +1780,17 @@ async function init() {
         return;
     }
 
+    // ── Staff ETAAX: llega de su portada con un negocio, o recarga ya adentro ──
+    if (window.StaffEtx) {
+        var _etxNeg = sessionStorage.getItem('etaax_etx_entrar');
+        var _sesEtx = _getSesion();
+        if (_etxNeg || (_sesEtx && _sesEtx.etx)) {
+            sessionStorage.removeItem('etaax_etx_entrar');
+            await _etxEntrar(_etxNeg || _sesEtx.negocioId, { sucursales: !!_etxNeg || goNegocios });
+            return;
+        }
+    }
+
     // ── Sesión de colaborador (localStorage) ──
     var ses = _getSesion();
     if (ses && ses.type === 'staff' && ses.expira > Date.now()) {
@@ -1816,6 +1845,9 @@ async function init() {
     if (session) {
         var u    = session.user;
         var meta = u.user_metadata || {};
+
+        // ── Staff ETAAX sin negocio elegido → su portada ──
+        if (window.StaffEtx && StaffEtx.esCorreo(u.email)) { _clearQuickSes(); window.location.replace('/staff-etaax.html'); return; }
 
         // ── Admin maestro ──
         if (u.email === ADMIN_EMAIL) {
@@ -1895,6 +1927,7 @@ async function _bgVerify() {
         }
         var u    = s.user;
         var meta = u.user_metadata || {};
+        if (window.StaffEtx && StaffEtx.esCorreo(u.email)) { _clearQuickSes(); window.location.replace('/staff-etaax.html'); return; }
         // Admin maestro: nunca degradarlo a usuario normal ni cachear su
         // sesión como qses (eso corrompía el fast path). Re-inicializar
         // por el slow path, que sí tiene rama de admin.
@@ -1966,7 +1999,7 @@ function _pintarHeader() {
                     ? (ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro).label
                     : (neg ? categoriaNegocio(_getSucursales(neg.id).length || 1).nombre : ''),
         logo:    neg ? _getNegLogo(neg.id) : '',
-        inicio:  !_sesion ? '/index.html' : (_sesion.type !== 'staff' && !_sesion.isAdmin ? '/hub.html?negocios=1' : '/hub.html'),
+        inicio:  !_sesion ? '/index.html' : ((_sesion.type !== 'staff' || _sesion.etx) && !_sesion.isAdmin ? '/hub.html?negocios=1' : '/hub.html'),
         marcaBase: '/marca/hub',
         cerrarSesion: function () { logout(); }
     });
@@ -2111,6 +2144,8 @@ async function loginSubmit() {
         var u = result.data.user, meta = u.user_metadata || {};
         // Admin maestro → ir directo al panel
         if (u.email === ADMIN_EMAIL) { window.location.href = 'admin.html'; return; }
+        // Staff ETAAX (tecleó el correo interno completo) → su portada
+        if (window.StaffEtx && StaffEtx.esCorreo(u.email)) { window.location.href = '/staff-etaax.html'; return; }
         _iniciarSesion({ id: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'pyme' });
         return;
     }
@@ -2227,6 +2262,25 @@ async function loginSubmit() {
                 return;
             }
         } catch (e) { console.warn('[login] staff nube:', e); }
+    }
+
+    /* ── Intento 4: Staff ETAAX (v88) ──
+       El equipo de ETAAX tiene su PROPIA cuenta de Supabase, con un correo
+       interno que nadie teclea: `<usuario>@staff.etaax.app`. Va al final para
+       que un colaborador de un negocio nunca pague esta vuelta al servidor si
+       su contraseña era buena. El mensaje de error es el mismo de siempre: la
+       pantalla no dice qué usuarios existen. */
+    if (window.StaffEtx && StaffEtx.usuarioValido(input) && typeof _supabase !== 'undefined') {
+        try {
+            var _rEtx = await _supabase.auth.signInWithPassword({ email: StaffEtx.email(input), password: pwd });
+            if (!_rEtx.error && _rEtx.data && _rEtx.data.user) {
+                /* Sin login_exito: la v77 solo deja borrar el contador de la
+                   sesión propia, y aquí el identificador (el usuario) no es el
+                   correo de la sesión. El contador caduca solo. */
+                window.location.href = '/staff-etaax.html';
+                return;
+            }
+        } catch (e) { console.warn('[login] staff ETAAX:', e); }
     }
 
     var _trasStaff = await _loginFallo(input);
@@ -2534,10 +2588,13 @@ function _clearSesion() {
 ════════════════════════════════════════════════════════ */
 function _misNegocios() {
     if (!_sesion) return [];
+    // Staff ETAAX: «su» negocio es aquel al que entró desde su portada.
+    if (_sesion.etx) return _getNegocios().filter(function(n){ return n.id === _sesion.negocioId; });
     return _negocios.filter(function(n){ return n.usuarioId === _sesion.usuarioId; });
 }
 
 function _renderVistaNegocio() {
+    if (_sesion && _sesion.etx) { _etxVistaNegocio(); return; }
     var marca = _misNegocios()[0] || (_sesion ? _getNegocios().find(function(n){ return n.usuarioId === _sesion.usuarioId; }) : _getNegocios()[0]);
     var heroTitle = document.getElementById('negHeroTitle');
     var heroSub   = document.getElementById('negHeroSub');
@@ -2638,8 +2695,10 @@ function _renderBrandBar(neg) {
             'title="Aviso de Privacidad de ETAAX — quién es responsable de tus datos, ' +
             'cuáles se guardan y cómo ejercer tus derechos">' +
             _ic('privacidad', 14) + 'Aviso de privacidad</a>' +
-        (neg ? '<button type="button" id="hubConfigNeg" class="hub-config-btn ic-fila">' +
-            _ic('ajustes', 14) + 'Configurar negocio</button>' : '') +
+        (neg && _sesion && _sesion.etx
+            ? '<a id="hubEtxPortada" class="hub-config-btn ic-fila" href="/staff-etaax.html">' + _ic('stf-volver', 14) + 'Mis negocios</a>'
+            : (neg ? '<button type="button" id="hubConfigNeg" class="hub-config-btn ic-fila">' +
+            _ic('ajustes', 14) + 'Configurar negocio</button>' : '')) +
         // Eliminar negocio ya NO vive aquí: se movió al fondo del modal
         // "⚙️ Configurar negocio" (zona de peligro), fuera del clic accidental.
         '</div>';
@@ -2659,13 +2718,17 @@ function _migrarSucursalesLegacy(neg) {
 
 function _renderSucursales(neg) {
     var sucs  = _migrarSucursalesLegacy(neg);
+    var _etx  = !!(_sesion && _sesion.etx);
+    if (_etx) sucs = StaffEtx.sucursalesPermitidas(StaffEtx.leerAcceso(neg.id), sucs);
     _renderBrandBar(neg);
     var lleno = false;   // ya no hay tope: siempre se puede abrir otra sucursal
     var color = neg.color || '#3dbe7a';
 
     var cat = categoriaNegocio(sucs.length || 1);
     var planSub = document.getElementById('sucPlanSub');
-    if (planSub) planSub.textContent = sucs.length + ' sucursal' + (sucs.length !== 1 ? 'es' : '') +
+    if (planSub) planSub.textContent = _etx
+        ? sucs.length + ' sucursal' + (sucs.length !== 1 ? 'es' : '') + ' con acceso'
+        : sucs.length + ' sucursal' + (sucs.length !== 1 ? 'es' : '') +
         ' · ' + cat.nombre + ' · plan actual: ' + _fmtPrecio(precioMensual(sucs.length)) + ' MXN/mes';
 
     var cont = document.getElementById('listSucursales');
@@ -2673,8 +2736,8 @@ function _renderSucursales(neg) {
         cont.innerHTML =
             '<div class="neg-empty" style="grid-column:1/-1">' +
                 '<div class="neg-empty-icon">🏪</div>' +
-                '<div class="neg-empty-title">No hay sucursales registradas</div>' +
-                '<div class="neg-empty-sub">Crea tu primera sucursal para comenzar</div>' +
+                '<div class="neg-empty-title">' + (_etx ? 'Sin sucursales con acceso' : 'No hay sucursales registradas') + '</div>' +
+                '<div class="neg-empty-sub">' + (_etx ? 'Pídele al admin de ETAAX que te asigne una sucursal de este negocio' : 'Crea tu primera sucursal para comenzar') + '</div>' +
             '</div>';
     } else {
         cont.innerHTML = sucs.map(function(suc, i) {
@@ -3536,7 +3599,7 @@ function _registrarAcceso(neg) {
         _supabase.rpc('acceso_registrar', {
             p_neg: neg.id,
             p_usuario: esStaff ? (_sesion.nombre || '') : '',
-            p_tipo: esStaff ? 'staff' : (esAdmin ? 'admin_fantasma' : 'dueno'),
+            p_tipo: (_sesion && _sesion.etx) ? 'staff_etaax' : (esStaff ? 'staff' : (esAdmin ? 'admin_fantasma' : 'dueno')),
             p_agente: String(navigator.userAgent || '').slice(0, 160)
         }).then(function (r) {
             /* Si no se pudo registrar, se borra la marca: así el siguiente
@@ -3627,6 +3690,11 @@ function _showModulos(neg) {
             if (btnVolver)  btnVolver.style.display  = 'none';
         }
     }
+    /* Staff ETAAX: de los módulos se regresa a las sucursales del negocio (y de
+       ahí a su portada). «Información del negocio» es del dueño. */
+    var btnEtx = document.getElementById('btnEtxSucursales');
+    if (btnEtx) btnEtx.style.display = (_sesion && _sesion.etx) ? '' : 'none';
+    if (_sesion && _sesion.etx) { var _bi = document.getElementById('btnInfoNeg'); if (_bi) _bi.style.display = 'none'; }
     if (typeof window.etaaxPintarModulos === 'function') {
         window.etaaxPintarModulos({ negId: neg.id, sucId: sucId, staff: !!(_sesion && _sesion.type === 'staff'), rol: (_sesion && _sesion.rol) || 'otro' });
     }
@@ -3766,7 +3834,119 @@ document.addEventListener('keydown', function(e) {
     else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
 });
 
+/* ══ STAFF ETAAX (v88) ══════════════════════════════════════════════════════
+   El equipo de ETAAX llega aquí desde su portada (staff-etaax.html) con un
+   negocio elegido, o recargando ya adentro. Se le trata como a un colaborador
+   (type 'staff') con el rol reservado `etaax_staff`: así los módulos, la barra
+   y page-guard funcionan igual que siempre, y sus permisos salen del acceso
+   que le dio el admin (page-guard: etaaxPermisosEtx), no de los roles del
+   dueño. Diferencias con un colaborador:
+     · tiene SU sesión de Supabase (la regla de la base lo deja entrar a los
+       negocios con acceso activo, nada más);
+     · ve las SUCURSALES del negocio, como cualquier negocio, pero solo las que
+       le tocan, y entra a una para ver sus módulos;
+     · no configura el negocio ni las sucursales, ni ve precios.
+   El acceso se vuelve a leer de la base cada vez que entra o recarga: si se lo
+   quitaron, se entera aquí y regresa a su portada. */
+var _ETX_HORAS = 12;
+async function _etxEntrar(negId, op) {
+    op = op || {};
+    var s = null;
+    try { var sd = await _supabase.auth.getSession(); s = sd.data && sd.data.session; } catch (e) {}
+    if (!s || !s.user || !StaffEtx.esCorreo(s.user.email)) {
+        // Sin su sesión no hay datos que ver: a entrar de nuevo.
+        _clearSesion();
+        showView('viewLogin');
+        return;
+    }
+    if (!negId) { window.location.replace('/staff-etaax.html'); return; }
+    var lista = null;
+    try { lista = await StaffEtx.misNegocios(_supabase); } catch (e) { lista = null; }
+    var n = lista ? lista.find(function (x) { return x.id === negId; }) : null;
+    if (lista && !n) {
+        // Ya no tiene acceso (o lo desactivaron): no se queda viendo lo de antes.
+        localStorage.removeItem('etaax_negocio_activo');
+        localStorage.removeItem('etaax_sucursal_activa');
+        localStorage.removeItem('etaax_ctx');
+        try { localStorage.removeItem(StaffEtx.claveAcceso(negId)); } catch (e) {}
+        window.location.replace('/staff-etaax.html');
+        return;
+    }
+    // Sin red: lo último que se supo de este equipo (la base sigue mandando).
+    var acceso = n ? n.acceso : StaffEtx.leerAcceso(negId);
+    var neg = n ? { id: n.id, usuarioId: null, nombre: n.nombre, tipo: n.tipo, emoji: n.emoji, color: n.color,
+                    organizacion: n.organizacion, fechaCreado: n.fechaCreado, logo: n.logo }
+                : _getNegocios().find(function (x) { return x.id === negId; });
+    if (!acceso || !neg) { window.location.replace('/staff-etaax.html'); return; }
+    StaffEtx.guardarAcceso(negId, acceso);
+    var negs = _getNegocios().filter(function (x) { return x.id !== negId; });
+    negs.push(neg);
+    _setNegocios(negs);
+    var previa = _getSesion();
+    var usuario = StaffEtx.usuarioDeCorreo(s.user.email);
+    var nombre = (previa && previa.etx && previa.nombre) || '';
+    if (!nombre) {
+        try {
+            var f = await _supabase.from('etaax_staff').select('datos').eq('uid', s.user.id).maybeSingle();
+            if (!f.error && f.data && f.data.datos) nombre = f.data.datos.nombre || '';
+        } catch (e) {}
+    }
+    _sesion = { type: 'staff', etx: true, staffId: 'etx_' + s.user.id, negocioId: negId,
+                nombre: nombre || usuario, usuario: usuario, rol: StaffEtx.ROL,
+                expira: Date.now() + _ETX_HORAS * 3600 * 1000 };
+    _setSesion(_sesion);
+    localStorage.setItem('etaax_negocio_activo', negId);
+    document.body.classList.add('etx-staff');
+    if (window.sbSucPull) { try { await sbSucPull(negId); } catch (e) {} }
+    _migrarDatosLegacy(negId);
+    var sucs = StaffEtx.sucursalesPermitidas(acceso, _migrarSucursalesLegacy(neg));
+    var sucId = localStorage.getItem('etaax_sucursal_activa') || '';
+    var suc = sucs.find(function (x) { return x.id === sucId; }) || null;
+    if (suc && !op.sucursales) {
+        _guardarCtx(neg, suc);
+        _updateTopbar();
+        _showModulos(neg);
+        return;
+    }
+    _etxVerSucursales();
+}
+/* De los módulos (o al llegar) a las sucursales del negocio. */
+function _etxVerSucursales() {
+    localStorage.removeItem('etaax_sucursal_activa');
+    sessionStorage.removeItem('etaax_cat_global');
+    sessionStorage.removeItem('etaax_fin_global');
+    var neg = _sesion && _getNegocios().find(function (n) { return n.id === _sesion.negocioId; });
+    if (!neg) { window.location.replace('/staff-etaax.html'); return; }
+    _guardarCtx(neg);
+    _updateTopbar();
+    showView('viewNegocios');
+    _etxVistaNegocio();
+}
+/* La pantalla de sucursales, con lo que le toca al Staff ETAAX. */
+function _etxVistaNegocio() {
+    var neg = _sesion && _getNegocios().find(function (n) { return n.id === _sesion.negocioId; });
+    if (!neg) return;
+    var acceso = StaffEtx.leerAcceso(neg.id) || {};
+    document.body.classList.add('etx-staff');
+    /* Los catálogos y el financiero GLOBALES enseñan lo de todas las
+       sucursales: solo con acceso a todas (page-guard tampoco los deja). */
+    document.body.classList.toggle('etx-global', StaffEtx.todas(acceso));
+    document.getElementById('secCrearMarca').style.display = 'none';
+    document.getElementById('secMarca').style.display = '';
+    var eyebrow = document.getElementById('negHeroEyebrow');
+    var heroTitle = document.getElementById('negHeroTitle');
+    var heroSub = document.getElementById('negHeroSub');
+    if (eyebrow) eyebrow.textContent = 'Staff ETAAX · ' + (neg.nombre || '');
+    if (heroTitle) { heroTitle.classList.add('hub-operacion-title'); heroTitle.innerHTML = 'ELIGE UNA <span class="g">SUCURSAL</span>'; }
+    if (heroSub) heroSub.textContent = 'Ves las sucursales y los módulos que el admin de ETAAX te asignó en este negocio.';
+    _renderSucursales(neg);
+    // Nombres y sucursales frescos (solo se LEE: el staff ETAAX no sube nada).
+    if (window.sbSucPull) sbSucPull(neg.id).then(function (ok) { if (ok) { try { _renderSucursales(neg); } catch (e) {} } });
+    _subSucRealtime(neg.id);
+}
+
 function cambiarNegocio() {
+    if (_sesion && _sesion.etx) { _etxVerSucursales(); return; }
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_sucursal_activa');
     _updateNegociosBar();

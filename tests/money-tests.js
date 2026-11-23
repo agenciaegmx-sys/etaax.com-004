@@ -17977,6 +17977,104 @@ console.log('\n══ BH84 · Uso en coctelería y en prebatch, también en bote
     });
 }
 
+/* ═══════════ SUITE BH85 · STAFF ETAAX (v88) ══════════════════════════════════
+   El equipo de ETAAX entra con SU usuario a los negocios que le dio el admin:
+   portada con sus negocios (staff-etaax.html), sucursales permitidas en el hub
+   y sus módulos. La puerta en la base es la v88 (es_staff_de + el Staff ETAAX);
+   aquí se cuida lo que, si se rompe, abre o cierra de más sin que nadie lo vea.
+   Las pruebas largas: tests/probar-sql-v88.mjs (Postgres con RLS) y
+   tests/probar-staff-etaax.cjs (navegador). */
+console.log('\n══ BH85 · Staff ETAAX ══');
+{
+    const pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    function montarEtx(acceso, suc) {
+        const ls = { etaax_ctx: JSON.stringify({ ctxType:'staff', rol:'etaax_staff', negId:'A' }) };
+        if (acceso) ls['etaax_A_acceso_etx'] = JSON.stringify(acceso);
+        if (suc) ls['etaax_sucursal_activa'] = suc;
+        // Una tabla de permisos del DUEÑO que no le toca: no debe mezclarse.
+        ls['etaax_A_permisos'] = JSON.stringify({ etaax_staff: { gastos: true } });
+        const ctx = {
+            console:{ warn(){}, log(){} }, JSON, Object, Array, String, Number, Boolean, Date, setTimeout, Promise,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            location:{ pathname:'/hub.html', search:'', replace(){} },
+            document:{ addEventListener(){} },
+        };
+        ctx.window = ctx; ctx.window.addEventListener = () => {};
+        vm.createContext(ctx);
+        vm.runInContext(pg, ctx, { filename:'page-guard.js' });
+        return ctx.window;
+    }
+    const acc = { sucursales:['suc_mia'], permisos:{ inventarios:{ capturar:true, cerrar:false }, recetas:true, gastos:false } };
+    const w = montarEtx(acc, 'suc_mia');
+    test('sus permisos salen de SU acceso, no de la tabla de roles del dueño', () =>
+        eq([w.etaaxPerm('A','etaax_staff','recetas'), w.etaaxPerm('A','etaax_staff','gastos'),
+            w.etaaxPerm('A','etaax_staff','inventarios.capturar'), w.etaaxPerm('A','etaax_staff','inventarios.cerrar')].join(','),
+           'true,false,true,false'));
+    test('en una sucursal que no le toca, NADA (aunque llegue por un enlace)', () =>
+        eq(w.etaaxPerm('A','etaax_staff','recetas','suc_tul'), false));
+    test('con sucursales contadas, tampoco la vista global (sin sucursal)', () =>
+        eq(w.etaaxPerm('A','etaax_staff','recetas',''), false));
+    test('con «todas», la global sí', () =>
+        eq(montarEtx({ sucursales:[], permisos:{ recetas:true } }).etaaxPerm('A','etaax_staff','recetas',''), true));
+    test('acceso en pausa o sin acceso guardado → nada', () =>
+        eq([montarEtx(Object.assign({}, acc, { activo:false }), 'suc_mia').etaaxPerm('A','etaax_staff','recetas'),
+            montarEtx(null, 'suc_mia').etaaxPerm('A','etaax_staff','recetas')].join(','), 'false,false'));
+
+    // Las reglas compartidas (staff-etaax.js).
+    const ctxE = { window:{}, localStorage:{ getItem(){ return null; }, setItem(){} } };
+    ctxE.window = ctxE; vm.createContext(ctxE);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-etaax.js'), 'utf8'), ctxE, { filename:'staff-etaax.js' });
+    const X = ctxE.StaffEtx;
+    test('el usuario se normaliza (sin acentos ni espacios) y su correo es interno', () =>
+        eq(X.email('Ána López') + '|' + X.usuarioDeCorreo('ana.lopez@staff.etaax.app') + '|' + X.esCorreo('dueno@correo.mx'),
+           'ana.lopez@staff.etaax.app|ana.lopez|false'));
+    test('el rol de staff-etaax.js es el mismo que resuelve page-guard', () =>
+        eq(X.ROL, w.ETAAX_ROL_ETX));
+    test('la llave del acceso guardado es la misma en los dos', () =>
+        eq(pg.indexOf("'etaax_' + negId + '_acceso_etx'") > -1 && X.claveAcceso('A') === 'etaax_A_acceso_etx', true));
+    test('sucursales permitidas: las contadas (sin las inactivas); vacío = todas', () =>
+        eq(X.sucursalesPermitidas({ sucursales:['b'] }, [{ id:'a' }, { id:'b' }, { id:'c', activa:false }]).map(s => s.id).join(',') + '|' +
+           X.sucursalesPermitidas({ sucursales:[] }, [{ id:'a' }, { id:'c', activa:false }]).map(s => s.id).join(','), 'b|a'));
+    test('un acceso nuevo nace con Recetas e Insumos y nada más', () => {
+        const p = X.permisosIniciales();
+        return eq(X.MODULOS.filter(m => p[m.key]).map(m => m.key).join(','), 'recetas,insumos,inventarios,requisiciones');
+    });
+
+    // La base (v88).
+    const v88 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v88.sql'), 'utf8');
+    const sinCom = v88.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+    test('v88 · es_staff_de suma al Staff ETAAX y NO se le revoca a anon (la usan políticas sin TO)', () =>
+        eq(/OR es_staff_etaax_de\(neg_id\)/.test(sinCom) && !/REVOKE[^;]*es_staff_de\(/.test(sinCom), true));
+    test('v88 · la portada nunca devuelve staff_cred', () => {
+        const i = sinCom.indexOf('FUNCTION etx_mis_negocios'); const cuerpo = sinCom.slice(i, sinCom.indexOf('$$;', i));
+        return eq(cuerpo.indexOf('staff_cred') === -1 && /n\.datos/.test(cuerpo), true);
+    });
+    test('v88 · la tabla negocios no se le abre al Staff ETAAX', () =>
+        eq(/CREATE POLICY[^;]*ON negocios/.test(sinCom), false));
+    test('v88 · las contraseñas solo a cuentas @staff.etaax.app, y solo el admin', () => {
+        const i = sinCom.indexOf('FUNCTION admin_etx_clave'); const c = sinCom.slice(i, sinCom.indexOf('$$;', i));
+        return eq(/is_platform_admin\(\)/.test(c) && /email LIKE '%@staff\.etaax\.app'/.test(c), true);
+    });
+    test('v88 · el Staff ETAAX solo LEE lo suyo (escribir accesos, solo el admin)', () =>
+        eq(/CREATE POLICY "propio_lee" ON etaax_staff_accesos FOR SELECT/.test(sinCom) &&
+           !/CREATE POLICY[^;]*ON etaax_staff_accesos FOR (ALL|INSERT|UPDATE)[^;]*auth\.uid\(\)/.test(sinCom), true));
+
+    // El hub y el login.
+    const hubE = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    test('login: el Staff ETAAX se intenta DESPUÉS de los colaboradores y con el mismo mensaje de error', () => {
+        const iEtx = hubE.indexOf('Intento 4: Staff ETAAX'), iNube = hubE.indexOf('Intento 3: validar contra la NUBE');
+        return eq(iNube > -1 && iEtx > iNube && hubE.indexOf("'Usuario o contraseña incorrectos.'", iEtx) > iEtx, true);
+    });
+    test('hub: el acceso se vuelve a leer de la base al entrar (si se lo quitaron, a su portada)', () => {
+        const i = hubE.indexOf('async function _etxEntrar('); const c = hubE.slice(i, hubE.indexOf('\nfunction _etxVerSucursales', i));
+        return eq(/StaffEtx\.misNegocios\(_supabase\)/.test(c) && /lista && !n/.test(c) && /staff-etaax\.html/.test(c), true);
+    });
+    test('hub: las sucursales del Staff ETAAX salen filtradas por su acceso', () =>
+        eq(/if \(_etx\) sucs = StaffEtx\.sucursalesPermitidas\(StaffEtx\.leerAcceso\(neg\.id\), sucs\)/.test(hubE), true));
+    test('admin.html carga page-guard solo por los catálogos: el guard no corre ahí', () =>
+        eq(/\(\^\|\\\/\)\(hub\|admin\)\(\\\.html\)\?\$/.test(pg), true));
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.

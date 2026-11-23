@@ -483,11 +483,30 @@ window.etaaxSucTienePropios = function (negId, rol, sucId) {
     return !!(raw && raw[window.ETAAX_SUC_KEY] && raw[window.ETAAX_SUC_KEY][sucId]);
 };
 
+/* ── STAFF ETAAX ─────────────────────────────────────────────────────────────
+   El equipo de ETAAX (staff-etaax.js) entra como colaborador con este rol
+   reservado. Sus permisos NO salen de la tabla `permisos` del negocio —esa es
+   del dueño, y la refresca cualquier pantalla— sino del acceso que le dio el
+   admin, guardado en este equipo al entrar (`etaax_<neg>_acceso_etx`). Misma
+   forma que la de un rol, así que el resto (etaaxPerm, sub-permisos) no cambia.
+   Una sucursal que no le toca no le da NADA: ni aunque llegue por un enlace. */
+window.ETAAX_ROL_ETX = 'etaax_staff';
+window.etaaxPermisosEtx = function (negId, sucId) {
+    var a = null;
+    try { a = JSON.parse(localStorage.getItem('etaax_' + negId + '_acceso_etx') || 'null'); } catch (e) {}
+    if (!a || a.activo === false) return {};
+    /* Con sucursales contadas, la vista GLOBAL del negocio (sin sucursal: los
+       catálogos globales) tampoco: ahí se ve lo de todas. */
+    if (a.sucursales && a.sucursales.length && (!sucId || a.sucursales.indexOf(sucId) === -1)) return {};
+    return a.permisos || {};
+};
+
 /* `sucId` omitido = la sucursal donde se está parado ahora. Pasar '' a
    propósito pide la BASE — lo usa el editor para mostrarla aunque el dueño
    esté dentro de una sucursal. */
 window.etaaxPermisosRol = function (negId, rol, sucId) {
     if (sucId === undefined) sucId = window.etaaxSucursalActiva();
+    if (rol === window.ETAAX_ROL_ETX) return window.etaaxPermisosEtx(negId, sucId);
     var p = null;
     try { p = JSON.parse(localStorage.getItem('etaax_' + negId + '_permisos') || 'null'); } catch (e) {}
     if (p && p[rol]) {
@@ -540,7 +559,9 @@ window.etaaxPerm = function (negId, rol, path, sucId) {
 
 (function () {
     // hub.html solo consume los helpers de arriba
-    if (/hub\.html$/.test(window.location.pathname)) return;
+    /* El panel admin lo carga solo por los catálogos de permisos (para dar
+       accesos al Staff ETAAX): tiene su propia verificación por correo. */
+    if (/(^|\/)(hub|admin)(\.html)?$/.test(window.location.pathname)) return;
 
     // Embebido en un modal flotante del hub (?embed=1): la página padre ya
     // validó la sesión. Nunca rebotar al hub aquí dentro (se vería el hub

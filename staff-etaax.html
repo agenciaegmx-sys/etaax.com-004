@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
+<script src="/theme.js?v=64b86f6e"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>ETAAX · Staff ETAAX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ══ PORTADA DEL STAFF ETAAX ═════════════════════════════════════════════════
+   La misma casa que el portal admin maestro (admin.html): la paleta de los
+   módulos, bloques con tarjetas, CIAN para lo que se abre y TERRACOTA para el
+   título. Pidió Edwin (23-nov) que se pareciera a esa: quien audita varios
+   negocios ve aquí los suyos, y al entrar a uno lo ve como cualquier negocio. */
+:root {
+  --bg: #0f0e0c; --s1: #171611; --s2: #211f1b;
+  --b1: #3a3830; --b2: #4a473f;
+  --cyan: #8ce4ee; --terra: #fb9b6f;
+  --cyan-soft: rgba(140,228,238,.24); --cyan-line: rgba(140,228,238,.5); --cyan-tint: rgba(140,228,238,.08);
+  --terra-line: rgba(251,155,111,.52);
+  --green: #3dbe7a; --red: #e05a3a; --amber: #e0a93d;
+  --text: #f0ece4; --muted: #b5afa3; --dim: #8b867e;
+}
+[data-theme="light"] {
+  --bg: #f4f3f0; --s1: #ffffff; --s2: #f0eeea;
+  --b1: #d3cfc7; --b2: #c4bfb6;
+  --cyan: #247681; --terra: #ad4b27;
+  --cyan-soft: rgba(36,118,129,.22); --cyan-line: rgba(36,118,129,.46); --cyan-tint: rgba(36,118,129,.07);
+  --terra-line: rgba(173,75,39,.46);
+  --green: #28a060; --red: #c0442a; --amber: #a86b00;
+  --text: #1a1916; --muted: #666157; --dim: #8a857c;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;}
+.etx-ic{flex-shrink:0;}
+#etaax-header{--green:var(--cyan);--surface:var(--s1);--ui-borde:var(--b1);}
+#etxHdCuentaOp,#etxHdPlanOp{display:none!important;}
+
+.shell{max-width:1240px;margin:0 auto;padding:28px 24px 80px;}
+.hero{padding:6px 0 22px;margin-bottom:22px;border-bottom:1px solid var(--b1);}
+.eyebrow{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.titulo{font-size:clamp(24px,3.4vw,38px);font-weight:600;text-transform:uppercase;letter-spacing:.6px;line-height:1.15;}
+.titulo .g{color:var(--terra);}
+.sub{font-size:13px;color:var(--muted);line-height:1.6;margin-top:8px;max-width:720px;}
+
+.cifras{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:22px;}
+.cifra{background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:16px 18px;min-width:0;}
+.cifra-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:7px;}
+.cifra-lbl .etx-ic{color:var(--cyan);}
+.cifra-val{font-size:30px;font-weight:600;letter-spacing:-.5px;line-height:1.1;margin-top:6px;}
+
+.bloque{background:var(--s1);border:1px solid var(--b1);border-radius:20px;padding:20px 20px 22px;}
+.bloque-cab{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--b1);}
+.bloque-tag{font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--muted);padding:3px 10px;background:var(--s2);
+  border:1px solid var(--b1);border-radius:20px;white-space:nowrap;line-height:1.6;}
+.bloque-tit{font-size:20px;font-weight:600;letter-spacing:-.3px;line-height:1.3;}
+.bloque-desc{font-size:12px;color:var(--muted);line-height:1.5;margin-left:auto;text-align:right;max-width:380px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;}
+
+.neg{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-height:190px;padding:20px;background:var(--bg);
+  border:1px solid var(--cyan-soft);border-radius:16px;color:var(--text);font:inherit;text-align:left;cursor:pointer;
+  transition:border-color .18s,background .18s;}
+.neg:hover{border-color:var(--cyan-line);background:var(--cyan-tint);}
+.neg:focus-visible{outline:2px solid var(--cyan);outline-offset:3px;}
+.neg-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;width:100%;}
+.neg-logo{width:46px;height:46px;border-radius:50%;border:1px solid var(--b1);background:var(--s2);display:flex;align-items:center;
+  justify-content:center;overflow:hidden;flex-shrink:0;font-size:22px;}
+.neg-logo img{width:100%;height:100%;object-fit:cover;background:#fff;}
+.chip{font-size:10.5px;font-weight:600;letter-spacing:.3px;border:1px solid var(--b1);color:var(--muted);border-radius:20px;padding:2px 9px;white-space:nowrap;}
+.neg-tit{font-size:17px;font-weight:600;letter-spacing:-.2px;line-height:1.3;}
+.neg-mods{display:flex;flex-wrap:wrap;gap:6px;}
+.neg-mod{font-size:11px;color:var(--muted);background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:3px 8px;}
+.neg-cta{margin-top:auto;padding-top:6px;font-size:12px;color:var(--cyan);}
+
+.vacio{padding:34px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6;}
+.vacio b{display:block;color:var(--text);font-size:15px;margin-bottom:4px;}
+
+.centro{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:20px;}
+.centro h2{font-size:20px;font-weight:600;}
+.centro p{font-size:13px;color:var(--muted);line-height:1.6;max-width:420px;}
+.btn{display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--b1);color:var(--text);border-radius:10px;
+  padding:10px 16px;font:inherit;font-size:13px;cursor:pointer;text-decoration:none;}
+.btn:hover{border-color:var(--cyan-line);background:var(--cyan-tint);}
+.puntos{display:inline-flex;gap:4px;}
+.puntos span{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:parpadeo 1.2s ease infinite;}
+.puntos span:nth-child(2){animation-delay:.2s;} .puntos span:nth-child(3){animation-delay:.4s;}
+@keyframes parpadeo{0%,80%,100%{opacity:.2;}40%{opacity:1;}}
+
+@media (max-width:720px){
+  .shell{padding:20px 16px 60px;}
+  .cifras{grid-template-columns:1fr 1fr;}
+  .bloque-desc{margin-left:0;text-align:left;}
+}
+</style>
+</head>
+<body>
+
+<div id="vCargando" class="centro"><div class="puntos"><span></span><span></span><span></span></div></div>
+
+<!-- Pasa si alguien llega sin ser del Staff ETAAX, o con la cuenta desactivada. -->
+<div id="vAviso" class="centro" style="display:none">
+  <h2 id="avisoTit">—</h2>
+  <p id="avisoTxt">—</p>
+  <button type="button" class="btn" onclick="etxSalir()">Entrar con otra cuenta</button>
+</div>
+
+<div id="vPortal" style="display:none">
+  <div class="shell">
+    <section class="hero">
+      <div class="eyebrow">Staff ETAAX</div>
+      <h1 class="titulo">Tus <span class="g">negocios</span></h1>
+      <p class="sub" id="portalSub">Entra a un negocio para ver sus sucursales y los módulos que tienes asignados.</p>
+    </section>
+
+    <div class="cifras">
+      <div class="cifra"><div class="cifra-lbl" data-ic="sh-info-negocio">Negocios</div><div class="cifra-val" id="cifNeg">—</div></div>
+      <div class="cifra"><div class="cifra-lbl" data-ic="sucursal">Sucursales</div><div class="cifra-val" id="cifSuc">—</div></div>
+      <div class="cifra"><div class="cifra-lbl" data-ic="mod-recetas-insumos">Módulos</div><div class="cifra-val" id="cifMod">—</div></div>
+    </div>
+
+    <section class="bloque">
+      <div class="bloque-cab">
+        <span class="bloque-tag">Accesos</span>
+        <h2 class="bloque-tit">Negocios con acceso</h2>
+        <div class="bloque-desc">Los que el admin de ETAAX te asignó. Al entrar ves sus sucursales como cualquier negocio, solo las que te tocan.</div>
+      </div>
+      <div class="grid" id="listaNeg"></div>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
+<script src="/js-arg.js"></script>
+<script src="/etaax-iconos.js?v=e6d5073b"></script>
+<script src="/etaax-header.js?v=15a5a6ef"></script>
+<script src="/staff-etaax.js?v=9c3b389b"></script>
+<script>
+/* ══ La portada ══════════════════════════════════════════════════════════════
+   1. ¿Hay sesión y es del Staff ETAAX? Si no, al login del hub.
+   2. Su ficha (nombre, activo) y sus negocios con acceso (etx_mis_negocios).
+   3. Al elegir uno, el hub hace lo demás (_etxEntrar): vuelve a leer el
+      acceso de la base, enseña las sucursales permitidas y luego sus módulos. */
+var _yo = null, _negs = [];
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function ic(n, t) { return typeof window.etaaxIcono === 'function' ? window.etaaxIcono(n, { tam: t || 22 }) : ''; }
+function ver(id) { ['vCargando', 'vAviso', 'vPortal'].forEach(function (v) { document.getElementById(v).style.display = v === id ? '' : 'none'; }); }
+function aviso(tit, txt) { document.getElementById('avisoTit').textContent = tit; document.getElementById('avisoTxt').textContent = txt; ver('vAviso'); }
+
+async function etxSalir() {
+    if (typeof window.etaaxConfirmSalir === 'function' && _yo && !(await window.etaaxConfirmSalir())) return;
+    if (typeof etaaxCerrarSesion === 'function') await etaaxCerrarSesion(true, null);
+    else { try { await _supabase.auth.signOut({ scope: 'local' }); } catch (e) {} }
+    try { sessionStorage.removeItem('etaax_sesion_hub'); } catch (e) {}
+    try { localStorage.removeItem('etaax_ctx'); localStorage.removeItem('etaax_negocio_activo'); localStorage.removeItem('etaax_sucursal_activa'); } catch (e) {}
+    window.location.href = '/hub.html';
+}
+
+function _sucTexto(n) {
+    var s = (n.acceso && n.acceso.sucursales) || [];
+    if (!s.length) return 'Todas las sucursales';
+    return s.length + ' sucursal' + (s.length === 1 ? '' : 'es');
+}
+function _negHTML(n) {
+    var mods = StaffEtx.modulosPrendidos(n.acceso);
+    var logo = n.logo ? '<img src="' + esc(n.logo) + '" alt="">' : (n.emoji ? esc(n.emoji) : ic('matriz', 22));
+    return '<button type="button" class="neg" data-neg="' + esc(n.id) + '" onclick="etxEntrar(\'' + etaaxJsArg(n.id) + '\')">' +
+        '<div class="neg-cab"><span class="neg-logo">' + logo + '</span><span class="chip">' + esc(_sucTexto(n)) + '</span></div>' +
+        '<div class="neg-tit">' + esc(n.nombre) + '</div>' +
+        '<div class="neg-mods">' + (mods.length
+            ? mods.map(function (m) { return '<span class="neg-mod">' + esc(m.label) + '</span>'; }).join('')
+            : '<span class="neg-mod">Sin módulos asignados</span>') + '</div>' +
+        '<div class="neg-cta">Entrar →</div>' +
+    '</button>';
+}
+function pintar() {
+    var cont = document.getElementById('listaNeg');
+    document.getElementById('portalSub').textContent = 'Hola, ' + (_yo.nombre || _yo.usuario) +
+        '. Entra a un negocio para ver sus sucursales y los módulos que tienes asignados.';
+    var sucs = 0, todas = false, mods = {};
+    _negs.forEach(function (n) {
+        var s = (n.acceso && n.acceso.sucursales) || [];
+        if (!s.length) todas = true; else sucs += s.length;
+        StaffEtx.modulosPrendidos(n.acceso).forEach(function (m) { mods[m.key] = true; });
+    });
+    document.getElementById('cifNeg').textContent = _negs.length;
+    document.getElementById('cifSuc').textContent = todas ? (sucs ? sucs + ' + todas' : 'Todas') : sucs;
+    document.getElementById('cifMod').textContent = Object.keys(mods).length;
+    document.querySelectorAll('.cifra-lbl[data-ic]').forEach(function (el) {
+        if (!el.querySelector('.etx-ic')) el.insertAdjacentHTML('afterbegin', ic(el.getAttribute('data-ic'), 16));
+    });
+    cont.innerHTML = _negs.length ? _negs.map(_negHTML).join('')
+        : '<div class="vacio" style="grid-column:1/-1"><b>Todavía no tienes negocios asignados</b>Pídele al admin de ETAAX que te dé acceso a un negocio.</div>';
+}
+
+function etxEntrar(negId) {
+    var n = _negs.find(function (x) { return x.id === negId; });
+    if (!n) return;
+    StaffEtx.guardarAcceso(n.id, n.acceso);
+    try {
+        sessionStorage.setItem('etaax_etx_entrar', n.id);
+        localStorage.setItem('etaax_negocio_activo', n.id);
+        localStorage.removeItem('etaax_sucursal_activa');
+    } catch (e) {}
+    window.location.href = '/hub.html';
+}
+
+async function arrancar() {
+    var s = null;
+    try { var sd = await _supabase.auth.getSession(); s = sd.data && sd.data.session; } catch (e) {}
+    if (!s || !s.user || !StaffEtx.esCorreo(s.user.email)) { window.location.replace('/hub.html'); return; }
+    var usuario = StaffEtx.usuarioDeCorreo(s.user.email);
+    var f = await _supabase.from('etaax_staff').select('usuario, datos').eq('uid', s.user.id).maybeSingle();
+    if (f.error) {
+        aviso('No se pudo leer tu acceso', /etaax_staff/.test(f.error.message || '')
+            ? 'Falta preparar la base del Staff ETAAX (supabase-migration-v88.sql). Avísale al admin de ETAAX.'
+            : 'Revisa tu conexión e inténtalo de nuevo. (' + (f.error.message || 'error') + ')');
+        return;
+    }
+    if (!f.data || !StaffEtx.activo(f.data)) {
+        aviso('Tu acceso está desactivado', 'Habla con el admin de ETAAX para que lo reactive.');
+        return;
+    }
+    _yo = { uid: s.user.id, usuario: f.data.usuario || usuario, nombre: (f.data.datos || {}).nombre || '' };
+    if (typeof window.etaaxHeader === 'function') {
+        window.etaaxHeader({ usuario: _yo.nombre || _yo.usuario, plan: 'Staff ETAAX', inicio: '/staff-etaax.html',
+                             inicioTexto: 'Mis negocios', cerrarSesion: etxSalir });
+    }
+    try { _negs = await StaffEtx.misNegocios(_supabase); }
+    catch (e) { aviso('No se pudieron leer tus negocios', 'Revisa tu conexión e inténtalo de nuevo. (' + (e.message || 'error') + ')'); return; }
+    // Al regresar a la portada ya no se está dentro de ningún negocio.
+    try { sessionStorage.removeItem('etaax_sesion_hub'); localStorage.removeItem('etaax_ctx'); } catch (e) {}
+    pintar();
+    ver('vPortal');
+}
+arrancar();
+</script>
+<script src="security.js?v=c188734e"></script>
+<script src="/modal-drag.js?v=4f2eff35"></script>
+<script src="/modal-dock.js?v=5cd269fc"></script>
+</body>
+</html>
