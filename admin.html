@@ -13,122 +13,150 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
+/* ══ PANEL ADMIN MAESTRO · ESTILO NUEVO (23-nov-2026) ═══════════════════════
+   La misma paleta de los módulos (etaax-modulos-ui.css): fondo, panel y líneas,
+   y los dos acentos de la marca —CIAN para lo que se abre, TERRACOTA para el
+   título y lo que pide atención—. El verde se queda para el dinero y lo que
+   está al corriente; el ámbar, para lo que está por vencer.
+   Los nombres viejos (--s1, --b1, --gold, --salmon…) se conservan: los usan las
+   tablas, los recibos y los modales que pinta el JS. */
 :root {
-  --bg:    #0a0908; --s1: #141210; --s2: #1e1c19;
-  --b1:    #2a2825; --b2: #3a3835;
+  --bg: #0f0e0c; --s1: #171611; --s2: #211f1b;
+  --b1: #3a3830; --b2: #4a473f;
+  --cyan: #8ce4ee; --terra: #fb9b6f;
+  --cyan-soft: rgba(140,228,238,.24); --cyan-line: rgba(140,228,238,.5); --cyan-tint: rgba(140,228,238,.08);
+  --terra-tint: rgba(251,155,111,.09); --terra-line: rgba(251,155,111,.52);
   --green: #3dbe7a; --green2: #2a9960;
-  --gold:  #f5c842; --salmon: #c87a6a; --red: #e05a3a;
-  --accent-text: #f5c842;   /* ámbar legible como TEXTO (en claro baja) */
-  --text:  #f0ece4; --muted: #7a7570; --dim: #4a4844;
+  --gold: #f5c842; --salmon: #fb9b6f; --red: #e05a3a; --amber: #e0a93d;
+  --accent-text: #f5c842;
+  --text: #f0ece4; --muted: #b5afa3; --dim: #8b867e;
 }
-
-/* ── Modo claro ─────────────────────────────────────────────────────────────
-   Esta pantalla declara su propia paleta, así que el tema claro TAMBIÉN se
-   declara aquí. Sin esto, el interruptor guardaba la preferencia y no cambiaba
-   nada: era justo "el modo claro no funciona en la pantalla principal".
-   Los valores son los mismos de styles.css, para que al navegar no se sienta
-   que se cambió de aplicación. */
+/* ── Modo claro: los mismos valores que los módulos en claro. ── */
 [data-theme="light"] {
-  --bg:     #f4f3f0;
-  --s1:     #ffffff;
-  --s2:     #f0eeea;
-  --b1:     #dddad5;
-  --b2:     #ccc9c3;
-  --green:  #28a060;
-  --green2: #1f8a50;
-  --greend: #d4f0e3;
-  --gold:   #c99a10;
+  --bg: #f4f3f0; --s1: #ffffff; --s2: #f0eeea;
+  --b1: #d3cfc7; --b2: #c4bfb6;
+  --cyan: #247681; --terra: #ad4b27;
+  --cyan-soft: rgba(36,118,129,.22); --cyan-line: rgba(36,118,129,.46); --cyan-tint: rgba(36,118,129,.07);
+  --terra-tint: rgba(173,75,39,.06); --terra-line: rgba(173,75,39,.46);
+  --green: #28a060; --green2: #1f8a50;
+  --gold: #c99a10; --salmon: #ad4b27; --red: #c0442a; --amber: #a86b00;
   --accent-text: #8a6400;
-  --goldd:  rgba(201,154,16,0.10);
-  --text:   #1a1916;
-  --muted:  #6b6560;
-  --dim:    #9e9890;
-  --salmon: #b0604f;
-  --red:    #cc3f22;
+  --text: #1a1916; --muted: #666157; --dim: #8a857c;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;}
-::-webkit-scrollbar{width:4px;}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;}
+::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
-::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px;}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px;}
+.etx-ic{flex-shrink:0;}
+
+/* La barra de arriba es la de todo el sistema (etaax-header.js); aquí sus
+   acentos en cian y sin «Mi cuenta / Plan», que son de un negocio. */
+#etaax-header{--green:var(--cyan);--surface:var(--s1);--ui-borde:var(--b1);}
+#etxHdCuentaOp,#etxHdPlanOp{display:none!important;}
 
 /* LAYOUT */
-.admin-shell{max-width:1200px;margin:0 auto;padding:32px 24px 80px;}
+.admin-shell{max-width:1240px;margin:0 auto;padding:28px 24px 80px;}
 
-/* TOPBAR */
-.admin-top{
-  display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:40px;padding-bottom:20px;border-bottom:1px solid var(--b1);
-}
-.admin-logo{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;}
-.admin-logo span{color:var(--green);}
-.admin-badge{
-  font-size:10px;letter-spacing:3px;text-transform:uppercase;
-  background:var(--gold)22;color:var(--gold);
-  padding:4px 10px;border-radius:4px;border:1px solid var(--gold)44;
-}
-.admin-user{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);}
-.btn-logout-adm{
-  background:transparent;border:1px solid var(--b2);color:var(--dim);
-  font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 12px;
-  border-radius:6px;cursor:pointer;transition:all .2s;letter-spacing:.5px;
-}
-.btn-logout-adm:hover{border-color:var(--red);color:var(--red);}
+/* PORTADA */
+.adm-hero{padding:6px 0 22px;margin-bottom:22px;border-bottom:1px solid var(--b1);}
+.adm-eyebrow{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.adm-title{font-size:clamp(24px,3.4vw,38px);font-weight:600;text-transform:uppercase;letter-spacing:.6px;line-height:1.15;color:var(--text);}
+.adm-title .g{color:var(--terra);}
+.adm-sub{font-size:13px;color:var(--muted);line-height:1.6;margin-top:8px;max-width:720px;}
 
 /* STAT CARDS */
-.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:40px;}
-.stat-card{
-  background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:20px 24px;
-}
-.stat-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
-.stat-val{font-family:'Bebas Neue',sans-serif;font-size:38px;letter-spacing:1px;line-height:1;}
-.stat-sub{font-size:11px;color:var(--dim);margin-top:4px;}
+.stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px;}
+.stat-card{background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:4px;min-width:0;}
+.stat-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:7px;}
+.stat-label .etx-ic{color:var(--cyan);}
+.stat-val{font-size:32px;font-weight:600;letter-spacing:-.5px;line-height:1.1;margin-top:4px;color:var(--text);overflow-wrap:anywhere;}
+.stat-sub{font-size:11.5px;color:var(--dim);}
+
+/* POR ATENDER: lo que hay que mover hoy, a un toque. */
+.adm-atencion{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--s1);border:1px solid var(--terra-line);
+  border-radius:16px;padding:12px 14px;margin-bottom:26px;}
+.adm-atencion.ok{border-color:var(--b1);}
+.adm-at-tit{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--terra);margin-right:4px;}
+.adm-atencion.ok .adm-at-tit{color:var(--green);}
+.adm-at-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--b1);background:transparent;color:var(--text);border-radius:20px;
+  padding:7px 13px;font:inherit;font-size:12.5px;cursor:pointer;transition:border-color .18s,background .18s;}
+.adm-at-chip b{font-weight:700;}
+.adm-at-chip:hover{border-color:var(--cyan-line);background:var(--cyan-tint);}
+.adm-at-chip.urg b{color:var(--red);}
+.adm-at-chip.aviso b{color:var(--amber);}
+.adm-at-txt{font-size:12.5px;color:var(--muted);}
+
+/* BLOQUES: cada uno es una tarjeta con sus herramientas adentro. */
+.adm-bloques{display:flex;flex-direction:column;gap:22px;}
+.adm-bloque{background:var(--s1);border:1px solid var(--b1);border-radius:20px;padding:20px 20px 22px;}
+.adm-bloque-cab{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--b1);}
+.adm-bloque-tag{font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--muted);padding:3px 10px;background:var(--s2);
+  border:1px solid var(--b1);border-radius:20px;white-space:nowrap;line-height:1.6;}
+.adm-bloque-tit{font-size:20px;font-weight:600;letter-spacing:-.3px;line-height:1.3;color:var(--text);}
+.adm-bloque-desc{font-size:12px;color:var(--muted);line-height:1.5;margin-left:auto;text-align:right;max-width:360px;}
+.adm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;}
+.adm-card{--green:var(--cyan);position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:9px;min-height:170px;padding:20px;
+  background:var(--bg);border:1px solid var(--cyan-soft);border-radius:16px;color:var(--text);font:inherit;text-align:left;cursor:pointer;
+  transition:border-color .18s,background .18s;}
+.adm-card:hover{border-color:var(--cyan-line);background:var(--cyan-tint);}
+.adm-card:focus-visible{outline:2px solid var(--cyan);outline-offset:3px;}
+.adm-card-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;width:100%;}
+.adm-card-ic{display:inline-flex;color:var(--text);}
+.adm-card-ic .etx-ic{width:30px;height:30px;}
+.adm-card-tit{font-size:17px;font-weight:600;letter-spacing:-.2px;line-height:1.3;}
+.adm-card-desc{font-size:12.5px;line-height:1.6;color:var(--muted);}
+.adm-card-cta{margin-top:auto;padding-top:8px;font-size:12px;color:var(--cyan);}
+.adm-chip{font-size:10.5px;font-weight:600;letter-spacing:.3px;border:1px solid var(--b1);color:var(--muted);border-radius:20px;padding:2px 9px;white-space:nowrap;}
+.adm-chip.aviso{border-color:rgba(224,169,61,.55);color:var(--amber);background:rgba(224,169,61,.08);}
+.adm-chip.urg{border-color:rgba(224,90,58,.5);color:var(--red);background:rgba(224,90,58,.08);}
+.adm-card.prox{cursor:default;border-style:dashed;border-color:var(--b1);background:transparent;}
+.adm-card.prox:hover{background:transparent;border-color:var(--b1);}
+.adm-card.prox .adm-card-ic,.adm-card.prox .adm-card-tit{opacity:.75;}
+.adm-card.prox .adm-card-cta{color:var(--dim);}
+
+/* PANEL: la sección abierta, con su regreso. */
+.adm-panel-cab{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:4px 0 18px;margin-bottom:22px;border-bottom:1px solid var(--b1);}
+.adm-volver{display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--b1);color:var(--text);border-radius:10px;
+  padding:9px 14px;font:inherit;font-size:13px;cursor:pointer;transition:border-color .18s,background .18s;}
+.adm-volver:hover{border-color:var(--cyan-line);background:var(--cyan-tint);}
+.adm-panel-ic{display:inline-flex;--green:var(--cyan);}
+.adm-panel-ic .etx-ic{width:34px;height:34px;}
+.adm-panel-tit{font-size:clamp(20px,2.6vw,28px);font-weight:600;text-transform:uppercase;letter-spacing:.5px;line-height:1.2;}
+.adm-panel-desc{font-size:12.5px;color:var(--muted);margin-top:3px;max-width:640px;line-height:1.5;}
+
+/* BOTONES SUELTOS (los conservan algunos lugares) */
+.btn-logout-adm{background:transparent;border:1px solid var(--b1);color:var(--muted);font-family:inherit;font-size:12px;padding:7px 13px;
+  border-radius:9px;cursor:pointer;transition:all .2s;}
+.btn-logout-adm:hover{border-color:var(--cyan-line);color:var(--text);}
 
 /* SECCIÓN */
-.admin-section{margin-bottom:40px;}
-.section-head{
-  display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:16px;
-}
+.admin-section{margin-bottom:32px;}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
 .section-title{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);}
-.section-count{font-size:11px;color:var(--dim);}
+.section-count{font-size:12px;color:var(--dim);}
 
 /* TABLA */
 .admin-table{width:100%;border-collapse:collapse;}
-.admin-table th{
-  font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);
-  padding:8px 14px;text-align:left;border-bottom:1px solid var(--b1);font-weight:400;
-}
-.admin-table td{
-  padding:12px 14px;border-bottom:1px solid var(--b1);font-size:13px;color:var(--text);
-  vertical-align:middle;
-}
+.admin-table th{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:10px 14px;text-align:left;
+  border-bottom:1px solid var(--b1);font-weight:500;background:var(--s2);}
+.admin-table td{padding:12px 14px;border-bottom:1px solid var(--b1);font-size:13px;color:var(--text);vertical-align:middle;}
 .admin-table tr:last-child td{border-bottom:none;}
-.admin-table tr:hover td{background:var(--s2);}
-.table-wrap{background:var(--s1);border:1px solid var(--b1);border-radius:14px;overflow:hidden;}
+.admin-table tr:hover td{background:var(--cyan-tint);}
+.table-wrap{background:var(--s1);border:1px solid var(--b1);border-radius:16px;overflow:auto;}
 
 /* BADGES */
-.badge{
-  display:inline-block;font-size:10px;letter-spacing:1px;text-transform:uppercase;
-  padding:3px 8px;border-radius:4px;font-weight:500;
-}
-.badge-pyme{background:#f5c84222;color:var(--accent-text);}
-.badge-gran{background:#c87a6a22;color:#c87a6a;}
-.badge-neg{background:#7ab8f522;color:#7ab8f5;}
+.badge{display:inline-block;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border-radius:20px;font-weight:600;}
+.badge-pyme{background:rgba(245,200,66,.12);color:var(--accent-text);}
+.badge-gran{background:var(--terra-tint);color:var(--terra);border:1px solid var(--terra-line);}
+.badge-neg{background:var(--cyan-tint);color:var(--cyan);}
 .text-dim{color:var(--dim);}
 .text-green{color:var(--green);}
-.text-gold{color:var(--gold);}
+.text-gold{color:var(--accent-text);}
 
-/* TABS */
-.tabs{display:flex;gap:4px;margin-bottom:20px;background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:4px;}
-.tab{
-  flex:1;padding:8px 0;text-align:center;font-size:12px;letter-spacing:1px;text-transform:uppercase;
-  border-radius:7px;cursor:pointer;transition:all .2s;color:var(--muted);border:none;background:none;
-  font-family:'DM Sans',sans-serif;
-}
-.tab.active{background:var(--b1);color:var(--text);}
+/* (Las pestañas de antes se fueron: cada sección es una pantalla.) */
 .tab-panel{display:none;}
 .tab-panel.active{display:block;}
 
@@ -136,80 +164,55 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .empty-state{text-align:center;padding:48px 24px;color:var(--dim);font-size:13px;}
 
 /* LOADING / CENTRADO */
-.view-center{
-  min-height:100vh;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;text-align:center;gap:16px;
-}
+.view-center{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:20px;}
 .loading-dots{display:inline-flex;gap:4px;align-items:center;}
-.loading-dots span{width:5px;height:5px;border-radius:50%;background:var(--muted);animation:blink 1.2s ease infinite;}
+.loading-dots span{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:blink 1.2s ease infinite;}
 .loading-dots span:nth-child(2){animation-delay:.2s;}
 .loading-dots span:nth-child(3){animation-delay:.4s;}
 @keyframes blink{0%,80%,100%{opacity:.2;}40%{opacity:1;}}
 
-/* ACCESO DENEGADO */
-.access-denied h2{font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--salmon);}
-.access-denied p{font-size:13px;color:var(--muted);}
-.btn-back{
-  margin-top:8px;background:var(--s1);border:1px solid var(--b2);color:var(--text);
-  font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 24px;
-  border-radius:8px;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block;
-}
-.btn-back:hover{border-color:var(--green);color:var(--green);}
+/* LOGO según el tema: el oscuro sobre fondo oscuro y el claro sobre claro. */
+.logo-claro{display:none!important;}
+[data-theme="light"] .logo-oscuro{display:none!important;}
+[data-theme="light"] .logo-claro{display:block!important;}
 
-/* LOGIN FORM */
-.login-card{
-  background:var(--s1);border:1px solid var(--b1);border-radius:20px;
-  padding:40px;width:100%;max-width:400px;
-}
-.login-logo{
-  font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:3px;
-  margin-bottom:4px;
-}
-.login-logo span{color:var(--green);}
+/* ACCESO DENEGADO */
+.access-denied h2{font-size:26px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--terra);}
+.access-denied p{font-size:13px;color:var(--muted);line-height:1.6;}
+.btn-back{margin-top:8px;background:var(--s1);border:1px solid var(--b1);color:var(--text);font-family:inherit;font-size:13px;padding:10px 24px;
+  border-radius:10px;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block;}
+.btn-back:hover{border-color:var(--cyan-line);background:var(--cyan-tint);}
+
+/* LOGIN */
+.login-card{background:var(--s1);border:1px solid var(--cyan-soft);border-radius:20px;padding:40px;width:100%;max-width:400px;}
+.login-logo{margin-bottom:10px;}
 .login-sub{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:32px;}
-.login-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;display:block;}
+.login-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;display:block;text-align:left;}
 .login-field{margin-bottom:14px;}
-.login-input{
-  width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--text);
-  font-family:'DM Sans',sans-serif;font-size:14px;
-  padding:11px 14px;border-radius:8px;outline:none;transition:border-color .2s;
-}
+.login-input{width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--text);font-family:inherit;font-size:14px;padding:11px 14px;
+  border-radius:10px;outline:none;transition:border-color .2s;}
 .login-input::placeholder{color:var(--dim);}
-.login-input:focus{border-color:var(--green);}
+.login-input:focus{border-color:var(--cyan);}
 .login-input.error{border-color:var(--red);}
-.login-error{font-size:11px;color:var(--salmon);margin-top:10px;text-align:center;min-height:16px;}
-.btn-login{
-  width:100%;background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
-  font-size:14px;font-weight:600;padding:13px;border-radius:8px;border:none;
-  cursor:pointer;transition:background .2s;margin-top:20px;letter-spacing:.3px;
-}
-.btn-login:hover{background:var(--green2);}
+.login-error{font-size:12px;color:var(--red);margin-top:10px;text-align:center;min-height:16px;}
+.btn-login{width:100%;background:var(--cyan);color:#0f0e0c;font-family:inherit;font-size:14px;font-weight:600;padding:13px;border-radius:10px;
+  border:none;cursor:pointer;transition:opacity .2s;margin-top:20px;}
+[data-theme="light"] .btn-login{color:#fff;}
+.btn-login:hover{opacity:.88;}
 .btn-login:disabled{opacity:.5;cursor:default;}
 
-/* DETAIL PANEL */
-.detail-panel{
-  display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;
-  align-items:center;justify-content:center;padding:20px;
-}
+/* DETAIL PANEL (modales) */
+.detail-panel{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;padding:20px;}
 .detail-panel.open{display:flex;}
-.detail-box{
-  background:var(--s1);border:1px solid var(--b2);border-radius:20px;
-  width:100%;max-width:600px;max-height:88vh;overflow-y:auto;
-  animation:slideUp .25s ease;
-}
+.detail-box{background:var(--s1);border:1px solid var(--b1);border-radius:20px;width:100%;max-width:600px;max-height:88vh;overflow-y:auto;
+  animation:slideUp .25s ease;box-shadow:0 24px 70px rgba(0,0,0,.35);}
 @keyframes slideUp{from{transform:translateY(16px);opacity:0;}to{transform:translateY(0);opacity:1;}}
-.detail-head{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:22px 28px 18px;border-bottom:1px solid var(--b1);
-}
-.detail-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;}
-.detail-close{
-  background:transparent;border:1px solid var(--b2);color:var(--dim);
-  width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;
-  display:flex;align-items:center;justify-content:center;transition:all .2s;
-}
+.detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 26px 16px;border-bottom:1px solid var(--b1);}
+.detail-title{font-size:19px;font-weight:600;letter-spacing:-.2px;}
+.detail-close{background:transparent;border:1px solid var(--b1);color:var(--muted);width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:16px;
+  display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0;}
 .detail-close:hover{border-color:var(--red);color:var(--red);}
-.detail-body{padding:24px 28px;}
+.detail-body{padding:22px 26px;}
 .drow{display:flex;gap:10px;margin-bottom:12px;align-items:flex-start;}
 .dicon{font-size:16px;width:24px;flex-shrink:0;margin-top:1px;}
 .dlabel{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:2px;}
@@ -217,10 +220,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .dval.dim{color:var(--dim);}
 .detail-section{margin-top:20px;padding-top:16px;border-top:1px solid var(--b1);}
 .detail-section-title{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;}
-.neg-item{
-  display:flex;align-items:center;gap:10px;padding:10px 12px;
-  background:var(--s2);border:1px solid var(--b1);border-radius:10px;margin-bottom:8px;
-}
+.neg-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:12px;margin-bottom:8px;}
 .neg-item-emoji{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
 .neg-item-nombre{font-size:13px;font-weight:600;}
 .neg-item-meta{font-size:11px;color:var(--dim);}
@@ -228,48 +228,54 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 /* ROW CLICKABLE */
 .admin-table tr.clickable{cursor:pointer;}
-.admin-table tr.clickable:hover td{background:var(--s2);}
+.admin-table td button .etx-ic{width:15px;height:15px;}   /* los iconos de gestión, del alto de los botones de texto */
+.admin-table tr.clickable:hover td{background:var(--cyan-tint);}
 
-/* FORM PANEL */
+/* FORMULARIOS */
 .form-field{margin-bottom:14px;}
 .form-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:block;}
-.form-input,.form-select,.form-textarea{
-  width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--text);
-  font-family:'DM Sans',sans-serif;font-size:13px;
-  padding:10px 13px;border-radius:8px;outline:none;transition:border-color .2s;
-}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--text);font-family:inherit;font-size:13.5px;
+  padding:10px 13px;border-radius:10px;outline:none;transition:border-color .2s;}
 .form-input::placeholder,.form-textarea::placeholder{color:var(--dim);}
-.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--green);}
-.form-select option{background:var(--s2);}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--cyan);}
+.form-select option{background:var(--s2);color:var(--text);}
 .form-textarea{min-height:72px;resize:vertical;}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.btn-form-save{
-  width:100%;background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
-  font-size:13px;font-weight:600;padding:11px;border-radius:8px;border:none;
-  cursor:pointer;transition:background .2s;margin-top:8px;letter-spacing:.3px;
-}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;}
+.btn-form-save{width:100%;background:var(--green);color:#0a0908;font-family:inherit;font-size:13px;font-weight:600;padding:11px;border-radius:10px;
+  border:none;cursor:pointer;transition:background .2s;margin-top:8px;}
 .btn-form-save:hover{background:var(--green2);}
 .btn-form-save:disabled{opacity:.5;cursor:default;}
-.btn-form-delete{
-  width:100%;background:transparent;border:1px solid var(--b2);color:var(--dim);
-  font-family:'DM Sans',sans-serif;font-size:12px;padding:9px;border-radius:8px;
-  cursor:pointer;transition:all .2s;margin-top:6px;
-}
+.btn-form-delete{width:100%;background:transparent;border:1px solid var(--b1);color:var(--muted);font-family:inherit;font-size:12px;padding:9px;
+  border-radius:10px;cursor:pointer;transition:all .2s;margin-top:6px;}
 .btn-form-delete:hover{border-color:var(--red);color:var(--red);}
-.btn-add{
-  background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
-  font-size:11px;font-weight:600;letter-spacing:.5px;
-  padding:6px 14px;border-radius:6px;cursor:pointer;border:none;transition:background .2s;
-}
+.btn-add{background:var(--green);color:#0a0908;font-family:inherit;font-size:12px;font-weight:600;padding:8px 15px;border-radius:9px;cursor:pointer;
+  border:none;transition:background .2s;}
 .btn-add:hover{background:var(--green2);}
-.form-error{font-size:11px;color:var(--salmon);margin-top:6px;min-height:14px;}
+.btn-prim{background:var(--green);border:none;color:#0a0908;font-family:inherit;font-size:14px;font-weight:700;padding:11px 22px;border-radius:10px;cursor:pointer;}
+.btn-prim:hover{background:var(--green2);}
+.btn-mini{background:transparent;border:1px solid var(--b1);color:var(--muted);padding:5px 11px;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit;}
+.btn-mini:hover{border-color:var(--cyan-line);color:var(--text);}
+.btn-mini.peligro{border-color:rgba(224,90,58,.5);color:var(--red);}
+.form-error{font-size:12px;color:var(--red);margin-top:6px;min-height:14px;}
 .form-divider{height:1px;background:var(--b1);margin:16px 0;}
+.adm-caja{background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:18px 20px;}
+.adm-nota{font-size:12.5px;color:var(--muted);line-height:1.65;max-width:680px;}
+.adm-nota b{color:var(--text);}
+.adm-codigo{background:var(--s2);border:1px solid var(--b1);color:var(--green);border-radius:10px;padding:10px 14px;font-size:14px;}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
 .fade-up{animation:fadeUp .4s ease both;}
+@media (prefers-reduced-motion:reduce){.fade-up,.detail-box{animation:none;}}
 
-@media(max-width:900px){
-  .stat-grid{grid-template-columns:1fr 1fr;}
+@media(max-width:1000px){
+  .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .adm-bloque-desc{margin-left:0;text-align:left;max-width:none;flex-basis:100%;}
+}
+@media(max-width:600px){
+  .admin-shell{padding:18px 14px 60px;}
+  .adm-bloque{padding:16px 14px 18px;}
+  .adm-grid{grid-template-columns:1fr;}
   .admin-table th:nth-child(n+4),.admin-table td:nth-child(n+4){display:none;}
 }
 </style>
@@ -285,8 +291,9 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <!-- ── LOGIN ── -->
 <div id="viewLogin" class="view-center" style="display:none">
   <div class="login-card fade-up">
-    <div class="login-logo"><img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:28px;display:block;margin:0 auto"></div>
-    <div class="login-sub">Panel de administración</div>
+    <div class="login-logo"><img class="logo-oscuro" src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:28px;display:block;margin:0 auto">
+      <img class="logo-claro" src="/marca/etaax-logo-claro.svg" alt="ETAAX" style="height:28px;margin:0 auto"></div>
+    <div class="login-sub">Admin maestro</div>
 
     <div class="login-field">
       <label class="login-label">Correo</label>
@@ -330,59 +337,56 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <div id="viewAdmin" style="display:none">
 <div class="admin-shell fade-up">
 
-  <!-- TOPBAR -->
-  <div class="admin-top">
-    <div style="display:flex;align-items:center;gap:14px">
-      <div class="admin-logo"><img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:22px;display:block"></div>
-      <div class="admin-badge">⚡ Admin Master</div>
+  <!-- ══ PORTADA: cifras, lo que hay que atender y los bloques ══════════
+       Antes: una barra de botones sueltos y diez pestañas en un renglón. Ahora
+       cada cosa vive en su bloque (negocios activos, nuevos clientes,
+       catálogos, administración) y cada herramienta abre su propia pantalla,
+       con su regreso. Los bloques los pinta renderAdmHome() con sus cuentas. -->
+  <section id="admHome">
+    <div class="adm-hero">
+      <div class="adm-eyebrow">Plataforma ETAAX</div>
+      <h1 class="adm-title">Admin <span class="g">maestro</span></h1>
+      <p class="adm-sub">Los movimientos extraordinarios de la plataforma: negocios y su cobro, clientes nuevos, catálogos maestros y la administración de ETAAX.</p>
     </div>
-    <div class="admin-user">
-      <span id="adminNombre">—</span>
-      <button class="btn-logout-adm" style="border-color:var(--salmon);color:var(--salmon)" onclick="auditarCruces()" title="Busca recetas que quedaron en el negocio equivocado (solo lectura)">🔎 Auditar cruces</button>
-      <button class="btn-logout-adm" style="border-color:var(--green);color:var(--green)" onclick="abrirDocumentoModal('presupuesto','')" title="Genera presupuestos y recibos de pago: suscripción por sucursales y servicios adicionales">🧾 Presupuesto / Recibo</button>
-      <button id="abrirHistorialRecibos" class="btn-logout-adm" onclick="switchTab('documentos');document.getElementById('tab-documentos').scrollIntoView({behavior:'smooth',block:'start'})" title="Consultar recibos y presupuestos, pagos pendientes y reimpresiones">Historial de recibos</button>
-      <a href="hub.html" class="btn-logout-adm" style="text-decoration:none;border-color:var(--gold);color:var(--gold)" title="Explorar el hub de módulos como admin">⚡ Hub</a>
-      <button class="btn-logout-adm" onclick="adminLogout()">Cerrar sesión</button>
-    </div>
-  </div>
 
-  <!-- STAT CARDS -->
-  <div class="stat-grid">
-    <div class="stat-card">
-      <div class="stat-label">Usuarios registrados</div>
-      <div class="stat-val text-green" id="statUsuarios">—</div>
-      <div class="stat-sub">Cuentas activas</div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label" data-ic="usuario">Cuentas</div>
+        <div class="stat-val" id="statUsuarios">—</div>
+        <div class="stat-sub">Dueños registrados</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-ic="sh-info-negocio">Negocios</div>
+        <div class="stat-val" id="statNegocios">—</div>
+        <div class="stat-sub" id="statNegSub">En la plataforma</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-ic="cat-colaboradores">Colaboradores</div>
+        <div class="stat-val" id="statStaff">—</div>
+        <div class="stat-sub">Staff registrado</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-ic="org-pyme">Plan más usado</div>
+        <div class="stat-val" id="statPlanTop" style="font-size:22px">—</div>
+        <div class="stat-sub" id="statPlanSub">—</div>
+      </div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Negocios creados</div>
-      <div class="stat-val text-gold" id="statNegocios">—</div>
-      <div class="stat-sub">Total en la plataforma</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Colaboradores</div>
-      <div class="stat-val" id="statStaff" style="color:var(--salmon)">—</div>
-      <div class="stat-sub">Staff registrado</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Plan más usado</div>
-      <div class="stat-val" id="statPlanTop" style="font-size:22px;color:var(--muted)">—</div>
-      <div class="stat-sub" id="statPlanSub">—</div>
-    </div>
-  </div>
 
-  <!-- TABS -->
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('usuarios')">👥 Usuarios</button>
-    <button class="tab" onclick="switchTab('negocios')">🏪 Negocios<span id="tabNegBadge" style="display:none;margin-left:6px;background:#e0a93d;color:#1a1916;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700"></span></button>
-    <button class="tab" onclick="switchTab('documentos')">🧾 Historial de recibos</button>
-    <button class="tab" onclick="switchTab('invitaciones')">✉️ Invitaciones</button>
-    <button class="tab" onclick="switchTab('solicitudes')">📨 Solicitudes<span id="tabSolBadge" style="display:none;margin-left:6px;background:#e0a93d;color:#1a1916;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700"></span></button>
-    <button class="tab" onclick="switchTab('staff')">🎯 Staff global</button>
-    <button class="tab" onclick="switchTab('proveedores')">🚚 Proveedores</button>
-    <button class="tab" onclick="switchTab('insumos')">🗄️ Insumos</button>
-    <button class="tab" onclick="switchTab('rrhh')">🧑‍🍳 Perfiles y evaluaciones</button>
-    <button class="tab" onclick="switchTab('papelera')">🗑️ Papelera</button>
-  </div>
+    <div id="admAtencion"></div>
+    <div id="admBloques" class="adm-bloques"></div>
+  </section>
+
+  <!-- ══ PANEL: la herramienta abierta ══════════════════════════════════ -->
+  <section id="admPanel" style="display:none">
+    <div class="adm-panel-cab">
+      <button class="adm-volver" onclick="admInicio()" id="admVolver">← Panel admin</button>
+      <span class="adm-panel-ic" id="admPanelIc"></span>
+      <div>
+        <div class="adm-eyebrow" id="admPanelBloque" style="margin-bottom:4px">—</div>
+        <h2 class="adm-panel-tit" id="admPanelTit">—</h2>
+        <div class="adm-panel-desc" id="admPanelDesc"></div>
+      </div>
+    </div>
 
   <div id="tab-documentos" class="tab-panel"></div>
 
@@ -436,40 +440,36 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
       </div>
     </div>
 
-  <!-- ══ LA APP MÓVIL, EN BETA ════════════════════════════════════════════════
+  </div>
+
+  <!-- TAB: APP MÓVIL (BETA)
        UN SOLO ENLACE, igual para todos. Antes había que elegir un negocio y el
        enlace salía con su token adentro: eso obligaba a repartir por WhatsApp el
-       mismo secreto que está impreso en el QR de la barra, y además daba un
-       enlace distinto por negocio que nadie iba a saber cuál era.
-
-       Ahora las credenciales salen del login, como en cualquier app. -->
-  <div id="beta-app" style="margin:26px 0 0;background:var(--card,#17161a);border:1px solid rgba(245,200,66,.35);
-       border-radius:14px;padding:20px 22px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;
-            border:1px solid rgba(245,200,66,.5);border-radius:20px;padding:2px 10px">Beta</span>
-      <span style="font-size:15px;font-weight:600">App móvil de registro</span>
+       mismo secreto que está impreso en el QR de la barra. Ahora las
+       credenciales salen del login, como en cualquier app. -->
+  <div id="tab-app" class="tab-panel">
+    <div id="beta-app" class="adm-caja">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span class="adm-chip aviso">Beta</span>
+        <span style="font-size:15px;font-weight:600">App móvil de registro</span>
+      </div>
+      <div class="adm-nota" style="margin-bottom:16px">
+        Los cuatro flujos del QR y el portal del colaborador, instalables en el teléfono.
+        <b>Todavía no se promueve:</b> se prueba en una barra real antes de ofrecerla a los clientes.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <code id="betaAppUrl" class="adm-codigo">—</code>
+        <button class="btn-add" onclick="betaAppCopiar()">Copiar</button>
+        <a id="betaAppAbrir" href="/app" target="_blank" rel="noopener" class="btn-mini" style="text-decoration:none">Abrir ↗</a>
+      </div>
+      <div class="adm-nota" style="margin-top:14px">
+        <b>Es el mismo para todos los negocios.</b> Quien la instala entra con su
+        cuenta de ETAAX y la app averigua sola de qué negocio es — el token ya no viaja en la
+        dirección. Para el equipo de barra y cocina, el encargado configura el teléfono una vez con su
+        cuenta (o escanean el QR de la sucursal desde la app) y de ahí en adelante entran solo con su
+        NIP; la sucursal la pone su NIP, no el enlace.
+      </div>
     </div>
-    <div style="font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:16px;max-width:660px">
-      Los cuatro flujos del QR y el portal del colaborador, instalables en el teléfono.
-      <b style="color:var(--text,#eee)">Todavía no se promueve:</b> se prueba en una barra real antes de
-      ofrecerla a los clientes.
-    </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <code id="betaAppUrl" style="background:#111014;border:1px solid #2b2a30;color:#3dbe7a;
-            border-radius:9px;padding:10px 14px;font-size:14px">—</code>
-      <button class="btn-add" onclick="betaAppCopiar()">Copiar</button>
-      <a id="betaAppAbrir" href="/app" target="_blank" rel="noopener"
-         style="font-size:12.5px;color:#8a8a8a;text-decoration:none">Abrir ↗</a>
-    </div>
-    <div style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.65;max-width:660px">
-      <b style="color:#eee">Es el mismo para todos los negocios.</b> Quien la instala entra con su
-      cuenta de ETAAX y la app averigua sola de qué negocio es — el token ya no viaja en la
-      dirección. Para el equipo de barra y cocina, el encargado configura el teléfono una vez con su
-      cuenta (o escanean el QR de la sucursal desde la app) y de ahí en adelante entran solo con su
-      NIP; la sucursal la pone su NIP, no el enlace.
-    </div>
-  </div>
   </div>
 
   <!-- TAB: SOLICITUDES DE PLAN (nueva sucursal vía asesor) -->
@@ -483,26 +483,26 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
       <div class="section-head">
         <div class="section-title">Invitar a un cliente nuevo</div>
       </div>
-      <div style="padding:16px 18px">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
+      <div class="adm-caja">
+        <div class="form-grid">
           <div>
-            <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">Correo del cliente</label>
-            <input type="email" id="invEmail" placeholder="dueno@negocio.com" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+            <label class="form-label" for="invEmail">Correo del cliente</label>
+            <input type="email" id="invEmail" class="form-input" placeholder="dueno@negocio.com">
           </div>
           <div>
-            <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">Nombre del negocio</label>
-            <input type="text" id="invNegocio" placeholder="Tata Mezcalería" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+            <label class="form-label" for="invNegocio">Nombre del negocio</label>
+            <input type="text" id="invNegocio" class="form-input" placeholder="Tata Mezcalería">
           </div>
           <div>
-            <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">Cómo va a pagar</label>
-            <select id="invPago" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+            <label class="form-label" for="invPago">Cómo va a pagar</label>
+            <select id="invPago" class="form-select">
               <option value="stripe">💳 Tarjeta · cobro automático</option>
               <option value="offline">🏦 Transferencia o efectivo</option>
             </select>
           </div>
           <div>
-            <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">El link caduca en</label>
-            <select id="invDias" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+            <label class="form-label" for="invDias">El link caduca en</label>
+            <select id="invDias" class="form-select">
               <option value="3">3 días</option>
               <option value="7" selected>7 días</option>
               <option value="15">15 días</option>
@@ -510,10 +510,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           </div>
         </div>
         <div style="margin-top:12px">
-          <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">Notas internas (opcional)</label>
-          <input type="text" id="invNotas" placeholder="Lo atendió Edwin · acordamos 2 sucursales" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+          <label class="form-label" for="invNotas">Notas internas (opcional)</label>
+          <input type="text" id="invNotas" class="form-input" placeholder="Lo atendió Edwin · acordamos 2 sucursales">
         </div>
-        <button onclick="generarInvitacion()" id="invBtn" style="margin-top:14px;background:#3dbe7a;border:none;color:#0a0908;font-family:inherit;font-size:14px;font-weight:700;padding:11px 22px;border-radius:9px;cursor:pointer">Generar invitación</button>
+        <button onclick="generarInvitacion()" id="invBtn" class="btn-prim" style="margin-top:14px">Generar invitación</button>
         <div id="invResultado" style="margin-top:14px"></div>
       </div>
     </div>
@@ -615,10 +615,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     </div>
   </div>
 
-  <!-- TAB: INSUMOS — redirige a página dedicada -->
-  <div id="tab-insumos" class="tab-panel">
-    <div class="empty-state" style="padding:64px 24px">Redirigiendo al catálogo de insumos…</div>
-  </div>
+  </section>
 
 </div>
 </div>
@@ -670,12 +667,15 @@ async function betaAppCopiar() {
 <script src="/precios.js?v=f98b43e7"></script><!-- tabla de precios por sucursal (una sola verdad) -->
 <script src="/admin-documentos.js?v=ca9a7db8"></script>
 <script src="/etaax-core.js?v=a88c0cd1"></script><!-- importeLetra para recibos y presupuestos -->
+<script src="/etaax-iconos.js?v=e6d5073b"></script><!-- los iconos de la app (SVG) -->
+<script src="/etaax-header.js?v=15a5a6ef"></script><!-- la barra de arriba, la misma de todo el sistema -->
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
 var PLANES = {
-    pyme:  { nombre:'Pequeña Pyme', color:'#f5c842', cls:'badge-pyme'  },
-    gran:  { nombre:'Gran Pyme',    color:'#c87a6a', cls:'badge-gran'  }
+    // Colores del TEMA (el amarillo fijo no se leía en modo claro).
+    pyme:  { nombre:'Pequeña Pyme', color:'var(--accent-text)', cls:'badge-pyme'  },
+    gran:  { nombre:'Gran Pyme',    color:'var(--terra)',       cls:'badge-gran'  }
 };
 
 /* ── Datos del EMISOR (ETAAX) para el recibo de cobro. Editar aquí si cambian. ── */
@@ -714,7 +714,7 @@ function admDialog(cfg) {
     ov.innerHTML =
         '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:400px;width:100%;padding:26px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
             '<div style="font-size:40px;margin-bottom:10px">' + (cfg.icon || (danger ? '⚠️' : '❓')) + '</div>' +
-            (cfg.title ? '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:.5px;color:var(--text);margin-bottom:8px">' + cfg.title + '</div>' : '') +
+            (cfg.title ? '<div style="font-weight:600;font-size:22px;letter-spacing:.5px;color:var(--text);margin-bottom:8px">' + cfg.title + '</div>' : '') +
             '<div style="font-size:13.5px;color:var(--muted);line-height:1.55;margin-bottom:22px">' + (cfg.msg || '') + '</div>' +
             '<div style="display:flex;gap:10px;justify-content:center">' + btns + '</div>' +
         '</div>';
@@ -757,7 +757,7 @@ function admAlertHTML(titulo, html) {
     ov.innerHTML =
         '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:640px;width:100%;' +
              'padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.5);text-align:left">' +
-          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:21px;letter-spacing:.6px;color:var(--text);margin-bottom:14px">' +
+          '<div style="font-weight:600;font-size:21px;letter-spacing:.6px;color:var(--text);margin-bottom:14px">' +
             titulo + '</div>' +
           html +
           '<div style="display:flex;justify-content:flex-end;margin-top:16px">' +
@@ -863,8 +863,9 @@ async function init() {
         return;
     }
 
-    document.getElementById('adminNombre').textContent = session.user.email;
+    _admMontarHeader(session.user.email);
     document.getElementById('viewAdmin').style.display = 'block';
+    renderAdmHome();
     await cargarDatos();
 }
 
@@ -911,8 +912,9 @@ async function adminLogin() {
     }
 
     document.getElementById('viewLogin').style.display  = 'none';
-    document.getElementById('adminNombre').textContent  = result.data.user.email;
+    _admMontarHeader(result.data.user.email);
     document.getElementById('viewAdmin').style.display  = 'block';
+    renderAdmHome();
     await cargarDatos();
 }
 
@@ -960,6 +962,11 @@ async function cargarDatos() {
     renderInvitaciones();
     renderAvisoPendientes();
     renderSolicitudes();
+    _admCargado = true;
+    renderAdmHome();
+    // Si se recargó con una sección abierta (#negocios), se regresa a ella.
+    var _h = (location.hash || '').slice(1);
+    if (_h && _admTarjeta(_h)) switchTab(_h, true);
 }
 
 /* ── Solicitudes de plan (nueva sucursal vía asesor, pre-Stripe) ── */
@@ -1059,6 +1066,9 @@ function renderStats() {
     document.getElementById('statUsuarios').textContent = u.length;
     document.getElementById('statNegocios').textContent = n.length;
     document.getElementById('statStaff').textContent    = s.length;
+    var _act = n.filter(function (x) { var st = _estadoSuscripcion(x.id); return st.estado === 'activa' || st.estado === 'tolerancia'; }).length;
+    var _sub = document.getElementById('statNegSub');
+    if (_sub) _sub.textContent = n.length ? (_act + ' al corriente') : 'En la plataforma';
 
     var counts = {};
     u.forEach(function(x){ if(x.plan) counts[x.plan] = (counts[x.plan]||0) + 1; });
@@ -1130,15 +1140,15 @@ function renderNegocios() {
             : '—';
         var badge = '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';border:1px solid ' + st.color + '55">' + st.label + '</span>';
         // Botones de gestión (stopPropagation para no abrir el detalle).
-        var btnBase = 'border:none;border-radius:6px;padding:5px 9px;font-family:inherit;font-size:11px;cursor:pointer;margin-right:4px;';
+        var btnBase = 'border:none;border-radius:7px;padding:5px 9px;font-family:inherit;font-size:11px;cursor:pointer;margin-right:4px;display:inline-flex;align-items:center;vertical-align:middle;min-height:27px;';
         var btnActivar = '<button onclick="event.stopPropagation();activarSuscripcion(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(61,190,122,.15);color:#3dbe7a">' + (st.activa ? '+1 mes' : 'Activar 1 mes') + '</button>';
         var btnCancelar = st.estado !== 'cancelada' && st.estado !== 'pendiente'
             ? '<button onclick="event.stopPropagation();cancelarSuscripcion(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(232,90,90,.14);color:#e85a5a">Cancelar</button>'
             : '';
-        var btnCobro = '<button title="Día de cobro y días de tolerancia" onclick="event.stopPropagation();configurarCobro(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(122,184,245,.14);color:#7ab8f5">📅</button>';
-        var btnRecibo = '<button title="Generar recibo de pago o presupuesto de este negocio" onclick="event.stopPropagation();abrirDocumentoModal(\'recibo\',\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(245,200,66,.14);color:var(--accent-text)">🧾</button>';
-        var btnRespaldo = '<button title="Descargar respaldo del negocio" onclick="event.stopPropagation();descargarRespaldoNegocio(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:var(--s2);color:var(--muted)">⬇️</button>';
-        var btnEliminar = '<button title="Eliminar negocio" onclick="event.stopPropagation();eliminarNegocio(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(232,90,90,.10);color:#e85a5a">🗑️</button>';
+        var btnCobro = '<button title="Día de cobro y días de tolerancia" onclick="event.stopPropagation();configurarCobro(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:var(--cyan-tint);color:var(--cyan)">' + (_admIc('adm-calendario', 15) || '📅') + '</button>';
+        var btnRecibo = '<button title="Generar recibo de pago o presupuesto de este negocio" onclick="event.stopPropagation();abrirDocumentoModal(\'recibo\',\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(245,200,66,.14);color:var(--accent-text)">' + (_admIc('adm-comprobante', 15) || '🧾') + '</button>';
+        var btnRespaldo = '<button title="Descargar respaldo del negocio" onclick="event.stopPropagation();descargarRespaldoNegocio(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:var(--s2);color:var(--muted)">' + (_admIc('stf-descargar', 15) || '⬇️') + '</button>';
+        var btnEliminar = '<button title="Eliminar negocio" onclick="event.stopPropagation();eliminarNegocio(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(232,90,90,.10);color:var(--red)">' + (_admIc('mov-eliminar', 15) || '🗑️') + '</button>';
         return '<tr class="clickable" onclick="abrirDetalleNegocio(\'' + etaaxJsArg(n.id) + '\')">' +
             '<td><strong>' + esc(d.emoji||'🏢') + ' ' + esc(d.nombre||'—') + '</strong>' +
                 '<div class="text-dim" style="font-size:11px">' + esc(d.tipo||'—') + ' · ' + staff + ' colab.</div></td>' +
@@ -1395,7 +1405,7 @@ function _mostrarAuditoria(h, totalRecetas, negsConInsumos) {
         '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:1000px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
             '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">' +
                 '<span style="font-size:26px">🔎</span>' +
-                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:.5px;color:var(--text)">Cruces entre negocios</div>' +
+                '<div style="font-weight:600;font-size:24px;letter-spacing:.5px;color:var(--text)">Cruces entre negocios</div>' +
             '</div>' +
             '<div style="font-size:12.5px;color:var(--muted);margin-bottom:18px">' +
                 'Se revisaron <b>' + totalRecetas + '</b> recetas contra los catálogos de <b>' + negsConInsumos + '</b> negocios. ' +
@@ -1503,7 +1513,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:600px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
             '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
                 '<span style="font-size:26px">🧾</span>' +
-                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:.5px;color:var(--text)" id="doc_titulo">Documento</div>' +
+                '<div style="font-weight:600;font-size:24px;letter-spacing:.5px;color:var(--text)" id="doc_titulo">Documento</div>' +
             '</div>' +
 
             // Tipo: cambia el tiempo verbal del documento y qué campos se piden.
@@ -1556,8 +1566,8 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
                     '<div><div style="'+_lb+';margin:0">Total</div>' +
                         '<div id="doc_totalHint" style="font-size:11px;color:var(--muted);margin-top:3px">—</div></div>' +
                     '<div style="display:flex;align-items:center;gap:4px">' +
-                        '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:var(--green)">$</span>' +
-                        '<input id="doc_total" type="number" step="0.01" min="0" style="width:150px;text-align:right;font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:1px;color:var(--green);background:transparent;border:none;border-bottom:2px solid var(--green);padding:0 2px 2px;outline:none">' +
+                        '<span style="font-weight:600;font-size:24px;color:var(--green)">$</span>' +
+                        '<input id="doc_total" type="number" step="0.01" min="0" style="width:150px;text-align:right;font-weight:600;font-size:24px;letter-spacing:1px;color:var(--green);background:transparent;border:none;border-bottom:2px solid var(--green);padding:0 2px 2px;outline:none">' +
                     '</div>' +
                 '</div>' +
                 '<div id="doc_manual" style="display:none;font-size:11px;color:var(--accent-text);margin-top:6px">✏️ Ajustado a mano · <span data-act="totalAuto" style="cursor:pointer;text-decoration:underline">volver al automático</span></div>' +
@@ -2052,7 +2062,7 @@ function abrirPresupuestoModal() { return abrirDocumentoModal('presupuesto','');
         '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:520px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
             '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">' +
                 '<span style="font-size:26px">🧾</span>' +
-                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:.5px;color:var(--text)">Presupuesto</div>' +
+                '<div style="font-weight:600;font-size:24px;letter-spacing:.5px;color:var(--text)">Presupuesto</div>' +
             '</div>' +
             '<div style="font-size:12.5px;color:var(--muted);margin-bottom:20px">Proyección de pago mensual · precio base ' + EtaaxPrecios.fmt(EtaaxPrecios.BASE) + ' por sucursal</div>' +
 
@@ -2241,7 +2251,7 @@ function abrirReciboModal(negId) { return abrirDocumentoModal('recibo',negId);
         '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:520px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
             '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">' +
                 '<span style="font-size:26px">🧾</span>' +
-                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:.5px;color:var(--text)">Recibo de cobro</div>' +
+                '<div style="font-weight:600;font-size:24px;letter-spacing:.5px;color:var(--text)">Recibo de cobro</div>' +
             '</div>' +
             '<div style="font-size:12.5px;color:var(--muted);margin-bottom:20px">' + esc((d.emoji||'🏢')+' '+(d.nombre||'—')) + ' · ' + esc(dueno?(dueno.nombre||''):'') + '</div>' +
 
@@ -2754,24 +2764,178 @@ function cerrarDetail() {
 }
 
 /* ── TABS ── */
-function switchTab(tab) {
-    if (tab === 'insumos') { window.location.href = 'admin-catalogo-insumos.html'; return; }
-    if (tab === 'papelera') { window.location.href = 'admin-papelera.html'; return; }
-    if (tab === 'rrhh')     { window.location.href = 'admin-catalogo-rrhh.html'; return; }
-    _tabActivo = tab;
-    if (tab === 'documentos') AdminDocs.montar();
-    /* OJO: este arreglo se compara POR POSICIÓN contra los botones .tab. Al
-       agregar una pestaña hay que meterla aquí en el mismo lugar, o se marca
-       como activa la que no es. */
-    var tabs = ['usuarios','negocios','documentos','invitaciones','solicitudes','staff','proveedores','insumos'];
-    document.querySelectorAll('.tab').forEach(function(b,i){
-        b.classList.toggle('active', tabs[i] === tab);
-    });
-    document.querySelectorAll('.tab-panel').forEach(function(p){
-        p.classList.remove('active');
-    });
-    document.getElementById('tab-' + tab).classList.add('active');
+/* ══ LOS BLOQUES DEL PANEL (23-nov) ═══════════════════════════════════════
+   Una sola lista: de aquí salen la portada (bloques y tarjetas con sus cuentas)
+   y el encabezado de cada pantalla. Agregar una herramienta es agregar una
+   tarjeta aquí, no tocar tres lugares.
+     tipo 'panel'  → abre su pantalla dentro del panel (#tab-<id>)
+     tipo 'pagina' → otra página del admin
+     tipo 'accion' → hace algo (abre un modal, corre una revisión)
+     prox          → todavía no existe: se enseña para que se vea a dónde va. */
+var ADM_BLOQUES = [
+  { id:'activos', tag:'Operación', tit:'Negocios activos', desc:'Los negocios que ya trabajan en ETAAX: su cobro, sus cuentas, su gente y las sucursales que piden.', cards:[
+    { id:'negocios', tipo:'panel', ic:'sh-info-negocio', tit:'Negocios', desc:'Suscripción, día de cobro, recibos, respaldo, accesos y baja de cada negocio.' },
+    { id:'usuarios', tipo:'panel', ic:'usuario', tit:'Cuentas', desc:'Los dueños registrados, su plan y cuántos negocios tiene cada uno.' },
+    { id:'staff', tipo:'panel', ic:'cat-colaboradores', tit:'Staff global', desc:'Todos los colaboradores de la plataforma, con su rol, usuario y negocio.' },
+    { id:'solicitudes', tipo:'panel', ic:'anadir-sucursal', tit:'Solicitudes de sucursal', desc:'Negocios que pidieron agregar una sucursal: activarla o rechazarla.' }
+  ]},
+  { id:'clientes', tag:'Ventas', tit:'Nuevos clientes', desc:'El alta es solo por invitación: de la cotización al link de alta y al primer cobro.', cards:[
+    { id:'invitaciones', tipo:'panel', ic:'sto-correo', tit:'Invitaciones', desc:'El link de alta a nombre de un correo: caduca y se usa una sola vez.' },
+    { id:'presupuesto', tipo:'accion', ic:'adm-comprobante', tit:'Presupuesto / recibo', desc:'Cotiza la suscripción por sucursales y servicios, o emite un recibo de pago.', cta:'Crear documento →' },
+    { id:'por-activar', tipo:'accion', ic:'adm-pendiente', tit:'Por activar', desc:'Negocios dados de alta que esperan su primer pago o que los actives.' }
+  ]},
+  { id:'catalogos', tag:'Catálogos', tit:'Catálogos ETAAX', desc:'Las listas maestras que ETAAX comparte con todos los negocios.', cards:[
+    { id:'insumos', tipo:'pagina', ic:'cat-insumos', tit:'Insumos', desc:'El catálogo maestro de insumos, con presentaciones, marcas y costos de referencia.' },
+    { id:'proveedores', tipo:'panel', ic:'cat-proveedores', tit:'Proveedores', desc:'Los proveedores sugeridos para todos los negocios, con su contacto.' },
+    { id:'rrhh', tipo:'pagina', ic:'sto-perfiles', tit:'Perfiles y evaluaciones', desc:'Perfiles de puesto y evaluaciones de referencia para recursos humanos.' }
+  ]},
+  { id:'admin', tag:'Plataforma', tit:'Administración ETAAX', desc:'Revisiones, documentos emitidos y los movimientos extraordinarios de la plataforma.', cards:[
+    { id:'documentos', tipo:'panel', ic:'nom-recibo', tit:'Historial de recibos', desc:'Recibos y presupuestos emitidos, pagos pendientes y reimpresiones.' },
+    { id:'auditar', tipo:'accion', ic:'adm-buscar', tit:'Auditar cruces', desc:'Busca recetas que quedaron en el negocio equivocado. Solo lectura.', cta:'Revisar →' },
+    { id:'app', tipo:'panel', ic:'adm-celular', tit:'App móvil (beta)', desc:'El enlace único de la app de registro, para probarla en una barra real.' },
+    { id:'papelera', tipo:'pagina', ic:'mov-eliminar', tit:'Papelera', desc:'Lo que se eliminó en la plataforma, para revisarlo o recuperarlo.' },
+    { id:'migrar', prox:true, ic:'adm-sucursal', tit:'Migrar sucursal', desc:'Pasar una sucursal con toda su información a otra cuenta o negocio, y quitarla del anterior.' },
+    { id:'auditores', prox:true, ic:'stf-admin', tit:'Staff ETAAX', desc:'Accesos para el equipo de ETAAX: auditorías de escandallos, insumos e inventarios en varios negocios.' }
+  ]}
+];
+var _admCargado = false;   // hasta que contesta la nube, las tarjetas no dicen «0»
+var _ADM_PAGINAS = { insumos:'admin-catalogo-insumos.html', papelera:'admin-papelera.html', rrhh:'admin-catalogo-rrhh.html' };
+function _admIc(nombre, tam) { return (typeof window.etaaxIcono === 'function') ? window.etaaxIcono(nombre, { tam: tam || 24 }) : ''; }
+function _admTarjeta(id) {
+    for (var b = 0; b < ADM_BLOQUES.length; b++)
+        for (var c = 0; c < ADM_BLOQUES[b].cards.length; c++)
+            if (ADM_BLOQUES[b].cards[c].id === id) return { bloque: ADM_BLOQUES[b], card: ADM_BLOQUES[b].cards[c] };
+    return null;
 }
+/* La barra de arriba: la misma de todo el sistema, con la cuenta maestra. */
+function _admMontarHeader(email) {
+    if (typeof window.etaaxHeader !== 'function') return;
+    window.etaaxHeader({ usuario: email || ADMIN_EMAIL, plan: 'Admin maestro', inicio: '/hub.html', inicioTexto: 'Hub',
+                         cerrarSesion: adminLogout });
+}
+/* Lo que cada tarjeta dice de sí misma (cuántos hay, qué urge). */
+function _admNum(n, uno, varios) { return n + ' ' + (n === 1 ? uno : varios); }
+function _admEstadoNegocios() {
+    var r = { vencidas: 0, tolerancia: 0, porVencer: 0, pendientes: 0 };
+    (_data.negocios || []).forEach(function (n) {
+        var st = _estadoSuscripcion(n.id);
+        if (st.estado === 'vencida') r.vencidas++;
+        else if (st.estado === 'tolerancia') r.tolerancia++;
+        else if (st.estado === 'pendiente') r.pendientes++;
+        else if (st.estado === 'activa' && st.diasRestantes != null && st.diasRestantes <= 5) r.porVencer++;
+    });
+    return r;
+}
+function _admChip(id) {
+    var d = _data, cargado = !!_admCargado;
+    if (!cargado) return '';
+    var ch = function (txt, cls) { return '<span class="adm-chip' + (cls ? ' ' + cls : '') + '">' + esc(txt) + '</span>'; };
+    if (id === 'negocios') {
+        var e = _admEstadoNegocios();
+        if (e.vencidas) return ch(_admNum(e.vencidas, 'vencido', 'vencidos'), 'urg');
+        if (e.tolerancia || e.porVencer) return ch((e.tolerancia + e.porVencer) + ' por cobrar', 'aviso');
+        return ch(_admNum(d.negocios.length, 'negocio', 'negocios'));
+    }
+    if (id === 'usuarios') return ch(_admNum((d.usuarios || []).length, 'cuenta', 'cuentas'));
+    if (id === 'staff') return ch(_admNum((d.staff || []).length, 'persona', 'personas'));
+    if (id === 'solicitudes') {
+        var p = (d.solicitudes || []).filter(function (s) { return (s.datos || {}).estado === 'pendiente'; }).length;
+        return p ? ch(_admNum(p, 'pendiente', 'pendientes'), 'aviso') : ch('Al día');
+    }
+    if (id === 'invitaciones') {
+        var v = (d.invitaciones || []).filter(function (i) { return !i.usada_at && new Date(i.expira_at) > new Date(); }).length;
+        return ch(_admNum(v, 'vigente', 'vigentes'));
+    }
+    if (id === 'por-activar') { var pa = _negociosPendientes().length; return pa ? ch(_admNum(pa, 'negocio', 'negocios'), 'aviso') : ch('Ninguno'); }
+    if (id === 'proveedores') return ch(_admNum((d.proveedores || []).length, 'proveedor', 'proveedores'));
+    return '';
+}
+function _admCardHTML(c) {
+    var cta = c.prox ? 'Próximamente' : (c.cta || 'Abrir →');
+    return '<' + (c.prox ? 'div' : 'button type="button"') + ' class="adm-card' + (c.prox ? ' prox' : '') + '" data-card="' + esc(c.id) + '"' +
+        (c.prox ? ' aria-disabled="true"' : ' onclick="admAbrir(\'' + etaaxJsArg(c.id) + '\')"') + '>' +
+        '<div class="adm-card-cab"><span class="adm-card-ic">' + _admIc(c.ic, 30) + '</span>' +
+            (c.prox ? '<span class="adm-chip">Próximamente</span>' : _admChip(c.id)) + '</div>' +
+        '<div class="adm-card-tit">' + esc(c.tit) + '</div>' +
+        '<div class="adm-card-desc">' + esc(c.desc) + '</div>' +
+        '<div class="adm-card-cta">' + esc(cta) + '</div>' +
+    '</' + (c.prox ? 'div' : 'button') + '>';
+}
+function renderAdmHome() {
+    var cont = document.getElementById('admBloques'); if (!cont) return;
+    cont.innerHTML = ADM_BLOQUES.map(function (b) {
+        return '<section class="adm-bloque" data-bloque="' + esc(b.id) + '">' +
+            '<div class="adm-bloque-cab"><span class="adm-bloque-tag">' + esc(b.tag) + '</span>' +
+                '<h2 class="adm-bloque-tit">' + esc(b.tit) + '</h2>' +
+                '<div class="adm-bloque-desc">' + esc(b.desc) + '</div></div>' +
+            '<div class="adm-grid">' + b.cards.map(_admCardHTML).join('') + '</div>' +
+        '</section>';
+    }).join('');
+    // Los iconos de las cifras de arriba.
+    document.querySelectorAll('.stat-label[data-ic]').forEach(function (el) {
+        if (!el.querySelector('.etx-ic')) el.insertAdjacentHTML('afterbegin', _admIc(el.getAttribute('data-ic'), 16));
+    });
+    renderAdmAtencion();
+}
+/* POR ATENDER: lo que hay que mover hoy, a un toque. Si no hay nada, se dice. */
+function renderAdmAtencion() {
+    var el = document.getElementById('admAtencion'); if (!el) return;
+    if (!_admCargado) { el.innerHTML = ''; return; }
+    var e = _admEstadoNegocios(), items = [];
+    var sol = (_data.solicitudes || []).filter(function (s) { return (s.datos || {}).estado === 'pendiente'; }).length;
+    var pa = _negociosPendientes().length;
+    if (e.vencidas)   items.push(['negocios', 'urg', e.vencidas, e.vencidas === 1 ? 'negocio vencido' : 'negocios vencidos']);
+    if (e.tolerancia) items.push(['negocios', 'aviso', e.tolerancia, 'en tolerancia']);
+    if (e.porVencer)  items.push(['negocios', 'aviso', e.porVencer, 'vence' + (e.porVencer === 1 ? '' : 'n') + ' en 5 días o menos']);
+    if (sol)          items.push(['solicitudes', 'aviso', sol, sol === 1 ? 'solicitud de sucursal' : 'solicitudes de sucursal']);
+    if (pa)           items.push(['negocios', '', pa, pa === 1 ? 'negocio por activar' : 'negocios por activar']);
+    el.innerHTML = '<div class="adm-atencion' + (items.length ? '' : ' ok') + '">' +
+        '<span class="adm-at-tit">' + _admIc(items.length ? 'rec-alerta' : 'adm-pagado', 18) + (items.length ? 'Por atender' : 'Todo al día') + '</span>' +
+        (items.length ? items.map(function (x) {
+            return '<button type="button" class="adm-at-chip ' + x[1] + '" onclick="switchTab(\'' + etaaxJsArg(x[0]) + '\')"><b>' + x[2] + '</b>' + esc(x[3]) + '</button>';
+        }).join('') : '<span class="adm-at-txt">Sin cobros vencidos, solicitudes ni negocios esperando activación.</span>') +
+    '</div>';
+}
+function admAbrir(id) {
+    var t = _admTarjeta(id); if (!t || t.card.prox) return;
+    if (id === 'presupuesto') { abrirDocumentoModal('presupuesto', ''); return; }
+    if (id === 'auditar') { auditarCruces(); return; }
+    if (id === 'por-activar') { switchTab('negocios'); return; }
+    switchTab(id);
+}
+/* Abrir una sección: su pantalla, con su encabezado y el regreso. Va al
+   historial del navegador (#negocios), así el «atrás» de la tablet regresa a
+   la portada en vez de salirse del panel. */
+function switchTab(tab, sinHistorial) {
+    if (_ADM_PAGINAS[tab]) { window.location.href = _ADM_PAGINAS[tab]; return; }
+    var t = _admTarjeta(tab), panel = document.getElementById('tab-' + tab);
+    if (!t || !panel) { admInicio(sinHistorial); return; }
+    _tabActivo = tab;
+    if (tab === 'documentos' && window.AdminDocs) AdminDocs.montar();
+    document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.toggle('active', p === panel); });
+    document.getElementById('admPanelBloque').textContent = t.bloque.tit;
+    document.getElementById('admPanelTit').textContent = t.card.tit;
+    document.getElementById('admPanelDesc').textContent = t.card.desc;
+    document.getElementById('admPanelIc').innerHTML = _admIc(t.card.ic, 34);
+    document.getElementById('admHome').style.display = 'none';
+    document.getElementById('admPanel').style.display = '';
+    if (!sinHistorial && location.hash !== '#' + tab) { try { history.pushState({ adm: tab }, '', '#' + tab); } catch (e) {} }
+    try { window.scrollTo(0, 0); } catch (e) {}
+}
+function admInicio(sinHistorial) {
+    var h = document.getElementById('admHome'), p = document.getElementById('admPanel');
+    if (p) p.style.display = 'none';
+    if (h) h.style.display = '';
+    if (!sinHistorial && location.hash) { try { history.pushState({}, '', location.pathname + location.search); } catch (e) {} }
+    renderAdmHome();
+    try { window.scrollTo(0, 0); } catch (e) {}
+}
+if (window.addEventListener) window.addEventListener('popstate', function () {
+    var v = document.getElementById('viewAdmin');
+    if (!v || v.style.display === 'none') return;
+    var h = (location.hash || '').slice(1);
+    if (h && _admTarjeta(h)) switchTab(h, true); else admInicio(true);
+});
 
 /* ── LOGOUT ── */
 async function adminLogout() {
@@ -3066,15 +3230,15 @@ function renderAvisoPendientes() {
     caja.style.display = '';
     caja.innerHTML =
         '<div style="background:rgba(224,169,61,.1);border:1px solid rgba(224,169,61,.45);border-radius:10px;padding:13px 16px">' +
-            '<div style="font-size:13.5px;color:#e0a93d;font-weight:700;margin-bottom:5px">' +
+            '<div style="font-size:13.5px;color:var(--amber);font-weight:700;margin-bottom:5px">' +
                 '⏳ ' + pend.length + (pend.length === 1 ? ' negocio espera activación' : ' negocios esperan activación') + '</div>' +
-            '<div style="font-size:12.5px;color:#a8a29a;line-height:1.6">' +
+            '<div style="font-size:12.5px;color:var(--muted);line-height:1.6">' +
                 pend.map(function (n) {
                     return esc((n.datos && n.datos.nombre) || n.id);
                 }).join(' · ') +
             '</div>' +
-            '<div style="font-size:11.5px;color:#6b6862;margin-top:7px">' +
-                'Los de tarjeta se activan solos al pagar. Los de transferencia los activas tú en la pestaña Negocios.</div>' +
+            '<div style="font-size:11.5px;color:var(--dim);margin-top:7px">' +
+                'Los de tarjeta se activan solos al pagar. Los de transferencia los activas tú en Negocios.</div>' +
         '</div>';
 }
 
@@ -3086,28 +3250,28 @@ function renderInvitaciones() {
     var vivas = lista.filter(function (i) { return !i.usada_at && new Date(i.expira_at) > new Date(); }).length;
     if (cnt) cnt.textContent = lista.length + (vivas ? ' · ' + vivas + ' vigente' + (vivas !== 1 ? 's' : '') : '');
     if (!lista.length) {
-        tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b6862;padding:22px;font-size:13px">Todavía no has invitado a nadie.</td></tr>';
+        tb.innerHTML = '<tr><td colspan="6" class="empty-state">Todavía no has invitado a nadie.</td></tr>';
         return;
     }
     tb.innerHTML = lista.map(function (i) {
         var usada = !!i.usada_at, vencida = new Date(i.expira_at) < new Date();
         var estado = usada ? '<span style="color:#3dbe7a">✅ Usada</span>'
-                   : vencida ? '<span style="color:#6b6862">⏳ Caducada</span>'
+                   : vencida ? '<span style="color:var(--dim)">⏳ Caducada</span>'
                    : '<span style="color:var(--accent-text)">📨 Vigente</span>';
         var f = new Date(i.expira_at);
         return '<tr>' +
-            '<td>' + esc(i.email) + (i.notas ? '<div style="font-size:11px;color:#6b6862">' + esc(i.notas) + '</div>' : '') + '</td>' +
+            '<td>' + esc(i.email) + (i.notas ? '<div style="font-size:11px;color:var(--dim)">' + esc(i.notas) + '</div>' : '') + '</td>' +
             '<td>' + esc(i.nombre_negocio) + '</td>' +
             '<td>' + (i.forma_pago === 'stripe' ? '💳 Tarjeta' : '🏦 Transfer.') + '</td>' +
             '<td>' + estado + '</td>' +
-            '<td style="font-size:12px;color:#a8a29a">' + f.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) + '</td>' +
+            '<td style="font-size:12px;color:var(--muted)">' + f.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) + '</td>' +
             '<td style="white-space:nowrap">' +
                 (usada ? '' :
                     (vencida ? '' :
-                        '<button onclick="_copiarInv(\'' + etaaxJsArg(i.token) + '\')" style="background:transparent;border:1px solid #2a2824;color:#a8a29a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Copiar link</button> ') +
+                        '<button onclick="_copiarInv(\'' + etaaxJsArg(i.token) + '\')" class="btn-mini">Copiar link</button> ') +
                     /* Cancelar también en las caducadas: ya no sirven y solo
                        ensucian la lista mientras se hacen pruebas. */
-                    '<button onclick="cancelarInvitacion(\'' + etaaxJsArg(i.token) + '\')" title="El link deja de servir" style="background:transparent;border:1px solid rgba(224,90,58,.5);color:#e05a3a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Cancelar</button>') +
+                    '<button onclick="cancelarInvitacion(\'' + etaaxJsArg(i.token) + '\')" title="El link deja de servir" class="btn-mini peligro">Cancelar</button>') +
             '</td>' +
         '</tr>';
     }).join('');
@@ -3142,7 +3306,7 @@ window.onload = init;
 <div id="modalCredenciales" style="display:none;position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.66);align-items:center;justify-content:center;padding:20px">
   <div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:430px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
     <div style="font-size:10px;letter-spacing:2.4px;text-transform:uppercase;color:var(--dim)">Acceso del dueño</div>
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.8px;color:var(--text);margin:5px 0 4px" id="credNeg">—</div>
+    <div style="font-size:20px;font-weight:600;color:var(--text);margin:5px 0 4px" id="credNeg">—</div>
     <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
       Correo actual: <b style="color:var(--text);word-break:break-all" id="credActual">—</b><br>
       Deja en blanco lo que no quieras cambiar.
