@@ -99,6 +99,43 @@ function sdkEtx() {
             guarda(db); return null;
         }
     };
+    /* La Edge Function admin-staff-etaax, de mentira: mismas respuestas y mismos
+       candados (solo la sesión del admin). `__funcionDesplegada = false` simula
+       que todavía no se desplegó (el navegador no recibe respuesta). */
+    var fetchReal = window.fetch;
+    window.__funcionDesplegada = true; window.__llamadas = [];
+    window.fetch = async function (url, opc) {
+        if (String(url).indexOf('/functions/v1/admin-staff-etaax') === -1) return fetchReal.apply(this, arguments);
+        if (!window.__funcionDesplegada) throw new TypeError('Failed to fetch');
+        var resp = function (b, st) { return new Response(JSON.stringify(b), { status: st || 200, headers: { 'Content-Type': 'application/json' } }); };
+        var u = user();
+        if (!u || u.email !== 'admin@etaax.com' || !/^Bearer ./.test((opc.headers || {}).Authorization || '')) return resp({ ok: false, error: 'Sesión no válida.' }, 401);
+        var b = JSON.parse(opc.body), db = nube(); db.__auth = db.__auth || [];
+        window.__llamadas.push(b.accion);
+        var delStaff = function (uid) { var x = db.__auth.find(function (a) { return a.id === uid; }); return !!x && /@staff\.etaax\.app$/.test(x.email); };
+        if (b.accion === 'crear') {
+            if ((db.etaax_staff || []).some(function (x) { return x.usuario === b.usuario; })) return resp({ ok: false, error: 'Ya hay alguien del Staff ETAAX con ese usuario.' }, 409);
+            if ((db.staff || []).some(function (x) { return (x.datos || {}).usuario === b.usuario; })) return resp({ ok: false, error: 'Ese usuario ya lo tiene un colaborador de un negocio. Elige otro.' }, 409);
+            var email = b.usuario + '@staff.etaax.app', x = db.__auth.find(function (a) { return a.email === email; });
+            if (x) x.password = b.password;
+            else { x = { id: 'uid-' + Math.random().toString(36).slice(2, 10), email: email, password: b.password, meta: { nombre: b.nombre } }; db.__auth.push(x); }
+            db.etaax_staff = (db.etaax_staff || []).filter(function (r) { return r.uid !== x.id; });
+            db.etaax_staff.push({ uid: x.id, usuario: b.usuario, datos: { nombre: b.nombre } });
+            guarda(db); return resp({ ok: true, uid: x.id });
+        }
+        if (b.accion === 'clave') {
+            if (!delStaff(b.uid)) return resp({ ok: false, error: 'Esa cuenta no es del Staff ETAAX.' }, 400);
+            db.__auth.find(function (a) { return a.id === b.uid; }).password = b.password; guarda(db); return resp({ ok: true });
+        }
+        if (b.accion === 'baja') {
+            if (!delStaff(b.uid)) return resp({ ok: false, error: 'Esa cuenta no es del Staff ETAAX.' }, 400);
+            db.etaax_staff = (db.etaax_staff || []).filter(function (r) { return r.uid !== b.uid; });
+            db.etaax_staff_accesos = (db.etaax_staff_accesos || []).filter(function (r) { return r.uid !== b.uid; });
+            db.__auth = db.__auth.filter(function (a) { return a.id !== b.uid; });
+            guarda(db); return resp({ ok: true });
+        }
+        return resp({ ok: false, error: 'Acción desconocida.' }, 400);
+    };
     window.supabase = { createClient: function (url, key, o) {
         var efimero = !!(o && o.auth && o.auth.persistSession === false), local = null;
         var quien = function () { return efimero ? local : user(); };
@@ -114,14 +151,8 @@ function sdkEtx() {
                     if (efimero) local = uu; else sessionStorage.setItem('__ses', JSON.stringify({ id: x.id, email: x.email, meta: x.meta }));
                     return { data: { user: uu, session: { user: uu } }, error: null };
                 },
-                signUp: async function (c) {
-                    var db = nube(); db.__auth = db.__auth || [];
-                    if (db.__auth.some(function (u) { return u.email === String(c.email).toLowerCase(); })) return { data: { user: null }, error: { message: 'User already registered' } };
-                    var id = 'uid-' + Math.random().toString(36).slice(2, 10);
-                    db.__auth.push({ id: id, email: String(c.email).toLowerCase(), password: c.password, meta: (c.options || {}).data || {} }); guarda(db);
-                    var uu = { id: id, email: c.email }; if (efimero) local = uu;
-                    return { data: { user: uu, session: { user: uu } }, error: null };
-                },
+                // Como en producción: los registros abiertos están apagados.
+                signUp: async function () { return { data: { user: null }, error: { message: 'Signups not allowed for this instance' } }; },
                 signOut: async function () { if (efimero) local = null; else sessionStorage.removeItem('__ses'); return { error: null }; },
                 refreshSession: async function () { return { data: { session: null }, error: null }; },
                 updateUser: async function () { return { data: {}, error: null }; }
@@ -223,17 +254,24 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         await caso('…y una contraseña débil no pasa', async () =>
             assert.match(await texto(page, '#tab-auditores'), /Contraseña débil/));
         await page.fill('#etxAltaPass', 'Audita2026Seg');
+        await page.evaluate(() => { window.__funcionDesplegada = false; });
+        await page.click('#etxAltaBtn'); await page.waitForTimeout(500);
+        await caso('si la función del servidor no está desplegada, lo dice (y no deja nada a medias)', async () => {
+            assert.match(await texto(page, '#tab-auditores'), /Falta desplegar la función «admin-staff-etaax»/);
+            assert.equal((await nubeDe(page)).etaax_staff.length, 0);
+            assert.equal(await page.evaluate(() => document.getElementById('etxAltaUsuario').value), 'ana.auditora');   // lo tecleado se queda
+        });
+        await page.evaluate(() => { window.__funcionDesplegada = true; });
         await page.click('#etxAltaBtn'); await page.waitForTimeout(800);
         let uid = null;
-        await caso('dar de alta crea la cuenta (correo interno), fija la contraseña y guarda la ficha', async () => {
+        await caso('dar de alta crea la cuenta (correo interno) en el SERVIDOR —sin signUp, que está apagado— con su contraseña y su ficha', async () => {
             const n = await nubeDe(page);
             const cuenta = n.__auth.find(u => u.email === 'ana.auditora@staff.etaax.app');
             assert.ok(cuenta, 'sin cuenta de Auth');
             assert.equal(cuenta.password, 'Audita2026Seg');
             uid = cuenta.id;
             assert.deepEqual(n.etaax_staff.map(s => [s.uid, s.usuario, s.datos.nombre]), [[uid, 'ana.auditora', 'Ana Auditora']]);
-            const rpcs = await page.evaluate(() => window.__rpcs);
-            assert.ok(rpcs.indexOf('admin_etx_uid') > -1 && rpcs.indexOf('admin_etx_clave') > -1, rpcs.join(','));
+            assert.deepEqual(await page.evaluate(() => window.__llamadas), ['crear']);
         });
         await caso('…y queda elegida, diciendo con qué usuario entra', async () =>
             assert.match(await texto(page, '#tab-auditores'), /Entra con el usuario ana\.auditora en el login de siempre/));
@@ -377,18 +415,18 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         console.log('\n══ Staff ETAAX · baja ══');
         await page.evaluate(() => { window.__motivo = 'ana.auditora'; });
         await page.click('text=Dar de baja'); await page.waitForTimeout(500);
-        await caso('dar de baja pide escribir el usuario, borra ficha y accesos, y su contraseña deja de servir', async () => {
+        await caso('dar de baja pide escribir el usuario, borra ficha, accesos y su cuenta', async () => {
             const n = await nubeDe(page);
             assert.equal(n.etaax_staff.length, 0);
             assert.equal(n.etaax_staff_accesos.length, 0);
-            assert.notEqual(n.__auth.find(u => u.email === 'ana.auditora@staff.etaax.app').password, 'NuevaClave2026x');
+            assert.equal(n.__auth.some(u => u.email === 'ana.auditora@staff.etaax.app'), false);
             assert.match(await texto(page, '#tab-auditores'), /Todavía no hay nadie/);
         });
         await page.fill('#etxNombre', 'x').catch(() => {});
         await page.click('#tab-auditores .btn-add'); await page.waitForTimeout(150);
         await page.fill('#etxAltaNombre', 'Ana Otra Vez'); await page.fill('#etxAltaUsuario', 'ana.auditora'); await page.fill('#etxAltaPass', 'Regreso2026Ok');
         await page.click('#etxAltaBtn'); await page.waitForTimeout(800);
-        await caso('volver a darla de alta con el mismo usuario recupera su cuenta con la contraseña nueva', async () => {
+        await caso('se puede volver a dar de alta con el mismo usuario, con la contraseña nueva', async () => {
             const n = await nubeDe(page);
             const cuentas = n.__auth.filter(u => u.email === 'ana.auditora@staff.etaax.app');
             assert.equal(cuentas.length, 1);

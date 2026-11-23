@@ -76,11 +76,14 @@
     ];
     // Del negocio: se quedan en el original (se enseñan para que no sorprenda).
     var DEL_NEGOCIO = [
-        'Cuentas y tarjetas', 'Categorías de gasto', 'Perfiles de puesto y organigrama',
+        'Cuentas y tarjetas que la sucursal no usa', 'Categorías de gasto', 'Perfiles de puesto y organigrama',
         'Permisos por rol', 'Configuración del negocio', 'Metas de venta y de KPIs',
         'Nóminas manuales (las de antes del módulo de nómina)', 'Requisiciones'
     ];
     var DOCS = ['negocio_sucursales', 'inv_ajustes', 'gf_nomina_params'];
+    /* Cuentas bancarias y tarjetas (tabla tarjetas_credito): son del NEGOCIO, no
+       de una sucursal. En la COPIA viajan las que usa la sucursal (ver planear). */
+    var CUENTAS = 'tarjetas_credito';
 
     function sucDe(d) { return (d && d.sucursalId) || MATRIZ; }
     function memb(x) {
@@ -127,6 +130,16 @@
     }
     function filas(datos, t) { return ((datos && datos.tablas && datos.tablas[t]) || []).filter(function (r) { return r && r.datos; }); }
     function doc(datos, t) { return (datos && datos.docs && datos.docs[t]) || null; }
+    /* La cuenta BASE de débito: la que usan los cortes viejos sin desglose por
+       cuenta. La regla vive en el núcleo (EtaaxCore.cuentasDebito); aquí solo se
+       le pregunta. Sin núcleo cargado, la primera de débito en orden de alta. */
+    function cuentaBase(filasCtas) {
+        var ctas = filasCtas.map(function (r) { return Object.assign({}, r.datos, { id: r.id || r.datos.id }); });
+        var C = root.EtaaxCore;
+        if (C && C.cuentasDebito && C.ctaBaseCatalogo) { var b = C.ctaBaseCatalogo(C.cuentasDebito(ctas)); return b ? b.id : ''; }
+        var deb = ctas.filter(function (c) { return c.tipo === 'debito'; });
+        return deb.length ? deb[0].id : '';
+    }
     function nombreNeg(n) { return (n && n.datos && n.datos.nombre) || (n && n.id) || '—'; }
 
     /* ══ EL PLAN ═══════════════════════════════════════════════════════════
@@ -147,7 +160,7 @@
             sucursalNombre: '', llegaComo: comoMatriz ? 'matriz' : 'nueva', conStaff: conStaff,
             tablas: [], hijos: [], docs: [], insumos: [], recetas: [], quitarInsumos: [], quitarRecetas: [],
             filas: [], remap: {}, fotos: [], resumen: [], seQueda: DEL_NEGOCIO.slice(), avisos: avisos, bloqueos: bloqueos,
-            modo: modoCopia ? 'copia' : 'mover', recopia: false, filasCopia: [], catalogoCopia: { insumos: [], recetas: [] }
+            modo: modoCopia ? 'copia' : 'mover', recopia: false, filasCopia: [], catalogoCopia: { insumos: [], recetas: [] }, cuentas: []
         };
         if (!orig || !dest) { bloqueos.push('Elige el negocio de origen y el de destino.'); return plan; }
         if (orig === dest) { bloqueos.push('El destino tiene que ser otro negocio.'); return plan; }
@@ -298,6 +311,16 @@
             };
             Object.keys(mudan).forEach(function (t) { (mudan[t] || []).forEach(function (r) { mapaFilas[r.id || r.datos.id] = idCopia(t, r); }); });
             if (menu) mapaFilas[menu.id] = dest + '|' + S2;
+            /* Las cuentas bancarias y tarjetas que USA la sucursal: las que nombran
+               sus registros (un corte dice a qué cuenta entró su tarjeta, un gasto
+               con qué tarjeta se pagó, un depósito a qué cuenta fue) y la cuenta
+               BASE de débito, la de los cortes viejos sin desglose. Sin ellas, la
+               comisión y el neto al banco de esos cortes se calcularían en el
+               destino con otras cuentas, y los reportes no cuadrarían. Las demás
+               cuentas del negocio se quedan: son de otras sucursales. */
+            var ctasO = filas(O, CUENTAS), nombradas = cadenas(contenido, {}), baseCta = ctasO.length ? cuentaBase(ctasO) : '';
+            plan.cuentas = ctasO.filter(function (r) { var id = r.id || r.datos.id; return !!nombradas[id] || id === baseCta; });
+            plan.cuentas.forEach(function (r) { mapaFilas[r.id || r.datos.id] = (r.id || r.datos.id) + '-c' + suf; });
             Object.keys(mapaFilas).forEach(function (k) { plan.remap[k] = mapaFilas[k]; });
             var copiar = function (t, r, id2) {
                 var d = remapear(clon(r.datos), plan.remap);
@@ -308,6 +331,13 @@
             };
             Object.keys(mudan).forEach(function (t) { (mudan[t] || []).forEach(function (r) { copiar(t, r, mapaFilas[r.id || r.datos.id]); }); });
             if (menu) copiar('menu_publico', menu, dest + '|' + S2);
+            // La cuenta es del negocio: se copia SIN sello de sucursal.
+            plan.cuentas.forEach(function (r) {
+                var id2 = mapaFilas[r.id || r.datos.id], d = remapear(clon(r.datos), plan.remap);
+                if (Object.prototype.hasOwnProperty.call(d, 'id')) d.id = id2;
+                if (Object.prototype.hasOwnProperty.call(d, 'negocioId')) d.negocioId = dest;
+                plan.filasCopia.push({ tabla: CUENTAS, id: id2, datos: d });
+            });
             plan.filas = [];
             // El catálogo, ya armado: sin lazos con el origen.
             var fichaCat = function (datos, id, sucs, global) {
@@ -387,6 +417,8 @@
         });
         HIJOS.forEach(function (h) { var n = (mudan[h.t] || []).length; if (n) plan.resumen.push(modoCopia ? { mod: h.mod, lbl: h.lbl, copia: n } : { mod: h.mod, lbl: h.lbl, mueve: n }); });
         if (menu) plan.resumen.push(modoCopia ? { mod: 'Administración', lbl: 'Carta pública (QR de las mesas)', copia: 1 } : { mod: 'Administración', lbl: 'Carta pública (QR de las mesas)', mueve: 1 });
+        if (plan.cuentas.length) plan.resumen.push({ mod: 'Gastos y finanzas', lbl: 'Cuentas bancarias y tarjetas', copia: plan.cuentas.length,
+            nota: 'las que usan sus cortes, depósitos y gastos, y la principal de débito' });
         var nInsAsig = plan.insumos.filter(function (x) { return x.sucursales.length; }).length;
         var nRecAsig = plan.recetas.filter(function (x) { return x.sucursales.length; }).length;
         plan.resumen.push({ mod: 'Catálogo', lbl: 'Insumos', copia: plan.insumos.length,
@@ -401,6 +433,8 @@
             avisos.unshift('El negocio original NO se toca: la sucursal sigue ahí hasta que la elimines (y se puede restaurar).');
             if (plan.recopia) avisos.push('Ya había una copia de esta sucursal en el destino: se ACTUALIZA con lo de hoy (lo que se haya cambiado en la copia se reemplaza).');
             else avisos.push('Si la sucursal sigue trabajando en el original mientras revisas, vuelve a copiarla antes de eliminarla: la copia se actualiza.');
+            if (plan.cuentas.length && filas(D, CUENTAS).length && !plan.recopia)
+                avisos.push('El negocio nuevo ya tenía cuentas bancarias: revisa en Cuentas bancarias cuál queda como principal.');
         } else avisos.push('Después de migrar, el dueño del negocio original debe recargar ETAAX en sus equipos para que la sucursal ya no le aparezca.');
         if (listaO.filter(function (s) { return s && s.id !== S && s.activa !== false; }).length === 0)
             avisos.push('El negocio original se queda sin sucursales activas además de la Matriz.');
@@ -438,16 +472,18 @@
         return r.data || null;
     }
     async function cargar(sb, negocioOrigen, negocioDestino) {
-        var tablasO = POR_SUCURSAL.map(function (x) { return x.t; }).concat(HIJOS.map(function (h) { return h.t; }), ['negocio_insumos', 'recetas', 'menu_publico']);
+        var tablasO = POR_SUCURSAL.map(function (x) { return x.t; }).concat(HIJOS.map(function (h) { return h.t; }), ['negocio_insumos', 'recetas', 'menu_publico', CUENTAS]);
         var O = { negocio: negocioOrigen, tablas: {}, docs: {} }, D = { negocio: negocioDestino, tablas: {}, docs: {} };
         await Promise.all(tablasO.map(async function (t) { O.tablas[t] = await leerTabla(sb, t, negocioOrigen.id); }));
+        // Las cuentas en su orden de alta (el mismo de las pantallas): decide la base.
+        O.tablas[CUENTAS].sort(function (a, b) { var x = String(a.created_at || ''), y = String(b.created_at || ''); return x < y ? -1 : x > y ? 1 : 0; });
         await Promise.all(DOCS.map(async function (t) {
             O.docs[t] = await leerDoc(sb, t, negocioOrigen.id);
             D.docs[t] = await leerDoc(sb, t, negocioDestino.id);
         }));
         // Del destino basta saber qué insumos tiene y si ya opera (para llegar como Matriz).
         D.tablas.negocio_insumos = await leerTabla(sb, 'negocio_insumos', negocioDestino.id, 'insumo_id,datos');
-        await Promise.all(POR_SUCURSAL.map(async function (x) {
+        await Promise.all(POR_SUCURSAL.concat([{ t: CUENTAS }]).map(async function (x) {
             var r = await sb.from(x.t).select('id').eq('negocio_id', negocioDestino.id).limit(1);
             D.tablas[x.t] = (r.data || []).map(function (y) { return { id: y.id, datos: {} }; });
         }));
@@ -519,7 +555,7 @@
         // 3) Registros, tabla por tabla.
         var porTabla = {}, orden = [], cuenta = { insumos: plan.catalogoCopia.insumos.length, recetas: plan.catalogoCopia.recetas.length, fotos: plan.fotos.length };
         plan.filasCopia.forEach(function (x) { if (!porTabla[x.tabla]) { porTabla[x.tabla] = []; orden.push(x.tabla); } porTabla[x.tabla].push({ id: x.id, negocio_id: plan.destino, datos: x.datos }); });
-        var LBL = {}; POR_SUCURSAL.concat(HIJOS).forEach(function (x) { LBL[x.t] = x.lbl; }); LBL.menu_publico = 'Carta pública';
+        var LBL = {}; POR_SUCURSAL.concat(HIJOS).forEach(function (x) { LBL[x.t] = x.lbl; }); LBL.menu_publico = 'Carta pública'; LBL[CUENTAS] = 'Cuentas bancarias y tarjetas';
         for (var o = 0; o < orden.length; o++) {
             await lotes(sb, orden[o], porTabla[orden[o]], 'id', avance, LBL[orden[o]] || orden[o]);
             cuenta[orden[o]] = porTabla[orden[o]].length;
@@ -541,7 +577,7 @@
     }
 
     root.MigSuc = {
-        MATRIZ: MATRIZ, POR_SUCURSAL: POR_SUCURSAL, HIJOS: HIJOS, DEL_NEGOCIO: DEL_NEGOCIO, DOCS: DOCS,
+        MATRIZ: MATRIZ, CUENTAS: CUENTAS, POR_SUCURSAL: POR_SUCURSAL, HIJOS: HIJOS, DEL_NEGOCIO: DEL_NEGOCIO, DOCS: DOCS,
         planear: planear, paraServidor: paraServidor, cargar: cargar, respaldo: respaldo, ejecutarCopia: ejecutarCopia,
         planearCopia: function (e) { return planear(Object.assign({}, e, { modo: 'copia' })); }, memb: memb,
         remapear: remapear, idRecetaNueva: idRecetaNueva, idHorario: idHorario, nombreNeg: nombreNeg

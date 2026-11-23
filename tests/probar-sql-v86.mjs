@@ -20,6 +20,12 @@ import {createRequire} from 'node:module';
 import assert from 'node:assert/strict';
 const RAIZ = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const {PGlite} = createRequire((process.env.PGLITE_DIR || '/tmp/etaax-billing-sql') + '/test.cjs')('@electric-sql/pglite');
+/* El núcleo (la cuenta base de débito) se cuelga de `window`. Se corre en su
+   propio contexto: definir `window` en el global le hace creer a PGlite que
+   está en un navegador. */
+{ const c = vm.createContext({ window: {}, console, JSON, Object, Array, String, Number, Math, Date, parseFloat, isNaN });
+  vm.runInContext(fs.readFileSync(path.join(RAIZ, 'etaax-core.js'), 'utf8'), c);
+  globalThis.EtaaxCore = c.window.EtaaxCore; }
 vm.runInThisContext(fs.readFileSync(path.join(RAIZ, 'admin-migrar-sucursal.js'), 'utf8'));
 const MigSuc = globalThis.MigSuc;
 
@@ -35,7 +41,7 @@ const falla = async (fn, patron) => {
 async function mundo() {
     const db = new PGlite();
     const q = async (sql, args) => (await db.query(sql, args)).rows;
-    const REG = MigSuc.POR_SUCURSAL.map(x => x.t).concat(MigSuc.HIJOS.map(h => h.t), ['menu_publico', 'recetas']);
+    const REG = MigSuc.POR_SUCURSAL.map(x => x.t).concat(MigSuc.HIJOS.map(h => h.t), ['menu_publico', 'recetas', MigSuc.CUENTAS]);
     await db.exec(`
       DO $$ BEGIN CREATE ROLE authenticated; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
       DO $$ BEGIN CREATE ROLE anon; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -77,6 +83,15 @@ async function mundo() {
         entradasLog: [{ id: 'e1', sucursalId: S, insumoId: 'i3' }] });
     await ins('entradas_log', 'e1', 'A', { sucursalId: S, insumoId: 'i3', foto_urls: ['priv:A/entradas/f2.jpg'] });
     await ins('entradas_log', 'e2', 'A', { insumoId: 'i1' });
+    // Cuentas bancarias y tarjetas (del negocio). La base de débito es la de alta más antigua.
+    await ins('tarjetas_credito', 'cta_base', 'A', { tipo: 'debito', banco: 'BBVA', comisionTD: 2, fechaAlta: '2025-01-01' });
+    await ins('tarjetas_credito', 'cta_mia', 'A', { tipo: 'debito', banco: 'Banorte', comisionTD: 2.5, fechaAlta: '2026-01-01' });
+    await ins('tarjetas_credito', 'cta_tul', 'A', { tipo: 'debito', banco: 'Santander', fechaAlta: '2026-02-01' });   // solo de Tulum
+    await ins('tarjetas_credito', 'tc_1', 'A', { tipo: 'credito', banco: 'Amex' });
+    await ins('tarjetas_credito', 'ctaB', 'B', { tipo: 'debito', banco: 'HSBC' });                                   // el destino ya tenía una
+    await ins('cortes', 'c4', 'A', { negocioId: 'A', sucursalId: S, fecha: '2026-11-21', tarjetaCuentas: [{ cuentaId: 'cta_mia', neto: 100 }] });
+    await ins('cortes', 'c5', 'A', { negocioId: 'A', sucursalId: 'suc_tul', fecha: '2026-11-21', tarjetaCuentas: [{ cuentaId: 'cta_tul', neto: 50 }] });
+    await ins('gastos', 'g1', 'A', { sucursalId: S, monto: 300, tarjetaId: 'tc_1' });
     await ins('staff', 'st1', 'A', { sucursalId: S, nombre: 'Ana', usuario: 'ana' });
     await ins('staff', 'st2', 'A', { nombre: 'Beto', usuario: 'beto' });
     await ins('nomina_recibos', 'nr1', 'A', { staffId: 'st1' });
@@ -100,6 +115,8 @@ async function leer(q, origen, destino) {
     for (const t of MigSuc.POR_SUCURSAL.map(x => x.t).concat(MigSuc.HIJOS.map(h => h.t), ['menu_publico', 'recetas']))
         O.tablas[t] = await q(`SELECT id, negocio_id, datos FROM ${t} WHERE negocio_id = $1`, [origen]);
     O.tablas.negocio_insumos = await q(`SELECT insumo_id, negocio_id, datos FROM negocio_insumos WHERE negocio_id = $1`, [origen]);
+    O.tablas.tarjetas_credito = await q(`SELECT id, negocio_id, datos, created_at::text AS created_at FROM tarjetas_credito WHERE negocio_id = $1 ORDER BY created_at`, [origen]);
+    D.tablas.tarjetas_credito = await q(`SELECT id, '{}'::jsonb AS datos FROM tarjetas_credito WHERE negocio_id = $1 LIMIT 1`, [destino]);
     D.tablas.negocio_insumos = await q(`SELECT insumo_id, datos FROM negocio_insumos WHERE negocio_id = $1`, [destino]);
     for (const x of MigSuc.POR_SUCURSAL) D.tablas[x.t] = await q(`SELECT id, '{}'::jsonb AS datos FROM ${x.t} WHERE negocio_id = $1 LIMIT 1`, [destino]);
     for (const t of MigSuc.DOCS) {
@@ -136,7 +153,7 @@ const insumo = async (q, neg, id) => ((await q(`SELECT datos FROM negocio_insumo
     const r = await aplicar(q, plan);
     await ok('la función responde ok, con lo que movió', () => {
         assert.equal(r.ok, true);
-        assert.equal(r.cuenta.cortes, 1);
+        assert.equal(r.cuenta.cortes, 2);   // c1 y c4
         assert.equal(r.cuenta.recetas_copiadas, 5);
     });
     await ok('los registros de la sucursal se mudan; los de la Matriz y Tulum no', async () => {
@@ -304,7 +321,7 @@ function sbDe(q, copias) {
         storage: { from(bk) { return { copy: async (a, z) => { copias.push(bk + ':' + a + '>' + z); return { error: null }; } }; } }
     };
 }
-const TABLAS_SUC = MigSuc.POR_SUCURSAL.map(x => x.t).concat(MigSuc.HIJOS.map(h => h.t), ['menu_publico']);
+const TABLAS_SUC = MigSuc.POR_SUCURSAL.map(x => x.t).concat(MigSuc.HIJOS.map(h => h.t), ['menu_publico', MigSuc.CUENTAS]);
 async function foto(q, neg) {
     const o = {};
     for (const t of TABLAS_SUC) o[t] = await q(`SELECT id, negocio_id, datos, created_at::text AS c FROM ${t} WHERE negocio_id = $1 ORDER BY id`, [neg]);
@@ -341,6 +358,22 @@ async function foto(q, neg) {
         assert.ok(await uno(q, 'horarios', 'hor_1_A_suc_mia_2026-W47'));      // el original sigue
         assert.ok(await uno(q, 'menu_publico', 'B|' + S));
         assert.ok(copias.some(c => c === 'evidencias-priv:A/cortes/f1.jpg>B/cortes/f1.jpg'));
+    });
+    await ok('copiar: las cuentas que USA la sucursal viajan (la de sus cortes, la tarjeta de sus gastos y la base de débito), sin sello de sucursal', async () => {
+        const ids = (await q(`SELECT id FROM tarjetas_credito WHERE negocio_id = 'B' ORDER BY id`)).map(r => r.id).sort();
+        assert.deepEqual(ids, ['ctaB', suf('cta_base'), suf('cta_mia'), suf('tc_1')].sort());
+        const c = await uno(q, 'tarjetas_credito', suf('cta_mia'));
+        assert.deepEqual([c.datos.id, c.datos.banco, c.datos.comisionTD, 'sucursalId' in c.datos], [suf('cta_mia'), 'Banorte', 2.5, false]);
+    });
+    await ok('…la de Tulum se queda, y los registros copiados nombran a la copia de su cuenta', async () => {
+        assert.equal(plan.remap.cta_tul, undefined);
+        assert.equal((await uno(q, 'cortes', suf('c4'))).datos.tarjetaCuentas[0].cuentaId, suf('cta_mia'));
+        assert.equal((await uno(q, 'gastos', suf('g1'))).datos.tarjetaId, suf('tc_1'));
+        assert.equal((await uno(q, 'cortes', 'c4')).datos.tarjetaCuentas[0].cuentaId, 'cta_mia');   // el original, igual
+    });
+    await ok('…el resumen las cuenta, y avisa que el destino ya tenía cuentas', async () => {
+        assert.ok(plan.resumen.some(r => r.lbl === 'Cuentas bancarias y tarjetas' && r.copia === 3));
+        assert.ok(plan.avisos.some(a => /ya tenía cuentas bancarias/.test(a)));
     });
     await ok('…el staff NO se copia (su usuario es único) y se avisa', async () => {
         assert.equal((await q(`SELECT count(*)::int AS n FROM staff WHERE negocio_id = 'B'`))[0].n, 0);

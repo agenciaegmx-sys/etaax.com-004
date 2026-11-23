@@ -18075,6 +18075,62 @@ console.log('\n══ BH85 · Staff ETAAX ══');
         eq(/\(\^\|\\\/\)\(hub\|admin\)\(\\\.html\)\?\$/.test(pg), true));
 }
 
+/* ═══════════ SUITE BH86 · LA COPIA DE UNA SUCURSAL SE LLEVA SUS CUENTAS ════
+   Edwin, 23-nov: la comisión de tarjeta y el neto al banco de un corte se
+   calculan con las cuentas del negocio donde se ven. Si la copia no se las
+   llevara, los reportes del negocio nuevo no cuadrarían con los del original.
+   Viajan las que NOMBRAN sus registros y la BASE de débito (la de los cortes
+   viejos sin desglose); las de otras sucursales se quedan. */
+console.log('\n══ BH86 · La copia de una sucursal se lleva sus cuentas ══');
+{
+    const M = vm.createContext({ console, JSON, Object, Array, String, Math });
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'admin-migrar-sucursal.js'), 'utf8'), M);
+    const Mig = M.MigSuc, S = 'suc_mia';
+    const r = (id, d) => ({ id, datos: Object.assign({ id }, d) });
+    const O = { negocio: { id: 'A' }, docs: { negocio_sucursales: { datos: { sucursales: [{ id: 'suc_principal' }, { id: S, nombre: 'El Miami' }] } } },
+        tablas: {
+            cortes: [r('c1', { sucursalId: S, tarjetaCuentas: [{ cuentaId: 'cta_mia' }] }), r('c9', { sucursalId: 'suc_tul', tarjetaCuentas: [{ cuentaId: 'cta_tul' }] })],
+            gastos: [r('g1', { sucursalId: S, tarjetaId: 'tc_1' })],
+            tarjetas_credito: [r('cta_base', { tipo: 'debito' }), r('cta_mia', { tipo: 'debito' }), r('cta_tul', { tipo: 'debito' }), r('tc_1', { tipo: 'credito' }), r('tc_2', { tipo: 'credito' })],
+            negocio_insumos: [], recetas: [] } };
+    const D = { negocio: { id: 'B' }, docs: {}, tablas: { negocio_insumos: [] } };
+    const p = Mig.planearCopia({ origen: O, destino: D, sucursal: S });
+    const filasCta = p.filasCopia.filter(x => x.tabla === Mig.CUENTAS);
+    test('viajan la de sus cortes, la tarjeta de sus gastos y la base de débito; las de otras sucursales no', () =>
+        eq(p.cuentas.map(x => x.id).sort().join(','), 'cta_base,cta_mia,tc_1'));
+    test('…con id nuevo y SIN sello de sucursal (la cuenta es del negocio)', () =>
+        eq(filasCta.map(x => (x.id !== x.datos.id ? 'x' : '') + (x.id.indexOf('-c') > 0 ? 'c' : '') + ('sucursalId' in x.datos ? 'S' : '')).join(','), 'c,c,c'));
+    test('…y el corte copiado nombra a la copia de su cuenta', () =>
+        eq(p.filasCopia.find(x => x.tabla === 'cortes').datos.tarjetaCuentas[0].cuentaId, p.remap.cta_mia));
+    test('el resumen las cuenta', () =>
+        eq((p.resumen.find(x => x.lbl === 'Cuentas bancarias y tarjetas') || {}).copia, 3));
+    test('en el plan de MOVER (v86) no se tocan las cuentas', () =>
+        eq(Mig.planear({ origen: O, destino: D, sucursal: S, llegaComo: 'nueva' }).cuentas.length, 0));
+    test('la cuenta base la decide el núcleo cuando está cargado (no una copia de la regla)', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'admin-migrar-sucursal.js'), 'utf8');
+        return eq(/C\.ctaBaseCatalogo\(C\.cuentasDebito\(ctas\)\)/.test(src), true);
+    });
+    test('el panel carga el núcleo ANTES del motor de migrar', () => {
+        const a = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
+        return eq(a.indexOf('/etaax-core.js') > -1 && a.indexOf('/etaax-core.js') < a.indexOf('/admin-migrar-sucursal.js'), true);
+    });
+
+    // ── El alta del Staff ETAAX va por el servidor (signups apagados) ──
+    const adm = fs.readFileSync(path.join(RAIZ, 'admin-staff-etaax.js'), 'utf8');
+    const fn = fs.readFileSync(path.join(RAIZ, 'supabase/functions/admin-staff-etaax/index.ts'), 'utf8');
+    test('Staff ETAAX: el panel NO usa signUp (en Supabase los registros están apagados)', () =>
+        eq(/\.signUp\(/.test(adm), false));
+    test('…crea, cambia contraseña y da de baja por la Edge Function admin-staff-etaax', () =>
+        eq(/\/functions\/v1\/admin-staff-etaax/.test(adm) && /accion: 'crear'/.test(adm) && /accion: 'clave'/.test(adm) && /accion: 'baja'/.test(adm), true));
+    test('…la función solo acepta la sesión del admin y solo toca cuentas @staff.etaax.app', () =>
+        eq(/quien !== ADMIN_EMAIL/.test(fn) && /endsWith\(DOMINIO\)/.test(fn) && /'@staff\.etaax\.app'/.test(fn), true));
+    test('…pide la misma fuerza de contraseña que el front, y el mismo formato de usuario', () =>
+        eq(/function passwordDebil/.test(fn) && fn.indexOf('/^[a-z0-9][a-z0-9._-]{2,39}$/') > -1 &&
+           fs.readFileSync(path.join(RAIZ, 'staff-etaax.js'), 'utf8').indexOf('/^[a-z0-9][a-z0-9._-]{2,39}$/') > -1, true));
+    test('…y saca la cuenta nueva del espejo `usuarios` (es de dueños: si no, saldría en «Cuentas»)', () =>
+        eq(/from\('usuarios'\)\.delete\(\)\.eq\('id', uid\)/.test(fn), true));
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.

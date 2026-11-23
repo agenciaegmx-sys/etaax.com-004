@@ -11,11 +11,12 @@
    Las reglas compartidas (usuario, correo interno, módulos) viven en
    staff-etaax.js; la puerta de verdad, en la base (supabase-migration-v88.sql).
 
-   La cuenta de Auth se crea con un cliente EFÍMERO (no toca la sesión del
-   admin), como las cuentas de colaboradores (staff-auth.js). Después, SIEMPRE,
-   la contraseña se fija con admin_etx_clave: si la cuenta ya existía (una baja
-   que vuelve), signUp no la cambia; y si «Confirm email» estuviera prendido,
-   la confirma.
+   La cuenta de Auth la crea, le cambia la contraseña y la da de baja la Edge
+   Function `admin-staff-etaax` (supabase/functions/admin-staff-etaax): los
+   registros abiertos están APAGADOS en Supabase a propósito, así que signUp
+   desde aquí contesta «Signups not allowed». La función usa la llave de
+   servicio y solo acepta la sesión del admin maestro. Accesos, nombre y
+   activar/desactivar van directo a las tablas (RLS admin_all de la v88).
 
    Usa del panel: _supabase, _data (negocios y sucursales), esc, etaaxJsArg,
    _admIc, EtaaxPwd. Sub-permisos: ETAAX_SUBPERMS (page-guard.js).
@@ -311,14 +312,24 @@
             return 'Ese usuario ya lo tiene un colaborador de un negocio. Elige otro.';
         return '';
     }
-    var _efimero = null;
-    function efimero() {
-        if (_efimero) return _efimero;
-        if (typeof supabase === 'undefined' || !supabase.createClient) return null;
-        _efimero = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'etaax-etx-alta' }
-        });
-        return _efimero;
+    /* La Edge Function, con la sesión del admin. Si no está desplegada, el
+       navegador no recibe respuesta (CORS) o recibe 404: se dice qué falta. */
+    var FALTA_FUNCION = 'Falta desplegar la función «admin-staff-etaax» en Supabase (Edge Functions). Sin ella no se pueden crear cuentas.';
+    async function funcion(cuerpo) {
+        var token = '';
+        try { var ses = await _supabase.auth.getSession(); token = ses && ses.data && ses.data.session ? ses.data.session.access_token : ''; } catch (e) {}
+        var r, j = {};
+        try {
+            r = await fetch(SUPABASE_URL + '/functions/v1/admin-staff-etaax', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, 'apikey': SUPABASE_ANON },
+                body: JSON.stringify(cuerpo)
+            });
+        } catch (e) { return { error: FALTA_FUNCION + ' (o no hay conexión)' }; }
+        try { j = await r.json(); } catch (e) {}
+        if (r.status === 404 && !(j && j.error)) return { error: FALTA_FUNCION };
+        if (!r.ok || !j || !j.ok) return { error: (j && j.error) || ('No se pudo (HTTP ' + r.status + ').') };
+        return j;
     }
     async function alta() {
         var nombre = (document.getElementById('etxAltaNombre').value || '').trim();
@@ -331,25 +342,10 @@
         if (window.EtaaxPwd) { var ev = EtaaxPwd.evaluar(pass, {}); if (!ev.ok) return fallo('Contraseña débil: ' + (ev.faltan || []).join(', ') + '.'); }
         else if (pass.length < 8) return fallo('La contraseña debe tener al menos 8 caracteres.');
         var btn = document.getElementById('etxAltaBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Creando…'; }
-        var correo = StaffEtx.email(u), ep = efimero();
-        if (!ep) return fallo('No cargó el cliente de Supabase.');
-        // 1) La cuenta de Auth (si ya existía, se recupera abajo).
-        var up = await ep.auth.signUp({ email: correo, password: pass, options: { data: { nombre: nombre, staff_etaax: true } } });
-        try { await ep.auth.signOut({ scope: 'local' }); } catch (e) {}
-        if (up.error && !/already|registered|exists/i.test(up.error.message || '')) return fallo('No se pudo crear la cuenta: ' + up.error.message);
-        // 2) Su uid REAL (con «Confirm email» prendido, signUp de un correo que ya
-        //    existe devuelve un usuario de mentira).
-        var ru = await _supabase.rpc('admin_etx_uid', { p_email: correo });
-        if (ru.error) return fallo(msgError(ru.error));
-        var uid = ru.data || (up.data && up.data.user && up.data.user.id);
-        if (!uid) return fallo('La cuenta no quedó creada. Revisa en Supabase → Auth que se permitan registros.');
-        // 3) La contraseña elegida (y el correo confirmado), siempre.
-        var rc = await _supabase.rpc('admin_etx_clave', { p_uid: uid, p_clave: pass });
-        if (rc.error) return fallo(msgError(rc.error));
-        // 4) Su ficha.
-        var ri = await _supabase.from('etaax_staff').upsert({ uid: uid, usuario: u, datos: { nombre: nombre, creado: new Date().toISOString() },
-                                                             updated_at: new Date().toISOString() }, { onConflict: 'uid' });
-        if (ri.error) return fallo(msgError(ri.error));
+        // La cuenta (ya confirmada) y su ficha, en el servidor.
+        var r = await funcion({ accion: 'crear', usuario: u, nombre: nombre, password: pass });
+        if (r.error) return fallo(r.error);
+        var uid = r.uid;
         await cargar();
         E.sel = uid; E.edit = {};
         E.msg = { persona: { ok: true, txt: 'Listo: ' + nombre + ' entra con el usuario «' + u + '». Ahora dale acceso a sus negocios.' } };
@@ -385,8 +381,8 @@
         var pass = document.getElementById('etxClaveNueva').value || '';
         if (window.EtaaxPwd) { var ev = EtaaxPwd.evaluar(pass, {}); if (!ev.ok) { E.msg.persona = { txt: 'Contraseña débil: ' + (ev.faltan || []).join(', ') + '.' }; render(); return; } }
         else if (pass.length < 8) { E.msg.persona = { txt: 'Al menos 8 caracteres.' }; render(); return; }
-        var r = await _supabase.rpc('admin_etx_clave', { p_uid: p.uid, p_clave: pass });
-        E.msg.persona = r.error ? { txt: msgError(r.error) } : { ok: true, txt: 'Contraseña cambiada. Pásasela por un medio seguro.' };
+        var r = await funcion({ accion: 'clave', uid: p.uid, password: pass });
+        E.msg.persona = r.error ? { txt: r.error } : { ok: true, txt: 'Contraseña cambiada. Pásasela por un medio seguro.' };
         render();
     }
     async function baja() {
@@ -395,8 +391,8 @@
         var t = prompt('Dar de baja a ' + nom + ': se borran su ficha y todos sus accesos, y su contraseña deja de servir.\n\nEscribe su usuario (' + p.usuario + ') para confirmar:');
         if (t === null) return;
         if (String(t).trim().toLowerCase() !== p.usuario) { E.msg.persona = { txt: 'El usuario no coincide; no se dio de baja.' }; render(); return; }
-        var r = await _supabase.rpc('admin_etx_baja', { p_uid: p.uid });
-        if (r.error) { E.msg.persona = { txt: msgError(r.error) }; render(); return; }
+        var r = await funcion({ accion: 'baja', uid: p.uid });
+        if (r.error) { E.msg.persona = { txt: r.error }; render(); return; }
         await cargar();
         E.sel = null; E.edit = {};
         render();

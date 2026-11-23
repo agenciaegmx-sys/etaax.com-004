@@ -30,7 +30,11 @@ const nube = {
     negocio_sucursales: [
         { negocio_id: 'A', updated_at: '2026-11-20T10:00:00+00:00', datos: { sucursales: [{ id: 'suc_principal', nombre: 'Matriz', activa: true }, { id: S, nombre: 'El Miami', activa: true }] } },
         { negocio_id: 'B', updated_at: '2026-11-20T10:00:00+00:00', datos: { sucursales: [{ id: 'suc_principal', nombre: 'Matriz B', activa: true }] } }],
-    cortes: [fila('c1', 'A', { sucursalId: S, foto: 'priv:A/cortes/f1.jpg' }), fila('c2', 'A', {})],
+    cortes: [fila('c1', 'A', { sucursalId: S, foto: 'priv:A/cortes/f1.jpg', tarjetaCuentas: [{ cuentaId: 'cta_mia', neto: 100 }] }), fila('c2', 'A', {})],
+    // Cuentas bancarias (del negocio): la base de débito y la que usa la sucursal viajan; la otra, no.
+    tarjetas_credito: [fila('cta_base', 'A', { tipo: 'debito', banco: 'BBVA', fechaAlta: '2025-01-01' }),
+                       fila('cta_mia', 'A', { tipo: 'debito', banco: 'Banorte', fechaAlta: '2026-01-01' }),
+                       fila('cta_otra', 'A', { tipo: 'debito', banco: 'Santander', fechaAlta: '2026-02-01' })],
     inventarios: [fila('inv1', 'A', { sucursalId: S, cocktailsVendidos: { r1: 2 } })],
     staff: [fila('st1', 'A', { sucursalId: S, nombre: 'Ana' })],
     negocio_insumos: [{ negocio_id: 'A', insumo_id: 'i1', datos: { id: 'i1', nombre: 'Ron', sucursales: [S] } }],
@@ -83,6 +87,7 @@ const nube = {
             const t = await page.evaluate(() => document.getElementById('migPlan').innerText.replace(/\s+/g, ' '));
             assert.match(t, /El Miami · de EGMx → a Miami SA/);
             assert.match(t, /Cortes de caja 1/);
+            assert.match(t, /Cuentas bancarias y tarjetas las que usan sus cortes, depósitos y gastos, y la principal de débito 2/);
             assert.match(t, /no se copia: su usuario es único/);
             assert.match(t, /El negocio original NO se toca/);
         });
@@ -99,6 +104,14 @@ const nube = {
             assert.equal(cortes.find(c => c.id === 'c1').negocio_id, 'A');
             assert.equal((await enNube('staff')).filter(x => x.negocio_id === 'B').length, 0);
             assert.deepEqual(await page.evaluate(() => __copias), ['evidencias-priv:A/cortes/f1.jpg>B/cortes/f1.jpg']);
+        });
+        await caso('…con las cuentas que usa la sucursal (y el corte nombra a la copia de su cuenta)', async () => {
+            const ctas = (await enNube('tarjetas_credito')).filter(c => c.negocio_id === 'B');
+            assert.deepEqual(ctas.map(c => c.datos.banco).sort(), ['BBVA', 'Banorte']);
+            const copia = (await enNube('cortes')).find(c => c.negocio_id === 'B');
+            const mia = ctas.find(c => c.datos.banco === 'Banorte');
+            assert.equal(copia.datos.tarjetaCuentas[0].cuentaId, mia.id);
+            assert.equal((await enNube('tarjetas_credito')).filter(c => c.negocio_id === 'A').length, 3);
         });
         await caso('…la sucursal aparece en el destino diciendo de dónde viene, y la pantalla lo confirma', async () => {
             const b = (await enNube('negocio_sucursales')).find(x => x.negocio_id === 'B');
