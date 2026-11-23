@@ -71,3 +71,16 @@ body.cuenta-page{padding:0;background:var(--bg);}
 @media(max-width:780px){.cuenta-layout{grid-template-columns:1fr;}.cuenta-shell{padding:20px 16px 40px;}.cuenta-intro h1{font-size:36px;}}
 @media(max-width:440px){.cuenta-fields{grid-template-columns:1fr;}.cuenta-card{padding:20px;}.cuenta-actions .cuenta-btn{flex:1;}.cuenta-tabs{gap:20px;}.cuenta-hero h2{font-size:18px;}}
 @media print{.cuenta-tabs,.cuenta-volver,.cuenta-actions{display:none;}.cuenta-layout{display:block;}.cuenta-card{break-inside:avoid;margin-bottom:16px;}}
+
+/* Plan por apps (v89) */
+.plan-apps{color:var(--cyan,var(--green));font-weight:600;}
+.plan-sub{font-size:11.5px;color:var(--text-dim,var(--muted,#888));}
+.plan-editor{margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:14px;}
+.plan-opciones{display:flex;flex-direction:column;gap:8px;font-size:13px;}
+.plan-opciones label{display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);}
+.plan-suc{display:flex;flex-direction:column;gap:8px;}
+.plan-suc-nom{font-size:13px;font-weight:700;}
+.plan-resumen{font-size:13px;line-height:1.6;}
+/* Los radios del editor de plan no son campos de texto (.cuenta-field input les ponía ancho completo y relleno). */
+.cuenta-field .plan-opciones input[type=radio]{width:auto;min-width:0;padding:0;border:0;background:none;margin:0;flex:0 0 auto;accent-color:var(--green);}
+.plan-opciones label{justify-content:flex-start;font-weight:400;}

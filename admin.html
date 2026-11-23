@@ -291,6 +291,18 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
 .mig-avance{font-size:12.5px;color:var(--muted);}
 .mig-ok-nota{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text);}
 .mig-ok-nota .etx-ic{color:var(--green);}
+/* Planes por apps (admin-planes.js) */
+.admp-ov{position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 16px;overflow-y:auto;}
+.admp-caja{background:var(--s1);border:1px solid var(--b1);border-radius:16px;width:100%;max-width:560px;padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);}
+.admp-tit{font-size:19px;font-weight:600;}
+.admp-fila{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;font-size:13px;}
+.admp-fila .form-label{width:100%;margin:0;}
+.admp-fila label{display:inline-flex;align-items:center;gap:7px;cursor:pointer;}
+.admp-fila input{accent-color:var(--cyan);}
+.admp-suc{display:flex;flex-direction:column;gap:8px;}
+.admp-suc-nom{font-size:13.5px;font-weight:700;}
+.admp-total{font-size:13px;color:var(--muted);}
+.admp-total b{color:var(--text);}
 /* Staff ETAAX */
 .etx-lay{display:grid;grid-template-columns:minmax(240px,320px) minmax(0,1fr);gap:16px;margin-top:16px;align-items:start;}
 .etx-lista{display:flex;flex-direction:column;gap:8px;padding:14px;}
@@ -572,6 +584,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
             </select>
           </div>
         </div>
+        <!-- Las apps con las que nace el negocio (admin-planes.js; la v89 las pasa a su suscripción) -->
+        <div style="margin-top:12px"><span class="form-label">Apps con las que empieza (Matriz)</span>
+          <div id="invPlanResumen" style="font-size:13px;margin:6px 0 8px"></div>
+          <button type="button" class="btn-mini" onclick="AdmPlanes.elegirInvitacion()">Elegir apps y forma de pago</button></div>
         <div style="margin-top:12px">
           <label class="form-label" for="invNotas">Notas internas (opcional)</label>
           <input type="text" id="invNotas" class="form-input" placeholder="Lo atendió Edwin · acordamos 2 sucursales">
@@ -727,15 +743,17 @@ async function betaAppCopiar() {
 <script src="/js-arg.js"></script><!-- un id dentro de un onclick es un dato, no código -->
 <script src="/password.js"></script><!-- medidor y generador: la misma regla que el alta -->
 <script src="/reporte-marca.js?v=90a9c06c"></script>
-<script src="/precios.js?v=f98b43e7"></script><!-- tabla de precios por sucursal (una sola verdad) -->
+<script src="/precios.js?v=c0cc0bbf"></script><!-- tabla de precios por sucursal (una sola verdad) -->
 <script src="/admin-documentos.js?v=ca9a7db8"></script>
 <script src="/etaax-core.js?v=a88c0cd1"></script><!-- importeLetra para recibos y presupuestos -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script><!-- los iconos de la app (SVG) -->
 <script src="/etaax-header.js?v=15a5a6ef"></script><!-- la barra de arriba, la misma de todo el sistema -->
 <script src="/admin-migrar-sucursal.js?v=61629f85"></script><!-- migrar una sucursal: el plan (lo aplica la v86) -->
-<script src="/page-guard.js?v=b4c13e80"></script><!-- solo los catálogos de permisos (el guard no aplica en el admin) -->
+<script src="/page-guard.js?v=efd50067"></script><!-- solo los catálogos de permisos (el guard no aplica en el admin) -->
 <script src="/staff-etaax.js?v=9c3b389b"></script><!-- Staff ETAAX: reglas compartidas -->
 <script src="/admin-staff-etaax.js?v=2b941941"></script><!-- Staff ETAAX: la pantalla del panel (v88) -->
+<script src="/etaax-apps-ui.js?v=58f96d85"></script><!-- el selector de apps (Cost·ax, Fin·ax, Equip·ax) -->
+<script src="/admin-planes.js?v=16c8138d"></script><!-- planes por apps: editar, invitar, solicitudes (v89) -->
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -1031,6 +1049,7 @@ async function cargarDatos() {
     renderSolicitudes();
     _admCargado = true;
     renderAdmHome();
+    if (window.AdmPlanes) AdmPlanes.pintarInvitacion();
     // Cuántos hay en el Staff ETAAX (para su tarjeta). No detiene nada.
     if (window.AdmEtx) AdmEtx.cargar().then(function () { if (document.getElementById('admHome').style.display !== 'none') renderAdmHome(); }, function () {});
     // Si se recargó con una sección abierta (#negocios), se regresa a ella.
@@ -1066,14 +1085,15 @@ function renderSolicitudes() {
         var sucsHoy = _data.sucsNeg[s.negocio_id];
         var btnB = 'border:none;border-radius:6px;padding:5px 9px;font-family:inherit;font-size:11px;cursor:pointer;margin-right:4px;';
         var acciones = d.estado === 'pendiente'
-            ? '<button style="' + btnB + 'background:rgba(61,190,122,.15);color:#3dbe7a" onclick="activarSolicitud(\'' + etaaxJsArg(s.id) + '\')">✅ Activar sucursal</button>' +
+            ? '<button style="' + btnB + 'background:rgba(61,190,122,.15);color:#3dbe7a" onclick="activarSolicitud(\'' + etaaxJsArg(s.id) + '\')">' + (d.tipo === 'apps' ? '✅ Activar cambio' : '✅ Activar sucursal') + '</button>' +
               '<button style="' + btnB + 'background:rgba(232,90,90,.14);color:#e85a5a" title="Rechazar" onclick="rechazarSolicitud(\'' + etaaxJsArg(s.id) + '\')">✖</button>'
             : (d.atendidaAt ? '<span style="font-size:11px;color:var(--muted)">' + new Date(d.atendidaAt).toLocaleDateString('es-MX') + '</span>' : '—');
         return '<tr>' +
             '<td>' + fecha + '</td>' +
             '<td><b>' + esc(negNombre) + '</b></td>' +
             '<td>' + esc(d.solicitante || '—') + '<div style="font-size:11px;color:var(--muted)">' + esc(d.email || '') + '</div></td>' +
-            '<td>🏪 ' + esc(d.nombreSucursal || '—') + '</td>' +
+            '<td>' + (d.tipo === 'apps' && window.AdmPlanes ? AdmPlanes.solicitudTexto(d)
+                : '🏪 ' + esc(d.nombreSucursal || '—') + (d.apps && window.EtaaxPrecios ? '<div style="font-size:11px;color:var(--cyan)">' + esc(EtaaxPrecios.nombreApps(d.apps)) + '</div>' : '')) + '</td>' +
             '<td>' + (sucsHoy != null ? sucsHoy + ' hoy' : '') + ' <span style="color:var(--muted);font-size:11px">(' + (d.sucursalesActivas || 0) + ' al solicitar)</span></td>' +
             '<td>' + _solFmt(d.costoActual) + ' → <b style="color:#3dbe7a">' + _solFmt(d.costoNuevo) + '</b>/mes</td>' +
             '<td><span style="background:' + est.c + '22;color:' + est.c + ';border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600">' + est.l + '</span></td>' +
@@ -1085,6 +1105,21 @@ async function activarSolicitud(id) {
     var s = (_data.solicitudes || []).find(function(x){ return x.id === id; });
     if (!s) return;
     var d = s.datos || {};
+    /* Cambio de apps (v89): el plan que pidió el dueño pasa a su suscripción. */
+    if (d.tipo === 'apps') {
+        admConfirm('Activar cambio de plan',
+            'El negocio queda con el plan que pidió (' + esc(EtaaxPrecios.fmt(d.costoNuevo || 0)) + (d.cicloNuevo === 'anual' ? ' al año' : ' al mes') + '). Hazlo cuando el cobro esté acordado. ¿Continuar?',
+            async function () {
+                var e = await AdmPlanes.activarApps(s);
+                if (e) { admAlert('No se pudo aplicar: ' + e); return; }
+                var nd = Object.assign({}, d, { estado:'activada', atendidaAt: new Date().toISOString() });
+                await _supabase.from('solicitudes_plan').update({ datos: nd, updated_at: new Date().toISOString() }).eq('id', s.id);
+                s.datos = nd;
+                renderSolicitudes(); renderNegocios();
+                admAlert('Plan actualizado ✅ — el negocio lo verá al volver a entrar.');
+            }, { yesLabel:'Sí, activar' });
+        return;
+    }
     admConfirm('Activar sucursal',
         'Se creará la sucursal "' + (d.nombreSucursal || 'Sucursal nueva') + '" en el negocio y la solicitud quedará como activada. Hazlo cuando el cobro esté acordado. ¿Continuar?',
         async function(){
@@ -1092,8 +1127,9 @@ async function activarSolicitud(id) {
             var res = await _supabase.from('negocio_sucursales').select('datos').eq('negocio_id', s.negocio_id).maybeSingle();
             var doc = (res.data && res.data.datos) || {};
             var sucs = Array.isArray(doc.sucursales) ? doc.sucursales : [];
+            var nuevaId = 'suc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
             sucs.push({
-                id: 'suc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+                id: nuevaId,
                 negocioId: s.negocio_id, nombre: d.nombreSucursal || 'Sucursal nueva',
                 activa: true, fechaCreado: new Date().toISOString()
             });
@@ -1101,6 +1137,13 @@ async function activarSolicitud(id) {
             var up = await _supabase.from('negocio_sucursales')
                 .upsert({ negocio_id: s.negocio_id, datos: doc, updated_at: new Date().toISOString() }, { onConflict: 'negocio_id' });
             if (up.error) { admAlert('No se pudo crear la sucursal: ' + up.error.message); return; }
+            // 1b. Las apps que pidió para ella (v89). Sin apps en la solicitud, sigue el plan base.
+            if (d.apps && window.AdmPlanes) {
+                var ePlan = await AdmPlanes.aplicarSucursalNueva(s.negocio_id, nuevaId, d.apps);
+                if (ePlan) admAlert('La sucursal se creó, pero sus apps no se guardaron: ' + ePlan + '. Ponlas desde el plan del negocio.');
+            }
+            (_data.sucursales = _data.sucursales || {})[s.negocio_id] = sucs.filter(function(x){ return x && x.activa !== false; })
+                .map(function(x){ return { id: x.id, nombre: x.nombre || x.id }; });
             // 2. Marcar la solicitud como atendida
             var nd = Object.assign({}, d, { estado:'activada', atendidaAt: new Date().toISOString() });
             await _supabase.from('solicitudes_plan').update({ datos: nd, updated_at: new Date().toISOString() }).eq('id', s.id);
@@ -1210,7 +1253,8 @@ function renderNegocios() {
         var badge = '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';border:1px solid ' + st.color + '55">' + st.label + '</span>';
         // Botones de gestión (stopPropagation para no abrir el detalle).
         var btnBase = 'border:none;border-radius:7px;padding:5px 9px;font-family:inherit;font-size:11px;cursor:pointer;margin-right:4px;display:inline-flex;align-items:center;vertical-align:middle;min-height:27px;';
-        var btnActivar = '<button onclick="event.stopPropagation();activarSuscripcion(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(61,190,122,.15);color:#3dbe7a">' + (st.activa ? '+1 mes' : 'Activar 1 mes') + '</button>';
+        var anualN = !!(window.AdmPlanes && AdmPlanes.cotizacion(n.id).ciclo === 'anual');
+        var btnActivar = '<button onclick="event.stopPropagation();activarSuscripcion(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(61,190,122,.15);color:#3dbe7a">' + (st.activa ? (anualN ? '+1 año' : '+1 mes') : (anualN ? 'Activar 1 año' : 'Activar 1 mes')) + '</button>';
         var btnCancelar = st.estado !== 'cancelada' && st.estado !== 'pendiente'
             ? '<button onclick="event.stopPropagation();cancelarSuscripcion(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(232,90,90,.14);color:#e85a5a">Cancelar</button>'
             : '';
@@ -1220,7 +1264,8 @@ function renderNegocios() {
         var btnEliminar = '<button title="Eliminar negocio" onclick="event.stopPropagation();eliminarNegocio(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(232,90,90,.10);color:var(--red)">' + (_admIc('mov-eliminar', 15) || '🗑️') + '</button>';
         return '<tr class="clickable" onclick="abrirDetalleNegocio(\'' + etaaxJsArg(n.id) + '\')">' +
             '<td><strong>' + esc(d.emoji||'🏢') + ' ' + esc(d.nombre||'—') + '</strong>' +
-                '<div class="text-dim" style="font-size:11px">' + esc(d.tipo||'—') + ' · ' + staff + ' colab.</div></td>' +
+                '<div class="text-dim" style="font-size:11px">' + esc(d.tipo||'—') + ' · ' + staff + ' colab.</div>' +
+                (window.AdmPlanes ? '<div style="font-size:11px;color:var(--cyan)">' + esc(AdmPlanes.resumen(n.id)) + '</div>' : '') + '</td>' +
             '<td class="text-dim">' + esc(dueno ? (dueno.nombre||'—') : '—') + '</td>' +
             '<td>' + badge + '</td>' +
             '<td class="text-dim">' + vence + '</td>' +
@@ -1267,6 +1312,9 @@ async function activarSuscripcion(negId) {
     var desde = vigente ? corte : EtaaxCore.todayStr();
     var ancla = (s && s.dia_cobro) || Number(EtaaxCore.todayStr().slice(8, 10));
     var nuevo = EtaaxCore.proximoCobro(ancla, desde);
+    /* Plan anual (v89): se pagó un año → doce cortes de un jalón, con la misma ancla. */
+    if (window.AdmPlanes && AdmPlanes.cotizacion(negId).ciclo === 'anual')
+        for (var _m = 1; _m < 12; _m++) nuevo = EtaaxCore.proximoCobro(ancla, nuevo);
     var reg = {
         negocio_id: negId, estado: 'activa',
         proximo_cobro: nuevo, dia_cobro: ancla,
@@ -2612,6 +2660,7 @@ function abrirDetalleNegocio(nid) {
             '<div class="detail-section-title">Staff (' + staff.length + ')</div>' +
             staffHtml +
         '</div>' +
+        (window.AdmPlanes ? AdmPlanes.seccionDetalle(n.id) : '') +
         '<button onclick="entrarComoAdmin()" ' +
             'style="width:100%;margin-top:20px;background:var(--gold);color:#0a0908;font-family:\'DM Sans\',sans-serif;' +
             'font-size:13px;font-weight:700;padding:12px;border-radius:8px;border:none;cursor:pointer;letter-spacing:.5px">' +
@@ -2656,6 +2705,7 @@ var ACC_TIPO = {
     admin:          { ic:'🛡️', txt:'Admin ETAAX',      col:'#7ab8f5' },
     admin_fantasma: { ic:'👻', txt:'Admin (sin login)', col:'#7ab8f5' },
     admin_reset:    { ic:'🔑', txt:'Cambio de credenciales', col:'#e05252' },
+    staff_etaax:    { ic:'🧭', txt:'Staff ETAAX',      col:'#8ce4ee' },
     desconocido:    { ic:'❔', txt:'Sin identificar',  col:'var(--dim)' }
 };
 
@@ -3450,20 +3500,25 @@ async function generarInvitacion() {
     var token = _invToken();
     var expira = new Date(Date.now() + dias * 86400000).toISOString();
     btn.disabled = true; btn.textContent = 'Generando…';
-    var r = await _supabase.from('invitaciones').insert({
-        token: token, email: email, nombre_negocio: negocio,
-        forma_pago: pago, notas: notas || null, expira_at: expira
-    });
+    var planInv = window.AdmPlanes ? AdmPlanes.invitacionPlan() : null;
+    var filaInv = { token: token, email: email, nombre_negocio: negocio,
+        forma_pago: pago, notas: notas || null, expira_at: expira };
+    if (planInv) filaInv.plan = planInv;   // sin elegir = paquete completo (y no exige la v89)
+    var r = await _supabase.from('invitaciones').insert(filaInv);
     btn.disabled = false; btn.textContent = 'Generar invitación';
 
     if (r.error) {
         out.innerHTML = '<div style="color:#e05a3a;font-size:13px">No se pudo guardar: ' + esc(r.error.message) +
-            (/relation .* does not exist/i.test(r.error.message) ? '<br>Falta correr la migración v49 en el SQL Editor.' : '') + '</div>';
+            (/relation .* does not exist/i.test(r.error.message) ? '<br>Falta correr la migración v49 en el SQL Editor.' : '') +
+            (/plan/i.test(r.error.message) ? '<br>Falta correr la migración v89 en el SQL Editor.' : '') + '</div>';
         return;
     }
+    var resumenInv = planInv && window.EtaaxPrecios ? EtaaxPrecios.cotizar(planInv, [{ id: 'suc_principal' }]) : null;
+    if (window.AdmPlanes) AdmPlanes.invitacionReset();
 
     var link = _invLink(token);
     var cuerpo = 'Hola,\n\nYa está lista tu invitación para entrar a ETAAX con el negocio "' + negocio + '".\n\n' +
+        (resumenInv ? 'Tu plan: ' + resumenInv.lineas[0].nombreApps + ' · ' + EtaaxPrecios.fmt(resumenInv.total) + (resumenInv.ciclo === 'anual' ? ' al año' : ' al mes') + '.\n\n' : '') +
         'Abre este link y crea tu contraseña:\n' + link + '\n\n' +
         'El link vence en ' + dias + ' días y solo se puede usar una vez.\n\n' +
         (pago === 'stripe'

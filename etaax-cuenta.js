@@ -240,16 +240,33 @@
             ]);
             if (turno !== estado.vuelta) return;
             if (rs.some(function (r) { return r.error; })) throw new Error('No pudimos consultar el servicio completo.');
-            pintarPlan(negocio, rs[0].data, rs[1].data, rs[2].data);
+            /* Las apps de cada sucursal (v89). Va aparte: sin la v89 la columna no
+               existe y el resto de la página no tiene por qué caerse — sin plan
+               es el paquete completo, que es lo que tenían todos. */
+            var plan = null, pendiente = null;
+            try {
+                var rp = await conPlazo(_supabase.rpc('negocio_plan', { p_neg: id }));
+                if (!rp.error) plan = rp.data || null;
+            } catch (e) {}
+            if (!estado.staff) {
+                try {
+                    var rq = await conPlazo(_supabase.from('solicitudes_plan').select('id,datos').eq('negocio_id', id));
+                    pendiente = ((rq && rq.data) || []).filter(function (x) { return x.datos && x.datos.tipo === 'apps' && x.datos.estado === 'pendiente'; })[0] || null;
+                } catch (e) {}
+            }
+            if (turno !== estado.vuelta) return;
+            pintarPlan(negocio, rs[0].data, rs[1].data, rs[2].data, plan, pendiente);
         } catch (e) {
             if (turno !== estado.vuelta) return;
             $('planContenido').innerHTML = '<section class="cuenta-card"><h2>No pudimos consultar este plan</h2><p>Revisa tu conexión. El estado de tu servicio y los importes no pudieron verificarse.</p><div class="cuenta-actions"><button class="cuenta-btn secundario" id="planReintentar">Reintentar</button></div></section>';
             $('planReintentar').onclick = cargarPlan;
         }
     }
-    function pintarPlan(negocio, doc, sub, cobro) {
+    function pintarPlan(negocio, doc, sub, cobro, plan, pendiente) {
         var sucursales = doc && doc.datos && doc.datos.sucursales;
-        var cantidad = Math.max(1, Array.isArray(sucursales) ? sucursales.length : 0);
+        var activas = (Array.isArray(sucursales) ? sucursales : []).filter(function (x) { return x && x.activa !== false; });
+        var cantidad = Math.max(1, activas.length);
+        var cot = EtaaxPrecios.cotizar(plan, activas);
         sub = sub || {};
         if (!cobro || typeof cobro.activo !== 'boolean') throw new Error('Falta confirmar el estado del servicio.');
         var nombre = (negocio.datos || {}).nombre || 'Tu negocio';
@@ -259,22 +276,30 @@
         var est = cobro.activo ? 'activa' : cobro.estado === 'activa' ? 'vencida' : cobro.estado || 'pendiente';
         var etiqueta = cobro.activo && tol.enTolerancia ? 'En periodo de tolerancia' : ({activa:'Servicio activo',vencida:'Pago pendiente',pendiente:'Pendiente de activación',cancelada:'Servicio cancelado'})[est] || 'Estado por confirmar';
         var texto = 'Hola, soy ' + identidad() + '. Mi negocio es ' + nombre + ' (' + negocio.id + ').';
-        var costo = pesos(EtaaxPrecios.precioMensual(cantidad));
-        var filas = Array.from({ length: cantidad }, function (_, i) {
-            var suc = Array.isArray(sucursales) && sucursales[i];
-            return '<tr><td>' + esc(suc && suc.nombre || (i ? 'Sucursal ' + (i + 1) : 'Matriz')) + '</td><td>' + pesos(EtaaxPrecios.precioSucursal(i + 1)) + '</td></tr>';
+        var anual = cot.ciclo === 'anual', porSuc = cot.cobro === 'sucursal';
+        var costo = pesos(cot.mensual);
+        var filas = cot.lineas.map(function (l) {
+            return '<tr><td>' + esc(l.nombre) + '</td><td><span class="plan-apps">' + esc(l.nombreApps) + '</span></td><td>' + pesos(l.mensual) +
+                (anual ? '<div class="plan-sub">' + pesos(l.anual) + ' al año</div>' : '') + '</td></tr>';
         }).join('');
         var servicio = '<section class="cuenta-card"><h2>' + icono('org-corporativo') + esc(categoria) + '</h2><p>' + esc(nombre) + '</p><span class="cuenta-badge ' + esc(est) + '">' + esc(etiqueta) + '</span>' +
-            (estado.staff ? '' : '<div class="cuenta-precio">' + costo + ' <small>MXN / mes</small></div><p>Importe del servicio según las sucursales registradas.</p>') +
+            (estado.staff ? '' : (anual
+                ? '<div class="cuenta-precio">' + pesos(cot.anual) + ' <small>MXN / año</small></div><p>Plan anual: pagas ' + EtaaxPrecios.ANUAL_MESES + ' meses y usas 12 (equivale a ' + costo + ' al mes; ahorras ' + pesos(cot.ahorroAnual) + ').</p>'
+                : '<div class="cuenta-precio">' + costo + ' <small>MXN / mes</small></div><p>Importe del servicio según las apps de cada sucursal.</p>')) +
             '<dl class="cuenta-datos"><div><dt>Sucursales</dt><dd>' + cantidad + '</dd></div><div><dt>' + (cobro.activo ? 'Próxima fecha de cobro' : 'Fecha de cobro') + '</dt><dd>' + esc(fecha(corte)) + '</dd></div></dl>' +
             (tol.enTolerancia && cobro.activo ? '<div class="cuenta-nota">Tu servicio sigue activo durante la tolerancia. Regulariza el pago antes del ' + esc(fecha(tol.limite)) + '.</div>' : '') + '</section>';
         if (estado.staff) {
             $('planContenido').innerHTML = '<div class="cuenta-layout">' + servicio + '<section class="cuenta-card"><h2>Servicio del negocio</h2><p>El titular administra la suscripción, los pagos y las solicitudes de factura. Puedes consultar aquí el estado de tu servicio.</p></section></div>';
             return;
         }
-        var pago = '<section class="cuenta-card"><h2>' + icono('finanzas') + 'Pago del servicio</h2><p>' +
+        /* En Stripe hoy existe UN precio: el paquete completo, mensual, cobrado
+           junto. Planes por app, anuales o por sucursal se pagan por transferencia
+           hasta que se den de alta sus precios en Stripe. */
+        var tarjetaLista = cot.todoPaquete && !anual && !porSuc;
+        var pago = '<section class="cuenta-card"><h2>' + icono('finanzas') + 'Pago del servicio</h2>' +
+            (!tarjetaLista && !sub.stripe_subscription_id ? '<div class="cuenta-nota" style="margin-bottom:10px">El pago con tarjeta para planes por app, anuales o por sucursal llega pronto. Por ahora, paga por transferencia.</div>' : '') + '<p>' +
             (sub.stripe_subscription_id ? 'Tu negocio tiene una suscripción con tarjeta. Para revisar el cobro o actualizar tu forma de pago, contacta a soporte.' : cobro.activo ? 'Tu servicio está activo. Aquí tienes los datos para tu próximo pago por transferencia.' : 'Puedes pagar con tarjeta o hacer una transferencia para activar tu servicio.') + '</p>' +
-            '<div class="cuenta-actions">' + (!sub.stripe_subscription_id && !cobro.activo ? '<button class="cuenta-btn" id="planPagar">Pagar con tarjeta</button>' : '') +
+            '<div class="cuenta-actions">' + (!sub.stripe_subscription_id && !cobro.activo && tarjetaLista ? '<button class="cuenta-btn" id="planPagar">Pagar con tarjeta</button>' : '') +
             botonContacto('Consulta de pago ETAAX', texto + ' Quiero consultar mi pago de ETAAX.', 'Consultar mi pago', true) + '</div>' +
             '<details class="cuenta-details"><summary>Ver datos para transferencia</summary><div style="margin-top:14px">' + ETAAX_PAGO_DATOS.html(true) + '</div><div class="cuenta-actions">' +
             botonContacto('Comprobante de pago ETAAX', texto + ' Quiero enviar el comprobante de mi transferencia.', 'Enviar comprobante', true) + '</div></details></section>';
@@ -282,10 +307,81 @@
             '<div class="cuenta-nota" style="margin-top:14px">Ten a la mano tu RFC, razón social, código postal fiscal, régimen fiscal y uso de CFDI.</div>' +
             '<div class="cuenta-actions">' + botonContacto('Solicitud de factura ETAAX · ' + nombre, texto + '\n\nSolicito la factura de mi pago.\nRFC:\nRazón social:\nCódigo postal fiscal:\nRégimen fiscal:\nUso de CFDI:\nFecha e importe del pago:', 'Solicitar factura por correo', false) + '</div>' +
             '<p style="margin-top:14px">Las facturas y los comprobantes se atienden con soporte.</p></section>';
-        var detalle = '<section class="cuenta-card"><h2>Costo por sucursal</h2><p>La tarifa de cada sucursal viene de la tabla de precios de ETAAX.</p><div class="cuenta-table-wrap"><table class="cuenta-table"><thead><tr><th>Sucursal</th><th>MXN / mes</th></tr></thead><tbody>' + filas +
-            '</tbody><tfoot><tr><td><b>Total mensual</b></td><td><b>' + costo + '</b></td></tr></tfoot></table></div></section>';
+        var detalle = '<section class="cuenta-card"><h2>Tus apps por sucursal</h2><p>' +
+            (porSuc ? 'Cada sucursal paga lo suyo, por separado.' : 'Todas las sucursales se pagan juntas, en un solo cobro.') +
+            ' La 2ª sucursal en adelante lleva su descuento.</p><div class="cuenta-table-wrap"><table class="cuenta-table"><thead><tr><th>Sucursal</th><th>Apps</th><th>MXN / mes</th></tr></thead><tbody>' + filas +
+            '</tbody><tfoot><tr><td colspan="2"><b>Total mensual</b></td><td><b>' + costo + '</b>' + (anual ? '<div class="plan-sub">' + pesos(cot.anual) + ' al año</div>' : '') + '</td></tr></tfoot></table></div>' +
+            (pendiente
+                ? '<div class="cuenta-nota" style="margin-top:14px">Tienes una solicitud de cambio de plan en revisión. Un asesor la activa y te avisa.</div>'
+                : '<div class="cuenta-actions"><button class="cuenta-btn" id="planCambiar">Agregar apps o cambiar plan</button></div>') +
+            '<div id="planEditor"></div></section>';
         $('planContenido').innerHTML = '<div class="cuenta-layout"><div class="cuenta-stack">' + servicio + detalle + '</div><div class="cuenta-stack">' + pago + factura + '</div></div>';
         if ($('planPagar')) $('planPagar').onclick = function () { pagar(negocio.id, this); };
+        if ($('planCambiar')) $('planCambiar').onclick = function () { editarPlan(negocio, activas, plan, cot); };
+    }
+    /* ── AGREGAR APPS O CAMBIAR EL PLAN ──────────────────────────────────────
+       El dueño arma el plan que quiere (apps de cada sucursal, mensual o anual,
+       cobro junto o por sucursal) y lo manda como SOLICITUD: la activa ETAAX
+       desde el panel, cuando el cobro esté acordado. Nada cambia hasta entonces. */
+    function editarPlan(negocio, activas, plan, cotHoy) {
+        var cont = $('planEditor');
+        if (!cont) return;
+        var p = EtaaxPrecios.planNormal(plan);
+        var lista = activas.length ? activas : [{ id: 'suc_principal', nombre: 'Matriz' }];
+        cont.innerHTML = '<div class="plan-editor">' +
+            '<div class="cuenta-field"><label>Cada cuánto pagas</label><div class="plan-opciones">' +
+                '<label><input type="radio" name="planCiclo" value="mensual"' + (p.ciclo === 'mensual' ? ' checked' : '') + '> Mensual</label>' +
+                '<label><input type="radio" name="planCiclo" value="anual"' + (p.ciclo === 'anual' ? ' checked' : '') + '> Anual: pagas ' + EtaaxPrecios.ANUAL_MESES + ' meses y usas 12</label></div></div>' +
+            (lista.length > 1 ? '<div class="cuenta-field"><label>Cómo se cobra</label><div class="plan-opciones">' +
+                '<label><input type="radio" name="planCobro" value="negocio"' + (p.cobro === 'negocio' ? ' checked' : '') + '> Todas las sucursales juntas</label>' +
+                '<label><input type="radio" name="planCobro" value="sucursal"' + (p.cobro === 'sucursal' ? ' checked' : '') + '> Cada sucursal por separado</label></div></div>' : '') +
+            lista.map(function (s, i) {
+                return '<div class="plan-suc"><div class="plan-suc-nom">' + esc(s.nombre || (i ? 'Sucursal ' + (i + 1) : 'Matriz')) + '</div>' +
+                    EtaaxAppsUI.html('planApps_' + i, EtaaxPrecios.appsDe(p, s.id), { n: i + 1, ciclo: p.ciclo }) + '</div>';
+            }).join('') +
+            '<div class="plan-resumen" id="planResumen"></div>' +
+            '<div class="cuenta-actions"><button class="cuenta-btn" id="planEnviar">Enviar solicitud</button>' +
+                '<button class="cuenta-btn secundario" id="planCancelar">Cancelar</button></div>' +
+            '<p class="cuenta-msg" id="planMsg" role="status"></p></div>';
+        var propuesta = function () {
+            var ciclo = (cont.querySelector('input[name=planCiclo]:checked') || {}).value || 'mensual';
+            var cobroSel = (cont.querySelector('input[name=planCobro]:checked') || {}).value || 'negocio';
+            var nuevo = { ciclo: ciclo, cobro: cobroSel, base: p.base, sucursales: {} }, falta = false;
+            lista.forEach(function (s, i) { var sel = EtaaxAppsUI.leer('planApps_' + i); if (!sel) falta = true; nuevo.sucursales[s.id] = sel || 'suite'; });
+            return { plan: nuevo, falta: falta };
+        };
+        var resumen = function () {
+            var pr = propuesta(), c = EtaaxPrecios.cotizar(pr.plan, lista);
+            lista.forEach(function (_, i) { EtaaxAppsUI.ciclo('planApps_' + i, pr.plan.ciclo); });
+            $('planResumen').innerHTML = pr.falta ? '<span class="cuenta-msg error">Cada sucursal necesita al menos una app.</span>'
+                : 'Hoy pagas <b>' + pesos(cotHoy.total) + '</b> ' + (cotHoy.ciclo === 'anual' ? 'al año' : 'al mes') +
+                  ' · con el cambio: <b>' + pesos(c.total) + '</b> ' + (c.ciclo === 'anual' ? 'al año (ahorras ' + pesos(c.ahorroAnual) + ')' : 'al mes');
+            $('planEnviar').disabled = pr.falta;
+        };
+        cont.addEventListener('change', resumen);
+        lista.forEach(function (_, i) { EtaaxAppsUI.conectar('planApps_' + i, resumen); });
+        resumen();
+        $('planCancelar').onclick = function () { cont.innerHTML = ''; };
+        $('planEnviar').onclick = async function () {
+            var pr = propuesta(), c = EtaaxPrecios.cotizar(pr.plan, lista), btn = this;
+            if (pr.falta) return;
+            btn.disabled = true; btn.textContent = 'Enviando…';
+            var reg = { id: 'sol_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), negocio_id: negocio.id,
+                datos: { tipo: 'apps', estado: 'pendiente', negocioNombre: (negocio.datos || {}).nombre || '',
+                         planActual: plan || null, planNuevo: pr.plan, costoActual: cotHoy.total, cicloActual: cotHoy.ciclo,
+                         costoNuevo: c.total, cicloNuevo: c.ciclo, mensualNuevo: c.mensual,
+                         solicitante: identidad(), email: (estado.usuario && estado.usuario.email) || '', fecha: new Date().toISOString() } };
+            try {
+                var r = await conPlazo(_supabase.from('solicitudes_plan').upsert(reg));
+                if (r.error) throw r.error;
+                cont.innerHTML = '<div class="cuenta-nota" style="margin-top:14px">Listo: mandamos tu solicitud. Un asesor la activa cuando el cobro esté acordado y te avisa.</div>';
+                var b = $('planCambiar'); if (b) b.remove();
+            } catch (e) {
+                btn.disabled = false; btn.textContent = 'Enviar solicitud';
+                $('planMsg').className = 'cuenta-msg error';
+                $('planMsg').textContent = 'No se pudo enviar (' + ((e && e.message) || 'error') + '). Inténtalo de nuevo o escríbenos.';
+            }
+        };
     }
     async function pagar(id, btn) {
         if (estado.staff || btn.disabled) return;

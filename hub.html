@@ -7,8 +7,8 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>etaax – Acceso</title>
 <script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
-<script src="/page-guard.js?v=b4c13e80"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
-<script src="/precios.js?v=f98b43e7"></script>
+<script src="/page-guard.js?v=efd50067"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
+<script src="/precios.js?v=c0cc0bbf"></script>
 <script src="/datos-pago.js?v=6d6c3543"></script><!-- datos de transferencia y contacto: fuente única -->
 <script src="/etaax-core.js?v=a88c0cd1"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
 <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
@@ -339,6 +339,7 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 }
 .neg-card-nombre{font-size:15px;font-weight:600;color:var(--text);}
 .neg-card-meta{font-size:10px;color:var(--dim);margin-top:3px;letter-spacing:1px;text-transform:uppercase;}
+.neg-card-apps{font-size:11.5px;color:var(--cyan,#8ce4ee);margin-top:4px;font-weight:600;letter-spacing:.2px;}
 .neg-card-arrow{margin-left:auto;font-size:18px;flex-shrink:0;}
 
 .btn-nuevo-neg{
@@ -630,7 +631,7 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
 </style>
 <link rel="stylesheet" href="/hub-paleta.css?v=0ae181b1">
 <link rel="stylesheet" href="/hub-globales.css?v=e52b7f71">
-<link rel="stylesheet" href="/hub-modulos.css?v=93d3d8dc">
+<link rel="stylesheet" href="/hub-modulos.css?v=d1dd35b3">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 </head>
 <body class="hub-paleta">
@@ -1177,6 +1178,7 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
 <script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="staff-auth.js"></script>
 <script src="/staff-etaax.js?v=9c3b389b"></script><!-- Staff ETAAX: el equipo de ETAAX en varios negocios (v88) -->
+<script src="/etaax-apps-ui.js?v=58f96d85"></script><!-- el selector de apps (Cost·ax, Fin·ax, Equip·ax) -->
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -1716,6 +1718,17 @@ function _clearQuickSes() { localStorage.removeItem('etaax_qses'); }
 var _busy = false;
 var _toastTimer = null;
 
+/* ── LAS APPS DE CADA SUCURSAL (v89) ─────────────────────────────────────────
+   El plan lo guarda page-guard (etaax_<neg>_plan) y lo baja de la nube con
+   etaaxPlanRefrescar. Aquí solo se lee para enseñarlo. Sin plan = paquete. */
+function _planNeg(negId) { return (window.etaaxPlanLeer && etaaxPlanLeer(negId)) || null; }
+function _appsSucTxt(negId, sucId) {
+    if (!window.EtaaxPrecios || !EtaaxPrecios.appsDe) return '';
+    return EtaaxPrecios.nombreApps(EtaaxPrecios.appsDe(_planNeg(negId), sucId));
+}
+function _cotizacionNeg(negId, sucs) {
+    return EtaaxPrecios.cotizar(_planNeg(negId), (sucs || []).filter(function (s) { return s && s.activa !== false; }));
+}
 function _showToast(msg) {
     var el = document.getElementById('hubToast');
     if (!el) return;
@@ -1769,6 +1782,10 @@ async function init() {
     _pintarContactoAlta();
     var params     = new URLSearchParams(window.location.search);
     var goNegocios = params.get('negocios') === '1';
+    if (params.get('sinapp') === '1') {
+        history.replaceState(null, '', window.location.pathname);
+        setTimeout(function () { _showToast('Esa herramienta no está en las apps que contrató esta sucursal.'); }, 600);
+    }
     var panel = params.get('panel');
     _panelGlobalPendiente = goNegocios && (panel === 'catalogos' || panel === 'financiero') ? panel : '';
 
@@ -1986,18 +2003,29 @@ function _pintarPresenciaHub() {
 /* La barra compartida, con lo que este hub sabe de la sesión. Se repinta cada
    vez que cambia algo —entrar, salir, cambiar de negocio— porque lo que enseña
    es justo eso. */
+/* Lo que dice el menú de la cuenta (arriba a la derecha) como «plan»: las apps
+   contratadas. En una sucursal, las suyas; en el negocio, el paquete o «apps por
+   sucursal». Desde ahí, «Plan y facturación» para agregar apps o cambiar. */
+function _planEtiqueta(neg, sucIdForzado) {
+    if (!window.EtaaxPrecios || !EtaaxPrecios.cotizar) return categoriaNegocio(_getSucursales(neg.id).length || 1).nombre;
+    var cot = _cotizacionNeg(neg.id, _getSucursales(neg.id));
+    var sucId = sucIdForzado !== undefined ? (sucIdForzado || '') : (localStorage.getItem('etaax_sucursal_activa') || '');
+    var txt = cot.todoPaquete ? EtaaxPrecios.PAQUETE.nombre : (sucId ? _appsSucTxt(neg.id, sucId) : 'Apps por sucursal');
+    return txt + (cot.ciclo === 'anual' ? ' · anual' : '');
+}
 function _pintarHeader() {
     if (typeof etaaxHeader !== 'function') return;
+    var _negAct = localStorage.getItem('etaax_negocio_activo') || '';
     var neg = _sesion && _sesion.negocioId
         ? _getNegocios().find(function (n) { return n.id === _sesion.negocioId; })
-        : (_misNegocios()[0] || null);
+        : (_getNegocios().find(function (n) { return n.id === _negAct; }) || _misNegocios()[0] || null);
     etaaxHeader({
         activa:  !!_sesion,
         usuario: (_sesion && _sesion.nombre) || 'Sin sesión',
         negocio: neg ? neg.nombre : '',
         plan:    (_sesion && _sesion.type === 'staff')
                     ? (ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro).label
-                    : (neg ? categoriaNegocio(_getSucursales(neg.id).length || 1).nombre : ''),
+                    : (neg ? _planEtiqueta(neg) : ''),
         logo:    neg ? _getNegLogo(neg.id) : '',
         inicio:  !_sesion ? '/index.html' : ((_sesion.type !== 'staff' || _sesion.etx) && !_sesion.isAdmin ? '/hub.html?negocios=1' : '/hub.html'),
         marcaBase: '/marca/hub',
@@ -2618,6 +2646,7 @@ function _renderVistaNegocio() {
     }
     if (heroSub)   heroSub.textContent = 'Opera cada sucursal por separado y consulta los resultados de todo tu negocio.';
     _renderSucursales(marca);
+    if (window.etaaxPlanRefrescar) etaaxPlanRefrescar(marca.id, function (cambio) { if (cambio) { try { _renderSucursales(marca); _pintarHeader(); } catch (e) {} } });
     // Sincronizar sucursales desde Supabase y re-renderizar (nombres/config que
     // se editaron en otro dispositivo). Render inmediato con localStorage arriba.
     if (window.sbSucPull) sbSucPull(marca.id).then(function (ok) {
@@ -2726,10 +2755,12 @@ function _renderSucursales(neg) {
 
     var cat = categoriaNegocio(sucs.length || 1);
     var planSub = document.getElementById('sucPlanSub');
+    var _cot = _etx ? null : _cotizacionNeg(neg.id, sucs);
     if (planSub) planSub.textContent = _etx
         ? sucs.length + ' sucursal' + (sucs.length !== 1 ? 'es' : '') + ' con acceso'
-        : sucs.length + ' sucursal' + (sucs.length !== 1 ? 'es' : '') +
-        ' · ' + cat.nombre + ' · plan actual: ' + _fmtPrecio(precioMensual(sucs.length)) + ' MXN/mes';
+        : sucs.length + ' sucursal' + (sucs.length !== 1 ? 'es' : '') + ' · ' + cat.nombre +
+          ' · plan actual: ' + _fmtPrecio(_cot.mensual) + ' MXN/mes' +
+          (_cot.ciclo === 'anual' ? ' (anual: ' + _fmtPrecio(_cot.anual) + ')' : '');
 
     var cont = document.getElementById('listSucursales');
     if (!sucs.length) {
@@ -2794,6 +2825,8 @@ function _renderSucursales(neg) {
                         '<div class="neg-card-meta' + (_logoCard ? ' ic-fila' : '') + '">' +
                             (_g ? ((_logoCard ? _ic(_g.ic, 13) : '') + _esc(_g.nom) + ' · ') : 'Sucursal · ') + fecha +
                         '</div>' +
+                        /* Las apps que contrató ESTA sucursal (Cost·ax, Fin·ax…). */
+                        '<div class="neg-card-apps">' + _esc(_appsSucTxt(neg.id, suc.id)) + '</div>' +
                     '</div>' +
                 '</div>' +
                 '<div class="hub-suc-actions">' +
@@ -2822,10 +2855,14 @@ function _renderSucursales(neg) {
         // de la que sigue, no un "+$X fijo".
         var pitch = document.getElementById('sucPitch');
         var nSig = sucs.length + 1, pSig = EtaaxPrecios.precioSucursal(nSig);
+        /* Cada sucursal elige sus apps: aquí se anuncia desde cuánto (la app más
+           barata) y cuánto con el paquete completo, ya con su escalón. */
+        var minApp = EtaaxPrecios.APPS.filter(function (a) { return !a.proximamente; })
+            .reduce(function (m, a) { return Math.min(m, a.precio); }, EtaaxPrecios.BASE);
         if (pitch) pitch.textContent =
-            'Tu ' + nSig + 'ª sucursal cuesta +' + _fmtPrecio(pSig) + ' MXN/mes' +
-            (nSig > 1 ? ' (' + EtaaxPrecios.fmtPct(EtaaxPrecios.descuentoSucursal(nSig)) + ' menos que el costo unitario de ' + _fmtPrecio(EtaaxPrecios.BASE) + ')' : '') +
-            ' · tu plan subiría a ' + _fmtPrecio(precioMensual(nSig)) + '/mes.';
+            'Tu ' + nSig + 'ª sucursal: desde ' + _fmtPrecio(EtaaxPrecios.precioSucursalApps(nSig, [EtaaxPrecios.APPS.filter(function (a) { return a.precio === minApp; })[0].id])) +
+            ' MXN/mes con una app, o ' + _fmtPrecio(pSig) + ' con el paquete completo' +
+            (nSig > 1 ? ' (' + EtaaxPrecios.fmtPct(EtaaxPrecios.descuentoSucursal(nSig)) + ' menos por ser la ' + nSig + 'ª)' : '') + '.';
     }
 }
 
@@ -3473,23 +3510,44 @@ async function _solicitarNuevaSucursal(marca, sucs, nombre) {
 
     // El precio depende de QUÉ sucursal es: la 2ª $1,699, la 3ª $1,669… (descuento
     // creciente sobre el costo unitario de $1,799, sin retroactividad).
-    var nSucNueva = sucs.length + 1;
-    var costoNuevo = precioMensual(nSucNueva);
-    var precioNueva = EtaaxPrecios.precioSucursal(nSucNueva);
-    var descNueva = EtaaxPrecios.descuentoSucursal(nSucNueva);
+    /* CADA SUCURSAL CONTRATA SUS APPS (v89). El precio depende de cuáles y de
+       QUÉ sucursal es (la escalera: la 2ª con su descuento…). */
+    var activas = sucs.filter(function (x) { return x && x.activa !== false; });
+    var nSucNueva = activas.length + 1;
+    var planAct = _planNeg(marca.id), cicloAct = EtaaxPrecios.planNormal(planAct).ciclo;
+    var costoActual = _cotizacionNeg(marca.id, sucs).mensual;
+    var cotConNueva = function (sel) {
+        var p = EtaaxPrecios.planNormal(planAct);
+        p.sucursales['__nueva'] = sel || 'suite';
+        return EtaaxPrecios.cotizar(p, activas.concat([{ id: '__nueva', nombre: nombre }]));
+    };
     var ov = _dlgHub(
         '<div style="font-size:34px;margin-bottom:10px">🏪</div>' +
         '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--text,#eee);margin-bottom:10px">¿AGREGAR UNA NUEVA SUCURSAL?</div>' +
-        '<div style="font-size:13px;color:var(--text-dim,#888);line-height:1.6;margin-bottom:8px">Tu <b style="color:var(--text,#eee)">' + nSucNueva + 'ª sucursal</b> cuesta <b style="color:var(--gold,#f5c842)">' + _fmtPrecio(precioNueva) + ' MXN/mes</b>' +
-            (descNueva > 0 ? ' <span style="color:#3dbe7a">(' + EtaaxPrecios.fmtPct(descNueva) + ' menos que el costo unitario de ' + _fmtPrecio(EtaaxPrecios.BASE) + ')</span>' : '') + '.</div>' +
-        '<div style="background:var(--s2,#1d1d1d);border:1px solid var(--b1,#2a2a2a);border-radius:10px;padding:12px;margin-bottom:18px;font-size:13px;color:var(--text,#eee)">Tu nuevo costo mensual sería de <b style="color:#3dbe7a">' + _fmtPrecio(costoNuevo) + ' MXN</b> <span style="color:var(--dim,#777)">(' + nSucNueva + ' sucursales)</span></div>' +
+        '<div style="font-size:13px;color:var(--text-dim,#888);line-height:1.6;margin-bottom:10px">Elige las apps que va a usar tu <b style="color:var(--text,#eee)">' + nSucNueva + 'ª sucursal</b>. Con las tres es el paquete completo.</div>' +
+        '<div style="margin-bottom:12px">' + EtaaxAppsUI.html('solSucApps', 'suite', { n: nSucNueva, ciclo: cicloAct }) + '</div>' +
+        '<div id="solSucTotal" style="background:var(--s2,#1d1d1d);border:1px solid var(--b1,#2a2a2a);border-radius:10px;padding:12px;margin-bottom:18px;font-size:13px;color:var(--text,#eee)"></div>' +
         '<div style="display:flex;gap:10px">' +
             '<button id="solSucCancel" style="flex:1;background:var(--surface2,#1d1d1d);border:1px solid var(--border,#2a2a2a);color:var(--text,#eee);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar</button>' +
             '<button id="solSucOk" style="flex:1;background:rgba(61,190,122,.14);border:1px solid rgba(61,190,122,.55);color:#3dbe7a;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Aceptar</button>' +
         '</div>');
+    var pintarTotal = function (sel) {
+        var t = document.getElementById('solSucTotal'), ok = document.getElementById('solSucOk');
+        if (ok) ok.disabled = !sel;
+        if (!t) return;
+        if (!sel) { t.textContent = 'Elige al menos una app.'; return; }
+        var c = cotConNueva(sel);
+        t.innerHTML = 'Tu nuevo costo mensual sería de <b style="color:#3dbe7a">' + _fmtPrecio(c.mensual) + ' MXN</b> <span style="color:var(--dim,#777)">(' + nSucNueva + ' sucursales)</span>' +
+            (c.ciclo === 'anual' ? '<br>Anual: <b>' + _fmtPrecio(c.anual) + '</b>' : '');
+    };
+    EtaaxAppsUI.conectar('solSucApps', pintarTotal);
+    pintarTotal(EtaaxAppsUI.leer('solSucApps'));
     document.getElementById('solSucCancel').onclick = function () { ov.remove(); };
     document.getElementById('solSucOk').onclick = async function () {
         var b = document.getElementById('solSucOk');
+        var appsSel = EtaaxAppsUI.leer('solSucApps');
+        if (!appsSel) return;
+        var cotN = cotConNueva(appsSel);
         b.disabled = true; b.textContent = 'Enviando…';
         var reg = {
             id: 'sol_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -3497,8 +3555,9 @@ async function _solicitarNuevaSucursal(marca, sucs, nombre) {
             datos: {
                 tipo: 'nueva_sucursal', estado: 'pendiente',
                 nombreSucursal: nombre, negocioNombre: marca.nombre || '',
-                sucursalesActivas: sucs.length,
-                costoActual: precioMensual(sucs.length), costoNuevo: costoNuevo,
+                sucursalesActivas: activas.length,
+                apps: appsSel,                                  // las apps que contrata la sucursal nueva
+                costoActual: costoActual, costoNuevo: cotN.mensual, ciclo: cotN.ciclo,
                 solicitante: _sesion.nombre || '', email: _sesion.email || '',
                 fecha: new Date().toISOString()
             }
@@ -3558,6 +3617,9 @@ function _guardarCtx(neg, suc) {
         // Leyenda por TAMAÑO real del negocio (n° de sucursales), ya no por plan elegido
         var p = categoriaNegocio(_getSucursales(neg.id).length || 1);
         ctx.userBadge = p.nombre; ctx.userColor = p.color || '#3dbe7a';
+        /* El «plan» que enseña la barra de arriba en los módulos: las apps que
+           contrató la sucursal (v89). */
+        if (neg.id) { try { ctx.userBadge = _planEtiqueta(neg, suc ? suc.id : ''); } catch (e) {} }
         // El admin-guard usa este correo para aceptar la contraseña del
         // dueño en sesiones de staff sin pedir el correo
         if (neg.id && _sesion.email) {
@@ -3690,6 +3752,8 @@ function _showModulos(neg) {
             if (btnVolver)  btnVolver.style.display  = 'none';
         }
     }
+    // Las apps que contrató la sucursal, frescas de la nube (el dock se repinta solo si cambian).
+    if (neg.id && window.etaaxPlanRefrescar) etaaxPlanRefrescar(neg.id, function (cambio) { if (cambio) _pintarHeader(); });
     /* Staff ETAAX: de los módulos se regresa a las sucursales del negocio (y de
        ahí a su portada). «Información del negocio» es del dueño. */
     var btnEtx = document.getElementById('btnEtxSucursales');
@@ -3940,6 +4004,7 @@ function _etxVistaNegocio() {
     if (heroTitle) { heroTitle.classList.add('hub-operacion-title'); heroTitle.innerHTML = 'ELIGE UNA <span class="g">SUCURSAL</span>'; }
     if (heroSub) heroSub.textContent = 'Ves las sucursales y los módulos que el admin de ETAAX te asignó en este negocio.';
     _renderSucursales(neg);
+    if (window.etaaxPlanRefrescar) etaaxPlanRefrescar(neg.id, function (cambio) { if (cambio) { try { _renderSucursales(neg); } catch (e) {} } });
     // Nombres y sucursales frescos (solo se LEE: el staff ETAAX no sube nada).
     if (window.sbSucPull) sbSucPull(neg.id).then(function (ok) { if (ok) { try { _renderSucursales(neg); } catch (e) {} } });
     _subSucRealtime(neg.id);
@@ -4751,7 +4816,7 @@ async function guardarNuevaPassword(){
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
 <script src="/etaax-header.js?v=15a5a6ef"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="/hub-interacciones.js?v=43cd2b2b"></script>
-<script src="/hub-modulos.js?v=9a34c44d"></script>
+<script src="/hub-modulos.js?v=bd963ee6"></script>
 <script src="security.js?v=c188734e"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>

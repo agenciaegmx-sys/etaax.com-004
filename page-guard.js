@@ -326,6 +326,9 @@ window.etaaxPermisosRefrescar = function (negId, luego) {
 window.etaaxPuedeSub = function (modulo, sub) {
     var ctx = null;
     try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
+    /* El plan va primero y para TODOS, dueño incluido: no es un rol, es lo que se contrató. */
+    if (ctx && typeof window.etaaxPermEnPlan === 'function' &&
+        !window.etaaxPermEnPlan(ctx.negId || localStorage.getItem('etaax_negocio_activo'), window.etaaxSucursalActiva(), modulo, sub)) return false;
     if (!ctx || ctx.ctxType !== 'staff') return true;
     if ((ctx.rol || '') === 'admin') return true;
     if (typeof window.etaaxPerm !== 'function') return true;
@@ -338,6 +341,12 @@ window.etaaxPuedeSub = function (modulo, sub) {
    que no se puede. Las dos capas, siempre. */
 window.etaaxExigeSub = function (modulo, sub, msg) {
     if (window.etaaxPuedeSub(modulo, sub)) return true;
+    var ctxP = null;
+    try { ctxP = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
+    if (ctxP && !window.etaaxPermEnPlan(ctxP.negId, window.etaaxSucursalActiva(), modulo, sub)) {
+        alert('🔒 Esta función no está en las apps que contrató esta sucursal.\n\nSe agrega desde Plan y facturación (menú de tu cuenta, arriba a la derecha).');
+        return false;
+    }
     alert('🔒 ' + (msg || 'Tu rol no tiene permiso para esta acción.') +
           '\n\nPídeselo al administrador del negocio, en Roles y Permisos.');
     return false;
@@ -501,6 +510,111 @@ window.etaaxPermisosEtx = function (negId, sucId) {
     return a.permisos || {};
 };
 
+/* ── LAS APPS CONTRATADAS (nov 2026) ─────────────────────────────────────────
+   ETAAX se vende por apps (precios.js: Cost·ax, Fin·ax, Equip·ax…) y CADA
+   SUCURSAL contrata las suyas. Lo que la sucursal no tiene contratado NO SE VE:
+   ni en el hub, ni en el selector de módulos, y page-guard no deja entrar por
+   un enlace. Vale para TODOS —dueño incluido—: es lo que se pagó, no un rol.
+
+   El plan vive en suscripciones.plan (v89) y se guarda en este equipo como
+   `etaax_<neg>_plan` (lo baja el hub al entrar, y aquí se refresca). Sin plan
+   guardado = paquete completo: así quedan los negocios de antes, y un problema
+   de red no deja a nadie fuera de lo que sí pagó.
+
+   Control de operación, igual que los permisos por rol: la base no cierra las
+   tablas por app. Los datos son del propio negocio; lo que se cuida es que no
+   se use lo que no se contrató. */
+window.ETAAX_APPS_SUITE = ['costax', 'finax', 'equipax'];   // = precios.js appsDisponibles()
+window.ETAAX_APP_PERMISO = {
+    recetas: 'costax', insumos: 'costax', inventarios: 'costax', requisiciones: 'costax',
+    ventas: 'finax', gastos: 'finax', menu: 'finax', proveedores: 'finax', clientes: 'finax', financiero: 'finax',
+    ventas_productos: ['costax', 'finax']
+    /* staff, permisos y config: en todas. El catálogo de colaboradores es lo que
+       da acceso a la gente; lo que vende Equip·ax es lo demás (abajo). */
+};
+/* Funciones de OTRA app dentro de un módulo: pagar la nómina vive en Ventas y
+   Gastos Diarios (Fin·ax), pero es de Equip·ax. */
+window.ETAAX_APP_SUB = {
+    'gastos.nominas': 'equipax',
+    // Gestión de Staff: el catálogo va en todas; las herramientas de RH son de Equip·ax.
+    'staff.horarios': 'equipax', 'staff.checklists': 'equipax', 'staff.organigrama': 'equipax',
+    'staff.perfiles': 'equipax', 'staff.evaluaciones': 'equipax'
+};
+/* Páginas de Equip·ax que comparten el permiso «staff» con el catálogo. */
+window.ETAAX_APP_RUTAS = [
+    [/\/administrativo\/(horarios|checklists|organigrama|perfiles-puesto|evaluaciones)/, 'equipax']
+];
+window.etaaxPlanLeer = function (negId) {
+    try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_plan') || 'null'); } catch (e) { return null; }
+};
+window.etaaxPlanGuardar = function (negId, plan) {
+    if (!negId) return;
+    try {
+        if (plan) localStorage.setItem('etaax_' + negId + '_plan', JSON.stringify(plan));
+        else localStorage.removeItem('etaax_' + negId + '_plan');
+    } catch (e) {}
+};
+function _appsExpandir(sel) {
+    if (sel === 'suite' || sel == null) return window.ETAAX_APPS_SUITE.slice();
+    var l = Array.isArray(sel) ? sel : [sel];
+    return l.length ? l.slice() : window.ETAAX_APPS_SUITE.slice();
+}
+/* Las apps de una sucursal. Sin sucursal (la vista global del negocio: los
+   catálogos y el financiero de todas) = lo de TODAS sus sucursales. */
+window.etaaxAppsDe = function (negId, sucId) {
+    var p = window.etaaxPlanLeer(negId);
+    if (!p) return window.ETAAX_APPS_SUITE.slice();
+    var suc = p.sucursales || {}, tiene = function (k) { return Object.prototype.hasOwnProperty.call(suc, k); };
+    if (sucId) return _appsExpandir(tiene(sucId) ? suc[sucId] : p.base);
+    var lista = [];
+    try { lista = JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]') || []; } catch (e) {}
+    var u = [], sumar = function (sel) { _appsExpandir(sel).forEach(function (a) { if (u.indexOf(a) === -1) u.push(a); }); };
+    Object.keys(suc).forEach(function (k) { sumar(suc[k]); });
+    if (!lista.length || lista.some(function (s) { return s && !tiene(s.id); })) sumar(p.base);
+    return u;
+};
+window.etaaxTieneApp = function (negId, sucId, app) { return window.etaaxAppsDe(negId, sucId).indexOf(app) !== -1; };
+/* ¿El plan de esta sucursal incluye este módulo (y este sub-permiso)? */
+window.etaaxPermEnPlan = function (negId, sucId, modulo, sub) {
+    var apps = window.etaaxAppsDe(negId, sucId);
+    var req = sub && window.ETAAX_APP_SUB[modulo + '.' + sub];
+    if (req && apps.indexOf(req) === -1) return false;
+    var a = window.ETAAX_APP_PERMISO[modulo];
+    if (!a) return true;
+    return (Array.isArray(a) ? a : [a]).some(function (x) { return apps.indexOf(x) !== -1; });
+};
+window.etaaxRutaEnPlan = function (negId, sucId, ruta) {
+    var apps = window.etaaxAppsDe(negId, sucId);
+    for (var i = 0; i < window.ETAAX_APP_RUTAS.length; i++)
+        if (window.ETAAX_APP_RUTAS[i][0].test(ruta)) return apps.indexOf(window.ETAAX_APP_RUTAS[i][1]) !== -1;
+    return true;
+};
+/* El plan fresco de la nube (RPC negocio_plan, v89). Sin la v89 o sin red, se
+   queda lo guardado. `luego(cambio)` corre al llegar. */
+var _planPedido = {};
+window.etaaxPlanRefrescar = function (negId, luego) {
+    if (!negId || _planPedido[negId]) return; _planPedido[negId] = true;
+    var intentos = 0;
+    (function esperar() {
+        if (typeof window._supabase === 'undefined') {
+            if (++intentos > 80) return;
+            return setTimeout(esperar, 100);
+        }
+        if (!window._supabase || typeof window._supabase.rpc !== 'function') return;
+        var pedido;
+        try { pedido = window._supabase.rpc('negocio_plan', { p_neg: negId }); } catch (e) { return; }
+        if (!pedido || typeof pedido.then !== 'function') return;
+        pedido.then(function (r) {
+            if (!r || r.error) return;
+            var antes = JSON.stringify(window.etaaxPlanLeer(negId)), plan = r.data || null;
+            window.etaaxPlanGuardar(negId, plan);
+            var cambio = antes !== JSON.stringify(plan);
+            if (typeof luego === 'function') luego(cambio);
+            if (cambio) { try { window.dispatchEvent(new CustomEvent('etaax:plan', { detail: { negId: negId } })); } catch (e) {} }
+        }, function () {});
+    })();
+};
+
 /* `sucId` omitido = la sucursal donde se está parado ahora. Pasar '' a
    propósito pide la BASE — lo usa el editor para mostrarla aunque el dueño
    esté dentro de una sucursal. */
@@ -533,6 +647,8 @@ window.etaaxPermisosRol = function (negId, rol, sucId) {
 window.etaaxPerm = function (negId, rol, path, sucId) {
     var parts = String(path || '').split('.');
     var mod = parts[0], sub = parts[1];
+    /* Lo que la sucursal no contrató no lo da ningún rol. */
+    if (!window.etaaxPermEnPlan(negId, sucId === undefined ? window.etaaxSucursalActiva() : sucId, mod, sub)) return false;
     var perms = window.etaaxPermisosRol(negId, rol, sucId);
     var v = perms[mod];
     if (!sub) return !!v;
@@ -580,10 +696,6 @@ window.etaaxPerm = function (negId, rol, path, sucId) {
     window.etaaxPermisosRefrescar(ctx.negId, function () { if (_reEvaluar) _reEvaluar(); });
     window.etaaxPermisosEnVivo(ctx.negId);
 
-    // Dueño y admin maestro: acceso total
-    if (ctx.ctxType !== 'staff') return;
-    var rol = ctx.rol || 'otro';
-    if (rol === 'admin') return;
     var _reEvaluar = null;
 
     // Mapa ruta → clave(s) de permiso. El orden importa
@@ -632,11 +744,59 @@ window.etaaxPerm = function (negId, rol, path, sucId) {
         [/\/recetas\//,                         'recetas'],
         [/\/configuracion/,                     'config'],
     ];
-    var key = null;
-    var path = window.location.pathname;
-    for (var i = 0; i < MAPA.length; i++) {
-        if (MAPA[i][0].test(path)) { key = MAPA[i][1]; break; }
+    function _claveDe(ruta) {
+        for (var i = 0; i < MAPA.length; i++) if (MAPA[i][0].test(ruta)) return MAPA[i][1];
+        return null;
     }
+    var path = window.location.pathname;
+    var key = _claveDe(path);
+    /* ¿Esta ruta está en lo que contrató la sucursal? */
+    function _rutaEnPlan(ruta, suc) {
+        if (!window.etaaxRutaEnPlan(ctx.negId, suc, ruta)) return false;
+        var k = _claveDe(ruta);
+        if (!k) return true;
+        return (Array.isArray(k) ? k : [k]).some(function (x) { return window.etaaxPermEnPlan(ctx.negId, suc, x); });
+    }
+    /* Las tarjetas y enlaces de la página a herramientas que la sucursal NO
+       contrató no se enseñan (portadas de módulo, accesos). Si alguien llega
+       igual, la puerta de abajo lo regresa. */
+    function _ocultarFueraDePlan() {
+        if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+        var suc = window.etaaxSucursalActiva();
+        var enlaces = document.querySelectorAll('a[href]');
+        for (var i = 0; i < enlaces.length; i++) {
+            var a = enlaces[i], u = null;
+            try { u = new URL(a.getAttribute('href'), window.location.href); } catch (e) { continue; }
+            if (u.origin !== window.location.origin || !/\.html$/.test(u.pathname)) continue;
+            if (_rutaEnPlan(u.pathname, suc)) continue;
+            (a.closest('.cf-card') || a).style.display = 'none';
+        }
+    }
+    if (!_embed && typeof document.addEventListener === 'function') {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _ocultarFueraDePlan);
+        else _ocultarFueraDePlan();
+        if (typeof window.addEventListener === 'function') {
+            window.addEventListener('load', _ocultarFueraDePlan);
+            window.addEventListener('etaax:plan', _ocultarFueraDePlan);
+        }
+    }
+    /* ── LO CONTRATADO, PARA TODOS ──
+       Antes del atajo del dueño: una sucursal que no contrató Cost·ax no entra a
+       Inventarios ni con la cuenta del dueño. Se vuelve a revisar cuando llega
+       el plan fresco de la nube (si se quitó una app, se sale). */
+    function _enPlan() { return _rutaEnPlan(path, window.etaaxSucursalActiva()); }
+    function _planOk() {
+        if (_enPlan() || _embed) return true;
+        window.location.replace('/hub.html?sinapp=1');
+        return false;
+    }
+    if (!_planOk()) return;
+    window.etaaxPlanRefrescar(ctx.negId, function () { _planOk(); });
+
+    // Dueño y admin maestro: acceso total (a lo contratado)
+    if (ctx.ctxType !== 'staff') return;
+    var rol = ctx.rol || 'otro';
+    if (rol === 'admin') return;
     if (!key) return; // landings de módulo (administrativo/index) pasan
 
     function _evaluar(quieto) {

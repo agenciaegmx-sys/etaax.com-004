@@ -23,7 +23,8 @@ body.hub-paleta .hub-workspace{max-width:1000px;width:100%;margin:0 auto;}
 body.hub-paleta .hub-module-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:14px 0 10px;font-size:11px;color:var(--ui-apagado);}
 body.hub-paleta .hub-module-intro>span:first-child{font-size:9px;letter-spacing:2px;text-transform:uppercase;}
 body.hub-paleta .hub-module-selector{position:relative;padding:22px 18px;border:1px solid var(--hub-line);border-radius:18px;background:var(--s1);}
-body.hub-paleta :is(.hub-module-dock,.hub-module-actions){display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;}
+body.hub-paleta :is(.hub-module-dock,.hub-module-actions){display:grid;grid-template-columns:repeat(var(--hub-mods,4),minmax(0,1fr));gap:18px;}
+body.hub-paleta .hub-module-tab[hidden]{display:none;}
 body.hub-paleta .hub-module-actions{margin-top:16px;}
 body.hub-paleta .hub-module-actions[hidden]{display:none;}
 body.hub-paleta .hub-module-tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:150px;min-width:0;padding:16px 10px;background:var(--s2);border:1px solid var(--ui-borde);border-radius:14px;color:var(--text);font-family:inherit;cursor:pointer;transform-origin:50% 100%;transform:translate3d(0,var(--dock-y,0px),0) scale(var(--dock-scale,1));}
@@ -175,7 +176,7 @@ body.hub-paleta .hub-captura-pie .etx-ic{width:20px;height:20px;}
   body.hub-paleta .hub-modulos-bar .btn-cambiar-neg{white-space:normal;padding:10px 8px;text-align:center;}
   body.hub-paleta .hub-module-intro{align-items:flex-start;flex-direction:column;gap:8px;}
   body.hub-paleta .hub-module-selector{padding:20px 14px;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding-inline:14px;scrollbar-width:thin;scrollbar-color:var(--hub-line) transparent;}
-  body.hub-paleta :is(.hub-module-dock,.hub-module-actions){grid-template-columns:repeat(4,minmax(170px,68%));gap:14px;}
+  body.hub-paleta :is(.hub-module-dock,.hub-module-actions){grid-template-columns:repeat(var(--hub-mods,4),minmax(170px,68%));gap:14px;}
   body.hub-paleta .hub-module-tab{scroll-snap-align:start;}
   body.hub-paleta .hub-herramientas{margin-top:30px;}
   body.hub-paleta .hub-herramientas-head{gap:12px;margin-bottom:22px;align-items:flex-start;}

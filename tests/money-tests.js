@@ -18131,6 +18131,179 @@ console.log('\n══ BH86 · La copia de una sucursal se lleva sus cuentas ═�
         eq(/from\('usuarios'\)\.delete\(\)\.eq\('id', uid\)/.test(fn), true));
 }
 
+/* ═══════════ SUITE BH87 · VENTA POR APPS (v89) ════════════════════════════
+   Edwin, 23-nov: ETAAX se vende como Adobe. Cost·ax $899, Fin·ax $999,
+   Equip·ax $599 o el paquete completo $1,799, por SUCURSAL, con la escalera de
+   siempre; anual = paga 9 y usa 12. Lo que la sucursal no contrató no se ve
+   (ni para el dueño). Aquí, las reglas de dinero y de qué se enseña. */
+console.log('\n══ BH87 · Venta por apps ══');
+{
+    const PR = require(path.join(RAIZ, 'precios.js'));
+    const f = (x) => JSON.stringify(x);
+    test('los precios de las apps y del paquete (los que eligió Edwin)', () =>
+        eq(PR.APPS.filter(a => !a.proximamente).map(a => a.nombre + ' ' + a.precio).join(', ') + ' · paquete ' + PR.BASE + ' · anual paga ' + PR.ANUAL_MESES,
+           'Cost·ax 899, Fin·ax 999, Equip·ax 599 · paquete 1799 · anual paga 9'));
+    test('Vent·ax y Timbr·ax existen pero todavía no se venden', () =>
+        eq(PR.APPS.filter(a => a.proximamente).map(a => a.id).join(','), 'ventax,timbrax'));
+    test('las tres apps juntas SON el paquete; ninguna = paquete (nunca una sucursal sin apps)', () =>
+        eq(f([PR.normalizarApps(['equipax', 'finax', 'costax']), PR.normalizarApps([]), PR.normalizarApps(['costax', 'costax', 'ventax'])]), f(['suite', 'suite', ['costax']])));
+    test('el precio de lista nunca pasa del paquete (Cost·ax + Fin·ax = 1,898 → se cobra 1,799 y se sugiere el paquete)', () =>
+        eq(f([PR.precioLista(['costax', 'finax']), PR.convienePaquete(['costax', 'finax']), PR.convienePaquete(['costax'])]), f([1799, true, false])));
+    test('la escalera corre sobre las apps: Cost·ax en la 2ª sucursal = 899 × 1,699/1,799', () =>
+        eq(f([PR.precioSucursalApps(1, ['costax']), PR.precioSucursalApps(2, ['costax']), PR.precioSucursalApps(2, 'suite')]), f([899, Math.round(899 * 1699 / 1799), 1699])));
+    test('un negocio sin plan (todos los de antes) = paquete completo, mensual, cobro junto: el mismo precio de siempre', () => {
+        const c = PR.cotizar(null, [{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+        return eq(f([c.mensual, c.ciclo, c.cobro, c.todoPaquete]), f([PR.precioMensual(3), 'mensual', 'negocio', true]));
+    });
+    test('cada sucursal con lo suyo, en el orden de la lista (que decide su escalón)', () => {
+        const c = PR.cotizar({ base: 'suite', sucursales: { a: ['costax'] } }, [{ id: 'a', nombre: 'Matriz' }, { id: 'b', nombre: 'Centro' }]);
+        return eq(c.lineas.map(l => l.nombre + ':' + l.nombreApps + ':' + l.mensual).join(' | ') + ' = ' + c.mensual, 'Matriz:Cost·ax:899 | Centro:Paquete completo:1699 = 2598');
+    });
+    test('anual: paga 9 y usa 12 (ahorra 3 meses)', () => {
+        const c = PR.cotizar({ ciclo: 'anual' }, [{ id: 'a' }]);
+        return eq(f([c.total, c.anual, c.ahorroAnual]), f([1799 * 9, 1799 * 9, 1799 * 3]));
+    });
+    test('una sucursal sin plan propio sigue el plan base del negocio', () =>
+        eq(f(PR.appsDe({ base: ['equipax'], sucursales: { a: 'suite' } }, 'nueva')), f(['equipax'])));
+
+    // Qué se ve: page-guard, con el plan guardado en el equipo.
+    const pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    function pagina(plan, sucs) {
+        const ls = { etaax_ctx: JSON.stringify({ ctxType: 'owner', negId: 'n1' }), etaax_sucursal_activa: 'a' };
+        if (plan) ls['etaax_n1_plan'] = JSON.stringify(plan);
+        if (sucs) ls['etaax_n1_sucursales'] = JSON.stringify(sucs);
+        const ctx = { console: { warn() {}, log() {} }, JSON, Object, Array, String, Number, Boolean, Date, setTimeout, Promise,
+            localStorage: { getItem: k => (k in ls ? ls[k] : null), setItem(k, v) { ls[k] = String(v); }, removeItem(k) { delete ls[k]; } },
+            location: { pathname: '/hub.html', search: '', replace() {} }, document: { addEventListener() {} } };
+        ctx.window = ctx; ctx.window.addEventListener = () => {};
+        vm.createContext(ctx); vm.runInContext(pg, ctx, { filename: 'page-guard.js' });
+        return ctx;
+    }
+    const w = pagina({ base: 'suite', sucursales: { a: ['costax'] } }, [{ id: 'a' }, { id: 'b' }]);
+    test('page-guard sabe las mismas apps que se venden en precios.js', () =>
+        eq(f(w.ETAAX_APPS_SUITE), f(PR.appsDisponibles())));
+    test('sucursal con solo Cost·ax: recetas sí; ventas, gastos y financiero no; el catálogo de staff sí', () =>
+        eq(['recetas', 'inventarios', 'ventas', 'gastos', 'financiero', 'staff', 'config'].map(m => m + ':' + w.etaaxPermEnPlan('n1', 'a', m)).join(' '),
+           'recetas:true inventarios:true ventas:false gastos:false financiero:false staff:true config:true'));
+    test('…ni la nómina ni las herramientas de RH (son de Equip·ax)', () =>
+        eq(['gastos.nominas', 'staff.horarios', 'staff.evaluaciones', 'staff.verCatalogo'].map(x => { const [m, s2] = x.split('.'); return w.etaaxPermEnPlan('n1', 'a', m, s2); }).join(','),
+           'false,false,false,true'));
+    test('…ni las páginas de Equip·ax por su ruta', () =>
+        eq(f([w.etaaxRutaEnPlan('n1', 'a', '/administrativo/horarios.html'), w.etaaxRutaEnPlan('n1', 'a', '/administrativo/staff.html'), w.etaaxRutaEnPlan('n1', 'b', '/administrativo/horarios.html')]), f([false, true, true])));
+    test('la otra sucursal (paquete) tiene todo, y la vista global del negocio, lo de todas', () =>
+        eq(f([w.etaaxAppsDe('n1', 'b'), w.etaaxAppsDe('n1', '').slice().sort()]), f([['costax', 'finax', 'equipax'], ['costax', 'equipax', 'finax']])));
+    test('…con todas las sucursales en solo Cost·ax, la vista global tampoco abre lo demás', () => {
+        const w3 = pagina({ base: ['costax'], sucursales: {} }, [{ id: 'a' }, { id: 'b' }]);
+        return eq(f(w3.etaaxAppsDe('n1', '')), f(['costax']));
+    });
+    test('ningún rol abre lo que la sucursal no contrató (etaaxPerm pasa por el plan)', () =>
+        eq(f([w.etaaxPerm('n1', 'gerente', 'ventas', 'a'), w.etaaxPerm('n1', 'gerente', 'recetas', 'a')]), f([false, true])));
+    test('sin plan guardado (red caída, negocios de antes) = paquete completo: no deja a nadie fuera', () => {
+        const w2 = pagina(null);
+        return eq(f([w2.etaaxPermEnPlan('n1', 'a', 'financiero'), w2.etaaxPermEnPlan('n1', 'a', 'gastos', 'nominas')]), f([true, true]));
+    });
+    test('el hub y el selector de módulos ESCONDEN lo que no se puede (no lo apagan)', () => {
+        const hm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8'), mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        return eq(/tab\.hidden = !ok/.test(hm) && /if \(!ok\) return '';/.test(hm) && hm.indexOf('Sin acceso para tu rol') === -1 &&
+                  /MODULOS\.filter\(function\(m\)\{ return permitido\(m,c\); \}\)/.test(mu), true);
+    });
+    test('la tarjeta (Stripe) solo para el paquete mensual cobrado junto: es el único precio que existe allá', () =>
+        eq(/var tarjetaLista = cot\.todoPaquete && !anual && !porSuc;/.test(fs.readFileSync(path.join(RAIZ, 'etaax-cuenta.js'), 'utf8')), true));
+    const v89 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v89.sql'), 'utf8');
+    test('v89 · el plan lo leen dueño, colaboradores, Staff ETAAX y admin; anon no', () =>
+        eq(/es_staff_de\(p_neg\) OR is_platform_admin\(\)/.test(v89) && /REVOKE ALL ON FUNCTION negocio_plan\(TEXT\) FROM PUBLIC, anon;/.test(v89), true));
+    test('v89 · la invitación pasa su plan al negocio por trigger (sin tocar la Edge Function)', () =>
+        eq(/AFTER UPDATE OF negocio_id ON invitaciones/.test(v89) && /ON CONFLICT \(negocio_id\) DO UPDATE SET plan = EXCLUDED\.plan/.test(v89), true));
+}
+
+/* ═══════════ SUITE BH87 · ETAAX POR APPS (v89) ════════════════════════════════
+   Edwin, 23-nov: ETAAX se vende como Adobe — Cost·ax $899, Fin·ax $999,
+   Equip·ax $599 o el paquete completo $1,799 — y CADA SUCURSAL contrata las
+   suyas, con la misma escalera de descuento. Anual: paga 9 y usa 12. Lo que la
+   sucursal no contrató NO SE VE (para nadie, dueño incluido). */
+console.log('\n══ BH87 · ETAAX por apps ══');
+{
+    const P = require(path.join(RAIZ, 'precios.js'));
+    test('los precios de cada app y del paquete', () =>
+        eq(P.APPS.filter(a => !a.proximamente).map(a => a.nombre + ' ' + a.precio).join(' · ') + ' · paquete ' + P.BASE,
+           'Cost·ax 899 · Fin·ax 999 · Equip·ax 599 · paquete 1799'));
+    test('Vent·ax y Timbr·ax existen como «próximamente» (no se venden todavía)', () =>
+        eq(P.APPS.filter(a => a.proximamente).map(a => a.id).join(','), 'ventax,timbrax'));
+    test('anual: se pagan 9 meses y se usan 12', () => eq(P.ANUAL_MESES, 9));
+    test('con las tres apps es el paquete; ninguna, también (no existe una sucursal sin apps)', () =>
+        eq(P.normalizarApps(['equipax', 'costax', 'finax']) + '|' + P.normalizarApps([]) + '|' + P.normalizarApps(['finax', 'costax']).join(','),
+           'suite|suite|costax,finax'));
+    test('una app en la 1ª sucursal = su precio de lista', () => eq(P.precioSucursalApps(1, ['costax']), 899));
+    test('la escalera corre igual sobre las apps (2ª sucursal: el mismo % que el paquete)', () =>
+        eq(P.precioSucursalApps(2, ['costax']), Math.round(899 * 1699 / 1799)));
+    test('dos apps que suman más que el paquete se cobran como paquete, y se avisa', () =>
+        eq(P.precioLista(['costax', 'finax']) + '|' + P.convienePaquete(['costax', 'finax']) + '|' + P.convienePaquete(['costax', 'equipax']),
+           '1799|true|false'));
+    test('sin plan guardado = paquete completo, mensual, cobro junto (los negocios de antes no cambian)', () => {
+        const c = P.cotizar(null, [{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+        return eq([c.mensual, c.ciclo, c.cobro, c.todoPaquete].join('|'), P.precioMensual(3) + '|mensual|negocio|true');
+    });
+    test('la cotización: cada sucursal con sus apps y su escalón; anual = mensual × 9', () => {
+        const c = P.cotizar({ ciclo: 'anual', sucursales: { m: ['costax'], t: 'suite' } }, [{ id: 'm', nombre: 'Matriz' }, { id: 't', nombre: 'Tulum' }]);
+        return eq([c.lineas.map(l => l.nombreApps + ' ' + l.mensual).join(' / '), c.mensual, c.anual, c.ahorroAnual, c.total].join('|'),
+                  'Cost·ax 899 / Paquete completo 1699|2598|23382|7794|23382');
+    });
+    test('una sucursal sin plan propio toma la base del negocio', () =>
+        eq(P.appsDe({ base: ['equipax'], sucursales: { m: ['costax'] } }, 'otra').join(','), 'equipax'));
+
+    // page-guard: qué se ve y qué se deja entrar.
+    const pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    function montarPlan(plan, sucs) {
+        const ls = { etaax_ctx: JSON.stringify({ ctxType: 'owner', negId: 'A' }) };
+        if (plan) ls['etaax_A_plan'] = JSON.stringify(plan);
+        if (sucs) ls['etaax_A_sucursales'] = JSON.stringify(sucs);
+        const ctx = {
+            console: { warn() {}, log() {} }, JSON, Object, Array, String, Number, Boolean, Date, setTimeout, Promise, RegExp,
+            localStorage: { getItem: k => (k in ls ? ls[k] : null), setItem(k, v) { ls[k] = String(v); }, removeItem(k) { delete ls[k]; } },
+            location: { pathname: '/hub.html', search: '', replace() {} }, document: { addEventListener() {} },
+        };
+        ctx.window = ctx; ctx.window.addEventListener = () => {};
+        vm.createContext(ctx); vm.runInContext(pg, ctx, { filename: 'page-guard.js' });
+        return ctx.window;
+    }
+    const w = montarPlan({ sucursales: { m: ['costax'], t: 'suite' } }, [{ id: 'm' }, { id: 't' }]);
+    test('la lista de apps del paquete en page-guard es la misma que en precios.js', () =>
+        eq(montarPlan(null).ETAAX_APPS_SUITE.join(','), P.appsDisponibles().join(',')));
+    test('cada app abre sus módulos: Cost·ax recetas e inventarios; Fin·ax ventas y financiero', () =>
+        eq(['recetas', 'inventarios', 'ventas', 'financiero', 'staff'].map(m => w.etaaxPermEnPlan('A', 'm', m) ? 1 : 0).join(''), '11001'));
+    test('el catálogo de colaboradores va en todas; las herramientas de RH y pagar nómina son de Equip·ax', () =>
+        eq([w.etaaxPermEnPlan('A', 'm', 'staff', 'verCatalogo'), w.etaaxPermEnPlan('A', 'm', 'staff', 'horarios'),
+            w.etaaxPermEnPlan('A', 't', 'staff', 'horarios'), w.etaaxPermEnPlan('A', 't', 'gastos', 'nominas'),
+            w.etaaxRutaEnPlan('A', 'm', '/administrativo/organigrama.html'), w.etaaxRutaEnPlan('A', 'm', '/administrativo/staff.html')].join(','),
+           'true,false,true,true,false,true'));
+    test('ningún rol da lo que la sucursal no contrató (etaaxPerm)', () =>
+        eq(w.etaaxPerm('A', 'admin', 'ventas', 'm') + '|' + w.etaaxPerm('A', 'admin', 'ventas', 't'), 'false|true'));
+    test('sin plan guardado (o sin red) = todo el paquete: nadie se queda fuera de lo que pagó', () =>
+        eq(montarPlan(null).etaaxAppsDe('A', 'x').join(','), 'costax,finax,equipax'));
+    test('la vista global del negocio (sin sucursal) suma las apps de todas', () =>
+        eq(montarPlan({ sucursales: { m: ['costax'], t: ['equipax'] } }, [{ id: 'm' }, { id: 't' }]).etaaxAppsDe('A', '').sort().join(','), 'costax,equipax'));
+    test('el plan va ANTES del atajo del dueño en la puerta de cada página', () => {
+        const iPlan = pg.indexOf('if (!_planOk()) return;'), iDueno = pg.indexOf("if (ctx.ctxType !== 'staff') return;", pg.indexOf('if (!_planOk()) return;') - 2000);
+        return eq(iPlan > -1 && iDueno > iPlan, true);
+    });
+    // Lo que no se puede no se enseña (Edwin): ni apagado.
+    const hm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8');
+    test('el hub esconde (no apaga) módulos y herramientas sin acceso', () =>
+        eq(/tab\.hidden = !ok/.test(hm) && /if \(!ok\) return '';/.test(hm) && hm.indexOf('Sin acceso para tu rol') === -1, true));
+    // La base (v89).
+    const v89 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v89.sql'), 'utf8');
+    test('v89 · el plan lo leen dueño, colaboradores (y Staff ETAAX) y admin; anon no', () =>
+        eq(/v_owner = auth\.uid\(\) OR es_staff_de\(p_neg\) OR is_platform_admin\(\)/.test(v89) &&
+           /REVOKE ALL ON FUNCTION negocio_plan\(TEXT\) FROM PUBLIC, anon/.test(v89), true));
+    test('v89 · la invitación le pasa su plan al negocio con un trigger (sin tocar la Edge Function)', () =>
+        eq(/AFTER UPDATE OF negocio_id ON invitaciones/.test(v89) && /ON CONFLICT \(negocio_id\) DO UPDATE SET plan = EXCLUDED\.plan/.test(v89), true));
+    test('v89 · lo último del archivo es la tabla de comprobación', () => {
+        const sin = v89.split('\n').filter(l => l.trim().indexOf('--') !== 0).join('\n');
+        const sts = sin.split(';').map(x => x.trim()).filter(Boolean);
+        return eq(/^SELECT\b/i.test(sts[sts.length - 1]), true);
+    });
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.

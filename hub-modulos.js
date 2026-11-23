@@ -177,8 +177,16 @@
     }
     function icono(nombre, tam) { return typeof window.etaaxIcono === 'function' ? etaaxIcono(nombre, { tam: tam }) : ''; }
     function buscar(id) { return MODULOS.find(function (m) { return m.id === id; }); }
+    /* ¿Está en las apps que contrató esta sucursal? (page-guard: etaaxPermEnPlan).
+       Vale para todos, dueño incluido: es lo que se pagó, no un rol. */
+    function enPlan(h) {
+        if (typeof window.etaaxPermEnPlan !== 'function') return true;
+        if (h.ruta && typeof window.etaaxRutaEnPlan === 'function' && !window.etaaxRutaEnPlan(estado.negId, estado.sucId, '/' + h.ruta)) return false;
+        return !h.permiso.length || h.permiso.some(function (p) { return window.etaaxPermEnPlan(estado.negId, estado.sucId, p); });
+    }
     function permite(h) {
         if (!h || !estado || !estado.negId) return false;
+        if (!enPlan(h)) return false;
         if (!estado.staff || !h.permiso.length) return true;
         if (typeof window.etaaxPerm === 'function') return h.permiso.some(function (p) { return etaaxPerm(estado.negId, estado.rol, p, estado.sucId); });
         return false;
@@ -200,13 +208,25 @@
         var activo = buscar(seleccionado);
         if (!activo || !disponible(activo)) activo = MODULOS.find(disponible);
         seleccionado = activo ? activo.id : '';
+        /* LO QUE NO SE PUEDE, NO SE ENSEÑA (Edwin, 23-nov): ni las apps que la
+           sucursal no contrató ni lo que su rol no tiene. Antes salían apagados;
+           ahora el dock solo trae lo suyo, y las columnas se acomodan a cuántos
+           quedan. El número de módulo es el de su lugar en lo que se ve. */
+        var visibles = MODULOS.filter(disponible);
         dock.querySelectorAll('[data-modulo]').forEach(function (tab) {
-            tab.disabled = !disponible(buscar(tab.dataset.modulo));
+            var m = buscar(tab.dataset.modulo), ok = disponible(m);
+            tab.disabled = !ok;
+            tab.hidden = !ok;
             var elegido = tab.dataset.modulo === seleccionado;
             tab.setAttribute('aria-selected', String(elegido));
             tab.tabIndex = elegido ? 0 : -1;
-            tab.title = tab.disabled ? 'Sin acceso a las herramientas de este módulo' : '';
+            tab.title = '';
+            var num = tab.querySelector('.hub-module-numero');
+            if (num && ok) num.textContent = 'Módulo ' + (visibles.indexOf(m) + 1);
         });
+        var nCol = String(Math.max(1, visibles.length));
+        dock.style.setProperty('--hub-mods', nCol);
+        if (acciones) acciones.style.setProperty('--hub-mods', nCol);
         var aviso = document.getElementById('hubHerramientasEstado');
         document.querySelector('.hub-herramientas-head').hidden = !activo;
         var ir = document.getElementById('hubIrAlModulo');
@@ -225,14 +245,14 @@
         panel.removeAttribute('aria-label');
         panel.setAttribute('aria-labelledby', 'hub-tab-' + activo.id);
         document.getElementById('hubModuloIcono').innerHTML = icono(activo.icono, 38);
-        document.getElementById('hubModuloNumero').textContent = 'Módulo ' + (MODULOS.indexOf(activo) + 1) + ' · activo';
+        document.getElementById('hubModuloNumero').textContent = 'Módulo ' + (visibles.indexOf(activo) + 1) + ' · activo';
         document.getElementById('hubModuloTitulo').textContent = activo.nombre;
         document.getElementById('hubModuloDescripcion').textContent = activo.descripcion;
         /* La acción queda en la columna del módulo elegido, debajo de su
            tarjeta y fuera del tablist. Comparte su portada y permisos. */
         if (ir) {
             ir.href = activo.portada;
-            ir.style.gridColumn = String(MODULOS.indexOf(activo) + 1);
+            ir.style.gridColumn = String(visibles.indexOf(activo) + 1);
             ir.setAttribute('aria-label', 'Ir al módulo ' + activo.nombre);
             var flecha = ir.querySelector('.hub-module-entry-arrow');
             if (flecha) flecha.innerHTML = icono('flecha', 16);
@@ -255,7 +275,8 @@
            la foto de la pantalla, sí. */
         tarjetas.innerHTML = activo.herramientas.map(function (h, i) {
             var ok = permite(h), pasos = h.funciones || [];
-            return '<article class="hub-tool-fila' + (ok ? '' : ' hub-tool-bloqueada') + '"' +
+            if (!ok) return '';   // lo que no se puede, no se enseña (el índice se conserva)
+            return '<article class="hub-tool-fila"' +
                 ' data-hub-tool="' + i + '" data-ruta="' + esc(h.ruta) + '">' +
                 '<div class="hub-fila-id">' +
                     '<span class="hub-fila-icono" aria-hidden="true">' + icono(h.icono, 28) + '</span>' +
@@ -263,7 +284,6 @@
                         '<span class="hub-tool-etiqueta">' + esc(h.etiqueta) + '</span>' +
                         '<h3>' + esc(h.nombre) + '</h3>' +
                         '<p>' + esc(h.descripcion) + '</p>' +
-                        (ok ? '' : '<span class="hub-fila-sinacceso">Sin acceso para tu rol</span>') +
                     '</div>' +
                 '</div>' + visor(h, pasos) +
             '</article>';
@@ -310,6 +330,10 @@
         pintarPaso(v, Number(v.dataset.paso || 0) + Number(nav.dataset.dir));
     });
     window.addEventListener('etaax:permisos', function (e) {
+        if (estado && (!e.detail || !e.detail.negId || e.detail.negId === estado.negId)) pintar();
+    });
+    // El plan fresco de la nube (page-guard: etaaxPlanRefrescar): si cambió, se repinta.
+    window.addEventListener('etaax:plan', function (e) {
         if (estado && (!e.detail || !e.detail.negId || e.detail.negId === estado.negId)) pintar();
     });
     var entrada = document.getElementById('hubIrAlModulo');

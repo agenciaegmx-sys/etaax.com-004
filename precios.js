@@ -82,6 +82,103 @@
     function precioSiguiente(nSucsActuales) {
         return precioSucursal(_n(nSucsActuales) + 1);
     }
+    /* ══ LAS APPS DE ETAAX (nov 2026) ═══════════════════════════════════════
+       ETAAX se vende como Adobe: cada app por separado o el paquete completo.
+       Cada SUCURSAL contrata las suyas; el precio de lista de la sucursal es la
+       suma de sus apps (topada en el paquete completo) y sobre ese precio corre
+       la MISMA escalera de arriba (la 2ª sucursal con su descuento, etc.).
+         · Paquete completo = $1,799 (la tabla de siempre).
+         · El puntito de «Cost·ax» es el de etaax: dice de quién es la app.
+       Los ids NO se renombran nunca: viven en la base (suscripciones.plan) y en
+       page-guard.js (ETAAX_APPS_SUITE), que decide qué se ve. */
+    var APPS = [
+        { id: 'costax',  nombre: 'Cost\u00b7ax',  precio: 899, lema: 'Costeo, recetas e inventario',
+          incluye: 'Escandallos, insumos, inventarios y requisiciones' },
+        { id: 'finax',   nombre: 'Fin\u00b7ax',   precio: 999, lema: 'Administración y finanzas',
+          incluye: 'Ventas y cortes, gastos, caja fuerte, proveedores, clientes, carta y salud financiera' },
+        { id: 'equipax', nombre: 'Equip\u00b7ax', precio: 599, lema: 'Recursos humanos',
+          incluye: 'Horarios, checklists, evaluaciones, organigrama, perfiles de puesto y nómina' },
+        { id: 'ventax',  nombre: 'Vent\u00b7ax',  precio: 0, lema: 'Punto de venta', proximamente: true },
+        { id: 'timbrax', nombre: 'Timbr\u00b7ax', precio: 0, lema: 'Facturación electrónica', proximamente: true }
+    ];
+    var PAQUETE = { id: 'suite', nombre: 'Paquete completo' };
+    /* Anual: se pagan ANUAL_MESES y se usan 12 (Edwin, 23-nov: «paga 9»). */
+    var ANUAL_MESES = 9;
+
+    function app(id) { for (var i = 0; i < APPS.length; i++) if (APPS[i].id === id) return APPS[i]; return null; }
+    function appsDisponibles() { return APPS.filter(function (a) { return !a.proximamente; }).map(function (a) { return a.id; }); }
+    /* Lo que contrata una sucursal: 'suite' o una lista de apps disponibles,
+       sin repetidas y en el orden del catálogo. Con TODAS las disponibles es el
+       paquete. Vacío no existe: una sucursal sin apps se cobra como paquete. */
+    function normalizarApps(sel) {
+        if (sel === 'suite' || sel == null) return 'suite';
+        var disp = appsDisponibles(), lista = Array.isArray(sel) ? sel : [sel];
+        var ok = disp.filter(function (id) { return lista.indexOf(id) !== -1; });
+        if (!ok.length || ok.length === disp.length) return 'suite';
+        return ok;
+    }
+    function sumaApps(apps) {
+        return apps.reduce(function (t, id) { var a = app(id); return t + (a ? a.precio : 0); }, 0);
+    }
+    /* Precio de LISTA de una sucursal (antes de la escalera). Nunca más que el
+       paquete: dos apps que sumen más que las tres juntas se cobran como paquete. */
+    function precioLista(sel) {
+        var apps = normalizarApps(sel);
+        return apps === 'suite' ? BASE : Math.min(sumaApps(apps), BASE);
+    }
+    /* ¿Le conviene el paquete? Cuando sus apps ya cuestan lo mismo o más. */
+    function convienePaquete(sel) {
+        var apps = normalizarApps(sel);
+        return apps !== 'suite' && sumaApps(apps) >= BASE;
+    }
+    /* Mensual de la sucursal en la posición n con esas apps: la escalera es un
+       porcentaje sobre el precio de lista (precioSucursal(n) / BASE). */
+    function precioSucursalApps(n, sel) {
+        var p = precioSucursal(n);
+        if (!p) return 0;
+        var apps = normalizarApps(sel);
+        return apps === 'suite' ? p : Math.round(precioLista(apps) * p / BASE);
+    }
+    /* El plan de un negocio (suscripciones.plan). NULL = paquete completo,
+       mensual, cobro junto: así quedan todos los negocios de antes.
+         { ciclo:'mensual'|'anual', cobro:'negocio'|'sucursal',
+           base:'suite'|[apps]   ← para las sucursales que no tienen la suya,
+           sucursales:{ <sucId>: 'suite'|[apps] } } */
+    function planNormal(plan) {
+        plan = plan || {};
+        var suc = {};
+        Object.keys(plan.sucursales || {}).forEach(function (k) { suc[k] = normalizarApps(plan.sucursales[k]); });
+        return { ciclo: plan.ciclo === 'anual' ? 'anual' : 'mensual',
+                 cobro: plan.cobro === 'sucursal' ? 'sucursal' : 'negocio',
+                 base: normalizarApps(plan.base == null ? 'suite' : plan.base), sucursales: suc };
+    }
+    function appsDe(plan, sucId) {
+        var p = planNormal(plan);
+        return Object.prototype.hasOwnProperty.call(p.sucursales, sucId) ? p.sucursales[sucId] : p.base;
+    }
+    function nombreApps(sel) {
+        var apps = normalizarApps(sel);
+        if (apps === 'suite') return PAQUETE.nombre;
+        return apps.map(function (id) { return app(id).nombre; }).join(' + ');
+    }
+    /* La cotización completa de un negocio: una línea por sucursal (en el orden
+       de la lista, que es el que decide su escalón), el mensual y, si el ciclo es
+       anual, el anual (paga ANUAL_MESES) y lo que se ahorra. */
+    function cotizar(plan, sucursales) {
+        var p = planNormal(plan);
+        var lista = (sucursales && sucursales.length) ? sucursales : [{ id: 'suc_principal', nombre: 'Matriz' }];
+        var lineas = lista.map(function (s, i) {
+            var apps = appsDe(p, s.id), m = precioSucursalApps(i + 1, apps);
+            return { id: s.id, nombre: s.nombre || (i ? 'Sucursal ' + (i + 1) : 'Matriz'), n: i + 1, apps: apps,
+                     paquete: apps === 'suite', nombreApps: nombreApps(apps), mensual: m, anual: m * ANUAL_MESES,
+                     convienePaquete: convienePaquete(apps) };
+        });
+        var mensual = lineas.reduce(function (t, l) { return t + l.mensual; }, 0);
+        return { ciclo: p.ciclo, cobro: p.cobro, lineas: lineas, mensual: mensual,
+                 anual: mensual * ANUAL_MESES, ahorroAnual: mensual * (12 - ANUAL_MESES),
+                 total: p.ciclo === 'anual' ? mensual * ANUAL_MESES : mensual,
+                 todoPaquete: lineas.every(function (l) { return l.paquete; }) };
+    }
     function fmt(v) { return '$' + Number(v || 0).toLocaleString('en-US'); }
     // "5.6%" — un decimal, sin ceros de relleno (5.56 → 5.6, 12.23 → 12.2).
     function fmtPct(v) { return (Math.round(Number(v || 0) * 10) / 10) + '%'; }
@@ -94,6 +191,10 @@
         precioMensual: precioMensual,
         descuentoMensual: descuentoMensual,
         precioSiguiente: precioSiguiente,
+        APPS: APPS, PAQUETE: PAQUETE, ANUAL_MESES: ANUAL_MESES,
+        app: app, appsDisponibles: appsDisponibles, normalizarApps: normalizarApps,
+        precioLista: precioLista, convienePaquete: convienePaquete, precioSucursalApps: precioSucursalApps,
+        planNormal: planNormal, appsDe: appsDe, nombreApps: nombreApps, cotizar: cotizar,
         fmt: fmt, fmtPct: fmtPct
     };
     if (typeof window !== 'undefined') window.EtaaxPrecios = API;

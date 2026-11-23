@@ -36,6 +36,9 @@
     function moduloActual() { return MODULOS.find(function (m) { return m.id === location.pathname.split('/')[1]; }); }
     function permitido(m, c) {
         if (!m || !c || !c.negId) return false;
+        /* Las apps que contrató la sucursal, para TODOS (page-guard). */
+        if (m.permisos.length && typeof window.etaaxPermEnPlan === 'function' &&
+            !m.permisos.some(function (p) { return window.etaaxPermEnPlan(c.negId, c.sucId, p); })) return false;
         if (c.ctxType !== 'staff' || !m.permisos.length) return true;
         return typeof window.etaaxPerm === 'function' && m.permisos.some(function (p) { return window.etaaxPerm(c.negId, c.rol || 'otro', p, c.sucId); });
     }
@@ -289,8 +292,9 @@
         var c = leer('etaax_ctx');
         if (!c || !c.negId || contextoGlobal) return;
         var actual = moduloActual();
-        mostrarDialogo('Cambiar módulo','<p>Elige un área de trabajo de ' + esc(c.sucNombre || c.negNombre) + '.</p><div class="etx-module-options">' + MODULOS.map(function(m,i){
-            var ok = permitido(m,c), elegido = actual && actual.id === m.id;
+        mostrarDialogo('Cambiar módulo','<p>Elige un área de trabajo de ' + esc(c.sucNombre || c.negNombre) + '.</p><div class="etx-module-options">' + MODULOS.filter(function(m){ return permitido(m,c); }).map(function(m,i){
+            /* Lo que no se puede no se enseña (Edwin, 23-nov): ni apps sin contratar ni lo que el rol no tiene. */
+            var ok = true, elegido = actual && actual.id === m.id;
             return '<button type="button" data-modulo="' + m.id + '"' + (ok ? '' : ' disabled') + (elegido ? ' aria-current="true"' : '') + '>' + ic(m.icono,30) + '<span><small>Módulo ' + (i+1) + '</small><strong>' + esc(m.nombre) + '</strong><small>' + (ok ? (elegido ? 'Módulo actual' : 'Entrar al módulo') : 'Sin acceso para tu rol') + '</small></span>' + ic('flecha',18) + '</button>';
         }).join('') + '</div>',document.getElementById('etxCambiarModulo'));
         dialogo.querySelectorAll('[data-modulo]').forEach(function(b){b.onclick=function(){

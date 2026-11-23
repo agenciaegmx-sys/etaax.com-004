@@ -63,6 +63,7 @@
 <script src="/supabase-config.js"></script>
 <script src="/password.js"></script><!-- fuerza y sugerencia de contraseña -->
 <script src="/datos-pago.js?v=6d6c3543"></script><!-- datos de transferencia: fuente única -->
+<script src="/precios.js?v=c0cc0bbf"></script><!-- las apps y sus precios: el plan con el que entra -->
 <script>
 /* ════════════════════════════════════════════════════════════════
    ETAAX · Activación de cuenta por invitación
@@ -115,15 +116,24 @@ async function _cargar(){
     _pintarFormulario();
 }
 
+/* El plan con el que se le invitó (v89): sus apps y lo que paga. Sin plan en
+   la invitación, el paquete completo, como siempre. */
+function _planHTML(){
+    if (!window.EtaaxPrecios || !EtaaxPrecios.cotizar) return '';
+    var c = EtaaxPrecios.cotizar(_inv.plan || null, [{ id: 'suc_principal', nombre: 'Matriz' }]);
+    return '<div class="al-neg"><div class="l">Tu plan</div><div class="v" style="font-size:14px">' + esc(c.lineas[0].nombreApps) +
+        ' · ' + EtaaxPrecios.fmt(c.total) + (c.ciclo === 'anual' ? ' al año (pagas ' + EtaaxPrecios.ANUAL_MESES + ' meses y usas 12)' : ' al mes') + '</div></div>';
+}
 function _pintarFormulario(){
     var pago = _inv.forma_pago === 'stripe'
-        ? 'Al terminar te llevamos a registrar tu tarjeta. El cobro es mensual y automático.'
+        ? 'Al terminar te llevamos a registrar tu tarjeta. El cobro es automático.'
         : 'Quedamos de acuerdo en pago por transferencia o efectivo. Activamos tu negocio en cuanto entre el pago.';
     document.getElementById('alCuerpo').innerHTML =
         '<div class="al-tit">Activa tu cuenta</div>' +
         '<div class="al-sub">Solo falta tu nombre y una contraseña.</div>' +
         '<div class="al-neg"><div class="l">Negocio</div><div class="v">' + esc(_inv.nombre_negocio) + '</div></div>' +
         '<div class="al-neg"><div class="l">Correo de acceso</div><div class="v" style="font-size:14px">' + esc(_inv.email) + '</div></div>' +
+        _planHTML() +
         '<div class="al-campo"><label>Tu nombre completo</label>' +
             '<input type="text" id="alNombre" placeholder="Juan García" autocomplete="name"></div>' +
         '<div class="al-campo"><label>Crea tu contraseña</label>' +
