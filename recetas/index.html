@@ -10,10 +10,10 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX - Escandallo</title>
     <!-- Presentación inicial: descargar antes de llegar a los scripts del final. -->
-    <link rel="preload" as="script" href="/etaax-iconos.js?v=ce96904d">
+    <link rel="preload" as="script" href="/etaax-iconos.js?v=c96ccca0">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=5844cd7a">
     <link rel="preload" as="script" href="/etaax-header.js?v=412dbfd1">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=a12786c9">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=1f72ae8c">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
     <link rel="preload" as="script" href="/recetas/recetas-ui.js?v=91eddf64">
 
@@ -32,7 +32,7 @@
         html.embed .header button[onclick*="eliminarRecetaActual"] { display:none !important; }
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=69b8be70">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=98d272d0">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 <link rel="stylesheet" href="/recetas/recetas-ui.css?v=e483f18f">
 </head>
@@ -456,7 +456,7 @@
     <div style="position:absolute;top:-80px;left:50%;transform:translateX(-50%);width:600px;height:360px;pointer-events:none;background:radial-gradient(ellipse at center,rgba(30,80,220,.13) 0%,transparent 70%)"></div>
     <div class="cf-wrap">
         <div class="cf-hero etx-isla-wrap">
-            <div class="etx-isla" role="heading" aria-level="1" aria-label="Cost·ax"><span class="etx-isla-nombre"><span class="etx-isla-ini">C</span><span class="etx-isla-resto">ost<span class="etx-isla-punto">·</span>ax</span></span></div>
+            <div class="etx-isla" role="heading" aria-level="1" aria-label="Cost·ax"><span class="etx-isla-nombre"><span class="etx-isla-ini">C</span><span class="etx-isla-resto">ost</span><span class="etx-isla-punto">·</span><span class="etx-isla-resto">ax</span></span></div>
         </div>
         <div class="cf-modules">
 
@@ -1028,6 +1028,7 @@ function _aplicarModoCatalogoGlobalRecetas(){
         var a=document.querySelector('#nav a[href="'+h+'"]'); if(a){ var s2=a.closest('.nav-section'); (s2||a).style.display='none'; }
     });
     var t=document.querySelector('#moduloLanding .etx-isla-nombre'); if(t) t.innerHTML='<span class="etx-isla-ini">R</span><span class="etx-isla-resto">ecetas globales</span>';
+    var isl=document.querySelector('#moduloLanding .etx-isla'); if(isl) isl.setAttribute('aria-label','Recetas globales');
     var card=document.querySelector('#moduloLanding .cf-section .cf-card.highlight .cf-card-title'); if(card) card.textContent='Catálogo de Recetas';
     // Abrir directo la vista con buscador (el grid se rellena cuando cargan las recetas).
     if(typeof entrarEscandallos==='function') entrarEscandallos();
@@ -5027,11 +5028,11 @@ window.addEventListener('load', function() {
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
 <script src="/novedades.js?v=94a2317e"></script><!-- aviso de actualizaciones del sistema -->
-<script src="/etaax-iconos.js?v=ce96904d"></script>
+<script src="/etaax-iconos.js?v=c96ccca0"></script>
 <script src="/etaax-sidebar.js?v=5844cd7a"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=412dbfd1"></script>
-<script src="/etaax-modulos-ui.js?v=a12786c9"></script>
+<script src="/etaax-modulos-ui.js?v=1f72ae8c"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 <script src="/recetas/recetas-ui.js?v=91eddf64"></script>
 </body>

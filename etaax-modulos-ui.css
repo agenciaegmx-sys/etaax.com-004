@@ -527,8 +527,10 @@ body.etx-modulos-ui :is(#nav,#ctxBar,.etx-module-dialog) :is(a,button):focus-vis
    La portada de cada módulo lleva solo su nombre —Admin·ax, Cost·ax, Fin·ax,
    Learn·ax— en una cápsula como la isla dinámica de Apple: azul petróleo
    oscuro, corta y sin ícono. Se queda FIJA bajo la tarjeta del negocio y, al
-   bajar, se encoge a un círculo con la inicial («A») que cabe en el pasillo
-   entre las dos columnas de tarjetas: no tapa ningún acceso. */
+   bajar, se encoge a la inicial con su punto («A·») y cabe en el pasillo
+   entre las dos columnas de tarjetas: no tapa ningún acceso.
+   OJO: el aspecto de la cápsula está también en hub-modulos.css (el hub no
+   carga esta hoja); el candado vigila que los dos digan lo mismo. */
 body.etx-modulos-ui .cf-hero.etx-isla-wrap,
 body.etx-modulos-ui #moduloLanding .cf-hero.etx-isla-wrap,
 .cf-hero.etx-isla-wrap {
@@ -542,14 +544,18 @@ body.etx-modulos-ui #moduloLanding .cf-hero.etx-isla-wrap { top:4px; }
   background:linear-gradient(135deg,#17525a 0%,#21707a 100%); color:#fff; box-sizing:border-box;
   box-shadow:0 6px 16px rgba(14,48,53,.30); transition:padding .32s ease; animation:etxIslaEntra .35s ease-out both; }
 .etx-isla-nombre { display:inline-flex; align-items:center; font-size:clamp(15px,1.35vw,17px); font-weight:700; letter-spacing:-.1px; line-height:1; white-space:nowrap; }
-.etx-isla-resto { display:inline-flex; align-items:center; max-width:150px; overflow:hidden; transition:max-width .32s ease, opacity .2s ease; }
+.etx-isla-resto { display:inline-flex; align-items:center; max-width:10em; overflow:hidden; transition:max-width .32s ease, opacity .2s ease; }
 .etx-isla-punto { color:#ffb48f; margin:0 1px; }
-/* Al bajar: un círculo con la inicial. */
-.etx-isla.etx-isla--mini { padding:0 11px; }
+/* Al bajar: la inicial y su punto. */
+.etx-isla.etx-isla--mini { padding:0 12px; }
 .etx-isla.etx-isla--mini .etx-isla-resto { max-width:0; opacity:0; }
 /* Más pasillo entre las dos columnas de tarjetas para que el círculo quepa ahí. */
 body.etx-con-isla :is(.cf-grid-2, .cf-grid:not(.cf-grid-1):not(.cf-grid-3)) { column-gap:64px !important; }
 @media (max-width:900px) { body.etx-con-isla :is(.cf-grid-2, .cf-grid) { column-gap:14px !important; } }
+/* La isla chica, dentro de las tarjetas de «Cambiar módulo». */
+.etx-isla.etx-isla--chica { height:26px; min-width:26px; padding:0 12px; box-shadow:0 3px 9px rgba(14,48,53,.22); animation:none; }
+.etx-isla.etx-isla--chica .etx-isla-nombre { font-size:13px; }
+.etx-module-options .etx-mod-isla { display:flex; margin:6px 0; }
 @keyframes etxIslaEntra { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce) { .etx-isla, .etx-isla-resto { animation:none; transition:none; } }
 /* ══ LA FRANJA DE ARRIBA, SIN CORTE SECO (Edwin, 24-nov) ═══════════════════════

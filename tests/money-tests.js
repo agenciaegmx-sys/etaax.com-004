@@ -18696,9 +18696,33 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const pags = [['administrativo/index.html', 'Admin'], ['recetas/index.html', 'Cost'], ['financiero/index.html', 'Fin'], ['consultoria/index.html', 'Learn']];
         return eq(pags.every(([f, nom]) => {
             const t = fs.readFileSync(path.join(RAIZ, f), 'utf8');
-            return t.indexOf('<span class="etx-isla-nombre"><span class="etx-isla-ini">' + nom[0] + '</span><span class="etx-isla-resto">' + nom.slice(1) + '<span class="etx-isla-punto">·</span>ax</span></span>') > -1 &&
+            return t.indexOf('<span class="etx-isla-nombre"><span class="etx-isla-ini">' + nom[0] + '</span><span class="etx-isla-resto">' + nom.slice(1) + '</span><span class="etx-isla-punto">·</span><span class="etx-isla-resto">ax</span></span>') > -1 &&
                    !/class="cf-hero-(eyebrow|sub)"/.test(t) && !/etx-isla-ic/.test(t);
         }), true);
+    });
+    /* (24-nov) La isla también en las tarjetas del hub y de «Cambiar módulo», y al
+       contraerse conserva la inicial y su punto («A·»). */
+    test('la isla parte el nombre en inicial · resto · punto · resto (al contraerse queda «A·»)', () => {
+        const w = { document: { readyState: 'complete', addEventListener() {}, head: { appendChild() {} }, body: { appendChild() {} },
+                    createElement: () => ({ setAttribute() {}, appendChild() {}, style: {} }), getElementById: () => null, querySelector: () => null, querySelectorAll: () => [] } };
+        const src = fs.readFileSync(path.join(RAIZ, 'etaax-iconos.js'), 'utf8');
+        const i = src.indexOf('window.etaaxIslaHTML = function'), f = src.slice(i, src.indexOf('\n    };', i) + 7);
+        const win = {}; new Function('window', f)(win);
+        const h = win.etaaxIslaHTML('Admin·ax', { clase: 'etx-isla--chica' }), malo = win.etaaxIslaHTML('<b>x</b>·y');
+        return eq(h + '|' + /<b>/.test(malo), '<span class="etx-isla etx-isla--chica"><span class="etx-isla-nombre"><span class="etx-isla-ini">A</span><span class="etx-isla-resto">dmin</span>' +
+                  '<span class="etx-isla-punto">·</span><span class="etx-isla-resto">ax</span></span></span>|false');
+    });
+    test('…el hub y «Cambiar módulo» pintan el nombre en la isla chica', () => {
+        const hubm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8'), mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        return eq(/<span class="hub-module-nombre">' \+ islaNombre\(m\.nombre\)/.test(hubm) && /etaaxIslaHTML\(n, \{ clase: 'etx-isla--chica' \}\)/.test(hubm) &&
+                  /<span class="etx-mod-isla">' \+ \(typeof window\.etaaxIslaHTML === 'function' \? window\.etaaxIslaHTML\(m\.nombre, \{ clase: 'etx-isla--chica' \}\)/.test(mu), true);
+    });
+    test('…y las dos hojas (módulos y hub) pintan la misma cápsula', () => {
+        const a = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8').replace(/\s+/g, ''), b = fs.readFileSync(path.join(RAIZ, 'hub-modulos.css'), 'utf8').replace(/\s+/g, '');
+        const igual = (x) => a.indexOf(x) > -1 && b.indexOf(x) > -1;
+        return eq(igual('background:linear-gradient(135deg,#17525a0%,#21707a100%)') && igual('.etx-isla-punto{color:#ffb48f;margin:01px;}') &&
+                  igual('.etx-isla.etx-isla--chica{height:26px;min-width:26px;padding:012px;box-shadow:03px9pxrgba(14,48,53,.22);') &&
+                  igual('.etx-isla.etx-isla--mini.etx-isla-resto{max-width:0;opacity:0;}'), true);
     });
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));

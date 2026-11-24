@@ -36,6 +36,17 @@ body.hub-paleta .hub-module-tab[aria-selected="true"]{border-color:var(--hub-bra
 body.hub-paleta .hub-module-icon{display:inline-flex;}
 body.hub-paleta .hub-module-numero{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ui-apagado);}
 body.hub-paleta .hub-module-nombre{font-size:13px;font-weight:600;line-height:1.4;}
+/* EL NOMBRE DEL MÓDULO EN SU ISLA (Edwin, 24-nov): la misma cápsula azul
+   petróleo de la portada de cada módulo (etaax-modulos-ui.css, que el hub no
+   carga). El candado vigila que las dos hojas digan lo mismo. */
+body.hub-paleta .hub-module-nombre{display:inline-flex;}
+.etx-isla{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;border-radius:999px;background:linear-gradient(135deg,#17525a 0%,#21707a 100%);color:#fff;}
+.etx-isla-nombre{display:inline-flex;align-items:center;font-weight:700;letter-spacing:-.1px;line-height:1;white-space:nowrap;}
+.etx-isla-resto{display:inline-flex;align-items:center;max-width:10em;overflow:hidden;transition:max-width .32s ease,opacity .2s ease;}
+.etx-isla-punto{color:#ffb48f;margin:0 1px;}
+.etx-isla.etx-isla--chica{height:26px;min-width:26px;padding:0 12px;box-shadow:0 3px 9px rgba(14,48,53,.22);}
+.etx-isla.etx-isla--chica .etx-isla-nombre{font-size:13px;}
+.etx-isla.etx-isla--mini .etx-isla-resto{max-width:0;opacity:0;}
 body.hub-paleta .hub-module-tab[aria-selected="true"] .hub-module-nombre{color:var(--hub-brand);}
 body.hub-paleta .hub-module-tab:disabled{opacity:.4;cursor:default;transform:none;}
 body.hub-paleta .hub-herramientas{margin-top:44px;}

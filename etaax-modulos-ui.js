@@ -302,7 +302,7 @@
         mostrarDialogo('Cambiar módulo','<p>Elige un área de trabajo de ' + esc(c.sucNombre || c.negNombre) + '.</p><div class="etx-module-options">' + MODULOS.filter(function(m){ return permitido(m,c); }).map(function(m,i){
             /* Lo que no se puede no se enseña (Edwin, 23-nov): ni apps sin contratar ni lo que el rol no tiene. */
             var ok = true, elegido = actual && actual.id === m.id;
-            return '<button type="button" data-modulo="' + m.id + '"' + (ok ? '' : ' disabled') + (elegido ? ' aria-current="true"' : '') + '>' + ic(m.icono,30) + '<span><small>Módulo ' + (i+1) + '</small><strong>' + esc(m.nombre) + '</strong><small>' + (ok ? (elegido ? 'Módulo actual' : 'Entrar al módulo') : 'Sin acceso para tu rol') + '</small></span>' + ic('flecha',18) + '</button>';
+            return '<button type="button" data-modulo="' + m.id + '"' + (ok ? '' : ' disabled') + (elegido ? ' aria-current="true"' : '') + '>' + ic(m.icono,30) + '<span><small>Módulo ' + (i+1) + '</small><span class="etx-mod-isla">' + (typeof window.etaaxIslaHTML === 'function' ? window.etaaxIslaHTML(m.nombre, { clase: 'etx-isla--chica' }) : '<strong>' + esc(m.nombre) + '</strong>') + '</span><small>' + (ok ? (elegido ? 'Módulo actual' : 'Entrar al módulo') : 'Sin acceso para tu rol') + '</small></span>' + ic('flecha',18) + '</button>';
         }).join('') + '</div>',document.getElementById('etxCambiarModulo'));
         dialogo.querySelectorAll('[data-modulo]').forEach(function(b){b.onclick=function(){
             var fresco = leer('etaax_ctx'), m = MODULOS.find(function(x){return x.id === b.dataset.modulo;});

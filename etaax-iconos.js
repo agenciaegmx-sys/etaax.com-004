@@ -682,6 +682,22 @@
                '" aria-hidden="true"><use href="#etx-' + nombre + '"></use></svg>';
     };
 
+    /* EL NOMBRE DE UN MÓDULO EN SU ISLA (Edwin, 24-nov): «Admin·ax» en la
+       cápsula azul petróleo. Una sola forma para la portada del módulo, las
+       tarjetas del hub y «Cambiar módulo». El nombre va partido —inicial,
+       resto, punto, resto— para que la isla, al contraerse, conserve la
+       inicial y su punto: «A·». El texto se escapa: nunca entra HTML de nadie. */
+    window.etaaxIslaHTML = function (nombre, opc) {
+        opc = opc || {};
+        var s = String(nombre == null ? '' : nombre), i = s.indexOf('\u00b7');
+        var esc = function (t) { return String(t).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); };
+        var p = function (cl, t) { return '<span class="etx-isla-' + cl + '">' + esc(t) + '</span>'; };
+        var cuerpo = i > 0 ? p('ini', s.charAt(0)) + p('resto', s.slice(1, i)) + p('punto', '\u00b7') + p('resto', s.slice(i + 1))
+                           : p('ini', s.charAt(0)) + p('resto', s.slice(1));
+        var cl = String(opc.clase || '').replace(/[^A-Za-z0-9 _-]/g, '');
+        return '<span class="etx-isla' + (cl ? ' ' + cl : '') + '"><span class="etx-isla-nombre">' + cuerpo + '</span></span>';
+    };
+
     /* Los nombres disponibles, para que una pantalla pueda preguntar en vez de
        adivinar (y para que el candado los recorra). */
     window.etaaxIconos = function () {

@@ -191,9 +191,14 @@
         return false;
     }
     function disponible(m) { return m.herramientas.some(permite); }
+    /* El nombre de cada módulo, en su isla (la misma de la portada). */
+    function islaNombre(n) {
+        return typeof window.etaaxIslaHTML === 'function' ? window.etaaxIslaHTML(n, { clase: 'etx-isla--chica' })
+                                                          : String(n).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+    }
     dock.innerHTML = MODULOS.map(function (m, i) {
         return '<button type="button" class="hub-module-tab" id="hub-tab-' + m.id + '" data-modulo="' + m.id + '" role="tab" aria-controls="hubHerramientas" aria-selected="false" tabindex="-1" disabled>' +
-            '<span class="hub-module-icon" aria-hidden="true">' + icono(m.icono, 38) + '</span><span class="hub-module-numero">Módulo ' + (i + 1) + '</span><span class="hub-module-nombre">' + m.nombre + '</span></button>';
+            '<span class="hub-module-icon" aria-hidden="true">' + icono(m.icono, 38) + '</span><span class="hub-module-numero">Módulo ' + (i + 1) + '</span><span class="hub-module-nombre">' + islaNombre(m.nombre) + '</span></button>';
     }).join('');
     function mostrarSeleccion() {
         var tab = dock.querySelector('[aria-selected="true"]');
