@@ -134,11 +134,11 @@ document.addEventListener('DOMContentLoaded', function(){
                 <div class="hdr-acts">
                     <!-- Un solo reporte: la vista fusionada (antes "Reporte final") es la buena;
                          la variante sin fusionar se retiró para no confundir. -->
-                    <button class="btn-vista" id="btnReporteExistencias" onclick="abrirReporteExistencias()">📊 Reporte de existencias</button>
-                    <button class="btn-vista" onclick="abrirParametros()">🧩 Compuestos</button>
-                    <button class="btn-vista" id="btnQrEntradas" onclick="abrirQrEntradas()">📱 QR de entradas</button>
-                    <button class="btn-vista" onclick="mostrarVista('vistaEntradas')">📋 Revisar entradas</button>
-                    <button class="btn-vista" id="btnPrimerLev" onclick="nuevoPrimerLev()">📋 Primer levantamiento</button>
+                    <button class="btn-vista" id="btnReporteExistencias" onclick="abrirReporteExistencias()">Reporte de existencias</button>
+                    <button class="btn-vista" id="btnCompuestos" onclick="abrirParametros()">Compuestos</button>
+                    <button class="btn-vista" id="btnQrEntradas" onclick="abrirQrEntradas()">QR de entradas</button>
+                    <button class="btn-vista" id="btnRevisarEntradas" onclick="mostrarVista('vistaEntradas')">Revisar entradas</button>
+                    <button class="btn-vista" id="btnPrimerLev" onclick="nuevoPrimerLev()">Primer levantamiento</button>
                     <button class="btn-primary" id="btnNuevoInv" onclick="nuevoInventario()">+ Nuevo inventario</button>
                 </div>
             </div>
@@ -150,11 +150,11 @@ document.addEventListener('DOMContentLoaded', function(){
                     <div class="stat-card"><div class="stat-label">Último inventario</div><div class="stat-val" style="font-size:16px;padding-top:6px" id="statUltimo">—</div></div>
                     <div class="stat-card stat-card-filter active" id="tabTodos" onclick="setModoHistorial('todos')">
                         <div class="stat-label">Ver</div>
-                        <div style="font-size:26px;line-height:1;margin-top:6px">📋 Todos</div>
+                        <div class="stat-filtro" id="statFiltroTodos">Todos</div>
                     </div>
                     <div class="stat-card stat-card-filter" id="tabMes" onclick="setModoHistorial('mes')">
                         <div class="stat-label">Filtrar por</div>
-                        <div style="font-size:26px;line-height:1;margin-top:6px">📅 Mes / Año</div>
+                        <div class="stat-filtro" id="statFiltroMes">Mes / Año</div>
                     </div>
                 </div>
                 <!-- Elementos ocultos requeridos por JS -->
@@ -165,8 +165,8 @@ document.addEventListener('DOMContentLoaded', function(){
                 <div style="display:flex;justify-content:flex-end;margin-top:-4px">
                     <div id="toggleHistWrap" style="display:flex;gap:6px;align-items:center">
                         <div class="vista-toggle" id="toggleHistLista">
-                            <button class="active" id="btnHistLista" onclick="setModoListaHist('lista')">≡ Lista</button>
-                            <button id="btnHistGal" onclick="setModoListaHist('galeria')">⊞ Galería</button>
+                            <button class="active" id="btnHistLista" onclick="setModoListaHist('lista')">Lista</button>
+                            <button id="btnHistGal" onclick="setModoListaHist('galeria')">Galería</button>
                         </div>
                     </div>
                 </div>
@@ -356,7 +356,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=cbd0e7ae"></script>
-<script src="/recetas/inventarios.js?v=23a193a2"></script>
+<script src="/recetas/inventarios.js?v=4589e820"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -379,6 +379,16 @@ function toggleNav() {
 .stat-card-filter { cursor: pointer; user-select: none; }
 .stat-card-filter.active { border-color: var(--green); }
 .stat-card-filter:hover:not(.active) { border-color: var(--border2); }
+/* «Ver Todos» y «Mes / Año» con su ícono (antes 📋 y 📅). */
+.stat-filtro { display: flex; align-items: center; gap: 10px; font-size: 26px; line-height: 1; margin-top: 6px; color: var(--text); }
+.stat-filtro > svg.inv-ic { margin-right: 0; width: 26px; height: 26px; }
+#toggleHistLista button { display: inline-flex; align-items: center; gap: 5px; }
+#toggleHistLista button > svg.inv-ic { margin-right: 0; }
+.hist-card-icon .inv-ic, .empty-icon .inv-ic { margin-right: 0; }
+.inv-nom-ic { display: inline-flex; align-items: center; gap: 7px; }
+.inv-nom-ic > svg.inv-ic { margin-right: 0; }
+.inv-menu button > svg.inv-ic { margin-right: 0; }
+.inv-menu button.peligro > svg.inv-ic { color: var(--red); }
 
 /* ── Vista toggle (lista / galería) ─────────────────────────── */
 .vista-toggle {

@@ -10914,12 +10914,20 @@ console.log('\n══ BE6 · Inventarios, Requisiciones y la regla compartida �
     });
 
     /* ── Requisiciones ── */
+    /* (24-nov) El historial ya no es un modal: es la portada. Abrir una para
+       capturar pide «crear»; abrirla en el pedido pide «exportar»; finalizar y
+       eliminar desde la portada piden «crear»; y sin «historial» la portada
+       solo enseña las abiertas. */
     [['guardarExistencias','crear'], ['registrarFila','crear'],
-     ['abrirHistorial','historial'], ['verSnapHistorial','historial'],
+     ['abrirReq','crear'], ['abrirReq','exportar'], ['finalizarReqLista','crear'], ['eliminarReq','crear'], ['nuevaRequisicion','crear'],
      ['exportarPedido','exportar'], ['exportarCSV','exportar'], ['verPedidoAdmin','exportar']]
     .forEach(function (par) {
         test('requisiciones: ' + par[0] + ' pide «' + par[1] + '»', () =>
             eq(G(req, par[0], par[1]), true, 'con candado'));
+    });
+    test('requisiciones: sin «historial», la portada solo enseña las abiertas', () => {
+        const i = req.indexOf('function _reqListaVisible(');
+        return eq(req.slice(i, i + 400).indexOf("if (!_puedeReq('historial')) l = l.filter(_reqEsAbierta);") > -1, true, 'filtrada');
     });
     /* Los pasos SON el permiso: el 2 es la proyección y el 3 el pedido que sale
        al proveedor. Se piden en irPaso porque a esa la llaman también los
@@ -18436,6 +18444,73 @@ console.log('\n══ BH90 · Requisiciones como inventarios; «Cerrar sesión»
     test('tema oscuro: tarjeta oscura y «Seguir aquí» con letra clara', () =>
         eq([/background:#171611/.test(oscuro.h), /background:#24221d/.test(oscuro.btn), /color:#f0ece4/.test(oscuro.btn)].join('|'), 'true|true|true'));
     test('sin el emoji de la mano: ícono de la app (o nada)', () => eq(/👋/.test(negtab), false));
+}
+
+/* ═══════════ SUITE BH91 · LA PORTADA DE REQUISICIONES; INVENTARIOS SIN EMOJIS ═══
+   Edwin, 24-nov: «la página inicial de requisiciones como en inventarios, con un
+   historial de requisiciones que se puedan editar o eliminar, y que desde ahí se
+   creen las nuevas»; y los emojis de la portada de inventarios, por íconos.
+   Cada requisición es ahora su propio renglón de req_historial (abierta o
+   finalizada); la abierta que vivía en el documento req_pedido se pasa sola. */
+console.log('\n══ BH91 · Portada de requisiciones; inventarios sin emojis ══');
+{
+    const req = fs.readFileSync(path.join(RAIZ, 'recetas/requisiciones.html'), 'utf8');
+    const cuerpo = (n) => { const i = req.indexOf('function ' + n + '('); return i < 0 ? '' : req.slice(i, req.indexOf('\nfunction ', i + 10)); };
+    test('la página abre en la portada (historial) y la captura va aparte', () =>
+        eq(/<div id="vistaListaReq">/.test(req) && /<div id="vistaCapturaReq" style="display:none">/.test(req) &&
+           /id="btnNuevaReq" onclick="nuevaRequisicion\(\)"/.test(req) && /id="statReqs"/.test(req) && /id="tabMesReq"/.test(req), true));
+    test('cada requisición del historial se continúa o edita, se ve su pedido, se finaliza y se elimina', () => {
+        const m = cuerpo('_reqMenu');
+        return eq(['Continuar', 'Editar', 'Ver pedido', 'Finalizar requisición', 'Eliminar'].every(t => m.indexOf("'" + t + "'") > -1), true);
+    });
+    test('eliminar pide la contraseña general', () => eq(/_pedirClaveAdmin\('Eliminar requisición'/.test(cuerpo('eliminarReq')), true));
+    test('editar una finalizada guarda en ELLA misma (no crea otra) y conserva su fecha', () => {
+        const f = cuerpo('finalizarRequisicion');
+        return eq(/if \(!r\.fecha\) r\.fecha = ahora; else r\.editada = ahora;/.test(f) && !/_reqGenId\(\)/.test(f), true);
+    });
+    test('lo capturado se guarda en el renglón de la requisición, ya no en el documento req_pedido', () =>
+        eq(!/req_pedido/.test((cuerpo('setReqData') + cuerpo('_reqGuardarNube')).replace(/\/\*[\s\S]*?\*\//g, '')) && /_sbUpReq\(r\)/.test(cuerpo('_reqGuardarNube')), true));
+    test('…sin updated_at (req_historial no tiene esa columna)', () => eq(/from\('req_historial'\)\.upsert\(\{ id: r\.id, negocio_id: negId, datos: r, created_at:/.test(cuerpo('_sbUpReq')), true));
+    test('la abierta del documento viejo se pasa a su renglón una sola vez (y sale del documento)', () => {
+        const m = cuerpo('_reqMigrarAbierta');
+        return eq(/cerrada: false/.test(m) && /delete doc\.porSucursal\[_reqSuc\(\)\]/.test(m) && /_reqMigrarAbierta\(r\[1\]\.data\.datos\)/.test(req), true);
+    });
+    test('«Nueva requisición» no deja basura: entra al historial con su primera captura', () =>
+        eq(/inicio: null, cerrada: false, items: \{\}/.test(cuerpo('nuevaRequisicion')) && /if \(r\.inicio\)/.test(cuerpo('_reqGuardarNube')), true));
+    /* La regla corrida de verdad: el orden de la portada y el resumen. */
+    const ctxR = { console, JSON, Object, Array, String, Date, Math, isNaN, parseFloat, parseInt,
+        localStorage: { getItem: (k) => k === 'etaax_sucursal_activa' ? 's1' : null } };
+    vm.createContext(ctxR);
+    ['_reqSuc', '_reqEsAbierta', '_reqTodas', '_reqOrden', '_reqListaVisible', 'esRegistrado'].forEach(n => vm.runInContext(cuerpo(n), ctxR));
+    vm.runInContext('var _cacheReqHist = ' + JSON.stringify([
+        { id: 'a', sucursalId: 's1', cerrada: true, inicio: '2026-11-01T10:00:00Z', fecha: '2026-11-01T12:00:00Z' },
+        { id: 'b', sucursalId: 's1', cerrada: false, inicio: '2026-10-01T10:00:00Z' },
+        { id: 'c', sucursalId: 's2', cerrada: false, inicio: '2026-11-20T10:00:00Z' },
+        { id: 'd', inicio: '2026-11-10T10:00:00Z', fecha: '2026-11-10T12:00:00Z' }]) + '; var _puedeHist = true; function _puedeReq(k){ return k !== "historial" || _puedeHist; }', ctxR);
+    test('portada: solo esta sucursal (las viejas sin sucursal, en todas), las abiertas arriba y luego la más reciente', () =>
+        eq(vm.runInContext('_reqListaVisible().map(function(r){return r.id;}).join(",")', ctxR), 'b,d,a'));
+    test('…las viejas (sin el campo `cerrada`) cuentan como finalizadas', () => eq(vm.runInContext('_reqEsAbierta(_cacheReqHist[3])', ctxR), false));
+    test('…y sin permiso de historial solo quedan las abiertas', () =>
+        eq(vm.runInContext('_puedeHist = false; _reqListaVisible().map(function(r){return r.id;}).join(",")', ctxR), 'b'));
+
+    /* Inventarios: la portada, con íconos de la app. */
+    const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const emo = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2705}\u{270F}\u{FE0F}]/u;
+    test('inventarios: la portada (encabezado, tarjetas, lista/galería) sin emojis', () => {
+        const ini = inv.indexOf('<div id="vistaLista">'), fin = inv.indexOf('<div id="vistaForm"');
+        const m = inv.slice(ini, fin).match(emo);
+        return eq(m ? m[0] : '', '');
+    });
+    test('inventarios: tabla, tarjetas, menú «⋯» y aviso de vacío sin emojis', () => {
+        const c = (n) => { const i = ijs.indexOf('function ' + n + '('); return ijs.slice(i, ijs.indexOf('\nfunction ', i + 10)).replace(/<!--[\s\S]*?-->/g, ''); };
+        const m = ['renderHistorial', 'renderHistTabla', 'renderHistCard', '_invMenu', 'tipoIcon'].map(c).join('').match(emo) ||
+                  (ijs.match(/const TIPOS_ICON = [^\n]*/) || [''])[0].match(emo);
+        return eq(m ? m[0] : '', '');
+    });
+    test('inventarios: los botones de la portada llevan su ícono al cargar', () =>
+        eq(['btnReporteExistencias', 'btnCompuestos', 'btnQrEntradas', 'btnRevisarEntradas', 'btnPrimerLev', 'statFiltroTodos', 'statFiltroMes']
+            .every(id => inv.indexOf('id="' + id + '"') > -1 && ijs.indexOf("['" + id + "'") > -1), true));
 }
 
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════

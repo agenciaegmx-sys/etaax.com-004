@@ -690,7 +690,8 @@ function _copaMLInsumo(ins) {
     return COPA_STD.default;
 }
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const TIPOS_ICON = { primer_lev:'📋', bebidas:'🍸', alimentos:'🍽️', almacen:'📦', restaurante:'🏪', otro:'📋' };
+/* El tipo de inventario con el ícono de la app (antes 📋 🍸 🍽️ 📦 🏪). */
+const TIPOS_ICON = { primer_lev:'ins-catalogo', bebidas:'cor-bebidas', alimentos:'cor-alimentos', almacen:'ins-stock', restaurante:'restaurante', otro:'mod-inventarios' };
 
 // Grupo grande de categoría para los reportes (legibilidad): Destilados, Licores, Vinos,
 // Cervezas, Refrescos/Sodas, Alimentos, Otros. Usa tipoInsumo y, si falta (p.ej. insumos
@@ -3088,7 +3089,7 @@ function _filaLive(fila, sucursal) {
     return m;
 }
 
-function tipoIcon(tipo) { return TIPOS_ICON[tipo] || '📋'; }
+function tipoIcon(tipo, tam) { return _icInv(TIPOS_ICON[tipo] || 'mod-inventarios', tam || 16); }
 
 function getFilasFiltradas(conRegistro = false) {
     const b = busquedaCapt.toLowerCase();
@@ -4181,7 +4182,7 @@ function renderHistorial() {
     const lista = [...scoped].reverse();
     if (!lista.length) {
         cont.innerHTML = `<div class="empty-state" style="margin-top:16px">
-            <div class="empty-icon">📦</div>
+            <div class="empty-icon">${_icInv('mod-inventarios', 36)}</div>
             <div class="empty-title">Sin inventarios</div>
             <div class="empty-desc">Crea tu primer inventario</div>
         </div>`; return;
@@ -4380,12 +4381,12 @@ function _invCerrarMenus() {
     for (var i = 0; i < v.length; i++) { try { v[i].remove(); } catch (e) {} }
 }
 function _invMi(ic, txt, accion, peligro) {
-    return '<button onclick="_invCerrarMenus();' + accion + '" ' +
-        'style="display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;' +
+    return '<button class="' + (peligro ? 'peligro' : '') + '" onclick="_invCerrarMenus();' + accion + '" ' +
+        'style="display:flex;align-items:center;justify-content:flex-start;gap:9px;width:100%;background:none;border:none;' +
         'padding:9px 11px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:13px;text-align:left;' +
         'color:' + (peligro ? 'var(--red)' : 'var(--text)') + '" ' +
         'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'none\'">' +
-        '<span style="width:16px;text-align:center">' + ic + '</span>' + txt + '</button>';
+        (_icInv(ic, 16) || '<span style="width:16px"></span>') + txt + '</button>';
 }
 function _invMenu(ev, id) {
     ev.stopPropagation();
@@ -4400,19 +4401,19 @@ function _invMenu(ev, id) {
     m.style.cssText = 'position:fixed;z-index:10001;min-width:218px;background:var(--surface);' +
         'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);' +
         'top:' + Math.min(r.bottom + 6, window.innerHeight - 280) + 'px;left:' + Math.max(10, r.right - 218) + 'px';
-    var html = _invMi('👁️', 'Ver', "verInventarioTour('" + q + "')");
-    if (esLev)             html += _invMi('✏️', 'Ajustar línea base', "abrirInventario('" + q + "')");
-    else if (inv.cerrado)  html += _invMi('✏️', 'Editar', "editarInventario('" + q + "')");
-    else                   html += _invMi('▶', 'Continuar', "abrirInventario('" + q + "')");
-    html += _invMi('⏱️', 'Ajustar horarios', "ajustarHorariosInv('" + q + "')");
+    var html = _invMi('ojo', 'Ver', "verInventarioTour('" + q + "')");
+    if (esLev)             html += _invMi('rec-editar', 'Ajustar línea base', "abrirInventario('" + q + "')");
+    else if (inv.cerrado)  html += _invMi('rec-editar', 'Editar', "editarInventario('" + q + "')");
+    else                   html += _invMi('sto-siguiente', 'Continuar', "abrirInventario('" + q + "')");
+    html += _invMi('sto-reloj', 'Ajustar horarios', "ajustarHorariosInv('" + q + "')");
     if (!esLev) {
         html += '<div style="height:1px;background:var(--border);margin:5px 2px"></div>';
         html += inv.cerrado
-            ? _invMi('🔓', 'Reabrir inventario', "reabrirInventario('" + q + "')")
-            : _invMi('✅', 'Finalizar inventario', "finalizarInventarioHistorial('" + q + "')");
+            ? _invMi('stf-desbloquear', 'Reabrir inventario', "reabrirInventario('" + q + "')")
+            : _invMi('adm-pagado', 'Finalizar inventario', "finalizarInventarioHistorial('" + q + "')");
     }
     html += '<div style="height:1px;background:var(--border);margin:5px 2px"></div>';
-    html += _invMi('🗑️', 'Eliminar', "eliminarInventario('" + q + "')", true);
+    html += _invMi('ins-eliminar', 'Eliminar', "eliminarInventario('" + q + "')", true);
     m.innerHTML = html;
     document.body.appendChild(m);
     setTimeout(function () { document.addEventListener('click', _invCerrarMenus, { once: true }); }, 0);
@@ -4442,7 +4443,7 @@ function renderHistTabla(lista) {
                     : `<span class="pill ${inv.cerrado?'pill-green':'pill-amber'}">${inv.cerrado?'Cerrado':'Abierto'}</span>`;
                 return `<tr>
                     <td style="color:var(--text-muted)">${new Date(inv.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})}</td>
-                    <td style="font-weight:500">${tipoIcon(inv.tipoInv)} ${etx(inv.nombre||'Sin nombre')}</td>
+                    <td style="font-weight:500"><span class="inv-nom-ic">${tipoIcon(inv.tipoInv)}${etx(inv.nombre||'Sin nombre')}</span></td>
                     <td style="color:var(--text-dim);font-size:11px">${inv.area||'—'}</td>
                     <td style="color:var(--text-muted)">${(inv.filas||[]).length}</td>
                     <td style="color:var(--accent);font-weight:500">$${_money2(inv.capitalCosto)}</td>
@@ -4466,17 +4467,17 @@ function renderHistCard(inv) {
        vive en el menú, lejos del dedo. */
     const accionBtn = esLev
         ? `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--viol);border-color:var(--viol)"
-            onclick="abrirInventario('${inv.id}')">✏️ Ajustar línea base</button>`
+            onclick="abrirInventario('${inv.id}')">${_icInv('rec-editar', 14)}Ajustar línea base</button>`
         : inv.cerrado
         ? `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--accent);border-color:var(--accent)"
-            onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
+            onclick="editarInventario('${inv.id}')">${_icInv('rec-editar', 14)}Editar</button>`
         : `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
-            onclick="abrirInventario('${inv.id}')">▶ Continuar</button>`;
+            onclick="abrirInventario('${inv.id}')">${_icInv('sto-siguiente', 14)}Continuar</button>`;
     const estadoPill = esLev
         ? `<span class="pill" style="flex-shrink:0;margin-left:8px;background:rgba(155,141,232,.15);color:var(--viol);border:1px solid rgba(155,141,232,.35)">Línea base</span>`
         : `<span class="pill ${inv.cerrado?'pill-green':'pill-amber'}" style="flex-shrink:0;margin-left:8px">${inv.cerrado?'Cerrado':'Abierto'}</span>`;
     return `<div class="hist-card ${inv.cerrado?'cerrado':''}">
-        <div class="hist-card-icon">${tipoIcon(inv.tipoInv)}</div>
+        <div class="hist-card-icon">${tipoIcon(inv.tipoInv, 28)}</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
             <div class="hist-card-nombre">${etx(inv.nombre||'Sin nombre')}</div>
             ${estadoPill}
@@ -4495,7 +4496,7 @@ function renderHistCard(inv) {
         </div>
         <div class="hist-card-actions">
             <button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
-                onclick="verInventarioTour('${inv.id}')">👁️ Ver</button>
+                onclick="verInventarioTour('${inv.id}')">${_icInv('ojo', 14)}Ver</button>
             ${accionBtn}
             ${_invBtnMenu(inv.id)}
         </div>
@@ -5985,10 +5986,16 @@ function _icInv(nombre, tam) {
 var _ICONOS_HDR = [['btnInfoGeneral', 'sto-detalle', 'Info general'], ['btnPreviewActual', 'fin-estadisticas', 'Existencias'],
     ['btnRecalc5', 'mov-movimientos', 'Recalcular'], ['btnRepGerencial', 'aut-candado', 'Reporte gerencial'],
     ['btnRepDirectivo', 'adm-comprobante', 'Reporte directivo'], ['btnRepDesglose', 'cor-desglose', 'Desglose por insumo'],
-    ['btnGuardarInv', 'cerrar-sesion', 'Salir']];
+    ['btnGuardarInv', 'cerrar-sesion', 'Salir'],
+    // La portada (antes con 📊 🧩 📱 📋 📋 📅 ≡ ⊞):
+    ['btnReporteExistencias', 'fin-estadisticas', 'Reporte de existencias'], ['btnCompuestos', 'rec-sub-bebidas', 'Compuestos'],
+    ['btnQrEntradas', 'sto-qr', 'QR de entradas'], ['btnRevisarEntradas', 'adm-comprobante', 'Revisar entradas'],
+    ['btnPrimerLev', 'ins-catalogo', 'Primer levantamiento'],
+    ['statFiltroTodos', 'ins-lista', 'Todos', 26], ['statFiltroMes', 'adm-calendario', 'Mes / Año', 26],
+    ['btnHistLista', 'ins-lista', 'Lista', 14], ['btnHistGal', 'ins-galeria', 'Galería', 14]];
 function _iconosEncabezadoInv() {
     if (typeof window.etaaxIcono !== 'function') return;
-    _ICONOS_HDR.forEach(function (x) { var b = document.getElementById(x[0]); if (b && !b.querySelector('.inv-ic')) b.innerHTML = _icInv(x[1]) + x[2]; });
+    _ICONOS_HDR.forEach(function (x) { var b = document.getElementById(x[0]); if (b && !b.querySelector('.inv-ic')) b.innerHTML = _icInv(x[1], x[3]) + x[2]; });
 }
 document.addEventListener('DOMContentLoaded', function () { try { _iconosEncabezadoInv(); } catch (e) {} });
 

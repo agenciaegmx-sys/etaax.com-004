@@ -15,6 +15,11 @@
        buscador con Pendientes/Registrados y UNA vista en dos columnas; la captura
        en modal. La ficha técnica se VE sin contraseña; EDITAR sí la pide. Sin
        emojis: íconos de la app.
+     · (24-nov, 2) La página abre en la PORTADA (el historial, como inventarios):
+       «+ Nueva requisición» desde ahí; cada requisición —abierta o finalizada—
+       es su propio renglón de req_historial y se continúa o edita, se ve su
+       pedido, se finaliza o se elimina. La abierta del documento viejo
+       (req_pedido) se pasa sola a su renglón.
 
    Ejecutar: NODE_PATH=<playwright>/node_modules node tests/probar-requisiciones.cjs */
 'use strict';
@@ -54,6 +59,8 @@ function nube(plan) {
         req_pedido: [], req_historial: [], permisos: []
     };
 }
+const nubeDe = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube')));
+const filasReq = async (p) => ((await nubeDe(p)).req_historial || []).map(x => x.datos);
 function semilla(n) {
     return `(() => {
         window.alert = () => {}; window.confirm = () => true;
@@ -99,7 +106,7 @@ async function abrir(browser, n) {
     page.setDefaultTimeout(15000);
     page.on('pageerror', e => console.log('  [pageerror]', e.message));
     await page.goto(ORIGEN + '/recetas/requisiciones.html');
-    await page.waitForFunction(() => typeof _cacheInsumosReq !== 'undefined' && _cacheInsumosReq && document.getElementById('cntPend').textContent !== '0', null, { timeout: 20000 }).catch(() => {});
+    await page.waitForFunction(() => typeof _cacheInsumosReq !== 'undefined' && _cacheInsumosReq && _cacheReqHist !== null && insumos.length > 0, null, { timeout: 20000 }).catch(() => {});
     return { ctx, page };
 }
 
@@ -121,18 +128,34 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             assert.equal(ids.indexOf('a_ron'), -1);
             assert.equal(ids.indexOf('a_batch'), -1);
         });
+        await caso('abre en la PORTADA, como inventarios: «Requisiciones», «+ Nueva requisición» y sus tarjetas', async () => {
+            const v = await p.evaluate(() => ({ lista: getComputedStyle(document.getElementById('vistaListaReq')).display, capt: document.getElementById('vistaCapturaReq').style.display,
+                tit: document.querySelector('#vistaListaReq .brand-title').textContent, btn: document.getElementById('btnNuevaReq').textContent.trim(),
+                tarj: [...document.querySelectorAll('#vistaListaReq .stat-label')].map(x => x.textContent.trim()), n: document.getElementById('statReqs').textContent,
+                vacio: document.getElementById('historialReq').textContent.replace(/\s+/g, ' ').trim() }));
+            assert.deepEqual([v.lista !== 'none', v.capt, v.tit, v.btn, v.n], [true, 'none', 'Requisiciones', '+ Nueva requisición', '0']);
+            assert.deepEqual(v.tarj, ['Requisiciones', 'Última requisición', 'Ver', 'Filtrar por']);
+            assert.match(v.vacio, /Sin requisiciones/);
+        });
+        await foto(p, 'r0-portada-vacia');
+        await p.click('#btnNuevaReq'); await p.waitForTimeout(250);
+        await caso('«+ Nueva requisición» abre la captura en blanco (sin guardar nada todavía)', async () => {
+            assert.equal(await p.evaluate(() => document.getElementById('vistaCapturaReq').style.display), '');
+            assert.equal(await p.evaluate(() => document.getElementById('vistaListaReq').style.display), 'none');
+            assert.equal(((await nubeDe(p)).req_historial || []).length, 0);
+        });
         await caso('el botón de los pasos es el de inventarios: «1 Existencias ▾», sin la barra de pasos', async () => {
             assert.match(await p.evaluate(() => document.getElementById('btnPasoMenu').innerText.replace(/\s+/g, ' ')), /1 ?Existencias ▾/);
             assert.equal(await p.evaluate(() => !!document.querySelector('.req-steps') || !!document.getElementById('stepBtn1')), false);
         });
-        await caso('el encabezado es el de inventarios: «Paso 1 — Existencias», guardado y Info general · Historial · Salir · Finalizar', async () => {
+        await caso('el encabezado es el de inventarios: «Paso 1 — Existencias», guardado y Info general · Pedido · Salir · Finalizar', async () => {
             const h = await p.evaluate(() => ({
                 paso: document.getElementById('stepLabel').textContent, ind: document.getElementById('autoGuardarInd').textContent,
                 bot: [...document.querySelectorAll('#hdrBtns > button')].filter(b => b.offsetParent).map(b => b.textContent.trim()),
                 fijo: getComputedStyle(document.getElementById('reqHeader')).position }));
             assert.equal(h.paso, 'Paso 1 — Existencias');
             assert.equal(h.ind, 'Todos los cambios guardados');
-            assert.deepEqual(h.bot, ['Info general', 'Historial', 'Salir', 'Finalizar requisición']);
+            assert.deepEqual(h.bot, ['Info general', 'Pedido', 'Salir', 'Finalizar requisición']);
             assert.equal(h.fijo, 'sticky');
         });
         await caso('…con la barra del paso: «Buscar producto…», Pendientes y Registrados, lista o iconos', async () => {
@@ -254,28 +277,36 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             assert.equal(await p.evaluate(() => esRegistrado(reqData.a_limon)), false);
         });
         await p.click('#btnInfoReq'); await p.waitForTimeout(150);
-        await caso('«Info general»: sucursal, revisados, lo que va del pedido, cargar anteriores y nueva requisición', async () => {
+        await caso('«Info general»: sucursal, estado, revisados, lo que va del pedido y cargar anteriores', async () => {
             const t = await p.evaluate(() => document.getElementById('infoReqBody').textContent.replace(/\s+/g, ' '));
             assert.match(t, /Sucursal\s*Matriz/);
             assert.match(t, /Insumos revisados\s*1 de 1203/);
             assert.match(t, /A pedir\s*1 insumo\s*Costo estimado\s*\$3,840\.00/);
-            assert.match(t, /Cargar existencias anteriores.*Nueva requisición/);
+            assert.match(t, /Estado\s*Abierta/);
+            assert.match(t, /Cargar existencias anteriores/);
         });
         await foto(p, 'r6-info');
         await p.evaluate(() => cerrarInfoReq());
-        await caso('lo capturado se guarda en la requisición de ESTA sucursal', async () => {
-            const d = await p.evaluate(() => JSON.parse(localStorage.getItem('__nube')).req_pedido[0].datos);
-            assert.equal(d.__v, 2);
-            assert.equal(d.porSucursal.suc_principal.items.a_coca.existencia, 2);
+        await caso('lo capturado se guarda en SU renglón del historial (abierta, de ESTA sucursal)', async () => {
+            const f = await filasReq(p);
+            assert.equal(f.length, 1);
+            assert.deepEqual([f[0].sucursalId, f[0].cerrada, f[0].items.a_coca.existencia], ['suc_principal', false, 2]);
         });
-        await p.evaluate(() => finalizarRequisicion()); await p.waitForTimeout(600);
-        await caso('«Finalizar» la guarda en el historial con su sucursal y su costo, y deja la pantalla en blanco', async () => {
-            const n = await p.evaluate(() => JSON.parse(localStorage.getItem('__nube')));
-            const h = n.req_historial[0].datos;
-            assert.deepEqual([h.sucursalId, h.resumen.totalItems, h.resumen.totalCosto], ['suc_principal', 1, 3840]);
-            assert.equal(await p.evaluate(() => document.getElementById('cntReg').textContent), '0');
-            assert.match(await p.evaluate(() => document.getElementById('reqAviso').textContent), /Requisición finalizada/);
+        await p.click('#btnFinalizarReq'); await p.waitForTimeout(600);
+        await caso('«Finalizar» la guarda en el historial con su sucursal y su costo, y vuelve a la portada', async () => {
+            const h = (await filasReq(p))[0];
+            assert.deepEqual([h.sucursalId, h.cerrada, h.resumen.totalItems, h.resumen.totalCosto, !!h.fecha], ['suc_principal', true, 1, 3840, true]);
+            assert.equal(await p.evaluate(() => document.getElementById('vistaCapturaReq').style.display), 'none');
+            assert.match(await p.evaluate(() => document.getElementById('reqAvisoLista').textContent), /Requisición finalizada/);
         });
+        await caso('…en la portada: la requisición, sus revisados, lo que se pide, su costo y «Finalizada»', async () => {
+            const t = await p.evaluate(() => [...document.querySelectorAll('#historialReq tbody tr')].map(r => [...r.cells].map(c => c.textContent.replace(/\s+/g, ' ').trim())));
+            assert.equal(t.length, 1);
+            assert.match(t[0][1], /^Requisición · /);
+            assert.deepEqual(t[0].slice(2, 6), ['1', '1', '$3,840.00', 'Finalizada']);
+            assert.equal(await p.evaluate(() => document.getElementById('statReqs').textContent), '1');
+        });
+        await p.click('#btnNuevaReq'); await p.waitForTimeout(250);
         await p.click('#p1Pend .p12-item[data-id="a_limon"]'); await p.waitForTimeout(150);
         await p.click('#rcSig'); await p.waitForTimeout(250);
         await caso('«Registrar en cero — Siguiente» registra la existencia en 0 (en cero: se pide todo el máximo)', async () => {
@@ -283,23 +314,110 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             assert.match(await p.evaluate(() => document.querySelector('#p1Reg .p12-item[data-id="a_limon"]').textContent.replace(/\s+/g, ' ')), /Pedir 6/);
             assert.equal(await p.evaluate(() => document.getElementById('rcCard').dataset.id), 'a_mezcal');
         });
+        await caso('la nueva NO trae lo de la anterior (empieza en blanco)', async () =>
+            assert.equal(await p.evaluate(() => esRegistrado(reqData.a_coca)), false));
         await p.evaluate(() => _cerrarCapturaReq());
+        await p.click('#btnSalirReq'); await p.waitForTimeout(500);
+        await caso('«Salir» guarda y vuelve a la portada: la abierta, arriba', async () => {
+            const t = await p.evaluate(() => [...document.querySelectorAll('#historialReq tbody tr td:nth-child(6)')].map(c => c.textContent.trim()));
+            assert.deepEqual(t, ['Abierta', 'Finalizada']);
+            const ab = (await filasReq(p)).find(x => x.cerrada === false);
+            assert.equal(ab.items.a_limon.existencia, 0);
+        });
+        await p.evaluate(() => setModoListaHistReq('galeria')); await foto(p, 'r7-portada-galeria');
+        await caso('…también en galería, con «Continuar» y «Editar» a la vista', async () =>
+            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#historialReq .hist-card')].map(c => [...c.querySelectorAll('.hist-card-actions button')].map(b => b.textContent.trim()).join(' '))),
+                ['Pedido Continuar ⋯', 'Pedido Editar ⋯']));
+        await p.evaluate(() => setModoListaHistReq('lista')); await foto(p, 'r8-portada');
+        await p.click('#btnNuevaReq'); await p.waitForTimeout(250);
+        await caso('«+ Nueva» con una abierta: pregunta si continuarla o empezar otra', async () =>
+            assert.match(await p.evaluate(() => document.body.innerText), /Ya hay una requisición abierta/));
+        await p.click('text=Empezar otra'); await p.waitForTimeout(250);
+        await p.click('#btnSalirReq'); await p.waitForTimeout(400);
+        await caso('…empezar otra y salir sin capturar NO deja una requisición vacía', async () => {
+            assert.equal((await filasReq(p)).length, 2);
+            assert.equal(await p.evaluate(() => document.querySelectorAll('#historialReq tbody tr').length), 2);
+        });
+        await p.click('#historialReq tbody tr:nth-child(2) button'); await p.waitForTimeout(150);
+        await caso('el menú «⋯» de una finalizada: Editar, Ver pedido y Eliminar', async () =>
+            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.req-menu button')].map(b => b.textContent.trim())), ['Editar', 'Ver pedido', 'Eliminar']));
+        await p.click('.req-menu >> text=Editar'); await p.waitForTimeout(300);
+        await caso('«Editar» abre la finalizada con lo que tenía, y el botón dice «Guardar cambios»', async () => {
+            assert.equal(await p.evaluate(() => reqData.a_coca.existencia), 2);
+            assert.match(await p.evaluate(() => document.getElementById('btnFinalizarReq').textContent), /Guardar cambios/);
+        });
+        await p.click('#p1Reg .p12-item[data-id="a_coca"]'); await p.waitForTimeout(200);
+        await (await p.$$('#rcCard .rc-dos input'))[0].fill('1'); await p.waitForTimeout(100);
+        await p.evaluate(() => _cerrarCapturaReq());
+        await p.click('#btnFinalizarReq'); await p.waitForTimeout(600);
+        await caso('…«Guardar cambios» la actualiza en su lugar (no crea otra): 1 caja → pedir 9 · $4,320', async () => {
+            const f = await filasReq(p), fin = f.filter(x => x.cerrada);
+            assert.equal(f.length, 2);
+            assert.equal(fin.length, 1);
+            assert.deepEqual([fin[0].items.a_coca.existencia, fin[0].resumen.totalCosto, !!fin[0].editada], [1, 4320, true]);
+            assert.match(await p.evaluate(() => document.getElementById('reqAvisoLista').textContent), /Cambios guardados/);
+        });
+        await p.click('#historialReq tbody tr:nth-child(1) button'); await p.waitForTimeout(150);
+        await caso('el menú «⋯» de la abierta: Continuar, Ver pedido, Finalizar y Eliminar', async () =>
+            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.req-menu button')].map(b => b.textContent.trim())), ['Continuar', 'Ver pedido', 'Finalizar requisición', 'Eliminar']));
+        await p.evaluate(() => { window.__claves = 0; window._pedirClaveAdmin = (a, cb) => { window.__claves++; cb(); }; });
+        await p.click('.req-menu >> text=Eliminar'); await p.waitForTimeout(1500);
+        await caso('«Eliminar» pide la contraseña y la quita de la portada y de la nube', async () => {
+            assert.equal(await p.evaluate(() => window.__claves), 1);
+            assert.equal(await p.evaluate(() => document.querySelectorAll('#historialReq tbody tr').length), 1);
+            const f = await filasReq(p);
+            assert.deepEqual(f.map(x => x.cerrada), [true]);
+        });
+        await p.click('#historialReq tbody tr:nth-child(1) button'); await p.waitForTimeout(150);
+        await p.click('.req-menu >> text=Ver pedido'); await p.waitForTimeout(400);
+        await caso('«Ver pedido» abre la requisición en el paso 3 (Pedido y envío)', async () => {
+            assert.equal(await p.evaluate(() => document.getElementById('vistaPaso3').style.display), '');
+            assert.match(await p.evaluate(() => document.getElementById('btnPasoMenu').innerText.replace(/\s+/g, ' ')), /3 ?Pedido y envío/);
+        });
+        await p.click('#btnSalirReq'); await p.waitForTimeout(300);
+        await p.evaluate(() => setModoHistReq('mes')); await p.waitForTimeout(150);
+        await caso('«Mes / Año»: el calendario cuenta las requisiciones de cada mes', async () => {
+            const mes = new Date().getMonth();
+            assert.equal(await p.evaluate((m) => document.querySelectorAll('#historialReq .cal-mes')[m].querySelector('.cal-mes-count').textContent, mes), '1');
+        });
+        await p.evaluate(() => setModoHistReq('todos'));
+        await caso('portada sin emojis', async () =>
+            assert.equal(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{FE0F}]/u.test(await p.evaluate(() => document.getElementById('vistaListaReq').innerText)), false));
 
         console.log('\n══ Requisiciones · otra sucursal ══');
+        await p.click('#btnNuevaReq'); await p.waitForTimeout(250);
         await p.evaluate(() => { reqData.a_limon = { existencia: 4 }; setReqData(reqData); });
         await p.waitForTimeout(900);
         await p.evaluate(() => localStorage.setItem('etaax_sucursal_activa', 'suc_dos'));
         await p.reload();
-        await p.waitForFunction(() => typeof insumos !== 'undefined' && insumos.length > 0, null, { timeout: 20000 });
-        await caso('el Limón (compartido) NO trae la existencia que se capturó en la Matriz', async () =>
+        await p.waitForFunction(() => typeof insumos !== 'undefined' && insumos.length > 0 && _cacheReqHist !== null, null, { timeout: 20000 });
+        await caso('la portada de otra sucursal NO trae las requisiciones de la Matriz', async () => {
+            assert.equal(await p.evaluate(() => document.getElementById('statReqs').textContent), '0');
+            assert.equal(await p.evaluate(() => getHistorial().length), 0);
+        });
+        await p.click('#btnNuevaReq'); await p.waitForTimeout(250);
+        await caso('…y su nueva requisición no trae la existencia del Limón (compartido) de la Matriz', async () =>
             assert.equal(await p.evaluate(() => (reqData.a_limon || {}).existencia), undefined));
-        await caso('…y el historial de esta sucursal no trae la requisición de la Matriz', async () =>
-            assert.equal(await p.evaluate(() => getHistorial().length), 0));
         await a.ctx.close();
 
         console.log('\n══ Requisiciones · solo Cost·ax ══');
-        const b = await abrir(browser, nube({ sucursales: { suc_principal: ['costax'] } }));
+        const nb = nube({ sucursales: { suc_principal: ['costax'] } });
+        nb.req_pedido = [{ negocio_id: 'n1', datos: { __v: 2, porSucursal: {
+            suc_principal: { inicio: '2026-11-20T15:00:00.000Z', items: { a_limon: { existencia: 3 } } },
+            suc_dos: { inicio: '2026-11-21T15:00:00.000Z', items: { a_limon: { existencia: 9 } } } } } }];
+        const b = await abrir(browser, nb);
         const q = b.page;
+        await q.waitForTimeout(800);
+        await caso('la requisición ABIERTA del documento viejo pasa sola a su renglón y sale en la portada', async () => {
+            const f = await filasReq(q);
+            assert.deepEqual(f.map(x => [x.sucursalId, x.cerrada, x.items.a_limon.existencia]), [['suc_principal', false, 3]]);
+            assert.deepEqual(await q.evaluate(() => [...document.querySelectorAll('#historialReq tbody tr td:nth-child(6)')].map(c => c.textContent.trim())), ['Abierta']);
+        });
+        await caso('…y sale del documento (la de la otra sucursal se queda para cuando ella abra)', async () => {
+            const d = (await nubeDe(q)).req_pedido[0].datos;
+            assert.deepEqual(Object.keys(d.porSucursal), ['suc_dos']);
+        });
+
         await caso('carga igual su catálogo', async () => assert.equal(await q.evaluate(() => document.getElementById('cntPend').textContent), '1203'));
         await caso('NO lee las ventas de Fin·ax (cortes)', async () => assert.equal(await q.evaluate(() => _cacheCortesReq.length), 0));
         await q.evaluate(() => irPaso(3)); await q.waitForTimeout(300);

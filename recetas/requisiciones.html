@@ -16,11 +16,12 @@ function _exigeReq(sub, msg){
 }
 function _reqOcultar(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
 function _aplicarPermisosReq(){
-    if(!_puedeReq('historial'))     _reqOcultar('btnHistorialReq');
+    if(!_puedeReq('exportar'))      _reqOcultar('btnPedidoReq');
     if(!_puedeReq('exportar'))      ['btnExpCompleto','btnExpProv','btnExpArea','btnExpCSV','btnVistaAdminReq']
                                        .forEach(_reqOcultar);
     // Los pasos que el rol no puede ver salen del menú de pasos.
     if (typeof _pintarPasoMenuReq === 'function') _pintarPasoMenuReq();
+    if (typeof renderListaReq === 'function') renderListaReq();
 }
 document.addEventListener('DOMContentLoaded', function(){
     _aplicarPermisosReq();
@@ -198,8 +199,50 @@ document.addEventListener('DOMContentLoaded', function(){
         .inv-wizard-header > div { flex-wrap: wrap; min-width: 0; }
         .inv-wizard-header > div:first-child { margin-right: auto; }
         #hdrBtns { display: contents !important; }
-        body.etx-modulos-ui #mainContent > .inv-wizard-header { margin-top: -24px; }
-        @media (max-width: 600px) { body.etx-modulos-ui #mainContent > .inv-wizard-header { margin-top: -16px; } }
+        body.etx-modulos-ui #vistaCapturaReq > .inv-wizard-header { margin-top: -24px; }
+        @media (max-width: 600px) { body.etx-modulos-ui #vistaCapturaReq > .inv-wizard-header { margin-top: -16px; } }
+        /* ══ LA PORTADA: el historial de requisiciones (la de inventarios) ══ */
+        body.etx-modulos-ui #vistaListaReq > .header { margin-top: -24px; padding-top: 16px; }
+        @media (max-width: 600px) { body.etx-modulos-ui #vistaListaReq > .header { margin-top: -16px; padding-top: 12px; } }
+        .stat-card-filter { cursor: pointer; user-select: none; }
+        .stat-card-filter.active { border-color: var(--green); }
+        .stat-card-filter:hover:not(.active) { border-color: var(--border2); }
+        .stat-filtro { display: flex; align-items: center; gap: 10px; font-size: 26px; line-height: 1; margin-top: 6px; color: var(--text); }
+        .stat-filtro > svg.inv-ic { margin-right: 0; width: 26px; height: 26px; }
+        .hist-toggle { display: flex; justify-content: flex-end; margin-top: -4px; }
+        .hist-toggle .vista-toggle button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; }
+        .hist-galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px,1fr)); gap: 12px; margin-top: 12px; }
+        .hist-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; transition: all .15s; }
+        .hist-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+        .hist-card.cerrado { border-left: 3px solid var(--green); }
+        .hist-card-icon { margin-bottom: 10px; line-height: 0; }
+        .hist-card-icon .inv-ic { margin-right: 0; }
+        .hist-card-nombre { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+        .hist-card-meta { font-size: 10px; color: var(--text-dim); margin-bottom: 10px; line-height: 1.5; }
+        .hist-card-stat { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+        .hist-card-stat:last-child { border-bottom: none; }
+        .hist-card-actions { display: flex; gap: 6px; margin-top: 12px; }
+        .hist-card-actions .btn-vista { padding: 5px 10px; font-size: 11px; flex: 1; }
+        .hist-card-actions .btn-vista:last-child { flex: 0 0 auto; }
+        .req-nom-ic { display: inline-flex; align-items: center; gap: 7px; }
+        .req-nom-ic .inv-ic { margin-right: 0; }
+        .req-menu button .inv-ic { margin-right: 0; }
+        .req-menu button.peligro .inv-ic { color: var(--red); }
+        .cal-nav { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 12px 0; }
+        .cal-year { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 2px; color: var(--text); }
+        .cal-nav-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; color: var(--text-muted); cursor: pointer; font-size: 16px; transition: all .15s; }
+        .cal-nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .cal-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 16px; }
+        .cal-mes { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: all .15s; }
+        .cal-mes:hover { border-color: var(--accent); transform: translateY(-1px); }
+        .cal-mes.activo { border-color: var(--accent); background: rgba(245,200,66,0.05); }
+        .cal-mes.con-inv { border-color: rgba(61,190,122,0.4); }
+        .cal-mes-nombre { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+        .cal-mes-count { font-size: 30px; font-family: 'Bebas Neue', sans-serif; margin-top: 4px; letter-spacing: 1px; }
+        .cal-mes-count.verde { color: var(--green); }
+        .cal-mes-count.dim { color: var(--border); }
+        .empty-icon .inv-ic { margin-right: 0; color: var(--text-dim); }
+        #reqAvisoLista { margin: 0 0 12px; }
         .inv-wizard-header .btn-vista { padding: 8px 13px; font-size: 13px; white-space: nowrap; }
         #btnFinalizarReq { color: var(--green); border-color: var(--green); }
         .req-guardado { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: var(--green); }
@@ -456,6 +499,44 @@ document.addEventListener('DOMContentLoaded', function(){
 
     <main class="main-content expandido" id="mainContent">
 
+        <!-- ═══════════ PORTADA: el historial de requisiciones (como inventarios) ═══════════
+             Desde aquí se crean las nuevas y se continúan, editan o eliminan las de antes. -->
+        <div id="vistaListaReq">
+            <div class="header">
+                <div class="brand">
+                    <span class="brand-label">Control de compras</span>
+                    <span class="brand-title">Requisiciones</span>
+                </div>
+                <div class="hdr-acts">
+                    <button class="btn-primary" id="btnNuevaReq" onclick="nuevaRequisicion()">+ Nueva requisición</button>
+                </div>
+            </div>
+            <div class="wrap">
+                <div id="reqAvisoLista" class="req-aviso" role="status" hidden></div>
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-label">Requisiciones</div><div class="stat-val" id="statReqs">0</div></div>
+                    <div class="stat-card"><div class="stat-label">Última requisición</div><div class="stat-val" style="font-size:16px;padding-top:6px" id="statUltReq">—</div></div>
+                    <div class="stat-card stat-card-filter active" id="tabTodosReq" onclick="setModoHistReq('todos')">
+                        <div class="stat-label">Ver</div>
+                        <div class="stat-filtro" data-ic="ins-lista" data-ic-tam="26">Todas</div>
+                    </div>
+                    <div class="stat-card stat-card-filter" id="tabMesReq" onclick="setModoHistReq('mes')">
+                        <div class="stat-label">Filtrar por</div>
+                        <div class="stat-filtro" data-ic="adm-calendario" data-ic-tam="26">Mes / Año</div>
+                    </div>
+                </div>
+                <div class="hist-toggle" id="toggleHistReqWrap">
+                    <div class="vista-toggle">
+                        <button class="active" id="btnHistListaReq" onclick="setModoListaHistReq('lista')" data-ic="ins-lista" data-ic-tam="14">Lista</button>
+                        <button id="btnHistGalReq" onclick="setModoListaHistReq('galeria')" data-ic="ins-galeria" data-ic-tam="14">Galería</button>
+                    </div>
+                </div>
+            </div>
+            <div id="historialReq" style="padding:0 16px 24px"></div>
+        </div>
+
+        <!-- ═══════════ CAPTURA DE UNA REQUISICIÓN ═══════════ -->
+        <div id="vistaCapturaReq" style="display:none">
         <!-- ENCABEZADO: el MISMO de inventarios (título, guardado, pasos, botones y la barra del paso). -->
         <div class="inv-wizard-header" id="reqHeader">
             <div>
@@ -472,8 +553,8 @@ document.addEventListener('DOMContentLoaded', function(){
                     <div id="pasoMenuPop" class="inv-paso-pop" role="menu" hidden></div>
                 </div>
                 <button class="btn-vista" id="btnInfoReq" onclick="abrirInfoReq()" title="Sucursal, fechas, resumen, cargar las existencias anteriores o empezar una nueva">Info general</button>
-                <button class="btn-vista" id="btnHistorialReq" onclick="abrirHistorial()" title="Las requisiciones finalizadas de esta sucursal">Historial</button>
-                <button class="btn-vista" id="btnSalirReq" onclick="salirReq()" title="Guardar y salir: al volver sigues donde te quedaste">Salir</button>
+                <button class="btn-vista" id="btnPedidoReq" onclick="verPedido()" title="El pedido de compra de esta requisición, listo para imprimir">Pedido</button>
+                <button class="btn-vista" id="btnSalirReq" onclick="salirReq()" title="Guardar y volver al historial: al volver sigues donde te quedaste">Salir</button>
                 <button class="btn-vista" id="btnFinalizarReq" onclick="finalizarRequisicion()" title="Guardarla en el historial y dejar la pantalla lista para una nueva">Finalizar requisición</button>
             </div>
             <div id="pasoHerr" class="paso-herr"></div>
@@ -558,27 +639,13 @@ document.addEventListener('DOMContentLoaded', function(){
                 </div>
             </div>
         </div>
+        </div><!-- /vistaCapturaReq -->
     </main>
 </div>
 
 <!-- MODAL INFO GENERAL -->
 <div id="modalInfoReq" class="p12-modal" style="display:none" onclick="if(event.target===this)cerrarInfoReq()">
     <div class="p12-modal-caja" style="width:min(520px,100%)"><div class="ent-form-card" id="infoReqBody"></div></div>
-</div>
-
-<!-- MODAL HISTORIAL -->
-<div id="modalHistorial" onclick="if(event.target===this)cerrarHistorial()"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9900;
-            align-items:center;justify-content:center;padding:20px;box-sizing:border-box">
-    <div style="background:var(--surface);border-radius:14px;max-width:520px;width:100%;
-                max-height:80vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.5)">
-        <div style="display:flex;align-items:center;justify-content:space-between;
-                    padding:16px 20px;border-bottom:1px solid var(--border)">
-            <div style="font-size:14px;font-weight:600">Historial de requisiciones</div>
-            <button onclick="cerrarHistorial()" class="rc-x" title="Cerrar" data-ic="adm-cerrar" data-ic-tam="20"></button>
-        </div>
-        <div id="historialBody" style="padding:8px 0"></div>
-    </div>
 </div>
 
 <!-- THEME TOGGLE -->
@@ -638,18 +705,20 @@ function _reqGenId() { return Date.now().toString(36) + Math.random().toString(3
 
 // ── Datos — cache + Supabase ──────────────────────────────────
 var _cacheInsumosReq = null;
-var _cacheReqData    = null;
-var _cacheReqHist    = null;
-var _cacheCortesReq  = [];   // cortes del negocio → KPI compra vs venta (Paso 3)
+var _cacheReqHist    = null;   // TODAS las requisiciones del negocio: abiertas y finalizadas
+var _cacheCortesReq  = [];     // cortes del negocio → KPI compra vs venta (Paso 3)
+var _reqActual       = null;   // la requisición abierta en la captura (null = en la portada)
 
 function getInsumos() { return _cacheInsumosReq || (function(){ try { return JSON.parse(_reqGet('insumos')) || []; } catch(e) { return []; } }()); }
-/* ── UNA REQUISICIÓN POR SUCURSAL (24-nov) ──────────────────────────────────
-   Antes `req_pedido` era UN documento plano por negocio ({insumoId: renglón}):
-   dos sucursales que comparten un insumo se pisaban la existencia, y el
-   historial mezclaba sucursales. Ahora el documento lleva una requisición
-   abierta por sucursal: { __v:2, porSucursal: { <suc>: { items, inicio } } }.
-   Lo plano de antes se queda con la sucursal que lo abre primero (el módulo
-   casi no se usaba). El historial lleva la sucursal en cada requisición. */
+/* ── CADA REQUISICIÓN ES SU PROPIO RENGLÓN (Edwin, 24-nov) ──────────────────
+   Como los inventarios: una portada con el historial, desde donde se crean las
+   nuevas y se continúan, editan o eliminan las de antes. Cada requisición vive
+   en un renglón de `req_historial`:
+       { id, sucursalId, inicio, actualizado, cerrada, fecha, items, resumen }
+   `cerrada:false` = abierta (en captura); las de antes no traían el campo y
+   todas eran finalizadas. La abierta vivía en el documento `req_pedido` (una
+   por sucursal, { __v:2, porSucursal:{ <suc>:{ items, inicio } } }); al abrir
+   la página se pasa UNA vez a su renglón (_reqMigrarAbierta). */
 function _reqSuc() { return localStorage.getItem('etaax_sucursal_activa') || 'suc_principal'; }
 function _docReqV2(doc) {
     if (doc && doc.__v === 2) { doc.porSucursal = doc.porSucursal || {}; return doc; }
@@ -657,73 +726,75 @@ function _docReqV2(doc) {
     if (doc && typeof doc === 'object' && Object.keys(doc).length) nuevo.porSucursal[_reqSuc()] = { items: doc, inicio: null };
     return nuevo;
 }
-function getReqData() {
-    var r = _docReqV2(_cacheReqData || {}).porSucursal[_reqSuc()];
-    return (r && r.items) || {};
-}
-function _reqAbierta() { return _docReqV2(_cacheReqData || {}).porSucursal[_reqSuc()] || null; }
-function getHistorial() {
+function _reqEsAbierta(r) { return !!r && r.cerrada === false; }
+// Las de ESTA sucursal (las viejas sin sucursal se ven en todas, como antes).
+function _reqTodas() {
     var suc = _reqSuc();
     return (_cacheReqHist || []).filter(function (h) { return h && (!h.sucursalId || h.sucursalId === suc); });
 }
-
-function _sbSaveReqData(d) {
-    var negId = _reqNeg(); if (!negId || typeof _supabase === 'undefined') return;
-    sbUpsertDoc('req_pedido', d, negId);
+function _reqPorId(id) { return (_cacheReqHist || []).find(function (x) { return x && x.id === id; }) || null; }
+function _reqOrden(r) { return new Date(r.fecha || r.inicio || r.actualizado || 0).getTime() || 0; }
+function getReqData() { return (_reqActual && _reqActual.items) || {}; }
+function _reqAbierta() { return _reqActual; }
+// Las finalizadas de esta sucursal, la más reciente primero (sin la que se edita).
+function getHistorial() {
+    return _reqTodas().filter(function (h) { return !_reqEsAbierta(h) && (!_reqActual || h.id !== _reqActual.id); })
+        .sort(function (a, b) { return _reqOrden(b) - _reqOrden(a); });
 }
-function _sbUpHist(snap) {
-    var negId = _reqNeg(); if (!negId || typeof _supabase === 'undefined') return;
-    _supabase.from('req_historial').upsert({ id: snap.id, negocio_id: negId, datos: snap, created_at: snap.fecha || new Date().toISOString() })
-        .then(function(r){ if (r.error) _sbToastError('upsert req_historial: ' + r.error.message); });
+function _reqMeterEnCache(r) {
+    var l = _cacheReqHist || (_cacheReqHist = []);
+    var k = l.findIndex(function (x) { return x && x.id === r.id; });
+    if (k > -1) l[k] = r; else l.unshift(r);
+}
+/* req_historial no tiene updated_at: se escribe directo (sbUpsert manda esa
+   columna y PostgREST la rechazaría). */
+function _sbUpReq(r) {
+    var negId = _reqNeg(); if (!negId || typeof _supabase === 'undefined') return Promise.resolve();
+    return _supabase.from('req_historial').upsert({ id: r.id, negocio_id: negId, datos: r, created_at: r.inicio || r.fecha || new Date().toISOString() })
+        .then(function (res) { if (res && res.error && typeof _sbToastError === 'function') _sbToastError('upsert req_historial: ' + res.error.message); })
+        .catch(function () {});
 }
 
 /* Se guarda en la nube 0.7 s después de la última tecla (antes se mandaba el
-   documento entero en CADA tecla). */
+   documento entero en CADA tecla). La requisición entra al historial con su
+   primera captura: abrir «Nueva» y salir sin capturar no deja basura. */
 var _reqSaveTimer = null;
 function setReqData(items) {
-    var doc = _docReqV2(_cacheReqData || {}), suc = _reqSuc(), ahora = new Date().toISOString();
-    var r = doc.porSucursal[suc] || { inicio: ahora };
+    var r = _reqActual; if (!r) return;
+    var ahora = new Date().toISOString();
     r.items = items; r.actualizado = ahora;
     if (!r.inicio) r.inicio = ahora;
-    doc.porSucursal[suc] = r;
-    _cacheReqData = doc;
+    _reqMeterEnCache(r);
     clearTimeout(_reqSaveTimer);
     _reqSaveTimer = setTimeout(_reqGuardarNube, 700);
     _indGuardado('pend');
 }
-/* Guarda SOLO lo de esta sucursal: relee el documento y reemplaza su parte
-   (otra sucursal pudo guardar la suya mientras tanto). */
 async function _reqGuardarNube() {
     clearTimeout(_reqSaveTimer); _reqSaveTimer = null;
-    var negId = _reqNeg(); if (!negId || typeof _supabase === 'undefined') return;
-    var suc = _reqSuc(), doc = _docReqV2(_cacheReqData || {}), mio = doc.porSucursal[suc];
-    try {
-        var r = await _supabase.from('req_pedido').select('datos').eq('negocio_id', negId).maybeSingle();
-        if (!r.error && r.data && r.data.datos) {
-            var nube = _docReqV2(r.data.datos);
-            if (mio) nube.porSucursal[suc] = mio; else delete nube.porSucursal[suc];
-            doc = nube; _cacheReqData = doc;
-        }
-    } catch (e) {}
-    _sbSaveReqData(doc);
+    var r = _reqActual; if (!r) return;
+    if (r.inicio) { r.resumen = calcResumen(); await _sbUpReq(r); }
     _indGuardado('ok');
     _pintarTituloReq();
 }
 window.addEventListener('pagehide', function () { if (_reqSaveTimer) _reqGuardarNube(); });
-function _agregarSnapshot(snap) {
-    if (!snap.id) snap.id = _reqGenId();
-    _cacheReqHist = [snap].concat(_cacheReqHist || []);
-    _sbUpHist(snap);
-}
-function setHistorial(h) {
-    var prev = _cacheReqHist || [];
-    // Asignar IDs a snapshots que no los tengan
-    h.forEach(function(s) { if (!s.id) s.id = _reqGenId(); });
-    _cacheReqHist = h;
-    // Upsert only new entries
-    h.forEach(function(snap) {
-        if (!prev.find(function(x){ return x.id === snap.id; })) _sbUpHist(snap);
+/* La requisición abierta del documento viejo (req_pedido) pasa a su renglón,
+   una sola vez, y se quita del documento. */
+function _reqMigrarAbierta(datos) {
+    if (!datos || typeof datos !== 'object') return;
+    var doc = _docReqV2(datos), ab = doc.porSucursal[_reqSuc()];
+    if (!ab || !ab.items) return;
+    var hay = Object.keys(ab.items).some(function (id) {
+        var ri = ab.items[id] || {};
+        return esRegistrado(ri) || ri.noPedir || (ri.pedidoManual !== '' && ri.pedidoManual !== undefined && ri.pedidoManual !== null);
     });
+    if (hay) {
+        var r = { id: _reqGenId(), sucursalId: _reqSuc(), inicio: ab.inicio || ab.actualizado || new Date().toISOString(),
+                  actualizado: ab.actualizado || null, cerrada: false, items: ab.items };
+        _reqMeterEnCache(r); _sbUpReq(r);
+    }
+    delete doc.porSucursal[_reqSuc()];
+    var negId = _reqNeg();
+    if (negId && typeof sbUpsertDoc === 'function') sbUpsertDoc('req_pedido', doc, negId);
 }
 
 /* ¿Esta sucursal tiene también Fin·ax? Requisiciones es de Cost·ax: la venta
@@ -735,7 +806,7 @@ function _reqConVentas() {
 }
 async function _sbInitReq() {
     var negId = _reqNeg();
-    if (!negId || typeof _supabase === 'undefined') return;
+    if (!negId || typeof _supabase === 'undefined') { if (_cacheReqHist === null) { _cacheReqHist = []; init(); } return; }
     /* EL CATÁLOGO NO CARGABA (Edwin, 23-nov): se pedía ordenado por created_at y
        `negocio_insumos` NO tiene esa columna — PostgREST contestaba 400 y la página
        se quedaba con una copia vieja del equipo, vacía. Además una sola consulta
@@ -753,9 +824,9 @@ async function _sbInitReq() {
     // etaaxLeerTodo ya entrega el `datos` de cada fila.
     if (r[0] && r[0].filas && (r[0].filas.length || r[0].completa))
         _cacheInsumosReq = r[0].filas.filter(Boolean);
-    if (!r[1].error && r[1].data) _cacheReqData = r[1].data.datos;
-    else if (_cacheReqData === null) _cacheReqData = {};
-    if (!r[2].error) _cacheReqHist = (r[2].data || []).map(function(x){ return x.datos; });
+    if (!r[2].error) _cacheReqHist = (r[2].data || []).map(function(x){ return x.datos; }).filter(Boolean);
+    else if (_cacheReqHist === null) _cacheReqHist = [];
+    if (!r[1].error && r[1].data) _reqMigrarAbierta(r[1].data.datos);
     _cacheCortesReq = (r[3] && r[3].filas) ? r[3].filas.filter(Boolean) : [];
     init();
 }
@@ -815,8 +886,8 @@ try { if (localStorage.getItem('etaax_req_vista') === 'galeria') _reqModoLista =
 function _icReq(nombre, tam) {
     return (typeof window.etaaxIcono === 'function') ? window.etaaxIcono(nombre, { tam: tam || 16, clase: 'inv-ic' }) : '';
 }
-var _ICONOS_HDR_REQ = [['btnInfoReq', 'sto-detalle', 'Info general'], ['btnHistorialReq', 'ins-historial', 'Historial'],
-    ['btnSalirReq', 'cerrar-sesion', 'Salir'], ['btnFinalizarReq', 'adm-pagado', 'Finalizar requisición']];
+var _ICONOS_HDR_REQ = [['btnInfoReq', 'sto-detalle', 'Info general'], ['btnPedidoReq', 'adm-comprobante', 'Pedido'],
+    ['btnSalirReq', 'cerrar-sesion', 'Salir']];
 function _iconosReq() {
     if (typeof window.etaaxIcono !== 'function') return;
     _ICONOS_HDR_REQ.forEach(function (x) { var b = document.getElementById(x[0]); if (b && !b.querySelector('.inv-ic')) b.innerHTML = _icReq(x[1]) + x[2]; });
@@ -832,6 +903,7 @@ function init() {
     _pintarTituloReq();
     _indGuardado(_reqSaveTimer ? 'pend' : 'ok');
     renderReq();
+    renderListaReq();
     _ajustarStickyReq();
 }
 
@@ -1424,48 +1496,61 @@ function _hayCapturas() {
         return esRegistrado(ri) || ri.noPedir || (ri.pedidoManual !== '' && ri.pedidoManual !== undefined && ri.pedidoManual !== null);
     });
 }
-function _empezarEnBlanco() {
-    var doc = _docReqV2(_cacheReqData || {});
-    delete doc.porSucursal[_reqSuc()];
-    _cacheReqData = doc;
-    reqData = {};
-    _reqSel = null; _reqBusq = '';
-    var m = document.getElementById('reqCaptModal'); if (m) m.style.display = 'none';
-    _reqGuardarNube();
-    init();
-    irPaso(1);
-}
+/* «Finalizar» la guarda en el historial (con su pedido y su costo) y vuelve a
+   la portada. Si se estaba EDITANDO una finalizada, el botón dice «Guardar
+   cambios» y conserva su fecha. */
 function finalizarRequisicion() {
     if (typeof _exigeReq === 'function' && !_exigeReq('crear', 'No puedes capturar requisiciones.')) return;
+    var r = _reqActual; if (!r) return;
     if (!_hayCapturas()) { alert('Todavía no hay nada capturado en esta requisición.'); return; }
-    var res = calcResumen();
-    if (!confirm('¿Finalizar la requisición?\n\n' + res.totalItems + ' insumo(s) a pedir · ' + fmtMXN(res.totalCosto) +
-                 '\n\nQueda guardada en el historial de esta sucursal y la pantalla queda lista para una nueva.')) return;
-    var abierta = _reqAbierta();
-    _agregarSnapshot({
-        fecha: new Date().toISOString(),
-        inicio: (abierta && abierta.inicio) || null,
-        sucursalId: _reqSuc(),
-        items: JSON.parse(JSON.stringify(reqData)),
-        resumen: res
-    });
-    _empezarEnBlanco();
-    _reqAviso('Requisición finalizada y guardada en el historial (' + res.totalItems + ' a pedir · ' + fmtMXN(res.totalCosto) + ').');
+    var res = calcResumen(), editando = !_reqEsAbierta(r) && !!r.fecha;
+    if (!editando && !confirm('¿Finalizar la requisición?\n\n' + res.totalItems + ' insumo(s) a pedir · ' + fmtMXN(res.totalCosto) +
+                 '\n\nQueda guardada en el historial de esta sucursal.')) return;
+    var ahora = new Date().toISOString();
+    r.cerrada = true;
+    if (!r.fecha) r.fecha = ahora; else r.editada = ahora;
+    if (!r.sucursalId) r.sucursalId = _reqSuc();
+    r.resumen = res; r.actualizado = ahora;
+    _reqMeterEnCache(r);
+    clearTimeout(_reqSaveTimer); _reqSaveTimer = null;
+    _sbUpReq(r);
+    mostrarListaReq();
+    _reqAviso(editando ? 'Cambios guardados en la requisición del ' + _reqFecha(r.inicio || r.fecha, 'corta') + '.'
+                       : 'Requisición finalizada y guardada en el historial (' + res.totalItems + ' a pedir · ' + fmtMXN(res.totalCosto) + ').');
 }
+/* «+ Nueva requisición» (en la portada). Si ya hay una abierta en esta
+   sucursal se ofrece continuarla: dos abiertas a la vez casi siempre es un
+   descuido. */
 function nuevaRequisicion() {
     cerrarInfoReq();
     if (typeof _exigeReq === 'function' && !_exigeReq('crear', 'No puedes capturar requisiciones.')) return;
-    if (_hayCapturas() && !confirm('Esta requisición tiene capturas sin finalizar.\n\n¿Empezar una nueva desde cero? Lo capturado se pierde.\n(Para guardarla en el historial, usa «Finalizar».)')) return;
-    _empezarEnBlanco();
-    _reqAviso('Requisición nueva. En «Info general» puedes cargar las existencias de la última.');
+    var crear = async function () {
+        await _reqSoltarActual();
+        _reqActual = { id: _reqGenId(), sucursalId: _reqSuc(), inicio: null, cerrada: false, items: {} };
+        _mostrarCapturaReq(1);
+    };
+    var ab = _reqTodas().filter(_reqEsAbierta).sort(function (a, b) { return _reqOrden(b) - _reqOrden(a); })[0];
+    if (ab && (!_reqActual || _reqActual.id !== ab.id)) {
+        var msg = 'La del ' + _reqFecha(ab.inicio, 'larga') + ' sigue abierta. ¿La continúas o empiezas otra?';
+        if (typeof window.etaaxDialog === 'function') {
+            window.etaaxDialog({ icon: _icReq('mod-requisiciones', 30) || ' ', title: 'Ya hay una requisición abierta', msg: msg,
+                buttons: [{ label: 'Cancelar', kind: 'ghost' }, { label: 'Empezar otra', kind: 'ghost', onClick: crear },
+                          { label: 'Continuar la abierta', kind: 'primary', onClick: function () { abrirReq(ab.id); } }],
+                onBackdrop: null });
+            return;
+        }
+        if (confirm(msg + '\n\nAceptar = continuar la abierta · Cancelar = empezar otra')) { abrirReq(ab.id); return; }
+    }
+    crear();
 }
-// Compatibilidad: quien todavía llame al nombre viejo, finaliza.
 function cerrarRequisicion() { finalizarRequisicion(); }
 function _reqAviso(txt) {
-    var el = document.getElementById('reqAviso');
-    if (!el) return;
-    el.textContent = txt; el.hidden = false;
-    clearTimeout(el._t); el._t = setTimeout(function () { el.hidden = true; }, 6000);
+    ['reqAviso', 'reqAvisoLista'].forEach(function (k) {
+        var el = document.getElementById(k);
+        if (!el) return;
+        el.textContent = txt; el.hidden = false;
+        clearTimeout(el._t); el._t = setTimeout(function () { el.hidden = true; }, 6000);
+    });
 }
 
 /* ── FICHA TÉCNICA (Edwin, 24-nov): VER no pide contraseña; EDITAR sí ───────
@@ -1577,7 +1662,9 @@ function abrirInfoReq() {
             '<button class="rc-x" onclick="cerrarInfoReq()" title="Cerrar">' + (_icReq('adm-cerrar', 20) || '×') + '</button></div>' +
         '<div class="ri-lista">' +
             fila('Sucursal', _esc(_reqSucNombre())) +
+            fila('Estado', _reqEsAbierta(ab) ? 'Abierta' : 'Finalizada') +
             fila('Iniciada', ab.inicio ? _esc(f(ab.inicio)) : 'Todavía sin capturas') +
+            (ab.fecha ? fila('Finalizada', _esc(f(ab.fecha))) : '') +
             fila('Última captura', _esc(f(ab.actualizado))) +
             fila('Insumos revisados', c.reg + ' de ' + insumos.length) +
             fila('A pedir', res.totalItems + ' insumo' + (res.totalItems === 1 ? '' : 's')) +
@@ -1585,67 +1672,255 @@ function abrirInfoReq() {
         '</div>' +
         '<div class="ri-acc">' +
             '<button class="btn-vista" onclick="cargarTodasAnteriores()"' + (hayHist ? '' : ' disabled') + ' title="Llena las existencias vacías con las de la última requisición finalizada">' + _icReq('ins-historial', 15) + 'Cargar existencias anteriores</button>' +
-            '<button class="btn-vista" id="btnNuevaReq" onclick="nuevaRequisicion()" title="Empezar una requisición nueva en esta sucursal">' + _icReq('adm-agregar', 15) + 'Nueva requisición</button>' +
         '</div>';
     document.getElementById('modalInfoReq').style.display = 'flex';
 }
 function cerrarInfoReq() { var m = document.getElementById('modalInfoReq'); if (m) m.style.display = 'none'; }
-/* «Salir» guarda lo pendiente (sin esperar la pausa de teclas) y vuelve al
-   panel de Recetas e insumos. Al volver, la requisición sigue donde quedó. */
+/* «Salir» guarda lo pendiente (sin esperar la pausa de teclas) y vuelve a la
+   portada. Al volver a abrirla, la requisición sigue donde quedó. */
 async function salirReq() {
-    try { if (_reqSaveTimer) await _reqGuardarNube(); } catch (e) {}
-    window.location.href = 'index.html';
+    try { await _reqSoltarActual(); } catch (e) {}
+    mostrarListaReq();
+}
+async function _reqSoltarActual() { if (_reqSaveTimer) await _reqGuardarNube(); }
+
+/* ══ LA PORTADA: EL HISTORIAL DE REQUISICIONES (como inventarios, 24-nov) ══
+   Las tarjetas de arriba (cuántas, la última, ver todas / por mes) y la lista
+   o galería. Cada requisición tiene su menú «⋯»: continuar o editar, ver el
+   pedido, finalizar y eliminar. */
+var _modoHistReq = 'todos', _modoListaHistReq = 'lista', _mesSelReq = null, _anioReq = new Date().getFullYear();
+try { if (localStorage.getItem('etaax_req_hist_vista') === 'galeria') _modoListaHistReq = 'galeria'; } catch (e) {}
+var MESES_REQ = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function mostrarListaReq() {
+    _reqActual = null; reqData = {}; _reqSel = null; _reqBusq = ''; _pasoReq = 1;
+    var m = document.getElementById('reqCaptModal'); if (m) m.style.display = 'none';
+    var c = document.getElementById('vistaCapturaReq'); if (c) c.style.display = 'none';
+    var l = document.getElementById('vistaListaReq'); if (l) l.style.display = '';
+    _herrUltimoReq = null;
+    var h = document.getElementById('pasoHerr'); if (h) h.innerHTML = '';
+    renderListaReq();
+    try { window.scrollTo({ top: 0 }); } catch (e) {}
+}
+function _mostrarCapturaReq(paso) {
+    var l = document.getElementById('vistaListaReq'); if (l) l.style.display = 'none';
+    var c = document.getElementById('vistaCapturaReq'); if (c) c.style.display = '';
+    _reqSel = null; _reqBusq = ''; _herrUltimoReq = null;
+    var b = document.getElementById('btnFinalizarReq');
+    if (b) b.innerHTML = _icReq('adm-pagado') + (_reqEsAbierta(_reqActual) ? 'Finalizar requisición' : 'Guardar cambios');
+    init();
+    irPaso(paso || 1);
+    setTimeout(_ajustarStickyReq, 0);
+}
+/* Abrir una del historial: la abierta se continúa; una finalizada se EDITA en
+   su lugar (los cambios se guardan en ella misma, no se crea otra). */
+async function abrirReq(id, paso) {
+    var r = _reqPorId(id); if (!r) return;
+    if (paso !== 3 && typeof _exigeReq === 'function' && !_exigeReq('crear', 'No puedes capturar requisiciones.')) return;
+    if (paso === 3 && typeof _exigeReq === 'function' && !_exigeReq('exportar', 'No puedes armar ni exportar el pedido.')) return;
+    await _reqSoltarActual();
+    if (!r.items) r.items = {};
+    _reqActual = r;
+    _mostrarCapturaReq(paso || 1);
 }
 
-// ── Historial ─────────────────────────────────────────────────
-function abrirHistorial() {
-    if (typeof _exigeReq === 'function' && !_exigeReq('historial', 'No puedes ver el historial de requisiciones.')) return;
-    var hist = getHistorial();
-    var body = document.getElementById('historialBody');
-    if (!hist.length) {
-        body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin requisiciones archivadas aún</div>';
-    } else {
-        body.innerHTML = hist.map(function(snap, i) {
-            var d   = new Date(snap.fecha);
-            var res = snap.resumen || {};
-            return '<div class="hist-item" onclick="verSnapHistorial(' + i + ')">' +
-                '<div>' +
-                    '<div style="font-size:13px;font-weight:600">' +
-                        d.toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) +
-                    '</div>' +
-                    '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">' +
-                        (res.totalItems || 0) + ' ítems pedidos' +
-                    '</div>' +
-                '</div>' +
-                '<div style="text-align:right">' +
-                    '<div style="font-size:14px;font-weight:700;color:var(--green)">' + fmtMXN(res.totalCosto || 0) + '</div>' +
-                    '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">costo estimado</div>' +
-                '</div>' +
-            '</div>';
-        }).join('');
-    }
-    document.getElementById('modalHistorial').style.display = 'flex';
+function _reqFecha(iso, tipo) {
+    if (!iso) return '—';
+    var d = new Date(iso); if (isNaN(d.getTime())) return '—';
+    if (tipo === 'larga') return d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+    if (tipo === 'tabla') return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 }
-
-function cerrarHistorial() {
-    document.getElementById('modalHistorial').style.display = 'none';
-}
-
-function verSnapHistorial(i) {
-    if (typeof _exigeReq === 'function' && !_exigeReq('historial', 'No puedes ver el historial de requisiciones.')) return;
-    var hist = getHistorial();
-    var snap = hist[i];
-    if (!snap) return;
-    if (!confirm('¿Cargar las existencias de esta requisición archivada como punto de partida?')) return;
-    // Solo restaura existencias, no pedidos manuales ni noPedir
-    Object.keys(snap.items || {}).forEach(function(id) {
-        if (!reqData[id]) reqData[id] = {};
-        reqData[id].existencia = snap.items[id].existencia;
+function _reqNombre(r) { return 'Requisición · ' + _reqFecha(r.inicio || r.fecha, 'tabla'); }
+/* Lo que lleva: revisados, a pedir y costo. La ABIERTA se calcula en vivo con
+   el catálogo de hoy; la finalizada enseña lo que tenía al finalizar. */
+function _reqResumenDe(r) {
+    var items = r.items || {}, revisados = 0;
+    Object.keys(items).forEach(function (k) { if (esRegistrado(items[k])) revisados++; });
+    if (!_reqEsAbierta(r) && r.resumen) return { revisados: revisados, totalItems: r.resumen.totalItems || 0, totalCosto: r.resumen.totalCosto || 0 };
+    var tI = 0, tC = 0;
+    insumos.forEach(function (ins) {
+        var ri = items[ins.id]; if (!ri) return;
+        var calc = calcItem(ins, ri), pF = pedidoFinal(calc, ri);
+        if (pF > 0) { tI++; tC += pF * calc.costoUnitPieza; }
     });
-    setReqData(reqData);
-    cerrarHistorial();
-    renderReq();
+    return { revisados: revisados, totalItems: tI, totalCosto: tC };
 }
+function _reqListaVisible(lista) {
+    var l = (lista || _reqTodas()).slice();
+    // Sin permiso de historial solo se ven las abiertas (las que hay que terminar).
+    if (!_puedeReq('historial')) l = l.filter(_reqEsAbierta);
+    return l.sort(function (a, b) {
+        if (_reqEsAbierta(a) !== _reqEsAbierta(b)) return _reqEsAbierta(a) ? -1 : 1;   // las abiertas, arriba
+        return _reqOrden(b) - _reqOrden(a);
+    });
+}
+function _statsReq() {
+    var l = _reqListaVisible();
+    var n = document.getElementById('statReqs'); if (n) n.textContent = l.length;
+    var u = document.getElementById('statUltReq');
+    if (u) {
+        var ult = l.slice().sort(function (a, b) { return _reqOrden(b) - _reqOrden(a); })[0];
+        u.textContent = ult ? _reqFecha(ult.inicio || ult.fecha, 'tabla') : '—';
+    }
+}
+function renderListaReq() {
+    var cont = document.getElementById('historialReq'); if (!cont) return;
+    _statsReq();
+    var tw = document.getElementById('toggleHistReqWrap'); if (tw) tw.style.display = _modoHistReq === 'todos' ? '' : 'none';
+    if (_cacheReqHist === null) { cont.innerHTML = '<div class="empty-state" style="margin-top:16px"><div class="empty-desc">Cargando requisiciones…</div></div>'; return; }
+    if (_modoHistReq === 'mes') { cont.innerHTML = _calendarioReq(); return; }
+    var lista = _reqListaVisible();
+    if (!lista.length) {
+        cont.innerHTML = '<div class="empty-state" style="margin-top:16px"><div class="empty-icon">' + _icReq('mod-requisiciones', 36) + '</div>' +
+            '<div class="empty-title">Sin requisiciones</div><div class="empty-desc">Crea la primera con «+ Nueva requisición»</div></div>';
+        return;
+    }
+    cont.innerHTML = _modoListaHistReq === 'galeria'
+        ? '<div class="hist-galeria">' + lista.map(_reqCardHTML).join('') + '</div>'
+        : _reqTablaHTML(lista);
+}
+function _reqPill(r) {
+    return _reqEsAbierta(r) ? '<span class="pill pill-amber">Abierta</span>' : '<span class="pill pill-green">Finalizada</span>';
+}
+function _reqBtnMenu(id) {
+    return '<button class="btn-vista" onclick="_reqMenu(event,\'' + String(id).replace(/'/g, "\\'") + '\')" title="Acciones" ' +
+        'style="padding:4px 11px;font-size:13px;line-height:1">⋯</button>';
+}
+function _reqTablaHTML(lista) {
+    return '<div class="card" style="max-width:none;margin-top:12px"><div class="card-body" style="padding:0"><div class="tabla-wrap"><table>' +
+        '<thead><tr><th>Fecha</th><th>Requisición</th><th>Revisados</th><th>A pedir</th><th>Costo estimado</th><th>Estado</th><th></th></tr></thead><tbody>' +
+        lista.map(function (r) {
+            var res = _reqResumenDe(r);
+            return '<tr data-id="' + _esc(r.id) + '">' +
+                '<td style="color:var(--text-muted)">' + _reqFecha(r.inicio || r.fecha, 'tabla') + '</td>' +
+                '<td style="font-weight:500"><span class="req-nom-ic">' + _icReq('mod-requisiciones', 16) + _esc(_reqNombre(r)) + '</span></td>' +
+                '<td style="color:var(--text-muted)">' + res.revisados + '</td>' +
+                '<td style="color:var(--text-muted)">' + res.totalItems + '</td>' +
+                '<td style="color:var(--accent);font-weight:500">' + fmtMXN(res.totalCosto) + '</td>' +
+                '<td>' + _reqPill(r) + '</td>' +
+                '<td style="text-align:right;white-space:nowrap">' + _reqBtnMenu(r.id) + '</td></tr>';
+        }).join('') + '</tbody></table></div></div></div>';
+}
+function _reqCardHTML(r) {
+    var res = _reqResumenDe(r), ab = _reqEsAbierta(r), q = String(r.id).replace(/'/g, "\\'");
+    return '<div class="hist-card' + (ab ? '' : ' cerrado') + '" data-id="' + _esc(r.id) + '">' +
+        '<div class="hist-card-icon">' + _icReq('mod-requisiciones', 28) + '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;gap:8px">' +
+            '<div class="hist-card-nombre">' + _esc(_reqNombre(r)) + '</div>' + _reqPill(r) + '</div>' +
+        '<div class="hist-card-meta">Iniciada el ' + _reqFecha(r.inicio, 'larga') + (r.fecha ? '<br>Finalizada el ' + _reqFecha(r.fecha, 'larga') : '') + '</div>' +
+        '<div style="border-top:1px solid var(--border);padding-top:10px">' +
+            '<div class="hist-card-stat"><span>Insumos revisados</span><span>' + res.revisados + '</span></div>' +
+            '<div class="hist-card-stat"><span>A pedir</span><span>' + res.totalItems + '</span></div>' +
+            '<div class="hist-card-stat"><span>Costo estimado</span><span style="color:var(--accent);font-weight:500">' + fmtMXN(res.totalCosto) + '</span></div>' +
+        '</div>' +
+        '<div class="hist-card-actions">' +
+            (_puedeReq('exportar') ? '<button class="btn-vista" onclick="abrirReq(\'' + q + '\',3)">' + _icReq('adm-comprobante', 14) + 'Pedido</button>' : '') +
+            '<button class="btn-vista" onclick="abrirReq(\'' + q + '\')"' + (ab ? '' : ' style="color:var(--accent);border-color:var(--accent)"') + '>' +
+                _icReq(ab ? 'sto-siguiente' : 'rec-editar', 14) + (ab ? 'Continuar' : 'Editar') + '</button>' +
+            _reqBtnMenu(r.id) +
+        '</div></div>';
+}
+/* El menú «⋯»: lo destructivo va abajo, separado por una línea. */
+function _reqCerrarMenus() { document.querySelectorAll('.req-menu').forEach(function (m) { try { m.remove(); } catch (e) {} }); }
+function _reqMi(ic, txt, accion, peligro) {
+    return '<button class="' + (peligro ? 'peligro' : '') + '" onclick="_reqCerrarMenus();' + accion + '" ' +
+        'style="display:flex;align-items:center;justify-content:flex-start;gap:9px;width:100%;background:none;border:none;padding:9px 11px;border-radius:7px;cursor:pointer;' +
+        'font-family:inherit;font-size:13px;text-align:left;color:' + (peligro ? 'var(--red)' : 'var(--text)') + '" ' +
+        'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'none\'">' + _icReq(ic, 16) + txt + '</button>';
+}
+function _reqMenu(ev, id) {
+    ev.stopPropagation();
+    _reqCerrarMenus();
+    var r = _reqPorId(id); if (!r) return;
+    var q = String(id).replace(/'/g, "\\'"), ab = _reqEsAbierta(r), sep = '<div style="height:1px;background:var(--border);margin:5px 2px"></div>';
+    var m = document.createElement('div');
+    m.className = 'req-menu';
+    var rc = ev.currentTarget.getBoundingClientRect();
+    m.style.cssText = 'position:fixed;z-index:10001;min-width:218px;background:var(--surface);border:1px solid var(--border);border-radius:10px;' +
+        'padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);top:' + Math.min(rc.bottom + 6, window.innerHeight - 230) + 'px;left:' + Math.max(10, rc.right - 218) + 'px';
+    var h = ab ? _reqMi('sto-siguiente', 'Continuar', "abrirReq('" + q + "')") : _reqMi('rec-editar', 'Editar', "abrirReq('" + q + "')");
+    if (_puedeReq('exportar')) h += _reqMi('adm-comprobante', 'Ver pedido', "abrirReq('" + q + "',3)");
+    if (ab) h += sep + _reqMi('adm-pagado', 'Finalizar requisición', "finalizarReqLista('" + q + "')");
+    h += sep + _reqMi('ins-eliminar', 'Eliminar', "eliminarReq('" + q + "')", true);
+    m.innerHTML = h;
+    document.body.appendChild(m);
+    setTimeout(function () { document.addEventListener('click', _reqCerrarMenus, { once: true }); }, 0);
+}
+/* Finalizar desde la portada (sin entrar). */
+function finalizarReqLista(id) {
+    if (typeof _exigeReq === 'function' && !_exigeReq('crear', 'No puedes capturar requisiciones.')) return;
+    var r = _reqPorId(id); if (!r || !_reqEsAbierta(r)) return;
+    var res = _reqResumenDe(r);
+    if (!res.revisados) { alert('Todavía no hay nada capturado en esta requisición.'); return; }
+    if (!confirm('¿Finalizar la requisición del ' + _reqFecha(r.inicio, 'larga') + '?\n\n' + res.totalItems + ' insumo(s) a pedir · ' + fmtMXN(res.totalCosto))) return;
+    var ahora = new Date().toISOString();
+    r.cerrada = true; r.fecha = ahora; r.actualizado = ahora;
+    r.resumen = { totalItems: res.totalItems, totalCosto: res.totalCosto };
+    _sbUpReq(r);
+    renderListaReq();
+    _reqAviso('Requisición finalizada y guardada en el historial (' + res.totalItems + ' a pedir · ' + fmtMXN(res.totalCosto) + ').');
+}
+/* Eliminar pide la contraseña general (como todo lo que no tiene vuelta). */
+function eliminarReq(id) {
+    if (typeof _exigeReq === 'function' && !_exigeReq('crear', 'No puedes eliminar requisiciones.')) return;
+    var r = _reqPorId(id); if (!r) return;
+    if (!confirm('¿Eliminar la requisición del ' + _reqFecha(r.inicio || r.fecha, 'larga') + '?\n\nNo se puede deshacer.')) return;
+    var hacer = function () {
+        _cacheReqHist = (_cacheReqHist || []).filter(function (x) { return x && x.id !== id; });
+        if (_reqActual && _reqActual.id === id) { clearTimeout(_reqSaveTimer); _reqSaveTimer = null; _reqActual = null; }
+        if (typeof sbDelete === 'function') sbDelete('req_historial', id);
+        else if (typeof _supabase !== 'undefined') _supabase.from('req_historial').delete().eq('id', id).then(function () {});
+        renderListaReq();
+        _reqAviso('Requisición eliminada.');
+    };
+    if (typeof window._pedirClaveAdmin === 'function') window._pedirClaveAdmin('Eliminar requisición', hacer, 'Eliminar');
+    else hacer();
+}
+function setModoHistReq(modo) {
+    _modoHistReq = modo === 'mes' ? 'mes' : 'todos';
+    var t = document.getElementById('tabTodosReq'), mm = document.getElementById('tabMesReq');
+    if (t) t.classList.toggle('active', _modoHistReq === 'todos');
+    if (mm) mm.classList.toggle('active', _modoHistReq === 'mes');
+    _mesSelReq = null;
+    renderListaReq();
+}
+function setModoListaHistReq(modo) {
+    _modoListaHistReq = modo === 'galeria' ? 'galeria' : 'lista';
+    try { localStorage.setItem('etaax_req_hist_vista', _modoListaHistReq); } catch (e) {}
+    var a = document.getElementById('btnHistListaReq'), b = document.getElementById('btnHistGalReq');
+    if (a) a.classList.toggle('active', _modoListaHistReq === 'lista');
+    if (b) b.classList.toggle('active', _modoListaHistReq === 'galeria');
+    renderListaReq();
+}
+document.addEventListener('DOMContentLoaded', function () { if (_modoListaHistReq === 'galeria') setModoListaHistReq('galeria'); });
+function _reqDelMes(anio, mes) {
+    return _reqListaVisible().filter(function (r) {
+        var d = new Date(r.inicio || r.fecha || 0);
+        return d.getFullYear() === anio && d.getMonth() + 1 === mes;
+    });
+}
+function _calendarioReq() {
+    var meses = MESES_REQ.map(function (nom, i) {
+        var n = _reqDelMes(_anioReq, i + 1).length;
+        return '<div class="cal-mes ' + (n ? 'con-inv ' : '') + (_mesSelReq === i + 1 ? 'activo' : '') + '" onclick="seleccionarMesReq(' + (i + 1) + ')">' +
+            '<div class="cal-mes-nombre">' + nom + '</div><div class="cal-mes-count ' + (n ? 'verde' : 'dim') + '">' + n + '</div></div>';
+    }).join('');
+    var lista = '';
+    if (_mesSelReq) {
+        var del = _reqDelMes(_anioReq, _mesSelReq);
+        lista = '<div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">' +
+            '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px">' +
+                del.length + ' requisición' + (del.length === 1 ? '' : 'es') + ' — ' + MESES_REQ[_mesSelReq - 1] + ' ' + _anioReq + '</div>' +
+            (del.length ? (_modoListaHistReq === 'galeria' ? '<div class="hist-galeria">' + del.map(_reqCardHTML).join('') + '</div>' : _reqTablaHTML(del))
+                        : '<div style="color:var(--text-dim);font-size:13px;padding:20px 0">Sin requisiciones este mes</div>') + '</div>';
+    }
+    return '<div class="cal-nav"><button class="cal-nav-btn" onclick="cambiarAnioReq(-1)">‹</button><div class="cal-year">' + _anioReq + '</div>' +
+        '<button class="cal-nav-btn" onclick="cambiarAnioReq(1)">›</button></div>' +
+        '<div style="padding:0 16px"><div class="cal-grid">' + meses + '</div>' + lista + '</div>';
+}
+function seleccionarMesReq(mes) { _mesSelReq = _mesSelReq === mes ? null : mes; renderListaReq(); }
+function cambiarAnioReq(d) { _anioReq += d; _mesSelReq = null; renderListaReq(); }
 
 // ── Utilidades ────────────────────────────────────────────────
 function _esc(s) {
