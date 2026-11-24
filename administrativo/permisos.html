@@ -3,19 +3,19 @@
 <head>
 <script src="/embed.js?v=e0d4595d"></script><!-- abierta dentro del modal de Staff: oculta su cromo -->
 <script src="/negocio-tab.js?v=39197e12"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
-<script src="/page-guard.js?v=61410f25"></script>
+<script src="/page-guard.js?v=01a940a8"></script>
 <meta charset="UTF-8">
 <script src="/theme.js?v=64b86f6e"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>ETAAX – Roles y Permisos</title>
     <!-- Presentación inicial: descargar antes de llegar a los scripts del final. -->
-    <link rel="preload" as="script" href="/etaax-iconos.js?v=32b10474">
-    <link rel="preload" as="script" href="/etaax-sidebar.js?v=5844cd7a">
+    <link rel="preload" as="script" href="/etaax-iconos.js?v=7a651810">
+    <link rel="preload" as="script" href="/etaax-sidebar.js?v=8faeff96">
     <link rel="preload" as="script" href="/etaax-header.js?v=2721a8a2">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=b027b0bd">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=7733302c">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
-    <link rel="preload" as="script" href="/administrativo/staff-ui.js?v=8409e757">
+    <link rel="preload" as="script" href="/administrativo/staff-ui.js?v=adfcbec2">
 
 <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
      navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -392,14 +392,16 @@ var MODULES = [
 
 /* ── CATEGORÍAS (agrupación visual, igual que el nav) ── */
 var CATEGORIAS = [
-    /* (24-nov) Los grupos se llaman como los módulos: Admin·ax, Cost·ax, Fin·ax, Learn·ax.
-       El Menú se mudó a Cost·ax (Escandallos). */
+    /* (24-nov) Los grupos se llaman como los módulos y van en su orden: Cost·ax,
+       Admin·ax, Fin·ax, Equip·ax, Learn·ax. El Menú se mudó a Cost·ax
+       (Escandallos) y el equipo —Staff y Roles y Permisos— a Equip·ax. */
     { label:'Cost·ax', modulos:['recetas','insumos','inventarios','requisiciones','menu'] },
-    { label:'Admin·ax', modulos:['ventas','gastos','proveedores','clientes','staff','permisos'] },
+    { label:'Admin·ax', modulos:['ventas','gastos','proveedores','clientes'] },
+    { label:'Fin·ax',                modulos:['financiero'] },
+    { label:'Equip·ax',              modulos:['staff','permisos'] },
     /* Ventas por Producto estaba listado en Control Administrativo y la pantalla
        vive en Aprende y Analiza: se buscaba donde no estaba. */
     { label:'Learn·ax',              modulos:['ventas_productos'] },
-    { label:'Fin·ax',                modulos:['financiero'] },
     { label:'Ajustes',               modulos:['config'] },
     /* "Acciones especiales · Cambiar registros de sucursal" se retiró: era UN
        interruptor para toda la app y por eso no servía — apagarlo para que la
@@ -1293,12 +1295,12 @@ function ctxSalir() {
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
 <script src="/novedades.js?v=94a2317e"></script><!-- aviso de actualizaciones del sistema -->
-<script src="/etaax-iconos.js?v=32b10474"></script>
-<script src="/etaax-sidebar.js?v=5844cd7a"></script>
+<script src="/etaax-iconos.js?v=7a651810"></script>
+<script src="/etaax-sidebar.js?v=8faeff96"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=2721a8a2"></script>
-<script src="/etaax-modulos-ui.js?v=b027b0bd"></script>
+<script src="/etaax-modulos-ui.js?v=7733302c"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
-<script src="/administrativo/staff-ui.js?v=8409e757"></script>
+<script src="/administrativo/staff-ui.js?v=adfcbec2"></script>
 </body>
 </html>

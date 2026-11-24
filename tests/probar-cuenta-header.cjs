@@ -512,7 +512,7 @@ async function run(base) {
         assert.equal(await evalPage(p.sid,"document.querySelectorAll('.theme-toggle').length"),0);
         assert.ok(await evalPage(p.sid,"document.getElementById('etxHdTema')"));
         await evalPage(p.sid,"document.getElementById('etxCambiarModulo').click()");
-        assert.equal(await evalPage(p.sid,"document.querySelectorAll('#etxModuleDialog [data-modulo]:not(:disabled)').length"),4);
+        assert.equal(await evalPage(p.sid,"document.querySelectorAll('#etxModuleDialog [data-modulo]:not(:disabled)').length"),5);   // (24-nov) con Equip·ax
         await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'},p.sid);
         await until(p.sid,"!document.getElementById('etxModuleDialog').open");
         assert.equal(await evalPage(p.sid,'document.activeElement.id'),'etxCambiarModulo');

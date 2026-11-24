@@ -6,6 +6,7 @@
         administrativo: 'mod-control-administrativo',
         recetas: 'mod-recetas-insumos',
         financiero: 'mod-salud-financiera',
+        equipo: 'mod-equipax',
         consultoria: 'mod-aprende-analiza'
     };
     var RUTAS = {
@@ -13,6 +14,7 @@
         '/administrativo/ventas.html': 'fin-ventas',
         '/administrativo/gastos.html': 'fin-gastos',
         '/administrativo/staff-hub.html': 'cat-colaboradores',
+        '/equipo/index.html': 'mod-equipax',
         '/administrativo/staff.html': 'cat-colaboradores',
         '/administrativo/horarios.html': 'cat-horarios',
         '/administrativo/proveedores.html': 'cat-proveedores',
@@ -42,7 +44,7 @@
        y descripción; reintentar el pintado no corrige una ruta desconocida. */
     function rutaModulo(pathname) {
         var path = String(pathname || '');
-        if (!/^\/(administrativo|recetas|financiero|consultoria)(?:\/|$)/.test(path)) return path;
+        if (!/^\/(administrativo|recetas|financiero|consultoria|equipo)(?:\/|$)/.test(path)) return path;
         path = path.replace(/\/+$/, '');
         if (/^\/[^/]+$/.test(path)) return path + '/index.html';
         return /\/[^/.]+$/.test(path) ? path + '.html' : path;

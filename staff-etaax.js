@@ -36,9 +36,9 @@
         { key:'gastos',           label:'Gastos Diarios',     grupo:'Admin·ax' },
         { key:'proveedores',      label:'Proveedores',        grupo:'Admin·ax' },
         { key:'clientes',         label:'Clientes',           grupo:'Admin·ax' },
-        { key:'staff',            label:'Gestión de Staff',   grupo:'Admin·ax' },
-        { key:'ventas_productos', label:'Ventas por Producto',grupo:'Learn·ax' },
         { key:'financiero',       label:'Financiero',         grupo:'Fin·ax' },
+        { key:'staff',            label:'Gestión de Staff',   grupo:'Equip·ax' },   // (24-nov) el equipo es su propio módulo
+        { key:'ventas_productos', label:'Ventas por Producto',grupo:'Learn·ax' },
         { key:'config',           label:'Configuración',      grupo:'Negocio' }
     ];
     /* Con lo que nace un acceso nuevo: escandallos, insumos, inventarios y

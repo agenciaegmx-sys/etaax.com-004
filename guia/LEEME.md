@@ -18,7 +18,6 @@ Las capturas pendientes conservan su marco y no abren un visor vacío.
 | Módulo | Herramienta | Archivos |
 |---|---|---|
 | Control administrativo | Ventas y gastos diarios | **`diario-1.png` … `diario-10.png` ✅ puestas** |
-| | Gestión de colaboradores | **`staff-1.png` … `staff-8.png` ✅ puestas** |
 | | Proveedores | **`proveedores-1.png` … `proveedores-3.png` ✅ puestas** |
 | | Clientes | **`clientes-1.png` … `clientes-3.png` ✅ puestas** |
 | | Menú de la sucursal | **`menu-1.png` … `menu-3.png` ✅ puestas** |
@@ -33,6 +32,7 @@ Las capturas pendientes conservan su marco y no abren un visor vacío.
 | | Cuentas bancarias | `cuentas-1.png` … `-3.png` |
 | | KPIs | `kpis-1.png` … `-3.png` |
 | | Estadísticas | `estadisticas-1.png` … `-3.png` |
+| Equip·ax | Gestión del equipo | **`staff-1.png` … `staff-8.png` ✅ puestas** |
 | Aprende y analiza | Guías de uso | `guias-1.png` … `-3.png` |
 | | Ventas por producto | `ventas-productos-1.png` … `-3.png` |
 | | Simulador de metas | `simulador-1.png` … `-3.png` |
@@ -40,10 +40,10 @@ Las capturas pendientes conservan su marco y no abren un visor vacío.
 El **orden importa**: el número es el paso, y el pie que lo acompaña ya está
 escrito en `hub-modulos.js`. Proveedores tiene tres pasos: el directorio,
 el formulario para agregar un proveedor y el listado con el proveedor guardado.
-Ventas y gastos diarios tiene diez capturas; Gestión de colaboradores, ocho.
+Ventas y gastos diarios tiene diez capturas; Gestión del equipo (Equip·ax), ocho.
 Clientes muestra el directorio, el formulario de registro y el cliente guardado.
 Menú muestra su gestión, el QR para compartir la carta y los ajustes de apariencia.
-Las cinco herramientas de Control administrativo ya tienen sus recorridos completos.
+Las herramientas de Admin·ax ya tienen sus recorridos completos.
 Escandallos tiene siete capturas: su menú, recetas de alimentos y bebidas,
 sub-recetas de alimentos y bebidas, receta simple y catálogo con sus filtros.
 Insumos tiene siete capturas: catálogo, ficha técnica, edición, cambio de tipo,

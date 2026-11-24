@@ -13,10 +13,14 @@
        cambiar de módulo te sacaba del espacio de trabajo para que volvieras a
        entrar — dos pantallas para un movimiento lateral. Son las portadas que
        ya existen; no se inventa ninguna ruta. */
+    /* (24-nov) El orden: Cost·ax, Admin·ax, Fin·ax, Equip·ax, Learn·ax (Vent·ax y
+       Timbr·ax, cuando lleguen, van antes de Learn·ax). Equip·ax —el equipo— ya
+       no es submódulo de Admin·ax: es módulo propio. */
     var MODULOS = [
-        { id:'administrativo', nombre:'Admin·ax', icono:'mod-control-administrativo', portada:'/administrativo/index.html', permisos:['ventas','gastos','staff','proveedores','clientes'] },
         { id:'recetas', nombre:'Cost·ax', icono:'mod-recetas-insumos', portada:'/recetas/index.html', permisos:['recetas','insumos','inventarios','requisiciones','menu'] },
+        { id:'administrativo', nombre:'Admin·ax', icono:'mod-control-administrativo', portada:'/administrativo/index.html', permisos:['ventas','gastos','proveedores','clientes'] },
         { id:'financiero', nombre:'Fin·ax', icono:'mod-salud-financiera', portada:'/financiero/index.html', permisos:['financiero'] },
+        { id:'equipo', nombre:'Equip·ax', icono:'mod-equipax', portada:'/equipo/index.html', permisos:['staff'] },
         { id:'consultoria', nombre:'Learn·ax', icono:'mod-aprende-analiza', portada:'/consultoria/index.html', permisos:[] }
     ];
     var DESCRIPCIONES = {
@@ -35,10 +39,46 @@
     function leer(k, almacen) { try { return JSON.parse((almacen || localStorage).getItem(k) || 'null'); } catch (e) { return null; } }
     /* El Menú de la sucursal se quedó en /administrativo/menu.html (su dirección
        no cambia) pero ahora es de Recetas e Insumos, junto a Escandallos (24-nov). */
+    /* (24-nov) Las páginas del equipo se quedaron en /administrativo/ (sus
+       direcciones no cambian) pero son de Equip·ax. */
+    var RE_EQUIPO = /^\/administrativo\/(staff-hub|staff|horarios|checklists|organigrama|perfiles-puesto|evaluaciones|permisos)(\.html)?\/?$/;
     function moduloDeRuta() {
         var p = location.pathname, id = p.split('/')[1];
         if (/^\/administrativo\/menu(\.html)?\/?$/.test(p)) id = 'recetas';
+        if (RE_EQUIPO.test(p)) id = 'equipo';
         return id;
+    }
+    /* LA BARRA DE EQUIP·AX: cada página del equipo traía la suya (unas con las
+       de Admin·ax, otras con media lista, Checklists y Evaluaciones sin barra).
+       Ahora todas la arman de aquí, con lo que el rol y el plan permiten. */
+    var EQUIPO_NAV = [
+        ['/administrativo/staff.html', 'Catálogo', 'verCatalogo', 'cat-colaboradores'],
+        ['/administrativo/horarios.html', 'Horarios', 'horarios', 'cat-horarios'],
+        ['/administrativo/checklists.html', 'Checklists', 'checklists', 'mod-control-administrativo'],
+        ['/administrativo/organigrama.html', 'Organigrama', 'organigrama', 'org-corporativo'],
+        ['/administrativo/perfiles-puesto.html', 'Perfiles de puesto', 'perfiles', 'perfil'],
+        ['/administrativo/evaluaciones.html', 'Evaluaciones', 'evaluaciones', 'mod-control-administrativo']
+    ];
+    function armarNavEquipo(nav) {
+        var aqui = typeof window.etaaxRutaModulo === 'function' ? window.etaaxRutaModulo(location.pathname) : location.pathname;
+        var puede = function (sub) { return typeof window.etaaxPuedeSub === 'function' ? window.etaaxPuedeSub('staff', sub) : true; };
+        nav.querySelectorAll('.nav-section, :scope > a.nav-link:not(.etx-nav-back)').forEach(function (x) { x.remove(); });
+        var sec = document.createElement('div'); sec.className = 'nav-section etx-nav-equipo';
+        EQUIPO_NAV.forEach(function (e) {
+            if (!puede(e[2])) return;
+            var a = document.createElement('a'); a.href = e[0]; a.className = 'nav-link' + (aqui === e[0] ? ' active' : ''); a.dataset.tooltip = e[1];
+            a.innerHTML = '<span class="nav-icon etx-nav-icono" aria-hidden="true">' + ic(e[3], 22) + '</span><span class="nav-text">' + esc(e[1]) + '</span>';
+            sec.appendChild(a);
+        });
+        var salida = nav.querySelector('.etx-nav-back');
+        nav.insertBefore(sec, salida || null);
+    }
+    /* Checklists y Evaluaciones no traían barra: se les pone la de Equip·ax. */
+    function crearNavEquipo() {
+        var nav = document.createElement('nav'); nav.className = 'nav'; nav.id = 'nav';
+        nav.innerHTML = '<div class="nav-top"><button type="button" class="nav-toggle nav-toggle-btn" id="navToggleBtn"><span class="nav-toggle-text" id="navToggleTxt"></span></button></div>';
+        document.body.insertBefore(nav, document.body.firstChild);
+        return nav;
     }
     function moduloActual() { var id = moduloDeRuta(); return MODULOS.find(function (m) { return m.id === id; }); }
     function permitido(m, c) {
@@ -207,6 +247,7 @@
         if (embebido || !nav) return;
         var modulo = moduloActual();
         if (!modulo) return;
+        if (modulo.id === 'equipo' && !contextoGlobal && !nav._etxEquipo) { nav._etxEquipo = true; armarNavEquipo(nav); }
         var top = nav.querySelector('.nav-top'), panel = top && top.querySelector('a.nav-toggle');
         if (top && !top.querySelector('.etx-nav-identidad')) {
             var etiqueta = contextoGlobal ? (sessionStorage.getItem('etaax_fin_global') === '1' ? 'Financiero global' : 'Catálogos globales') : modulo.nombre;
@@ -513,6 +554,9 @@
         if (embebido) return;
         document.querySelectorAll('.theme-toggle').forEach(function(b){b.remove();});
         var nav = document.getElementById('nav');
+        var mod = moduloActual();
+        /* (El pintor de la barra, justo abajo, la estiliza: es quien arma «Sub módulos».) */
+        if (!nav && mod && mod.id === 'equipo' && /^\/administrativo\//.test(location.pathname)) nav = crearNavEquipo();
         subModulos(nav);
         if (typeof window.etaaxPintarIconosNav === 'function') window.etaaxPintarIconosNav();
         bicolorTitulo();
@@ -521,6 +565,11 @@
         vigilarCromo();
         medirLayout();window.addEventListener('resize',medirLayout);
         window.addEventListener('etaax:permisos',function(){if(dialogo && dialogo.open && dialogo.querySelector('[data-modulo]')){dialogo.close();abrirModulos();}});
+        /* Los permisos del rol llegan después: la barra de Equip·ax se vuelve a armar con ellos. */
+        window.addEventListener('etaax:permisos', function () {
+            var n = document.getElementById('nav');
+            if (n && n._etxEquipo) { armarNavEquipo(n); if (typeof window.etaaxPintarIconosNav === 'function') window.etaaxPintarIconosNav(); }
+        });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',iniciar);else iniciar();
 })();

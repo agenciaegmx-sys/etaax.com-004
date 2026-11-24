@@ -9357,7 +9357,7 @@ console.log('\n══ BD5 · Escandallos: los diez permisos, conectados ══')
    cerrar el catálogo).                                                        */
 console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
 {
-    const hub = fs.readFileSync(path.join(RAIZ, 'administrativo/staff-hub.html'), 'utf8');
+    const hub = fs.readFileSync(path.join(RAIZ, 'equipo/index.html'), 'utf8');
 
     /* Se corre el código REAL de la ventana con un DOM de mentira, y se le pone
        enfrente un iframe que "navegó" a donde diga cada prueba. */
@@ -9593,7 +9593,7 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
 console.log('\n══ BD7 · El "Volver" que se disfrazó de "Cerrar" ══');
 {
     const dock = fs.readFileSync(path.join(RAIZ, 'modal-dock.js'), 'utf8');
-    const hub  = fs.readFileSync(path.join(RAIZ, 'administrativo/staff-hub.html'), 'utf8');
+    const hub  = fs.readFileSync(path.join(RAIZ, 'equipo/index.html'), 'utf8');
     const stf  = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
 
     /* Se corre el buscador REAL del dock contra un encabezado de mentira. */
@@ -11223,7 +11223,7 @@ console.log('\n══ BE7 · Control Administrativo: una tarjeta, un permiso ═
 console.log('\n══ BE8 · Gestión de Staff, herramienta por herramienta ══');
 {
     const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
-    const hub = fs.readFileSync(path.join(RAIZ, 'administrativo/staff-hub.html'), 'utf8');
+    const hub = fs.readFileSync(path.join(RAIZ, 'equipo/index.html'), 'utf8');
     const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
 
     const SUB = (() => {
@@ -18693,7 +18693,7 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
                   /calc\(100% - 18px\), transparent 100%\)/.test(css), true);
     });
     test('…y cada portada trae solo su nombre en la isla', () => {
-        const pags = [['administrativo/index.html', 'Admin'], ['recetas/index.html', 'Cost'], ['financiero/index.html', 'Fin'], ['consultoria/index.html', 'Learn']];
+        const pags = [['administrativo/index.html', 'Admin'], ['recetas/index.html', 'Cost'], ['financiero/index.html', 'Fin'], ['equipo/index.html', 'Equip'], ['consultoria/index.html', 'Learn']];
         return eq(pags.every(([f, nom]) => {
             const t = fs.readFileSync(path.join(RAIZ, f), 'utf8');
             return t.indexOf('<span class="etx-isla-nombre"><span class="etx-isla-ini">' + nom[0] + '</span><span class="etx-isla-resto">' + nom.slice(1) + '</span><span class="etx-isla-punto">·</span><span class="etx-isla-resto">ax</span></span>') > -1 &&
@@ -18772,6 +18772,40 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
         return eq(/id="btnCambiarSucursal"[^>]*hub-acc|hub-acc[^>]*id="btnCambiarSucursal"/.test(h) && /_abrirPanelGlobal\('sucursales'\);\n    _hubPopColocar\(\);/.test(h) &&
                   /_bs\.classList\.remove\('abierto'\)/.test(h) && /texto: 'Información de sucursal', fn: abrirInfoSucursal/.test(h), true);
+    });
+    /* (24-nov) EQUIP·AX, MÓDULO PROPIO. El equipo (Gestión de Staff) dejó de ser
+       submódulo de Admin·ax. El orden: Cost·ax, Admin·ax, Fin·ax, Equip·ax,
+       Learn·ax — Vent·ax y Timbr·ax, cuando lleguen, antes de Learn·ax. */
+    test('Equip·ax: los módulos van en su orden, en el hub y en «Cambiar módulo»', () => {
+        const hubm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8'), mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        const orden = (t, re) => [...t.matchAll(re)].map(m => m[1]).join(',');
+        const esperado = 'recetas,administrativo,financiero,equipo,consultoria';
+        return eq(orden(hubm, /\{ id: '([a-z]+)', portada:/g) + ' | ' + orden(mu, /\{ id:'([a-z]+)', nombre:/g), esperado + ' | ' + esperado);
+    });
+    test('…Admin·ax ya no trae al equipo (ni en su permiso, ni en el hub, ni en su portada, ni en sus barras)', () => {
+        const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8'), hubm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8');
+        const adm = fs.readFileSync(path.join(RAIZ, 'administrativo/index.html'), 'utf8');
+        const navs = ['diario', 'proveedores', 'clientes'].map(f => fs.readFileSync(path.join(RAIZ, 'administrativo/' + f + '.html'), 'utf8'));
+        const bloqueAdm = hubm.slice(hubm.indexOf("{ id: 'administrativo'"), hubm.indexOf("{ id: 'financiero'"));
+        return eq(/\{ id:'administrativo'[^}]*permisos:\['ventas','gastos','proveedores','clientes'\] \}/.test(mu) && !/clave: 'staff'/.test(bloqueAdm) &&
+                  !/href="staff-hub\.html"/.test(adm) && navs.every(t => !/data-tooltip="Staff"/.test(t)), true);
+    });
+    test('…su portada es /equipo/index.html, con su isla y sus herramientas; la dirección vieja lleva a ella', () => {
+        const eqp = fs.readFileSync(path.join(RAIZ, 'equipo/index.html'), 'utf8'), vieja = fs.readFileSync(path.join(RAIZ, 'administrativo/staff-hub.html'), 'utf8');
+        const tools = ['staff', 'horarios', 'checklists', 'organigrama', 'perfiles-puesto', 'evaluaciones'].every(f => eqp.indexOf("abrirTool('/administrativo/" + f + ".html'") > -1);
+        return eq(tools && /aria-label="Equip·ax"/.test(eqp) && !/<nav class="nav/.test(eqp) && /page-guard\.js/.test(eqp) &&
+                  /location\.replace\('\/equipo\/index\.html' \+ location\.search/.test(vieja), true);
+    });
+    test('…la puerta de su portada pide «staff», y sus páginas son de Equip·ax aunque vivan en /administrativo/', () => {
+        const pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8'), mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        const re = /var RE_EQUIPO = (\/.*\/);/.exec(mu); const RE = re ? eval(re[1]) : null;
+        const suyas = ['/administrativo/staff.html', '/administrativo/horarios.html', '/administrativo/checklists', '/administrativo/organigrama.html', '/administrativo/perfiles-puesto.html', '/administrativo/evaluaciones.html', '/administrativo/permisos.html'];
+        const ajenas = ['/administrativo/diario.html', '/administrativo/proveedores.html', '/administrativo/menu.html'];
+        return eq(/\[\/\\\/equipo\(\\\/\|\$\)\/,\s*'staff'\]/.test(pg) && !!RE && suyas.every(r => RE.test(r)) && ajenas.every(r => !RE.test(r)), true);
+    });
+    test('…y en Roles y Permisos (y en el Staff ETAAX) el equipo es su propio grupo', () => {
+        const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8'), se = fs.readFileSync(path.join(RAIZ, 'staff-etaax.js'), 'utf8');
+        return eq(/\{ label:'Equip·ax',\s*modulos:\['staff','permisos'\] \}/.test(per) && /key:'staff',[^}]*grupo:'Equip·ax'/.test(se), true);
     });
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
@@ -29233,8 +29267,9 @@ console.log('\n══ BE19 · Cambiar de módulo entra al módulo ══');
     const modulos = [...js.matchAll(/\{ id:'([a-z]+)'[^}]*portada:'([^']+)'/g)]
         .map(m => ({ id: m[1], portada: m[2] }));
 
-    test('los cuatro módulos dicen a dónde entrar', () =>
-        eq(modulos.length, 4, 'hay ' + modulos.length + ' con portada: alguno volvería al hub'));
+    // (24-nov) Cinco: Cost·ax, Admin·ax, Fin·ax, Equip·ax y Learn·ax.
+    test('los cinco módulos dicen a dónde entrar', () =>
+        eq(modulos.length, 5, 'hay ' + modulos.length + ' con portada: alguno volvería al hub'));
 
     modulos.forEach(m => {
         test('…y la de ' + m.id + ' es un archivo que existe', () => {
@@ -29267,7 +29302,7 @@ console.log('\n══ BE19 · Cambiar de módulo entra al módulo ══');
         const delHub = [...hub.matchAll(/id: '([a-z]+)', portada: '([^']+)'/g)]
             .map(m => m[1] + '→/' + m[2]).sort();
         const delSubheader = modulos.map(m => m.id + '→' + m.portada).sort();
-        eq(delHub.length, 4, 'el hub no declara las cuatro portadas');
+        eq(delHub.length, 5, 'el hub no declara las cinco portadas');
         return eq(delHub.join(' | '), delSubheader.join(' | '),
                   'las dos tablas se separaron:\n      hub: ' + delHub.join(', ') +
                   '\n      subheader: ' + delSubheader.join(', '));

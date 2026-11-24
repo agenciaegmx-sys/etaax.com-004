@@ -156,7 +156,7 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
                 return { open: d.open, pop: d.classList.contains('etx-pop'), n: d.querySelectorAll('[data-modulo]').length, abierto: b.classList.contains('abierto'),
                          debajo: rd.top >= rb.bottom && rd.top - rb.bottom < 20, derecha: Math.abs(rd.right - rb.right) < 2, isla: !!d.querySelector('.etx-isla') };
             });
-            assert.deepEqual(r, { open: true, pop: true, n: 4, abierto: true, debajo: true, derecha: true, isla: true });
+            assert.deepEqual(r, { open: true, pop: true, n: 5, abierto: true, debajo: true, derecha: true, isla: true });   // Cost·ax, Admin·ax, Fin·ax, Equip·ax, Learn·ax
         });
         await caso('…Escape lo cierra y el botón vuelve a su tamaño', async () => {
             await p.keyboard.press('Escape');
@@ -205,6 +205,25 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             assert.equal(await p.evaluate(() => document.getElementById('etxCtxTitulo').textContent.trim().toLowerCase()), 'inventarios');
         });
 
+        /* (24-nov) Equip·ax: sus páginas viven en /administrativo/ pero son de Equip·ax,
+           con su propia barra (también Checklists y Evaluaciones, que no traían). */
+        for (const [ruta, activo] of [['/administrativo/horarios.html', 'Horarios'], ['/administrativo/checklists.html', 'Checklists']]) {
+            await ir(p, ruta);
+            await caso('Equip·ax, ' + ruta + ': «Sub módulos» con las seis herramientas del equipo', async () => {
+                await p.click('#navToggleBtn');
+                const r = await p.evaluate(() => ({ links: [...document.querySelectorAll('#nav .etx-nav-equipo a.nav-link .nav-text')].map(x => x.textContent),
+                    activo: (document.querySelector('#nav .etx-nav-equipo a.nav-link.active .nav-text') || {}).textContent,
+                    staffAdm: !!document.querySelector('#nav a[href$="diario.html"]') }));
+                assert.deepEqual(r, { links: ['Catálogo', 'Horarios', 'Checklists', 'Organigrama', 'Perfiles de puesto', 'Evaluaciones'], activo, staffAdm: false });
+                await p.keyboard.press('Escape');
+            });
+        }
+        await caso('Equip·ax: «Cambiar módulo» lo marca como el módulo actual (Módulo 4)', async () => {
+            await p.click('#etxCambiarModulo');
+            const r = await p.evaluate(() => { const b = document.querySelector('#etxModuleDialog [data-modulo="equipo"]'); return b && [b.getAttribute('aria-current'), b.textContent.replace(/\s+/g, ' ').trim()]; });
+            assert.ok(r && r[0] === 'true' && /Módulo 4/.test(r[1]) && /Equip·ax/.test(r[1]), JSON.stringify(r));
+            await p.keyboard.press('Escape');
+        });
         await ir(p, '/hub.html');
         await caso('hub: la misma isla, con «Tu espacio de trabajo» dentro y sin rótulo del negocio, plan ni «Información de sucursal»', async () => {
             const r = await p.evaluate(() => {

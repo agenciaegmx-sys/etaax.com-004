@@ -736,6 +736,8 @@ window.etaaxPerm = function (negId, rol, path, sucId) {
         [/\/administrativo\/perfiles-puesto/,   'staff'],
         [/\/administrativo\/evaluaciones/,      'staff'],
         [/\/administrativo\/staff/,             'staff'],
+        // (24-nov) La portada de Equip·ax: el módulo del equipo.
+        [/\/equipo(\/|$)/,                      'staff'],
         // permisos.html NO va aquí: la página se protege sola con el
         // candado de contraseña de administrador (solo dueño/admin)
         [/\/recetas\/insumos/,                  'insumos'],

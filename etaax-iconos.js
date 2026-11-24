@@ -109,6 +109,8 @@
         'sh-cambiar-sucursal': ['0 0 24 24', '<g stroke-width="1.8"><path d="M12.5 8.5c0 3.6-5.25 8.5-5.25 8.5S2 12.1 2 8.5a5.25 5.25 0 0 1 10.5 0Z"/><circle class="etx-punto" stroke="none" cx="7.25" cy="8.3" r="1.8"/><path class="etx-trazo" d="M14.5 8h7.5m-3-3 3 3-3 3M22 17h-7.5m3-3-3 3 3 3"/></g>'],
         'sh-matriz': ['0 0 24 24', '<g stroke-width="1.8"><path d="M19 10c0 5-7 12-7 12S5 15 5 10a7 7 0 0 1 14 0Z"/><circle class="etx-punto" stroke="none" cx="12" cy="9" r="2.5"/></g>'],
         'mod-aprende-analiza': ['0 0 24 24', '<g stroke-width="1.8"><path d="M12 5C8 2 4 3 2 4v15c3-1 7-1 10 2 3-3 7-3 10-2V4c-2-1-6-2-10 1Zm0 0v16M5 8h4m-4 4h4"/><path class="etx-trazo" d="M15 15v-3m3 3V8"/></g>'],
+        /* (24-nov) Equip·ax: el equipo (RH) ya es módulo propio. */
+        'mod-equipax': ['0 0 24 24', '<g stroke-width="1.8"><circle cx="12" cy="7.5" r="3.2"/><path d="M5.8 21v-1.2a6.2 6.2 0 0 1 12.4 0V21"/><path class="etx-trazo" d="M6.2 11.2a2.6 2.6 0 1 1 .9-5M17.8 11.2a2.6 2.6 0 1 0-.9-5M1.5 19a4.6 4.6 0 0 1 3.2-4.4M22.5 19a4.6 4.6 0 0 0-3.2-4.4"/></g>'],
         'mod-control-administrativo': ['0 0 24 24', '<g stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M8 2v4m8-4v4M3 9h18M7 13h3m-3 4h3"/><path class="etx-trazo" d="m13 16 2 2 4-5"/></g>'],
         'mod-recetas-insumos': ['0 0 24 24', '<g stroke-width="1.8"><path d="M2 3h11v17H5a3 3 0 0 1-3-3V3Zm0 13h11M6 7h3m-3 4h3M15 12l4-2 4 2v8l-4 2-4-2v-8Zm0 0 4 2 4-2"/><path class="etx-trazo" d="M19 14v8"/></g>'],
         'mod-salud-financiera': ['0 0 24 24', '<g stroke-width="1.8"><path d="M3 3v18h19M6 17v-4m4 4V9m4 8V5"/><path class="etx-trazo" d="M17 9h2l1-3 2 6"/></g>'],

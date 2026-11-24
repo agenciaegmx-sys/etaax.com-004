@@ -98,15 +98,19 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         await Promise.all([page.waitForNavigation(), page.evaluate(() => entrarSucursal('suc_principal', 'A'))]);
         await page.waitForFunction(() => document.getElementById('viewModulos').style.display !== 'none' && document.querySelector('#hubModuloDock [data-modulo]:not([hidden])'));
         await page.waitForTimeout(500);
-        await caso('en la Matriz (solo Cost·ax) el dock NO trae Salud financiera: ni apagada, simplemente no está', async () => {
+        /* (24-nov) Equip·ax es módulo propio. Su catálogo de colaboradores va en
+           TODOS los planes (es lo que da acceso a la gente), así que Equip·ax se
+           ve aun sin la app; Admin·ax (todo de Fin·ax) ya no. */
+        await caso('en la Matriz (solo Cost·ax) el dock NO trae Fin·ax ni Admin·ax: ni apagados, simplemente no están', async () => {
             const vis = await page.evaluate(() => [...document.querySelectorAll('#hubModuloDock [data-modulo]')].filter(t => !t.hidden).map(t => t.dataset.modulo));
-            assert.deepEqual(vis, ['administrativo', 'recetas', 'consultoria']);
+            assert.deepEqual(vis, ['recetas', 'equipo', 'consultoria']);
             assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('hub-tab-financiero')).display), 'none');
+            assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('hub-tab-administrativo')).display), 'none');
         });
-        await caso('…y en Control administrativo solo queda Gestión de colaboradores (sin «Sin acceso para tu rol»)', async () => {
-            await page.evaluate(() => etaaxSeleccionarModulo('administrativo'));
+        await caso('…y Equip·ax queda con su guía del equipo (sin «Sin acceso para tu rol»)', async () => {
+            await page.evaluate(() => etaaxSeleccionarModulo('equipo'));
             const filas = await page.evaluate(() => [...document.querySelectorAll('#hubHerramientasTarjetas .hub-tool-fila h3')].map(h => h.textContent));
-            assert.deepEqual(filas, ['Gestión de colaboradores']);
+            assert.deepEqual(filas, ['Gestión del equipo']);
             assert.equal(await page.evaluate(() => document.body.innerText.indexOf('Sin acceso para tu rol')), -1);
         });
         await caso('los módulos se numeran por lo que se ve', async () =>
@@ -117,6 +121,12 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         await caso('pagar nómina es de Equip·ax: en la Matriz no, en Tulum (paquete) sí', async () => {
             assert.equal(await page.evaluate(() => etaaxPuedeSub('gastos', 'nominas')), false);
             assert.equal(await page.evaluate(() => etaaxPermEnPlan('A', 'suc_tul', 'gastos', 'nominas')), true);
+        });
+        await page.goto(ORIGEN + '/equipo/index.html'); await page.waitForTimeout(1500);
+        await caso('la portada de Equip·ax sin la app: solo el catálogo de colaboradores (lo de RH no se enseña)', async () => {
+            assert.match(page.url(), /\/equipo\/index\.html/);
+            const vis = await page.evaluate(() => [...document.querySelectorAll('.cf-card[data-perm]')].filter(a => a.offsetParent).map(a => a.dataset.perm));
+            assert.deepEqual(vis, ['verCatalogo']);
         });
         await page.goto(ORIGEN + '/financiero/kpis.html'); await page.waitForURL(/hub\.html/, { timeout: 8000 }).catch(() => {});
         await caso('un enlace directo a Salud financiera regresa al hub, también al dueño', async () => assert.match(page.url(), /hub\.html/));
