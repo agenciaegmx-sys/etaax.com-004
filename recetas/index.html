@@ -12,8 +12,8 @@
     <!-- Presentación inicial: descargar antes de llegar a los scripts del final. -->
     <link rel="preload" as="script" href="/etaax-iconos.js?v=ce96904d">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=5844cd7a">
-    <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=230ef5e8">
+    <link rel="preload" as="script" href="/etaax-header.js?v=412dbfd1">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=edba343c">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
     <link rel="preload" as="script" href="/recetas/recetas-ui.js?v=91eddf64">
 
@@ -540,7 +540,7 @@
                     <span class="etx-tool-cta">Crear preparación →</span>
                 </button>
                 <!-- (24-nov) El Menú de la sucursal se mudó aquí desde Control administrativo. -->
-                <button id="btnMenuSucursal" onclick="location.href='../administrativo/menu.html'" class="cat-btn">
+                <button id="btnMenuSucursal" onclick="abrirMenuSucursal()" class="cat-btn">
                     <span class="etx-tool-icon" aria-hidden="true"></span>
                     <span class="cat-btn-title">Menú de la sucursal</span>
                     <span class="cat-btn-desc">La carta activa: platillos, bebidas, precios y el QR de las mesas.</span>
@@ -3039,6 +3039,12 @@ window.addEventListener('scroll', function (e) {
     if (m && (!e.target || !e.target.nodeType || !m.contains(e.target))) m.style.display = 'none';
 }, true);
 window.addEventListener('resize', function () { var m = document.getElementById('insumoMenu'); if (m) m.style.display = 'none'; });
+/* El Menú de la sucursal se abre en la MISMA ventana flotante que el catálogo
+   de insumos: se queda uno en Escandallos (Edwin, 24-nov). */
+function abrirMenuSucursal() {
+    if (typeof abrirEditorEnModal === 'function') abrirEditorEnModal('../administrativo/menu.html?solo=1', 'Menú de la sucursal');
+    else location.href = '../administrativo/menu.html';
+}
 function abrirInsumoDesde(modo) {
     var m = document.getElementById('insumoMenu'); if (m) m.style.display = 'none';
     var url = { globalneg:'insumos.html?solo=1&globalneg=1', etaax:'insumos.html?solo=1&etaax=1', nuevo:'insumos.html?solo=1&nuevo=1' }[modo];
@@ -5027,8 +5033,8 @@ window.addEventListener('load', function() {
 <script src="/etaax-iconos.js?v=ce96904d"></script>
 <script src="/etaax-sidebar.js?v=5844cd7a"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
-<script src="/etaax-header.js?v=15a5a6ef"></script>
-<script src="/etaax-modulos-ui.js?v=230ef5e8"></script>
+<script src="/etaax-header.js?v=412dbfd1"></script>
+<script src="/etaax-modulos-ui.js?v=edba343c"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 <script src="/recetas/recetas-ui.js?v=91eddf64"></script>
 </body>

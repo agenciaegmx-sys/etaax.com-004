@@ -76,7 +76,11 @@
             '.etx-hd-marca img{height:19px;display:block;}',
             '.etx-hd-que{font-size:11px;line-height:1.3;color:var(--ui-apagado,var(--text-muted,#9a948b));',
             '  border-left:1px solid var(--ui-borde,var(--border,#2e2c29));padding-left:12px;}',
-            '.etx-hd-centro{flex:1;display:flex;justify-content:center;}',
+            '.etx-hd-centro{flex:1;display:flex;justify-content:center;align-items:center;gap:8px;}',
+            /* Atrás / Adelante, junto a «Módulos» (Edwin, 24-nov): antes iban en la
+               tarjeta del negocio, chiquitos y con trazo delgado. */
+            '.etx-hd-nav{padding:8px;min-width:40px;justify-content:center;}',
+            '.etx-hd-nav svg{width:18px;height:18px;}',
             '.etx-hd-der{display:flex;align-items:center;gap:10px;flex-shrink:0;}',
             /* Botones: todos iguales, porque todos hacen lo mismo — llevar a
                algún lado. El de inicio lleva texto; los demás, solo dibujo. */
@@ -209,7 +213,9 @@
                 '<div class="etx-hd-que">ERP para alimentos<br>y bebidas</div>' +
             '</div>' +
             '<div class="etx-hd-centro">' +
+                (opc.nav ? '<button type="button" class="etx-hd-btn etx-hd-nav" id="etxHdAtras" title="Atrás" aria-label="Atrás"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>' : '') +
                 '<a class="etx-hd-btn" href="' + esc(inicio) + '">' + ic('hd-inicio', 18) + esc(inicioTexto) + '</a>' +
+                (opc.nav ? '<button type="button" class="etx-hd-btn etx-hd-nav" id="etxHdAdelante" title="Adelante" aria-label="Adelante"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></button>' : '') +
             '</div>' +
             '<div class="etx-hd-der">' +
                 '<button class="etx-hd-btn etx-hd-icon" id="etxHdTema" title="Tema">' + ic(_icTema(), 18) + '</button>' +
@@ -247,6 +253,11 @@
                 (activa ? '<button class="etx-hd-op sale" id="etxHdSalirOp">' + ic('cerrar-sesion', 18) + 'Cerrar sesión</button>' : '') +
             '</div>';
 
+        /* Atrás / Adelante: la página puede tener su propia regla (Escandallos
+           cierra primero la carátula abierta, ctxNavBack); si no, el historial. */
+        var _atr = document.getElementById('etxHdAtras'), _ade = document.getElementById('etxHdAdelante');
+        if (_atr) _atr.onclick = function () { if (typeof window.ctxNavBack === 'function') window.ctxNavBack(); else history.back(); };
+        if (_ade) _ade.onclick = function () { if (typeof window.ctxNavForward === 'function') window.ctxNavForward(); else history.forward(); };
         var menu = document.getElementById('etxHdMenu');
         var cerrar = function () {
             var m = document.getElementById('etxHdMenu'), b = document.getElementById('etxHdCuenta');

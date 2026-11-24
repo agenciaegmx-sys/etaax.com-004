@@ -261,13 +261,13 @@
             '<div class="ctx-neg-name">' + (contextoGlobal ? '' : ic('sh-matriz',18)) + '<span>' + esc(titulo) + '</span></div>' +
             '<div class="ctx-neg-tipo">' + esc(contextoGlobal ? 'Global · todas las sucursales' : (giro ? giro.nom : opciones.tipo)) + '</div></div>' +
             '<div class="ctx-presencia" id="ctxPresencia"></div>' +
-            '<div class="ctx-nav-btns"><button class="ctx-btn ctx-btn-icon" onclick="history.back()" aria-label="Atrás">←</button><button class="ctx-btn ctx-btn-icon" onclick="history.forward()" aria-label="Adelante">→</button></div>' +
+            /* Atrás / Adelante ya no van aquí: subieron al encabezado, junto a «Módulos» (24-nov). */
             '<div class="ctx-right"><span class="ctx-badge-plan">' + esc(ctx.userBadge || 'Mi negocio') + '</span>' +
             (contextoGlobal ? '<a class="ctx-btn" href="' + esc(volver) + '">Ir al negocio ' + ic('flecha',18) + '</a>' :
             (ctx.ctxType !== 'staff' ? '<button type="button" class="ctx-btn" id="etxCambiarSucursal" aria-haspopup="dialog">' + ic('sh-matriz',20) + 'Cambiar sucursal</button>' : '') +
             '<button type="button" class="ctx-btn" id="etxCambiarModulo">' + ic('sh-cambiar-negocio',20) + 'Cambiar módulo ' + ic('hd-desplegar',14) + '</button><button type="button" class="ctx-btn" id="etxInfoSucursal">' + ic('sh-info-sucursal',20) + 'Información de sucursal</button>') + '</div></div>';
-        if (opciones.editorNav) bar.querySelector('.ctx-nav-btns').replaceWith(opciones.editorNav);
-        if (typeof window.etaaxHeader === 'function') window.etaaxHeader({marcaBase:'/marca/hub',usuario:ctx.userName,negocio:ctx.negNombre,plan:ctx.userBadge,inicio:'/hub.html',inicioTexto:'Módulos',cerrarSesion:window.ctxSalir});
+        if (opciones.editorNav && opciones.editorNav.remove) opciones.editorNav.remove();   // las de Escandallos también van en el encabezado
+        if (typeof window.etaaxHeader === 'function') window.etaaxHeader({marcaBase:'/marca/hub',usuario:ctx.userName,negocio:ctx.negNombre,plan:ctx.userBadge,inicio:'/hub.html',inicioTexto:'Módulos',nav:true,cerrarSesion:window.ctxSalir});
         var cambiar = bar.querySelector('#etxCambiarModulo'), info = bar.querySelector('#etxInfoSucursal');
         if (cambiar) cambiar.onclick = abrirModulos;
         if (info) info.onclick = abrirInfoSucursal;

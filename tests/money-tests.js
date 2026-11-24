@@ -18651,7 +18651,12 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
     test('el Menú de la sucursal es una tarjeta dentro de Escandallos (junto a «Receta simple»)', () => {
         const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
         const i = rec.indexOf('id="btnEscSimple"'), j = rec.indexOf('id="btnMenuSucursal"');
-        return eq(i > -1 && j > i && j - i < 1200 && /location\.href='\.\.\/administrativo\/menu\.html'/.test(rec), true);
+        return eq(i > -1 && j > i && j - i < 1200 && /onclick="abrirMenuSucursal\(\)"/.test(rec) &&
+                  /abrirEditorEnModal\('\.\.\/administrativo\/menu\.html\?solo=1'/.test(rec), true);   // ventana flotante: se queda en Escandallos
+    });
+    test('…la página del Menú sabe abrirse en ventana (embed.js, sin su barra ni encabezado)', () => {
+        const mn = fs.readFileSync(path.join(RAIZ, 'administrativo/menu.html'), 'utf8');
+        return eq(mn.indexOf('/embed.js') > -1 && mn.indexOf('/embed.js') < mn.indexOf('/page-guard.js'), true);
     });
     test('…y ya no está en Control administrativo, ni en las barras laterales, ni en el hub', () => {
         const adm = fs.readFileSync(path.join(RAIZ, 'administrativo/index.html'), 'utf8');
@@ -18668,6 +18673,11 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const app = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
         const i = app.indexOf('function renderTabla('), cuerpo = app.slice(i, app.indexOf('\nfunction ', i + 10));
         return eq(/const _focoAntes = _ingFocoActual\(\);/.test(cuerpo) && /_ingFocoRestaurar\(_focoAntes\);/.test(cuerpo) && /setTimeout\(poner, 0\)/.test(app), true);
+    });
+    test('Atrás / Adelante van en el encabezado junto a «Módulos», ya no en la tarjeta del negocio', () => {
+        const hd = fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8'), mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        return eq(/id="etxHdAtras"/.test(hd) && /id="etxHdAdelante"/.test(hd) && /window\.ctxNavBack\(\); else history\.back\(\)/.test(hd) &&
+                  /inicioTexto:'Módulos',nav:true/.test(mu) && !/class="ctx-nav-btns"/.test(mu), true);
     });
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
