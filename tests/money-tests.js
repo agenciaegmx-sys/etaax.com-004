@@ -18687,11 +18687,17 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const n = (t, sep) => ['Admin·ax', 'Cost·ax', 'Fin·ax', 'Learn·ax'].every(x => t.indexOf('nombre' + sep + "'" + x + "'") > -1);
         return eq(n(hubm, ': ') && n(mu, ':'), true);
     });
+    test('…al bajar, la isla se encoge a un círculo con la inicial y la franja de arriba se desvanece', () => {
+        const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8'), css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8');
+        return eq(/isla\.classList\.toggle\('etx-isla--mini', leer\(\) > 24\)/.test(mu) && /\.etx-isla\.etx-isla--mini \.etx-isla-resto \{ max-width:0; opacity:0; \}/.test(css) &&
+                  /calc\(100% - 18px\), transparent 100%\)/.test(css), true);
+    });
     test('…y cada portada trae solo su nombre en la isla', () => {
         const pags = [['administrativo/index.html', 'Admin'], ['recetas/index.html', 'Cost'], ['financiero/index.html', 'Fin'], ['consultoria/index.html', 'Learn']];
         return eq(pags.every(([f, nom]) => {
             const t = fs.readFileSync(path.join(RAIZ, f), 'utf8');
-            return t.indexOf('<span class="etx-isla-nombre">' + nom + '<span class="etx-isla-punto">·</span>ax</span>') > -1 && !/class="cf-hero-(eyebrow|sub)"/.test(t);
+            return t.indexOf('<span class="etx-isla-nombre"><span class="etx-isla-ini">' + nom[0] + '</span><span class="etx-isla-resto">' + nom.slice(1) + '<span class="etx-isla-punto">·</span>ax</span></span>') > -1 &&
+                   !/class="cf-hero-(eyebrow|sub)"/.test(t) && !/etx-isla-ic/.test(t);
         }), true);
     });
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {

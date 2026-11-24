@@ -381,7 +381,19 @@
             if (slot && nombre) {slot.innerHTML = ic(nombre,30);slot.setAttribute('aria-hidden','true');}
         });
     }
+    /* La isla del nombre del módulo: al bajar se encoge a un círculo con la
+       inicial (en el pasillo entre las tarjetas); arriba vuelve a decir todo. */
+    function vigilarIsla() {
+        var isla = document.querySelector('.etx-isla'); if (!isla) return;
+        document.body.classList.add('etx-con-isla');
+        var cont = isla.closest('#moduloLanding');
+        var leer = function () { return cont ? cont.scrollTop : (window.pageYOffset || document.documentElement.scrollTop || 0); };
+        var pintar = function () { isla.classList.toggle('etx-isla--mini', leer() > 24); };
+        (cont || window).addEventListener('scroll', pintar, { passive: true });
+        pintar();
+    }
     function iniciar() {
+        try { vigilarIsla(); } catch (e) {}
         pintarTarjetas();
         if (embebido) return;
         document.querySelectorAll('.theme-toggle').forEach(function(b){b.remove();});
