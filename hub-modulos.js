@@ -5,20 +5,20 @@
     var dock = document.getElementById('hubModuloDock');
     if (!dock) return;
     var MODULOS = [
-        { id: 'recetas', portada: 'recetas/index.html', nombre: 'Cost·ax', icono: 'mod-recetas-insumos', descripcion: 'Costea recetas y controla las materias primas de esta sucursal.', herramientas: [
+        { id: 'recetas', portada: 'recetas/index.html', nombre: 'Cost·ax', icono: 'mod-recetas-insumos', descripcion: 'Costea tus recetas y controla insumos, inventarios, requisiciones y proveedores.', herramientas: [
             { nombre: 'Escandallos', clave: 'escandallos', ruta: 'recetas/index.html?escandallos=1', icono: 'mod-escandallos', etiqueta: 'Costeo', permiso: ['recetas'], descripcion: 'Costea tus recetas, revisa el precio aplicado y consulta su rentabilidad.', funciones: ['Consultar recetas y costos, o crear una preparación', 'Receta de alimentos: datos, ingredientes y procedimiento', 'Receta de bebidas: preparación, rendimiento y costos', 'Sub-receta de alimentos: envasado, vida útil y rendimiento', 'Sub-receta de bebidas: bases, almacenamiento y costos', 'Receta simple: empieza con el nombre y sus ingredientes', 'El catálogo: buscar, filtrar y ordenar tus recetas'] },
             { nombre: 'Insumos', clave: 'insumos', ruta: 'recetas/insumos.html', icono: 'mod-insumos', etiqueta: 'Abastecimiento', permiso: ['insumos'], descripcion: 'Organiza materias primas, presentaciones y costos por proveedor.', funciones: ['El catálogo: buscar, filtrar y consultar tus insumos', 'Ficha técnica: presentaciones, proveedor y costo base', 'Editar insumo: foto, datos y presentaciones', 'Cambiar el tipo de insumo', 'Costeo: precios por copa o botella y niveles de stock', 'Agregar insumo: elige su tipo', 'Catálogo global ETAAX: encuentra y agrega productos'] },
             { nombre: 'Inventarios', clave: 'inventarios', ruta: 'recetas/inventarios.html', icono: 'mod-inventarios', etiqueta: 'Abastecimiento', permiso: ['inventarios'], descripcion: 'Controla existencias por área y registra entradas, salidas y movimientos.', funciones: ['El catálogo: inventarios, áreas y capital en existencias', 'QR de entradas: registrar movimientos desde el celular', 'Reporte de existencias y capital por área', 'Productos compuestos: unir presentaciones del mismo producto', 'Historial de entradas, mermas y cortesías', 'Nuevo inventario: sucursal, área y existencia de referencia', 'Capturar existencias: buscar productos y revisar pendientes'] },
             { nombre: 'Requisiciones', clave: 'requisiciones', ruta: 'recetas/requisiciones.html', icono: 'mod-requisiciones', etiqueta: 'Abastecimiento', permiso: ['requisiciones'], descripcion: 'Gestiona pedidos internos y compras entre áreas y sucursales.', funciones: ['Existencias: búsqueda rápida y seguimiento de pendientes', 'Lista completa: stock, existencia actual y pedido final', 'Proyección del pedido por área y proveedor', 'Pedido y exportación: compra contra venta y formatos de salida'] },
             { nombre: 'Proveedores', clave: 'proveedores', ruta: 'administrativo/proveedores.html', icono: 'cat-proveedores', etiqueta: 'Directorios', permiso: ['proveedores'], descripcion: 'Organiza contactos y condiciones de abastecimiento del negocio.', funciones: ['El directorio: contactos, sucursal y forma de pago', 'Agregar proveedor: contacto, pago, facturación y expediente', 'El proveedor guardado en el directorio'] }
         ]},
-        { id: 'administrativo', portada: 'administrativo/index.html', nombre: 'Admin·ax', icono: 'mod-control-administrativo', descripcion: 'Registra y coordina la operación diaria de esta sucursal.', herramientas: [
+        { id: 'administrativo', portada: 'administrativo/index.html', nombre: 'Admin·ax', icono: 'mod-control-administrativo', descripcion: 'Registra la operación del día: ingresos, egresos, caja fuerte, cuentas bancarias y clientes.', herramientas: [
             { nombre: 'Ingresos, egresos y caja', clave: 'diario', ruta: 'administrativo/diario.html', icono: 'mod-control-administrativo', etiqueta: 'Captura diaria', permiso: ['ventas', 'gastos'], descripcion: 'Registra cortes, gastos, depósitos y los movimientos de tu operación.', funciones: ['Todo lo que puedes hacer aquí', 'Los cortes del período, con su venta y su resguardo', 'Capturar el corte del día, forma de pago por forma de pago', 'Los gastos del día, con factura y evidencia', 'Registrar un gasto: método, previsión y comprobante', 'Pagar las nóminas del período', 'Gastos fijos: renta, servicios y obligaciones del mes', 'Depósitos, retiros y dinero apartado en previsiones', 'Ventas especiales y anticipos, fuera de la operación diaria', 'Caja fuerte: efectivo acumulado, bancos y tarjetas'] },
             { nombre: 'Cuentas bancarias', clave: 'cuentas', ruta: 'financiero/cuentas-bancarias.html', icono: 'fin-cuentas-bancarias', etiqueta: 'Cuentas', permiso: ['financiero'], descripcion: 'Administra las cuentas y comisiones bancarias de esta sucursal.', funciones: ['Saldo por cuenta', 'Comisiones reales del corte', 'Conciliación bancaria'] },
             { nombre: 'Previsiones', clave: 'previsiones', ruta: 'financiero/previsiones.html', icono: 'fin-previsiones', etiqueta: 'Planeación', permiso: ['financiero'], descripcion: 'Planea compromisos futuros y da seguimiento al dinero apartado.', funciones: ['Compromisos futuros', 'Dinero ya apartado', 'Seguimiento de pagos'] },
             { nombre: 'Clientes', clave: 'clientes', ruta: 'administrativo/clientes.html', icono: 'cat-clientes', etiqueta: 'Directorios', permiso: ['clientes'], descripcion: 'Mantén los datos y notas de tus clientes frecuentes.', funciones: ['El directorio: clientes, teléfono y correo', 'Nuevo cliente: contacto, notas y sucursal', 'El cliente guardado, con sus datos y notas'] }
         ]},
-        { id: 'financiero', portada: 'financiero/index.html', nombre: 'Fin·ax', icono: 'mod-salud-financiera', descripcion: 'Consulta los resultados y la rentabilidad de esta sucursal.', herramientas: [
+        { id: 'financiero', portada: 'financiero/index.html', nombre: 'Fin·ax', icono: 'mod-salud-financiera', descripcion: 'Mide los resultados del negocio: ventas, gastos, utilidad, KPIs y estadísticas.', herramientas: [
             { nombre: 'Resumen financiero', clave: 'resumen', ruta: 'financiero/resumen.html', icono: 'fin-resumen-resultados', etiqueta: 'Resultados', permiso: ['financiero'], descripcion: 'Revisa ventas, egresos y utilidad del periodo en una sola vista.', funciones: ['Ingresos y egresos del periodo', 'Utilidad y margen', 'Comparativo entre sucursales'] },
             { nombre: 'Ventas totales', clave: 'ventas', ruta: 'financiero/ventas.html', icono: 'fin-ventas', etiqueta: 'Ingresos', permiso: ['financiero'], descripcion: 'Consulta tus ingresos, metas y avance de ventas por periodo.', funciones: ['Ventas por día, semana o mes', 'Meta y cumplimiento', 'Histórico semanal'] },
             { nombre: 'Gastos totales', clave: 'gastos', ruta: 'financiero/gastos-globales.html', icono: 'fin-gastos', etiqueta: 'Egresos', permiso: ['financiero'], descripcion: 'Revisa gastos fijos, variables y nóminas con sus desgloses.', funciones: ['Fijos, variables y nómina', 'Desglose por categoría', 'Egresos de todo el negocio'] },
@@ -28,10 +28,10 @@
         /* (24-nov) Equip·ax: el equipo dejó de ser un submódulo de Admin·ax. Su fila
            es el recorrido de las ocho capturas de Gestión de Staff: catálogo, rol
            semanal, checklists y su QR, organigrama, perfiles y evaluaciones. */
-        { id: 'equipo', portada: 'equipo/index.html', nombre: 'Equip·ax', icono: 'mod-equipax', descripcion: 'Organiza a tu equipo: colaboradores, turnos, rutinas, puestos y evaluaciones.', herramientas: [
+        { id: 'equipo', portada: 'equipo/index.html', nombre: 'Equip·ax', icono: 'mod-equipax', descripcion: 'Organiza a tu equipo: colaboradores, horarios, checklists, evaluaciones y puestos.', herramientas: [
             { nombre: 'Gestión del equipo', clave: 'staff', ruta: 'equipo/index.html', icono: 'mod-equipax', etiqueta: 'Equipo', permiso: ['staff'], descripcion: 'Consulta personal, nóminas, horarios, perfiles y evaluaciones.', funciones: ['Todo lo que hay en Equip·ax', 'El catálogo: puesto, rol de acceso y pago de nómina', 'El rol semanal, con la cobertura de cada día', 'Checklists de apertura, cierre y limpieza', 'Su QR: el colaborador entra con su NIP y queda su firma', 'El organigrama: quién reporta a quién', 'Perfiles de puesto, listos para imprimir', 'Evaluaciones tipo formulario, con puntuación automática'] }
         ]},
-        { id: 'consultoria', portada: 'consultoria/index.html', nombre: 'Learn·ax', icono: 'mod-aprende-analiza', descripcion: 'Aprende a usar ETAAX y explora tus productos, metas y escenarios.', herramientas: [
+        { id: 'consultoria', portada: 'consultoria/index.html', nombre: 'Learn·ax', icono: 'mod-aprende-analiza', descripcion: 'Aprende a usar ETAAX y analiza tus productos, metas y escenarios.', herramientas: [
             { nombre: 'Guías de uso', clave: 'guias', ruta: 'consultoria/guias.html', icono: 'mod-aprende-analiza', etiqueta: 'Aprende', permiso: [], descripcion: 'Consulta los manuales de ETAAX para aprovechar sus herramientas.', funciones: ['Manuales en PDF', 'Paso a paso por módulo', 'Material para tu equipo'] },
             { nombre: 'Ventas por producto', clave: 'ventas-productos', ruta: 'consultoria/ventas-productos.html', icono: 'fin-estadisticas', etiqueta: 'Analiza', permiso: ['ventas_productos'], descripcion: 'Compara periodos y descubre qué productos aportan más a tus ventas.', funciones: ['Qué producto vende más', 'Comparativo de periodos', 'Aporte de cada uno a la venta'] },
             { nombre: 'Simulador de metas', clave: 'simulador', ruta: 'consultoria/simulador-kpis.html', icono: 'fin-kpis', etiqueta: 'Planeación', permiso: ['financiero'], descripcion: 'Explora las ventas, comensales y cheque promedio necesarios para tus metas.', funciones: ['Meta de venta del mes', 'Comensales y cheque necesarios', 'Escenarios lado a lado'] }
@@ -205,13 +205,92 @@
         return '<button type="button" class="hub-module-tab" id="hub-tab-' + m.id + '" data-modulo="' + m.id + '" role="tab" aria-controls="hubHerramientas" aria-selected="false" tabindex="-1" disabled>' +
             '<span class="hub-module-icon" aria-hidden="true">' + icono(m.icono, 38) + '</span><span class="hub-module-numero">Módulo ' + (i + 1) + '</span><span class="hub-module-nombre">' + islaNombre(m.nombre) + '</span></button>';
     }).join('');
-    function mostrarSeleccion() {
-        var tab = dock.querySelector('[aria-selected="true"]');
-        if (!tab || !marcoDock.getClientRects().length) return;
-        if (tab.offsetLeft < marcoDock.scrollLeft + 14 || tab.offsetLeft + tab.offsetWidth > marcoDock.scrollLeft + marcoDock.clientWidth - 14) {
-            marcoDock.scrollLeft = Math.max(0, tab.offsetLeft - 14);
-        }
+    /* ══ LA MEDIA LUNA DE MÓDULOS (Edwin, 24-nov) ══════════════════════════════
+       Como la barra de apps de una Mac, en arco: el módulo elegido queda SIEMPRE
+       al centro; los demás se van a los lados más chicos, girados, más abajo y
+       difuminados, como en un carrusel 3D. NO da la vuelta: es media luna, con
+       tope a la izquierda (el primero) y a la derecha (el último). Se gira con el
+       dedo (arrastrar), con las flechas de los lados, con el teclado o con el
+       trackpad, y tocar uno de los lados lo trae al centro. Lo que el plan o el
+       rol no permiten no entra (hidden). */
+    dock.classList.add('hub-rueda');
+    function visiblesRueda() { return Array.from(dock.querySelectorAll('[data-modulo]')).filter(function (t) { return !t.hidden; }); }
+    function pasoRueda() { return Math.max(128, Math.min(270, (dock.clientWidth || 800) * 0.25)); }
+    function indiceRueda(tabs) { var k = 0; tabs.forEach(function (t, i) { if (t.dataset.modulo === seleccionado) k = i; }); return k; }
+    function colocarRueda(arrastre) {
+        arrastre = arrastre || 0;
+        var tabs = visiblesRueda(), n = tabs.length; if (!n) return;
+        var k = indiceRueda(tabs), paso = pasoRueda();
+        /* El tope: arrastrar más allá del primero o del último apenas cede (como un resorte). */
+        var min = -k, max = n - 1 - k;
+        if (arrastre < min) arrastre = min - Math.min(.35, (min - arrastre) * .3);
+        if (arrastre > max) arrastre = max + Math.min(.35, (arrastre - max) * .3);
+        tabs.forEach(function (t, i) {
+            var p = i - k - arrastre, a = Math.abs(p);
+            t.style.transform = 'translate(-50%, -50%) translateX(' + (p * paso).toFixed(1) + 'px) translateY(' + (a * a * 9).toFixed(1) + 'px) ' +
+                                'translateZ(' + (-a * 150).toFixed(1) + 'px) rotateY(' + (-p * 30).toFixed(2) + 'deg) rotateZ(' + (p * 3).toFixed(2) + 'deg) ' +
+                                'scale(' + Math.max(.6, 1 - a * .1).toFixed(3) + ')';
+            t.style.opacity = Math.max(0, 1 - a * .3).toFixed(3);
+            t.style.filter = a > .05 ? 'blur(' + (a * 1.6).toFixed(2) + 'px)' : 'none';
+            t.style.zIndex = String(100 - Math.round(a * 10));
+        });
+        /* Las flechas se apagan en los topes. */
+        marcoDock.querySelectorAll('.hub-rueda-flecha').forEach(function (b) {
+            b.disabled = Number(b.dataset.dir) < 0 ? k <= 0 : k >= n - 1;
+        });
     }
+    function moverRueda(pasos) {
+        var tabs = visiblesRueda(), n = tabs.length; if (!n) return;
+        var k = indiceRueda(tabs), destino = Math.max(0, Math.min(n - 1, k + (pasos || 0)));   // con tope, sin dar la vuelta
+        if (destino === k) { colocarRueda(0); return; }
+        window.etaaxSeleccionarModulo(tabs[destino].dataset.modulo);
+    }
+    function mostrarSeleccion() { colocarRueda(0); }
+    /* Las flechas de los lados. */
+    [-1, 1].forEach(function (dir) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'hub-rueda-flecha'; b.dataset.dir = String(dir);
+        b.setAttribute('aria-label', dir < 0 ? 'Módulo anterior' : 'Módulo siguiente');
+        b.innerHTML = icono('flecha', 18);
+        b.addEventListener('click', function () { moverRueda(dir); });
+        marcoDock.appendChild(b);
+    });
+    /* Con el dedo (o el mouse): la rueda sigue al arrastre y, al soltar, se
+       queda en el módulo más cercano. Un toque sin arrastre es un clic. */
+    var arrastre = null, recienArrastro = false;
+    dock.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        arrastre = { x: e.clientX, dx: 0, id: e.pointerId, movio: false };
+    });
+    dock.addEventListener('pointermove', function (e) {
+        if (!arrastre || e.pointerId !== arrastre.id) return;
+        arrastre.dx = e.clientX - arrastre.x;
+        if (!arrastre.movio && Math.abs(arrastre.dx) > 8) {
+            arrastre.movio = true; dock.classList.add('hub-rueda-arrastre');
+            try { dock.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+        if (arrastre.movio) colocarRueda(-arrastre.dx / pasoRueda());
+    });
+    function soltarRueda() {
+        if (!arrastre) return;
+        var a = arrastre; arrastre = null;
+        dock.classList.remove('hub-rueda-arrastre');
+        if (!a.movio) return;
+        recienArrastro = true; setTimeout(function () { recienArrastro = false; }, 60);
+        moverRueda(Math.round(-a.dx / pasoRueda()));
+    }
+    dock.addEventListener('pointerup', soltarRueda);
+    dock.addEventListener('pointercancel', soltarRueda);
+    /* El trackpad: un deslizamiento de lado gira la rueda un lugar. */
+    var ruedaQuieta = 0;
+    dock.addEventListener('wheel', function (e) {
+        if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) || Math.abs(e.deltaX) < 20) return;
+        e.preventDefault();
+        if (Date.now() < ruedaQuieta) return;
+        ruedaQuieta = Date.now() + 380;
+        moverRueda(e.deltaX > 0 ? 1 : -1);
+    }, { passive: false });
+    window.addEventListener('resize', function () { colocarRueda(0); });
     function pintar() {
         cerrarCaptura(false);
         var activo = buscar(seleccionado);
@@ -261,7 +340,7 @@
            tarjeta y fuera del tablist. Comparte su portada y permisos. */
         if (ir) {
             ir.href = activo.portada;
-            ir.style.gridColumn = String(visibles.indexOf(activo) + 1);
+            ir.style.gridColumn = '';   // la rueda deja al elegido al centro: «Ir al módulo» va centrado debajo
             ir.setAttribute('aria-label', 'Ir al módulo ' + activo.nombre);
             var flecha = ir.querySelector('.hub-module-entry-arrow');
             if (flecha) flecha.innerHTML = icono('flecha', 16);
@@ -313,6 +392,7 @@
         pintar();
     };
     dock.addEventListener('click', function (e) {
+        if (recienArrastro) return;   // fue un arrastre de la rueda, no un toque
         var tab = e.target.closest('button[data-modulo]');
         if (tab && !tab.disabled) window.etaaxSeleccionarModulo(tab.dataset.modulo);
     });
@@ -322,7 +402,8 @@
         if (!opciones.length) return;
         e.preventDefault();
         var i = opciones.indexOf(document.activeElement);
-        var siguiente = e.key === 'Home' ? 0 : e.key === 'End' ? opciones.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + opciones.length) % opciones.length;
+        /* Media luna: con tope en los extremos, sin dar la vuelta. */
+        var siguiente = e.key === 'Home' ? 0 : e.key === 'End' ? opciones.length - 1 : Math.max(0, Math.min(opciones.length - 1, i + (e.key === 'ArrowRight' ? 1 : -1)));
         var tab = opciones[siguiente];
         window.etaaxSeleccionarModulo(tab.dataset.modulo);
         tab.focus({ preventScroll: true });

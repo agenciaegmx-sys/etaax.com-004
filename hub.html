@@ -339,7 +339,9 @@ body{ --ui-borde:#403d37; --ui-apagado:#b1aaa0; --ui-campo:#1a1916; }
 }
 .neg-card-nombre{font-size:15px;font-weight:600;color:var(--text);}
 .neg-card-meta{font-size:10px;color:var(--dim);margin-top:3px;letter-spacing:1px;text-transform:uppercase;}
-.neg-card-apps{font-size:11.5px;color:var(--cyan,#8ce4ee);margin-top:4px;font-weight:600;letter-spacing:.2px;}
+.neg-card-apps{font-size:11.5px;color:#3d9aa4;margin-top:4px;font-weight:600;letter-spacing:.2px;}
+/* (24-nov) En el azul petróleo de la isla dinámica (en oscuro, un tono que se lea). */
+[data-theme="light"] .neg-card-apps{color:#17525a;}
 .neg-card-arrow{margin-left:auto;font-size:18px;flex-shrink:0;}
 
 .btn-nuevo-neg{
@@ -631,7 +633,7 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
 </style>
 <link rel="stylesheet" href="/hub-paleta.css?v=0ae181b1">
 <link rel="stylesheet" href="/hub-globales.css?v=e52b7f71">
-<link rel="stylesheet" href="/hub-modulos.css?v=59ef0a9e">
+<link rel="stylesheet" href="/hub-modulos.css?v=ec6851b7">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 </head>
 <body class="hub-paleta">
@@ -4839,7 +4841,7 @@ async function guardarNuevaPassword(){
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
 <script src="/etaax-header.js?v=2721a8a2"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="/hub-interacciones.js?v=43cd2b2b"></script>
-<script src="/hub-modulos.js?v=2f539dc9"></script>
+<script src="/hub-modulos.js?v=215e805a"></script>
 <script src="security.js?v=c188734e"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>

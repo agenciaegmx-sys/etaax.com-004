@@ -259,3 +259,54 @@ body.hub-paleta .hub-captura-pie .etx-ic{width:20px;height:20px;}
 @media(prefers-reduced-motion:reduce){body.hub-paleta .hub-tool-fila{animation:none;transition:none;}}
 @media(prefers-reduced-motion:reduce){body.hub-paleta .hub-captura-dialogo[open]{animation:none;}body.hub-paleta :is(.hub-visor-marco,.hub-visor-ampliar){transition:none;}}
 @media(prefers-reduced-motion:reduce){body.hub-paleta .hub-acceso-aparece{animation:none;}body.hub-paleta .hub-ir-modulo{transition:none;}}
+
+/* ══ LA RUEDA DE MÓDULOS (Edwin, 24-nov) ═════════════════════════════════════
+   El elegido al centro, los demás a los lados: más chicos, girados, más
+   atrás y difuminados (rueda 3D amplia). Los bordes del escenario se
+   desvanecen. Las posiciones las pone hub-modulos.js (colocarRueda). */
+body.hub-paleta .hub-module-selector{position:relative;overflow:hidden;padding:16px 58px 18px;}
+body.hub-paleta .hub-module-dock.hub-rueda{display:block!important;position:relative;height:184px;perspective:1100px;transform-style:preserve-3d;
+  touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 16%,#000 84%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 16%,#000 84%,transparent 100%);}
+body.hub-paleta .hub-rueda.hub-rueda-arrastre{cursor:grabbing;}
+body.hub-paleta .hub-rueda .hub-module-tab{position:absolute;left:50%;top:50%;width:min(232px,44vw);height:150px;margin:0;
+  transition:transform .5s cubic-bezier(.2,.8,.2,1),opacity .4s ease,filter .4s ease;will-change:transform,opacity;backface-visibility:hidden;}
+body.hub-paleta .hub-rueda.hub-rueda-arrastre .hub-module-tab{transition:none;}
+/* Opacas: la del centro tapa a las de los lados (el tinte del elegido va sobre un fondo sólido). */
+body.hub-paleta .hub-rueda .hub-module-tab{background:var(--s2);}
+body.hub-paleta .hub-rueda .hub-module-tab[aria-selected="true"]{background:linear-gradient(var(--hub-brand-tint),var(--hub-brand-tint)),var(--s1);}
+body.hub-paleta .hub-rueda-flecha{position:absolute;top:calc(16px + 92px);transform:translateY(-50%);z-index:300;display:inline-flex;align-items:center;justify-content:center;
+  width:40px;height:40px;border-radius:50%;border:1px solid var(--hub-line);background:var(--s1);color:var(--text);cursor:pointer;
+  --etx-color:var(--hub-brand);box-shadow:0 6px 16px rgba(0,0,0,.12);}
+body.hub-paleta .hub-rueda-flecha:hover{border-color:var(--hub-brand);background:var(--hub-brand-tint);}
+body.hub-paleta .hub-rueda-flecha[data-dir="-1"]{left:10px;}
+body.hub-paleta .hub-rueda-flecha[data-dir="-1"] .etx-ic{transform:rotate(180deg);}
+body.hub-paleta .hub-rueda-flecha[data-dir="1"]{right:10px;}
+body.hub-paleta .hub-module-actions{display:flex!important;justify-content:center;margin-top:10px;}
+@media(max-width:720px){
+  body.hub-paleta .hub-module-selector{overflow:hidden;padding:12px 44px 16px;scroll-snap-type:none;}
+  body.hub-paleta .hub-module-dock.hub-rueda{height:168px;}
+  body.hub-paleta .hub-rueda .hub-module-tab{width:min(200px,58vw);height:138px;}
+  body.hub-paleta .hub-rueda-flecha{top:calc(12px + 84px);width:34px;height:34px;}
+  body.hub-paleta .hub-rueda-flecha[data-dir="-1"]{left:6px;}
+  body.hub-paleta .hub-rueda-flecha[data-dir="1"]{right:6px;}
+}
+@media(prefers-reduced-motion:reduce){body.hub-paleta .hub-rueda .hub-module-tab{transition:none;}}
+
+/* Las flechas, apagadas en los topes de la media luna. */
+body.hub-paleta .hub-rueda-flecha:disabled{opacity:.3;cursor:default;box-shadow:none;}
+body.hub-paleta .hub-rueda-flecha:disabled:hover{border-color:var(--hub-line);background:var(--s1);}
+/* ══ EL MÓDULO ELEGIDO, CENTRADO DEBAJO DE LA MEDIA LUNA (Edwin, 24-nov) ═══════
+   Su nombre y QUÉ SE HACE AHÍ —los nombres ·ax todavía no lo dicen—, en letra
+   mediana y en negritas, sin ícono (ya está en la tarjeta de la rueda). */
+body.hub-paleta .hub-herramientas{margin-top:18px;}
+body.hub-paleta .hub-herramientas-head{flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:4px;margin-bottom:26px;}
+body.hub-paleta .hub-herramientas-head>div{flex:none;max-width:640px;}
+body.hub-paleta .hub-herramientas-icon{display:none!important;}
+body.hub-paleta .hub-modulo-numero{margin-bottom:4px;}
+body.hub-paleta #hubModuloTitulo{font-size:20px;font-weight:700;letter-spacing:-.2px;margin:0 0 4px;}
+body.hub-paleta .hub-modulo-desc{font-size:14px;font-weight:600;line-height:1.5;color:var(--text);}
+@media(max-width:720px){
+  body.hub-paleta .hub-herramientas-head{align-items:center;}
+  body.hub-paleta #hubModuloTitulo{font-size:19px;}
+}

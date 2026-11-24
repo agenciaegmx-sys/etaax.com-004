@@ -18633,6 +18633,39 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
     });
     test('…y las barras de Admin·ax ya no lo traen (las arma NAVS: ni Proveedores ni Staff)', () =>
         eq(/proveedores|staff/.test(JSON.stringify(NAVS.administrativo)), false));
+    /* (24-nov) LA MEDIA LUNA DE MÓDULOS DEL HUB: el elegido siempre al centro, los
+       demás a los lados (girados, atrás, más abajo y difuminados), y NO da la
+       vuelta: tope a la izquierda y a la derecha. Se gira con flechas, arrastre,
+       teclado o trackpad. */
+    const hubR = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8');
+    test('hub: la media luna pone al elegido al centro y tiene tope en los extremos (no da la vuelta)', () => {
+        const i = hubR.indexOf('function colocarRueda('), f = hubR.slice(i, hubR.indexOf('\n    function moverRueda', i));
+        const m = hubR.indexOf('function moverRueda('), mv = hubR.slice(m, hubR.indexOf('\n    }', m));
+        return eq(/var p = i - k - arrastre/.test(f) && !/p -= n|p \+= n/.test(f) && /var min = -k, max = n - 1 - k;/.test(f) &&
+                  /b\.disabled = Number\(b\.dataset\.dir\) < 0 \? k <= 0 : k >= n - 1;/.test(f) &&
+                  /Math\.max\(0, Math\.min\(n - 1, k \+ \(pasos \|\| 0\)\)\)/.test(mv) && !/% n/.test(mv) && /rotateY\(/.test(f) && /blur\(/.test(f), true);
+    });
+    test('…el teclado también se detiene en los extremos', () =>
+        eq(/Math\.max\(0, Math\.min\(opciones\.length - 1, i \+ \(e\.key === 'ArrowRight' \? 1 : -1\)\)\)/.test(hubR), true));
+    test('…y debajo, centrado y sin ícono, el módulo elegido con lo que se hace ahí', () => {
+        const css = fs.readFileSync(path.join(RAIZ, 'hub-modulos.css'), 'utf8');
+        return eq(/\.hub-herramientas-head\{flex-direction:column;align-items:center;justify-content:center;text-align:center;/.test(css) &&
+                  /\.hub-herramientas-icon\{display:none!important;\}/.test(css) && /\.hub-modulo-desc\{font-size:14px;font-weight:600;/.test(css) &&
+                  /descripcion: 'Costea tus recetas y controla insumos, inventarios, requisiciones y proveedores\.'/.test(hubR), true);
+    });
+    test('…se gira con las flechas, arrastrando, con el teclado y con el trackpad', () =>
+        eq(/hub-rueda-flecha/.test(hubR) && /dock\.addEventListener\('pointermove'/.test(hubR) && /moverRueda\(Math\.round\(-a\.dx \/ pasoRueda\(\)\)\)/.test(hubR) &&
+           /dock\.addEventListener\('wheel'/.test(hubR) && /if \(recienArrastro\) return;/.test(hubR), true));
+    test('…e «Ir al módulo» va centrado debajo (ya no en la columna del elegido)', () =>
+        eq(/ir\.style\.gridColumn = '';/.test(hubR) && !/ir\.style\.gridColumn = String\(/.test(hubR), true));
+    test('las portadas de módulo: todas las tarjetas en dos columnas, bajitas y con su grupo adentro', () => {
+        const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8'), css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8');
+        return eq(/function portadaCompacta\(\)/.test(mu) && /sp\.className = 'etx-card-grupo'; sp\.textContent = grupo;/.test(mu) &&
+                  /\.cf-modules\.etx-portada-modulos \{display:grid!important;grid-template-columns:repeat\(2,minmax\(0,1fr\)\);column-gap:64px!important;/.test(css) &&
+                  /\.etx-portada-modulos \.cf-section-hdr \{display:none!important;\}/.test(css), true);
+    });
+    test('…«Paquete completo» de cada sucursal, en el azul petróleo de la isla', () =>
+        eq(/\[data-theme="light"\] \.neg-card-apps\{color:#17525a;\}/.test(fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8')), true));
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
         return eq(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(cuerpo) || !/_insMenuItem\('ins-editar'/.test(cuerpo), false);

@@ -267,6 +267,56 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             await p.keyboard.press('Escape');
             assert.equal(await p.evaluate(() => document.getElementById('btnCambiarSucursal').classList.contains('abierto')), false);
         });
+        /* (24-nov) La rueda de módulos: el elegido siempre al centro. */
+        const rueda = () => p.evaluate(() => {
+            const dock = document.getElementById('hubModuloDock').getBoundingClientRect(), sel = document.querySelector('#hubModuloDock [aria-selected="true"]');
+            const r = sel.getBoundingClientRect(), ir = document.getElementById('hubIrAlModulo').getBoundingClientRect();
+            return { id: sel.dataset.modulo, centro: Math.abs((r.left + r.right) / 2 - (dock.left + dock.right) / 2) < 3,
+                     irCentrado: Math.abs((ir.left + ir.right) / 2 - (r.left + r.right) / 2) < 3, irDebajo: ir.top >= r.bottom - 1 };
+        });
+        await p.evaluate(() => etaaxSeleccionarModulo('recetas')); await p.waitForTimeout(700);
+        await caso('hub: la rueda deja al módulo elegido al centro, con «Ir al módulo» centrado debajo', async () =>
+            assert.deepEqual(await rueda(), { id: 'recetas', centro: true, irCentrado: true, irDebajo: true }));
+        await caso('…la flecha de la derecha gira al siguiente (y queda al centro)', async () => {
+            await p.click('.hub-rueda-flecha[data-dir="1"]'); await p.waitForTimeout(700);
+            assert.deepEqual(await rueda(), { id: 'administrativo', centro: true, irCentrado: true, irDebajo: true });
+        });
+        await caso('…es media luna: en el primero la flecha izquierda se apaga y no da la vuelta', async () => {
+            await p.click('.hub-rueda-flecha[data-dir="-1"]'); await p.waitForTimeout(700);
+            assert.equal((await rueda()).id, 'recetas');
+            assert.equal(await p.evaluate(() => document.querySelector('.hub-rueda-flecha[data-dir="-1"]').disabled), true);
+        });
+        await caso('…y en el último se apaga la derecha', async () => {
+            await p.evaluate(() => etaaxSeleccionarModulo('consultoria')); await p.waitForTimeout(700);
+            assert.deepEqual(await p.evaluate(() => [document.querySelector('.hub-rueda-flecha[data-dir="1"]').disabled, document.querySelector('.hub-rueda-flecha[data-dir="-1"]').disabled]), [true, false]);
+        });
+        await caso('…debajo, centrado y sin ícono: el nombre del módulo y lo que se hace ahí', async () => {
+            const r = await p.evaluate(() => {
+                const sel = document.getElementById('hubModuloSelector').getBoundingClientRect(), t = document.getElementById('hubModuloTitulo').getBoundingClientRect();
+                return { titulo: document.getElementById('hubModuloTitulo').textContent, desc: !!document.getElementById('hubModuloDescripcion').textContent.trim(),
+                         centrado: Math.abs((t.left + t.right) / 2 - (sel.left + sel.right) / 2) < 3, icono: !!document.getElementById('hubModuloIcono').getClientRects().length };
+            });
+            assert.deepEqual(r, { titulo: 'Learn·ax', desc: true, centrado: true, icono: false });
+        });
+        await caso('…y arrastrar con el dedo hacia la izquierda trae el de la derecha', async () => {
+            await p.evaluate(() => etaaxSeleccionarModulo('financiero')); await p.waitForTimeout(700);
+            const c = await p.evaluate(() => { const r = document.getElementById('hubModuloDock').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+            await p.mouse.move(c.x, c.y); await p.mouse.down(); await p.mouse.move(c.x - 170, c.y, { steps: 8 }); await p.mouse.up(); await p.waitForTimeout(700);
+            assert.deepEqual(await rueda(), { id: 'equipo', centro: true, irCentrado: true, irDebajo: true });
+        });
+        /* (24-nov) Las portadas de módulo: tarjetas bajitas en dos columnas, con su grupo adentro. */
+        await ir(p, '/equipo/index.html');
+        await caso('portada de Equip·ax: sin encabezados de sección, dos columnas y cada tarjeta con su grupo', async () => {
+            const r = await p.evaluate(() => {
+                const cards = [...document.querySelectorAll('.etx-portada-modulos .cf-card')].filter(c => c.offsetParent);
+                const xs = [...new Set(cards.map(c => Math.round(c.getBoundingClientRect().left)))];
+                return { encabezados: [...document.querySelectorAll('.cf-section-hdr')].some(h => h.offsetParent), columnas: xs.length,
+                         grupos: cards.map(c => (c.querySelector('.etx-card-grupo') || {}).textContent).join(','), alto: Math.max.apply(null, cards.map(c => c.getBoundingClientRect().height)) };
+            });
+            assert.equal(r.encabezados, false); assert.equal(r.columnas, 2);
+            assert.equal(r.grupos, 'Personal,Operativo,Operativo,Desarrollo,Estructura de staff,Estructura de staff,Estructura de staff');
+            assert.ok(r.alto <= 160, 'tarjeta de ' + r.alto + ' px');
+        });
         await ctx.close();
 
         const tel = await abrir(browser, 390);

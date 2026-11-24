@@ -600,8 +600,31 @@
         (cont || window).addEventListener('scroll', pintar, { passive: true });
         pintar();
     }
+    /* LAS PORTADAS DE MÓDULO, COMPACTAS (Edwin, 24-nov). Las secciones con su
+       línea y su título se sentían como separadores confusos y las tarjetas eran
+       altas: había que bajar para verlas todas. Ahora van TODAS en dos columnas
+       (con el pasillo del centro para la isla del nombre), más bajitas, y cada
+       una dice adentro el grupo al que pertenece (el rótulo de su sección, o su
+       `data-grupo`). El marcado de cada portada no cambia. */
+    function portadaCompacta() {
+        if (!document.querySelector('.etx-isla')) return;
+        document.querySelectorAll('.cf-wrap > .cf-modules').forEach(function (mods) {
+            mods.classList.add('etx-portada-modulos');
+            mods.querySelectorAll('.cf-section').forEach(function (sec) {
+                var tag = sec.querySelector('.cf-section-tag'), rotulo = tag ? tag.textContent.trim() : '';
+                sec.querySelectorAll('.cf-card').forEach(function (card) {
+                    var grupo = card.dataset.grupo || rotulo, hdr = card.querySelector('.cf-card-hdr');
+                    if (!grupo || !hdr || hdr.querySelector('.etx-card-grupo')) return;
+                    var sp = document.createElement('span'); sp.className = 'etx-card-grupo'; sp.textContent = grupo;
+                    var soon = hdr.querySelector('.cf-badge-soon');
+                    hdr.insertBefore(sp, soon || null);
+                });
+            });
+        });
+    }
     function iniciar() {
         try { vigilarIsla(); } catch (e) {}
+        try { portadaCompacta(); } catch (e) {}
         pintarTarjetas();
         if (embebido) return;
         document.querySelectorAll('.theme-toggle').forEach(function(b){b.remove();});

@@ -726,3 +726,24 @@ body.etx-modulos-ui #nav .etx-nav-grupo {font-size:9px;letter-spacing:1.6px;text
 body.etx-modulos-ui #nav .etx-nav-grupo:first-child {margin-top:2px;}
 body.etx-modulos-ui #nav .etx-nav-pronto {opacity:.45;cursor:default;}
 body.etx-modulos-ui #nav .etx-nav-pronto:hover {background:transparent;border-color:transparent;}
+
+/* ══ LAS PORTADAS DE MÓDULO, COMPACTAS (Edwin, 24-nov) ═════════════════════════
+   Todas las tarjetas en dos columnas —el pasillo del centro es para la isla del
+   nombre del módulo, que al bajar se encoge ahí—, sin los encabezados de sección
+   (se sentían como separadores) y más bajitas. El grupo de cada tarjeta va
+   adentro, arriba a la derecha (etaax-modulos-ui.js: portadaCompacta). */
+.cf-modules.etx-portada-modulos {display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:64px!important;row-gap:14px;
+  width:100%;max-width:980px;margin:0 auto;}
+.etx-portada-modulos > .cf-section, .etx-portada-modulos > .cf-section > :is(.cf-grid,.cf-grid-2) {display:contents!important;}
+.etx-portada-modulos .cf-section-hdr {display:none!important;}
+body.etx-module-cards .etx-portada-modulos .etx-tool-card {min-height:0!important;padding:16px 18px!important;gap:6px!important;border-radius:14px;}
+.etx-portada-modulos .etx-tool-card .cf-card-hdr {margin-bottom:0;gap:8px;}
+body.etx-module-cards .etx-portada-modulos .etx-tool-card .cf-card-icon .etx-ic {width:24px;height:24px;}
+body.etx-module-cards .etx-portada-modulos .etx-tool-card .cf-card-title {font-size:16px!important;}
+body.etx-module-cards .etx-portada-modulos .etx-tool-card .cf-card-desc {font-size:12px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+body.etx-module-cards .etx-portada-modulos .etx-tool-card .cf-card-cta {padding-top:4px;}
+.etx-portada-modulos .cf-badge-active {display:none!important;}
+.etx-card-grupo {margin-left:auto;font-size:9px;letter-spacing:1.4px;text-transform:uppercase;white-space:nowrap;line-height:1.5;
+  color:var(--etx-ui-cyan);border:1px solid var(--etx-ui-cyan-line);border-radius:999px;padding:3px 9px;}
+.etx-card-grupo + .cf-badge-soon {margin-left:6px;}
+@media (max-width:640px) {.cf-modules.etx-portada-modulos {grid-template-columns:1fr;column-gap:0!important;}}
