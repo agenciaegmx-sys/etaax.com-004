@@ -749,11 +749,11 @@ body.etx-module-cards .etx-portada-modulos .etx-tool-card .cf-card-cta {padding-
 @media (max-width:640px) {.cf-modules.etx-portada-modulos {grid-template-columns:1fr;column-gap:0!important;}}
 
 /* ══ LA SUCURSAL, CENTRADA DE VERDAD (Edwin, 24-nov) ═══════════════════════════
-   El centro se mide del círculo del logo a la ÚLTIMA LETRA DEL NOMBRE: el giro
-   de abajo («Restaurante bar», casi siempre más largo que el nombre) ya no
-   ensancha la caja ni corre el centro. Se queda debajo, alineado al nombre. */
-body.etx-modulos-ui .etx-ctx-isla .etx-ctx-ident .ctx-neg-id {overflow:visible;}
-body.etx-modulos-ui .etx-ctx-isla .etx-ctx-ident .ctx-neg-tipo {width:0;min-width:100%;overflow:visible;text-overflow:clip;}
+   Se centra el BLOQUE completo: del círculo del logo al final del renglón más
+   largo (el nombre o el giro de abajo). Centrar solo hasta la última letra del
+   nombre dejaba el bloque cargado a un lado cuando el renglón de abajo es más
+   largo («GRUPO JP» · «Corporativo · 2 sucursales»). Lo acomoda
+   etaaxAutoCentrar (etaax-header.js), que mide la caja entera. */
 
 /* Centrado automático (etaax-header.js: etaaxAutoCentrar): con la sucursal fuera de
    la fila, los botones se van a la derecha a cualquier ancho. */

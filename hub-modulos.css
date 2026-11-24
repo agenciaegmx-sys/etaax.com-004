@@ -42,13 +42,11 @@ body.hub-paleta .hub-modulos-bar #chipUbicacionHub .etx-ic{width:16px;height:16p
 body.hub-paleta .hub-modulos-bar .neg-activo-tipo{font-size:10.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 body.hub-paleta #chipMarcaHub,body.hub-paleta .hub-modulos-bar .user-badge,body.hub-paleta :is(#btnInfoSuc,#btnInfoNeg){display:none!important;}
 /* (24-nov) La isla del negocio (página de sucursales): sus botones como cápsulas, y
-   sin el título grande de abajo (la isla lo trae). El centro se mide del círculo
-   a la última letra del NOMBRE: el renglón de abajo no ensancha la caja. */
+   sin el título grande de abajo (la isla lo trae). */
 body.hub-paleta .hub-modulos-bar :is(.aviso-priv-btn,.hub-config-btn){min-height:40px;height:40px;padding:0 14px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;}
 body.hub-paleta .hub-negocio-bar.hub-modulos-bar .hub-negocio-actions{flex-wrap:nowrap;gap:8px;}
 body.hub-paleta #viewNegocios .hub-negocio-hero{display:none;}
-body.hub-paleta .hub-modulos-bar .hub-isla-ident .neg-activo-id{overflow:visible;}
-body.hub-paleta .hub-modulos-bar .hub-isla-ident .neg-activo-tipo{width:0;min-width:100%;overflow:visible;text-overflow:clip;}
+/* (24-nov) El negocio se centra como BLOQUE: del círculo al final del renglón más largo (el nombre o el de abajo). */
 /* Centrado automático (etaax-header.js): con el negocio fuera de la fila, los botones a la derecha a cualquier ancho. */
 body.hub-paleta .hub-modulos-bar.etx-ident-libre .neg-activo-btns{margin-left:auto!important;}
 body.hub-paleta .hub-isla-titulo{flex:1 1 auto;min-width:0;max-width:calc(50% - min(170px,15vw) - 24px);margin:0;padding-left:12px;text-align:left;font:700 15px/1.2 'DM Sans',sans-serif;letter-spacing:.8px;text-transform:uppercase;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

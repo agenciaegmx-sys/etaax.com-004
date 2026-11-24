@@ -18682,9 +18682,9 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
                   /'<h1 class="hub-isla-titulo" id="negIslaTitulo">' \+ _islaTituloNegocio\(\)/.test(f) && !/<img /.test(f) &&
                   /#viewNegocios \.hub-negocio-hero\{display:none;\}/.test(css), true);
     });
-    test('…y la sucursal / el negocio se centran del círculo del logo a la última letra del nombre (el giro no ensancha la caja)', () => {
-        const css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8'), hcss = fs.readFileSync(path.join(RAIZ, 'hub-modulos.css'), 'utf8');
-        return eq(/\.etx-ctx-ident \.ctx-neg-tipo \{width:0;min-width:100%;overflow:visible;/.test(css) && /\.hub-isla-ident \.neg-activo-tipo\{width:0;min-width:100%;overflow:visible;/.test(hcss), true);
+    test('…y la sucursal / el negocio se centran como BLOQUE: del círculo al final del renglón más largo (nombre o el de abajo)', () => {
+        const css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8'), hcss = fs.readFileSync(path.join(RAIZ, 'hub-modulos.css'), 'utf8'), hd = fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8');
+        return eq(!/ctx-neg-tipo \{width:0;/.test(css) && !/neg-activo-tipo\{width:0;/.test(hcss) && /w = ident\.getBoundingClientRect\(\)\.width/.test(hd), true);
     });
     /* (24-nov) CENTRADO AUTOMÁTICO: el botón de arriba y la sucursal/negocio de la isla van
        al centro de la página siempre que quepan (se mide; ya no depende de un ancho fijo). */

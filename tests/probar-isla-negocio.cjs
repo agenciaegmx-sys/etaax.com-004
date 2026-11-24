@@ -323,7 +323,7 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
         await caso('hub, página del negocio: la isla con su título, el negocio centrado en la página y su foto SOLO en la cuenta', async () => {
             const r = await p.evaluate(() => {
                 const id = document.querySelector('#brandInfoBar .hub-isla-ident'), lg = id.querySelector('.neg-activo-emoji-wrap').getBoundingClientRect(), nm = id.querySelector('.neg-activo-nombre').getBoundingClientRect();
-                return { titulo: document.getElementById('negIslaTitulo').textContent.trim().toLowerCase(), centro: Math.abs((lg.left + nm.right) / 2 - innerWidth / 2) < 2,
+                return { titulo: document.getElementById('negIslaTitulo').textContent.trim().toLowerCase(), centro: Math.abs((lg.left + Math.max(nm.right, id.querySelector('.ctx-neg-tipo, .neg-activo-tipo').getBoundingClientRect().right)) / 2 - innerWidth / 2) < 2,
                          islaFoto: !!document.querySelector('#brandInfoBar img'), cuentaFoto: !!document.querySelector('#etaax-header .etx-hd-avatar img'),
                          tituloGrande: !!document.getElementById('negHeroTitle').getClientRects().length };
             });
@@ -338,14 +338,14 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             const r = await p.evaluate(() => {
                 const c = document.querySelector('#etaax-header .etx-hd-centro').getBoundingClientRect(), id = document.querySelector('.etx-ctx-ident');
                 const lg = id.querySelector('.ctx-neg-emoji-wrap').getBoundingClientRect(), nm = id.querySelector('.ctx-neg-name span').getBoundingClientRect();
-                return Math.abs((c.left + c.right) / 2 - (lg.left + nm.right) / 2) < 1.5;
+                return Math.abs((c.left + c.right) / 2 - (lg.left + Math.max(nm.right, id.querySelector('.ctx-neg-tipo, .neg-activo-tipo').getBoundingClientRect().right)) / 2) < 1.5;
             });
             assert.equal(r, true);
         });
-        await caso('módulo: la sucursal centrada del círculo a la última letra del nombre, y la foto del negocio solo en la cuenta', async () => {
+        await caso('módulo: la sucursal centrada como bloque (del círculo al final del renglón más largo), y la foto del negocio solo en la cuenta', async () => {
             const r = await p.evaluate(() => {
                 const id = document.querySelector('.etx-ctx-ident'), lg = id.querySelector('.ctx-neg-emoji-wrap').getBoundingClientRect(), nm = id.querySelector('.ctx-neg-name span').getBoundingClientRect();
-                return { centro: Math.abs((lg.left + nm.right) / 2 - innerWidth / 2) < 2, islaFoto: !!id.querySelector('img'), cuentaFoto: !!document.querySelector('#etaax-header .etx-hd-avatar img') };
+                return { centro: Math.abs((lg.left + Math.max(nm.right, id.querySelector('.ctx-neg-tipo, .neg-activo-tipo').getBoundingClientRect().right)) / 2 - innerWidth / 2) < 2, islaFoto: !!id.querySelector('img'), cuentaFoto: !!document.querySelector('#etaax-header .etx-hd-avatar img') };
             });
             assert.deepEqual(r, { centro: true, islaFoto: false, cuentaFoto: true });
         });
@@ -361,7 +361,7 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
                     const id = [...document.querySelectorAll('.etx-ctx-ident, .hub-isla-ident')].find(e => e.getClientRects().length);
                     const lg = id.querySelector('.ctx-neg-emoji-wrap, .neg-activo-emoji-wrap').getBoundingClientRect(), nm = id.querySelector('.ctx-neg-name span, .neg-activo-nombre').getBoundingClientRect();
                     const isla = id.closest('.etx-ctx-isla, .hub-modulos-bar').getBoundingClientRect();
-                    return { arriba: Math.abs((hd.left + hd.right) / 2 - W) < 1.5, isla: Math.abs((lg.left + nm.right) / 2 - W) < 1.5, alto: Math.abs((lg.top + lg.bottom) / 2 - (isla.top + isla.bottom) / 2) < 2 };
+                    return { arriba: Math.abs((hd.left + hd.right) / 2 - W) < 1.5, isla: Math.abs((lg.left + Math.max(nm.right, id.querySelector('.ctx-neg-tipo, .neg-activo-tipo').getBoundingClientRect().right)) / 2 - W) < 1.5, alto: Math.abs((lg.top + lg.bottom) / 2 - (isla.top + isla.bottom) / 2) < 2 };
                 });
                 assert.deepEqual(r, { arriba: true, isla: true, alto: true });
             });
