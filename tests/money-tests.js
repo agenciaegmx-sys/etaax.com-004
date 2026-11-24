@@ -18513,6 +18513,46 @@ console.log('\n══ BH91 · Portada de requisiciones; inventarios sin emojis �
             .every(id => inv.indexOf('id="' + id + '"') > -1 && ijs.indexOf("['" + id + "'") > -1), true));
 }
 
+/* ═══════════ SUITE BH92 · INSUMOS SUBE SOLO LO QUE CAMBIÓ (CPU de Supabase) ═════
+   24-nov: Supabase avisó que el proyecto pasaba del 80 % de CPU. setInsumos()
+   subía el catálogo ENTERO 1.2 s después de cualquier cambio (pausar, activar,
+   borrar, ordenar…): miles de renglones reescritos por un clic, cada uno con su
+   evento de tiempo real para cada pantalla abierta, que además volvía a bajar
+   el catálogo completo. Ahora se compara contra la huella de lo que la nube
+   tiene y solo se sube lo distinto; el eco del propio guardado ya no provoca
+   otra descarga; y las recetas juntan una ráfaga de cambios en una relectura. */
+console.log('\n══ BH92 · Insumos sube solo lo que cambió ══');
+{
+    const ins = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const app = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
+    const cuerpo = (src, n) => { const i = src.indexOf('function ' + n + '('); return i < 0 ? '' : src.slice(i, src.indexOf('\n   function ', i + 10)); };
+    const c = { console, JSON, Object, Array, String, Math };
+    vm.createContext(c);
+    vm.runInContext('var _insHuellaNube = {};\n' + ['_canonIns', '_huellaIns', '_insCambiados'].map(n => cuerpo(ins, n)).join('\n'), c);
+    vm.runInContext(`var a = { id: 'a', nombre: 'Limón', presentaciones: [{ precio: '10', stockMin: '2' }] };
+        var b = { id: 'b', nombre: 'Sal' };
+        _insHuellaNube.a = _huellaIns({ presentaciones: [{ stockMin: '2', precio: '10' }], nombre: 'Limón', id: 'a' });   // como lo devuelve jsonb
+        _insHuellaNube.b = _huellaIns(b);`, c);
+    test('lo que la nube ya tiene NO se vuelve a subir (aunque jsonb traiga las llaves en otro orden)', () =>
+        eq(vm.runInContext('_insCambiados([a, b]).length', c), 0));
+    test('…solo se sube el insumo que cambió', () =>
+        eq(vm.runInContext("b.activo = '0'; _insCambiados([a, b]).map(function(x){return x.id;}).join(',')", c), 'b'));
+    test('…y uno nuevo (sin huella) sí se sube', () =>
+        eq(vm.runInContext("_insCambiados([a, { id: 'c' }]).map(function(x){return x.id;}).join(',')", c), 'c'));
+    const set = cuerpo(ins, 'setInsumos');
+    test('setInsumos sube los cambiados, no el catálogo entero', () =>
+        eq(/var cambios = _insCambiados\(data\);/.test(set) && /_sincronizarInsumosSupabase\(negId, cambios\)/.test(set) && !/_sincronizarInsumosSupabase\(negId, data\)/.test(set), true));
+    test('la huella se toma al bajar de la nube y al subir cada lote', () =>
+        eq(/remote\.forEach\(function \(x\) \{ _insHuellaNube\[x\.id\] = _huellaIns\(x\); \}\);/.test(ins) &&
+           /_insHuellaNube\[r\.datos\.id\] = _huellaIns\(r\.datos\)/.test(cuerpo(ins, '_sincronizarInsumosSupabase')), true));
+    test('el eco del propio guardado no vuelve a bajar el catálogo', () =>
+        eq(/if \(evs\.length && !ajenos\.length\) return;/.test(ins), true));
+    test('recetas: una ráfaga de cambios en tiempo real = UNA relectura', () => {
+        const i = app.indexOf('function _subRecetasRealtime(');
+        return eq(/clearTimeout\(_recRtT\);\s*_recRtT = setTimeout\(/.test(app.slice(i, i + 900)), true);
+    });
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.

@@ -554,6 +554,26 @@
    var _insumosCache       = null;
    var _insumosCacheNegId  = null;
    var _insumosSyncTimer   = null;
+   /* ══ SUBIR SOLO LO QUE CAMBIÓ (24-nov, alerta de CPU de Supabase) ═══════════
+      setInsumos() subía el CATÁLOGO ENTERO 1.2 s después de cualquier cambio:
+      pausar o activar un insumo, borrar, ordenar, una acción en bloque… Miles
+      de renglones reescritos por un clic; cada uno dispara el tiempo real para
+      cada pantalla abierta, y cada pantalla vuelve a bajar el catálogo. Ahora se
+      guarda la huella de lo que la nube tiene (al bajar y al subir) y solo se
+      sube lo que es distinto. Sin huella (la carga falló) se sube todo, como
+      antes. */
+   var _insHuellaNube = {};
+   /* Con las llaves ORDENADAS: Postgres (jsonb) devuelve las llaves en otro
+      orden, y el mismo insumo daría dos huellas distintas. */
+   function _canonIns(v) {
+       if (Array.isArray(v)) return v.map(_canonIns);
+       if (v && typeof v === 'object') { var o = {}; Object.keys(v).sort().forEach(function (k) { o[k] = _canonIns(v[k]); }); return o; }
+       return v;
+   }
+   function _huellaIns(x) { try { return JSON.stringify(_canonIns(x)); } catch (e) { return String(Math.random()); } }
+   function _insCambiados(data) {
+       return (data || []).filter(function (x) { return x && x.id && _insHuellaNube[x.id] !== _huellaIns(x); });
+   }
    var _insumosSupaCargado = false;
 
    function getInsumos() {
@@ -599,7 +619,9 @@
        clearTimeout(_insumosSyncTimer);
        _insumosSyncTimer = setTimeout(function() {
            _insumosSyncPend = null;
-           _sincronizarInsumosSupabase(negId, data).catch(function(e) {
+           var cambios = _insCambiados(data);
+           if (!cambios.length) return;
+           _sincronizarInsumosSupabase(negId, cambios).catch(function(e) {
                console.warn('[setInsumos] sync error:', e);
            });
        }, 1200);
@@ -612,7 +634,8 @@
        if (_insumosSyncPend) {
            clearTimeout(_insumosSyncTimer);
            var p = _insumosSyncPend; _insumosSyncPend = null;
-           try { _sincronizarInsumosSupabase(p.negId, p.data); } catch(e) {}
+           var cambios = _insCambiados(p.data);
+           try { if (cambios.length) _sincronizarInsumosSupabase(p.negId, cambios); } catch(e) {}
        }
    });
 
@@ -679,6 +702,8 @@
                if (!_vistos[x.id]) { _vistos[x.id] = 1; _dedup.push(x); }
            });
            remote = _dedup;
+           // La huella de lo que la nube tiene: setInsumos sube solo lo distinto.
+           remote.forEach(function (x) { _insHuellaNube[x.id] = _huellaIns(x); });
            // Auto-reparación: si la nube todavía tiene insumos que ya borramos (el delete
            // se canceló al navegar, o falló), re-emitir el borrado para que sea durable.
            if (_revividos.length) {
@@ -755,20 +780,31 @@
 
    // Realtime: el servidor empuja cambios de negocio_insumos → este dispositivo se
    // actualiza solo (sin recargar), como recetas y sucursales.
-   var _insumosRtCh = null, _insumosRtNeg = null, _insRtT = null, _insRtCargando = false;
+   var _insumosRtCh = null, _insumosRtNeg = null, _insRtT = null, _insRtCargando = false, _insRtEventos = [];
    function _subInsumosRealtime(negId) {
        if (!negId || _insumosRtNeg === negId || typeof sbRealtime !== 'function') return;
        if (_insumosRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_insumosRtCh); } catch(e) {} }
        _insumosRtNeg = negId;
-       _insumosRtCh = sbRealtime('negocio_insumos', negId, function() {
+       _insumosRtCh = sbRealtime('negocio_insumos', negId, function(payload) {
            // No interrumpir si el usuario está editando un insumo (modal abierto).
            var modal = document.getElementById('modalOverlay');
            if (modal && modal.style.display !== 'none' && modal.offsetParent !== null) return;
            if (getNegocioActivo() !== negId) return;
+           _insRtEventos.push(payload);
            // Debounce: coalescer ráfagas de eventos en UNA sola recarga (sin parpadeo)
            // y sin re-empujar (realtime:true) → ya no hay bucle.
            clearTimeout(_insRtT);
            _insRtT = setTimeout(function() {
+               /* El ECO de lo que este equipo acaba de subir no es un cambio:
+                  si todo lo que llegó ya es igual a lo que tenemos, no se vuelve
+                  a bajar el catálogo entero (24-nov, CPU de Supabase). */
+               var evs = _insRtEventos; _insRtEventos = [];
+               var ajenos = evs.filter(function (ev) {
+                   var d = ev && ev.new && ev.new.datos;
+                   if (!d || !d.id || (ev.eventType && ev.eventType === 'DELETE')) return true;
+                   return _insHuellaNube[d.id] !== _huellaIns(d);
+               });
+               if (evs.length && !ajenos.length) return;
                if (_insRtCargando) return;
                _insRtCargando = true;
                Promise.resolve(_cargarInsumosDeSupabase({ realtime: true }))
@@ -811,6 +847,7 @@
                console.warn('[insumos] registro no sincronizado, se omite:', records[i].insumo_id, rUp.error.message);
                fallo = true; i += 1; BATCH = 50; continue;
            }
+           records.slice(i, i + BATCH).forEach(function (r) { if (r.datos && r.datos.id) _insHuellaNube[r.datos.id] = _huellaIns(r.datos); });
            i += records.slice(i, i + BATCH).length; BATCH = 50;
        }
        if (fallo) _sbToastError('Algunos insumos no se sincronizaron (registro problemático omitido).');

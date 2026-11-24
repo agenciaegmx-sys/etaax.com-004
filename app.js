@@ -273,9 +273,16 @@ async function _sbInitInsumosCatalogo() {
 var _recetasRtCh = null;
 function _subRecetasRealtime(negId) {
     if (_recetasRtCh || typeof sbRealtime !== 'function' || !negId) return;
+    /* Una ráfaga de cambios (guardar varias recetas, recalcular costos) llegaba
+       como un evento por receta y CADA uno releía todas las recetas. Ahora se
+       juntan en una sola relectura (alerta de CPU de Supabase, 24-nov). */
+    var _recRtT = null;
     _recetasRtCh = sbRealtime('recetas', negId, function() {
-        console.log('[recetas] cambio en vivo desde otro dispositivo → recargando');
-        _sbInitRecetas();
+        clearTimeout(_recRtT);
+        _recRtT = setTimeout(function () {
+            console.log('[recetas] cambio en vivo desde otro dispositivo → recargando');
+            _sbInitRecetas();
+        }, 600);
     });
 }
 function genId() {
