@@ -104,6 +104,9 @@
         'sh-cambiar-negocio': ['0 0 24 24', '<g stroke-width="1.8"><path d="M3 7h18m-4-4 4 4-4 4M21 17H3m4-4-4 4 4 4"/><circle class="etx-punto" stroke="none" cx="6" cy="7" r="1.7"/><circle class="etx-punto" stroke="none" cx="18" cy="17" r="1.7"/></g>'],
         'sh-info-negocio': ['0 0 24 24', '<g stroke-width="1.8"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M3 22h18M9 6h1m4 0h1M9 10h1m4 0h1M9 14h1m4 0h1"/><path class="etx-trazo" d="M10 22v-4h4v4"/></g>'],
         'sh-info-sucursal': ['0 0 24 24', '<g stroke-width="1.8"><path d="M4 10v11h16V10M2 10l3-7h14l3 7H2M8 3l-1 7m9-7 1 7M4 15h4"/><path class="etx-trazo" d="M12 21v-7h5v7"/></g>'],
+        /* (24-nov) Cambiar sucursal: el pin y sus flechas de cambio. Era el mismo pin
+           que va junto al nombre de la sucursal y se leía como «ubicación». */
+        'sh-cambiar-sucursal': ['0 0 24 24', '<g stroke-width="1.8"><path d="M12.5 8.5c0 3.6-5.25 8.5-5.25 8.5S2 12.1 2 8.5a5.25 5.25 0 0 1 10.5 0Z"/><circle class="etx-punto" stroke="none" cx="7.25" cy="8.3" r="1.8"/><path class="etx-trazo" d="M14.5 8h7.5m-3-3 3 3-3 3M22 17h-7.5m3-3-3 3 3 3"/></g>'],
         'sh-matriz': ['0 0 24 24', '<g stroke-width="1.8"><path d="M19 10c0 5-7 12-7 12S5 15 5 10a7 7 0 0 1 14 0Z"/><circle class="etx-punto" stroke="none" cx="12" cy="9" r="2.5"/></g>'],
         'mod-aprende-analiza': ['0 0 24 24', '<g stroke-width="1.8"><path d="M12 5C8 2 4 3 2 4v15c3-1 7-1 10 2 3-3 7-3 10-2V4c-2-1-6-2-10 1Zm0 0v16M5 8h4m-4 4h4"/><path class="etx-trazo" d="M15 15v-3m3 3V8"/></g>'],
         'mod-control-administrativo': ['0 0 24 24', '<g stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M8 2v4m8-4v4M3 9h18M7 13h3m-3 4h3"/><path class="etx-trazo" d="m13 16 2 2 4-5"/></g>'],

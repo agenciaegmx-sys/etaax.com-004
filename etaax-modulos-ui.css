@@ -593,18 +593,24 @@ body.etx-modulos-ui .ctx-bar-inner.etx-ctx-isla {
   padding:5px 7px 5px 6px;border:1px solid var(--etx-ui-cyan-line);border-radius:999px;background:var(--etx-ui-panel);
   box-shadow:0 8px 22px rgba(0,0,0,.12);overflow:visible;box-sizing:border-box;
 }
-body.etx-modulos-ui .etx-ctx-isla .ctx-neg-emoji-wrap {width:40px;height:40px;}
+/* La sucursal (logo, pin, nombre y giro) al centro de la PÁGINA: se mide contra
+   la franja fija, que va de orilla a orilla, no contra la isla. */
+body.etx-modulos-ui .etx-ctx-ident {display:flex;align-items:center;gap:10px;min-width:0;
+  position:absolute;left:50%;top:var(--etx-ctx-pad-top,10px);height:52px;transform:translateX(-50%);max-width:min(340px,30vw);}
+body.etx-modulos-ui .etx-ctx-isla .ctx-neg-emoji-wrap {width:40px;height:40px;flex-shrink:0;}
 body.etx-modulos-ui .etx-ctx-isla .ctx-neg-emoji-wrap .etx-ic {width:22px;height:22px;}
-body.etx-modulos-ui .etx-ctx-isla .ctx-neg-id {flex:0 1 auto;min-width:0;max-width:34%;overflow:hidden;}
+body.etx-modulos-ui .etx-ctx-isla .ctx-neg-id {flex:0 1 auto;min-width:0;max-width:none;overflow:hidden;}
 body.etx-modulos-ui .etx-ctx-isla .ctx-neg-name {font-size:14.5px;font-weight:600;line-height:1.2;gap:5px;white-space:nowrap;overflow:hidden;}
 body.etx-modulos-ui .etx-ctx-isla .ctx-neg-name span {overflow:hidden;text-overflow:ellipsis;}
 body.etx-modulos-ui .etx-ctx-isla .ctx-neg-name .etx-ic {width:16px;height:16px;flex-shrink:0;}
 body.etx-modulos-ui .etx-ctx-isla .ctx-neg-tipo {font-size:10.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.etx-ctx-titulo {flex:1 1 auto;min-width:0;text-align:center;font-size:15px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+/* El título, a la orilla izquierda; nunca llega a la sucursal del centro. */
+.etx-ctx-titulo {flex:1 1 auto;min-width:0;max-width:calc(50vw - var(--etx-ctx-space,0px) - 24px - var(--etx-ident-mitad,170px) - 28px);
+  padding-left:12px;text-align:left;font-size:15px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
   line-height:1.2;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .etx-ctx-titulo .g {color:var(--etx-ui-terra);}
 .etx-ctx-titulo[hidden] {display:block;visibility:hidden;}
-body.etx-modulos-ui .etx-ctx-isla .ctx-right {margin-left:0;gap:6px;flex-shrink:0;width:auto;flex-wrap:nowrap;}
+body.etx-modulos-ui .etx-ctx-isla .ctx-right {margin-left:auto;gap:6px;flex-shrink:0;width:auto;flex-wrap:nowrap;}
 /* Los botones chicos: solo el icono; al tocarlos se expanden con su nombre. */
 body.etx-modulos-ui .ctx-btn.etx-ctx-acc {gap:0;height:40px;min-height:40px;padding:0 10px;border-radius:999px;white-space:nowrap;overflow:hidden;}
 .etx-ctx-acc-txt {display:inline-block;max-width:0;opacity:0;margin-left:0;overflow:hidden;transition:max-width .26s ease,opacity .2s ease,margin .26s ease;}
@@ -677,11 +683,12 @@ body.etx-modulos-ui.etx-sub-menu #nav .etx-nav-back {margin-top:8px;padding-top:
   body.etx-modulos-ui #ctxBar {padding:8px 12px 14px calc(var(--etx-ctx-space,0px) + 12px);}
   body.etx-modulos-ui:has(#nav) #ctxBar {padding-left:calc(var(--etx-ctx-space,58px) + 12px);}
   body.etx-modulos-ui .ctx-bar-inner.etx-ctx-isla {flex-wrap:wrap;row-gap:2px;border-radius:26px;padding:5px 6px;}
+  body.etx-modulos-ui .etx-ctx-ident {position:static;transform:none;height:auto;max-width:none;flex:1 1 0;}
   body.etx-modulos-ui .etx-ctx-isla .ctx-neg-id {flex:1 1 0;max-width:none;}
   body.etx-modulos-ui .etx-ctx-isla .ctx-neg-emoji-wrap {width:36px;height:36px;}
   body.etx-modulos-ui .etx-ctx-isla .ctx-right {display:flex;gap:4px;}
   body.etx-modulos-ui .ctx-btn.etx-ctx-acc {padding:0 9px;font-size:12px;}
-  .etx-ctx-titulo {order:5;flex:1 0 100%;font-size:13px;padding:2px 0 4px;}
+  .etx-ctx-titulo {order:5;flex:1 0 100%;max-width:none;font-size:13px;padding:2px 0 4px 8px;}
   body.etx-modulos-ui.etx-sub-menu #nav, body.etx-modulos-ui.etx-sub-menu #nav.cerrado {top:calc(var(--etx-header-h,70px) + 8px);left:12px;height:48px;width:48px;}
   body.etx-modulos-ui.etx-sub-menu #nav .nav-top {height:46px;}
   body.etx-modulos-ui.etx-sub-menu #nav:not(.etx-sub-abierto) .etx-nav-contraer {padding:0;justify-content:center;}
@@ -689,3 +696,24 @@ body.etx-modulos-ui.etx-sub-menu #nav .etx-nav-back {margin-top:8px;padding-top:
   body.etx-modulos-ui.etx-sub-menu #nav.etx-sub-abierto {width:min(260px,calc(100vw - 24px));}
 }
 @media print { body.etx-titulo-en-isla .etx-titulo-subido {position:static!important;width:auto!important;height:auto!important;clip-path:none!important;} }
+
+/* ══ NADA SE ASOMA ENTRE LA ISLA Y LAS CABECERAS FIJAS (Edwin, 24-nov) ══════════
+   Bajo la isla hay un desvanecido de 18 px (para que el contenido no se corte
+   seco). Las cabeceras pegajosas de cada submódulo —Insumos, Inventarios,
+   Clientes…— se pegan debajo de él, y lo que subía por encima de ellas se
+   asomaba en ese hueco. Cada cabecera fija lleva arriba una franja del color
+   del fondo (una sombra sin difuminar) que tapa el hueco: no cambia su sitio
+   ni su alto, así que nada se recorre al bajar. */
+body.etx-modulos-ui {--etx-ctx-fade:18px;--etx-ctx-pad-top:10px;}
+body.etx-modulos-ui :is(.header,.inv-wizard-header):not(.etx-cab-vacia) {box-shadow:0 calc(-1 * var(--etx-ctx-fade)) 0 var(--bg);}
+@media (max-width:1099px) {
+  /* Sin espacio para centrarla en la página: va al centro de lo que queda. */
+  body.etx-modulos-ui .etx-ctx-ident {position:static;transform:none;height:auto;max-width:none;flex:1 1 auto;justify-content:center;}
+  .etx-ctx-titulo {flex:0 1 auto;max-width:38%;}
+  body.etx-modulos-ui .etx-ctx-isla .ctx-right {margin-left:0;}
+}
+@media (max-width:600px) {
+  body.etx-modulos-ui {--etx-ctx-fade:14px;--etx-ctx-pad-top:8px;}
+  body.etx-modulos-ui .etx-ctx-ident {justify-content:flex-start;flex:1 1 0;}
+  .etx-ctx-titulo {order:5;flex:1 0 100%;max-width:none;}
+}

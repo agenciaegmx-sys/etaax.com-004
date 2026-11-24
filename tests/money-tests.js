@@ -18751,6 +18751,18 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
                   /if \(!nav\.contains\(t\) \|\| \(t\.closest && t\.closest\('a\.nav-link'\)\)\) abrir\(false\)/.test(mu) &&
                   /body\.etx-modulos-ui\.etx-sub-menu #nav:not\(\.etx-sub-abierto\)>:not\(\.nav-top\) \{display:none!important;\}/.test(css), true);
     });
+    test('…el título a la izquierda, la sucursal al centro de la página y «Cambiar sucursal» con su propio ícono', () => {
+        const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8'), css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8');
+        const icos = fs.readFileSync(path.join(RAIZ, 'etaax-iconos.js'), 'utf8');
+        return eq(/'<div class="etx-ctx-titulo" id="etxCtxTitulo" aria-hidden="true"><\/div>' \+\s*'<div class="etx-ctx-ident">/.test(mu) &&
+                  /acc\('etxCambiarSucursal', 'sh-cambiar-sucursal'/.test(mu) && /'sh-cambiar-sucursal': \['0 0 24 24'/.test(icos) &&
+                  /\.etx-ctx-ident \{[^}]*position:absolute;left:50%;[^}]*transform:translateX\(-50%\)/.test(css), true);
+    });
+    test('…y entre la isla y las cabeceras fijas no se asoma nada (una franja del fondo tapa el desvanecido)', () => {
+        const css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8');
+        return eq(/body\.etx-modulos-ui :is\(\.header,\.inv-wizard-header\):not\(\.etx-cab-vacia\) \{box-shadow:0 calc\(-1 \* var\(--etx-ctx-fade\)\) 0 var\(--bg\);\}/.test(css) &&
+                  !/\.header \{top:calc\(var\(--etx-shell-top\) - var\(--etx-ctx-fade\)\)/.test(css), true);
+    });
     test('…y los botones de la isla despliegan sus opciones pegadas a ellos sin perder lo expandido', () => {
         const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
         return eq(/var seguir = dialogo\.open && dialogo\._etxTrigger === trigger;/.test(mu) && /if \(dialogo\.open\) return;   \/\/ el «close» de un diálogo anterior llega tarde/.test(mu) &&

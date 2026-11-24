@@ -100,6 +100,16 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             assert.deepEqual([r.isla, r.nombre, r.giro, r.marca, r.plan, r.info], [true, 'Matriz', 'el de la sucursal', false, false, false], JSON.stringify(r));
             assert.ok(r.alto <= 60, 'la isla mide ' + r.alto + ' px de alto');
         });
+        await caso('el título va a la orilla izquierda, la sucursal al CENTRO DE LA PÁGINA y los botones a la derecha', async () => {
+            const r = await p.evaluate(() => {
+                const t = document.getElementById('etxCtxTitulo').getBoundingClientRect(), id = document.querySelector('#ctxBar .etx-ctx-ident').getBoundingClientRect();
+                const isla = document.querySelector('#ctxBar .etx-ctx-isla').getBoundingClientRect(), b = document.querySelector('#ctxBar .ctx-right').getBoundingClientRect();
+                return { izq: t.left - isla.left < 24, centro: Math.abs((id.left + id.right) / 2 - innerWidth / 2) < 2, orden: t.right <= id.left && id.right <= b.left, derecha: isla.right - b.right < 12 };
+            });
+            assert.deepEqual(r, { izq: true, centro: true, orden: true, derecha: true });
+        });
+        await caso('«Cambiar sucursal» tiene su propio ícono (no el pin de junto al nombre)', async () =>
+            assert.deepEqual(await p.evaluate(() => [!!document.querySelector('#etxCambiarSucursal use[href="#etx-sh-cambiar-sucursal"]'), !!document.querySelector('#etxCambiarSucursal use[href="#etx-sh-matriz"]')]), [true, false]));
         await caso('el título de la pantalla sube a la isla; su rótulo y su párrafo se quitan', async () => {
             const r = await p.evaluate(() => ({
                 isla: document.getElementById('etxCtxTitulo').textContent, g: document.querySelector('#etxCtxTitulo .g').textContent,
@@ -170,6 +180,23 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             const r = await p.evaluate(() => { const d = document.getElementById('etxModuleDialog'); return [d.open, d.classList.contains('etx-pop'), /555 123 4567/.test(d.textContent)]; });
             assert.deepEqual(r, [true, false, true]);
             await p.keyboard.press('Escape');
+        });
+        await caso('al bajar, entre la isla y las cabeceras fijas (Clientes, Insumos) no queda hueco por donde se asome el contenido', async () => {
+            for (const ruta of ['/administrativo/clientes.html', '/recetas/insumos.html']) {
+                await ir(p, ruta);
+                await p.evaluate(() => { const m = document.getElementById('mainContent'); const d = document.createElement('div'); d.style.height = '2500px'; m.appendChild(d); });
+                await p.mouse.move(640, 600); await p.mouse.wheel(0, 500); await p.waitForTimeout(400);
+                /* La cabecera se pega bajo la franja; su sombra del color del fondo
+                   cubre todo el hueco hasta la isla. */
+                const r = await p.evaluate(() => {
+                    const isla = document.querySelector('#ctxBar .etx-ctx-isla').getBoundingClientRect();
+                    const el = [...document.querySelectorAll('#mainContent > .header')].find(x => x.getClientRects().length), h = el.getBoundingClientRect();
+                    const n = getComputedStyle(el).boxShadow.replace(/rgba?\([^)]*\)/, '').trim().split(/\s+/).map(parseFloat);   // «0px -18px 0px 0px»
+                    const banda = -(n[1] || 0);
+                    return { hueco: Math.round(h.top - isla.bottom), banda };
+                });
+                assert.ok(r.hueco >= 0 && r.banda >= r.hueco, ruta + ': ' + JSON.stringify(r));
+            }
         });
         await caso('Clientes e Inventarios: su título también sube a la isla', async () => {
             await ir(p, '/administrativo/clientes.html');

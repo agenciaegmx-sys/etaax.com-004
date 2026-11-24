@@ -165,6 +165,10 @@
         raiz.setProperty('--etx-ctx-space', (visible ? cajaW + 10 : 0) + 'px');
         var alto = bar && bar.getClientRects().length ? Math.ceil(bar.getBoundingClientRect().height) : 0;
         raiz.setProperty('--etx-context-h', alto + 'px');
+        /* Lo que mide la sucursal del centro: el título de la izquierda llega
+           hasta ella y no más (con un nombre corto, el título cabe completo). */
+        var ident = bar && bar.querySelector('.etx-ctx-ident');
+        if (ident && ident.getClientRects().length) raiz.setProperty('--etx-ident-mitad', Math.ceil(ident.getBoundingClientRect().width / 2) + 'px');
     }
     /* El desplegable: el botón de la barra lo abre y lo cierra (en vez de
        plegarla), tocar fuera, Escape o elegir un submódulo lo cierran. La
@@ -287,15 +291,17 @@
             return '<button type="button" class="ctx-btn etx-ctx-acc" id="' + id + '" aria-label="' + texto + '" aria-haspopup="dialog" aria-expanded="false"' + (extra || '') + '>' +
                 ic(icono, 20) + '<span class="etx-ctx-acc-txt">' + texto + '</span></button>';
         };
+        /* (24-nov, 2) El título va a la orilla izquierda y la sucursal al CENTRO
+           DE LA PÁGINA (no de la isla, que empieza después de «Sub módulos»). */
         bar.innerHTML = '<div class="ctx-bar-inner etx-ctx-isla">' +
-            '<div class="ctx-neg-emoji-wrap">' + logo + '</div><div class="ctx-neg-id">' +
-            '<div class="ctx-neg-name">' + (contextoGlobal ? '' : ic('sh-matriz',16)) + '<span>' + esc(titulo) + '</span></div>' +
-            '<div class="ctx-neg-tipo">' + esc(contextoGlobal ? 'Global · todas las sucursales' : (giro ? giro.nom : opciones.tipo)) + '</div></div>' +
             '<div class="etx-ctx-titulo" id="etxCtxTitulo" aria-hidden="true"></div>' +
+            '<div class="etx-ctx-ident"><div class="ctx-neg-emoji-wrap">' + logo + '</div><div class="ctx-neg-id">' +
+            '<div class="ctx-neg-name">' + (contextoGlobal ? '' : ic('sh-matriz',16)) + '<span>' + esc(titulo) + '</span></div>' +
+            '<div class="ctx-neg-tipo">' + esc(contextoGlobal ? 'Global · todas las sucursales' : (giro ? giro.nom : opciones.tipo)) + '</div></div></div>' +
             '<div class="ctx-presencia" id="ctxPresencia"></div>' +
             '<div class="ctx-right">' +
             (contextoGlobal ? '<a class="ctx-btn" href="' + esc(volver) + '">Ir al negocio ' + ic('flecha',18) + '</a>' :
-            (ctx.ctxType !== 'staff' ? acc('etxCambiarSucursal', 'sh-matriz', 'Cambiar sucursal') : '') +
+            (ctx.ctxType !== 'staff' ? acc('etxCambiarSucursal', 'sh-cambiar-sucursal', 'Cambiar sucursal') : '') +
             acc('etxCambiarModulo', 'sh-cambiar-negocio', 'Cambiar módulo')) + '</div></div>';
         if (opciones.editorNav && opciones.editorNav.remove) opciones.editorNav.remove();   // las de Escandallos también van en el encabezado
         if (typeof window.etaaxHeader === 'function') window.etaaxHeader({marcaBase:'/marca/hub',usuario:ctx.userName,negocio:ctx.negNombre,plan:ctx.userBadge,inicio:'/hub.html',inicioTexto:'Módulos',nav:true,cerrarSesion:window.ctxSalir,

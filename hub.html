@@ -631,7 +631,7 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
 </style>
 <link rel="stylesheet" href="/hub-paleta.css?v=0ae181b1">
 <link rel="stylesheet" href="/hub-globales.css?v=e52b7f71">
-<link rel="stylesheet" href="/hub-modulos.css?v=df6f4424">
+<link rel="stylesheet" href="/hub-modulos.css?v=59ef0a9e">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 </head>
 <body class="hub-paleta">
@@ -886,6 +886,9 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
 
     <!-- Negocio activo + info usuario -->
     <div class="neg-activo-bar hub-modulos-bar" id="negActBar">
+      <!-- (24-nov, 2) El título a la orilla izquierda; la sucursal, al centro. -->
+      <h1 class="hub-isla-titulo">Tu espacio de <span class="g">trabajo</span></h1>
+      <div class="hub-isla-ident">
       <div class="neg-activo-emoji-wrap" id="negActEmojiWrap">
         <span id="chipEmoji">🏢</span>
       </div>
@@ -894,9 +897,7 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
         <div id="chipSucursalHub" class="hub-sucursal-nombre"><span id="chipUbicacionHub" aria-hidden="true"></span><span id="chipNombre" class="neg-activo-nombre">—</span></div>
         <div id="chipTipo" class="neg-activo-tipo">—</div>
       </div>
-      <!-- (24-nov) El título de la pantalla vive en la isla de la sucursal; el
-           rótulo «Explora» y el párrafo de abajo se quitaron. -->
-      <h1 class="hub-isla-titulo">Tu espacio de <span class="g">trabajo</span></h1>
+      </div>
       <!-- Quién más está trabajando en este negocio. El hub NO tenía este hueco
            ni cargaba presencia.js: entre tarea y tarea la gente se queda aquí,
            así que era justo donde más falta hacía y donde nadie se anunciaba. -->
@@ -2453,7 +2454,7 @@ function _pintarIconosLogin() {
     poner('icGuiaNegocio', 'org-corporativo', 32);
     poner('icGuiaNuevaSuc', 'anadir-sucursal', 32);
     poner('icNuevaSuc',     'anadir-sucursal', 17);
-    poner('icCambiarSucursal', 'sh-cambiar-negocio', 20);
+    poner('icCambiarSucursal', 'sh-cambiar-sucursal', 20);
     poner('icInfoSucursal', 'sh-info-sucursal', 20);
     poner('icInfoNegocio', 'sh-info-negocio', 20);
     /* «Cerrar sesión» aparece en dos vistas: se pintan las dos de una vez. */
@@ -4834,7 +4835,7 @@ async function guardarNuevaPassword(){
 })();
 </script>
 <script src="admin-guard.js"></script>
-<script src="/etaax-iconos.js?v=c96ccca0"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
+<script src="/etaax-iconos.js?v=32b10474"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
 <script src="/etaax-header.js?v=2721a8a2"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="/hub-interacciones.js?v=43cd2b2b"></script>

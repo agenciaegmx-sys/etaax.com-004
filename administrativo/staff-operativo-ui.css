@@ -88,7 +88,9 @@
  .etx-op-page .pp-field {min-width:0;margin-bottom:18px;}
  .etx-op-page .pp-sec {display:flex;align-items:center;gap:8px;font:600 16px/1.5 'DM Sans',sans-serif;color:var(--text);letter-spacing:0;text-transform:none;padding-bottom:14px;border-color:var(--op-line);}
  .etx-op-page #viewEditor>.pp-head {position:sticky;top:0;z-index:5;background:var(--op-panel);border:1px solid var(--op-line);border-radius:12px;padding:16px;}
- html:not(.embed) body.etx-op-page.etx-modulos-ui #viewEditor>.pp-head {top:var(--etx-shell-top);}
+ html:not(.embed) body.etx-op-page.etx-modulos-ui #viewEditor>.pp-head {top:var(--etx-shell-top);
+   /* (24-nov) Una franja del color del fondo arriba de la tarjeta tapa el desvanecido de la isla: lo que sube no se asoma entre las dos. */
+   box-shadow:0 calc(-1 * var(--etx-ctx-fade,18px)) 0 var(--bg);}
  .etx-op-page .pp-doc {max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;}
  /* Evaluaciones y resultados. Los colores del puntaje conservan su criterio. */
  .etx-op-page :is(.ev-cat-nom,.res-stat-v) {font-family:'DM Sans',sans-serif;letter-spacing:0;}
