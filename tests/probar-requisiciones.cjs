@@ -36,7 +36,11 @@ function nube(plan) {
         negocio_sucursales: [{ negocio_id: 'n1', datos: { sucursales: [{ id: 'suc_principal', nombre: 'Matriz', activa: true }, { id: 'suc_dos', nombre: 'Dos', activa: true }] } }],
         suscripciones: [{ negocio_id: 'n1', estado: 'activa', plan: plan }],
         negocio_insumos: [
-            ins('a_mezcal', { nombre: 'Mezcal Espadín', familia: 'Destilados', area: 'barra', sucursales: ['suc_principal'] }),
+            ins('a_mezcal', { nombre: 'Mezcal Espadín', familia: 'Destilados', area: 'barra', tipoInsumo: 'destilado', sucursales: ['suc_principal'] }),
+            // Refresco por caja de 24: el stock va en CAJAS y cada caja cuesta $480.
+            ins('a_coca', { nombre: 'Coca-Cola', familia: 'Refrescos', area: 'barra', tipoInsumo: 'refresco', sucursales: ['suc_principal'],
+                presentaciones: [{ nombre: 'Caja', presentacionCompra: 'Caja', cantPresCompra: '24', precio: '480', incluyeImpuesto: '1', costoPieza: '20',
+                                   contNeto: '355', umContenido: 'ML', stockMin: '2', stockMax: '6' }] }),
             ins('a_limon', { nombre: 'Limón', familia: 'Frutas', area: 'cocina', sucursales: ['suc_principal', 'suc_dos'] }),
             ins('a_ron', { nombre: 'Ron Blanco', familia: 'Destilados', sucursales: ['suc_dos'] }),          // de otra sucursal
             ins('a_batch', { nombre: 'Batch Paloma', esSubReceta: true, sucursales: ['suc_principal'] })    // sub-receta
@@ -91,7 +95,7 @@ async function abrir(browser, n) {
 }
 
 /* SHOTS=<carpeta>: capturas para revisarlas a ojo. */
-const foto = (page, nombre) => process.env.SHOTS ? page.waitForTimeout(800).then(() => page.screenshot({ path: path.join(process.env.SHOTS, nombre + '.png'), fullPage: false })) : null;
+const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO || nombre.indexOf(process.env.SHOTS_SOLO) === 0)) ? page.waitForTimeout(800).then(() => page.screenshot({ path: path.join(process.env.SHOTS, nombre + '.png'), fullPage: false })) : null;
 (async () => {
     const browser = await chromium.launch();
     try {
@@ -100,8 +104,8 @@ const foto = (page, nombre) => process.env.SHOTS ? page.waitForTimeout(800).then
         const p = a.page;
         await caso('el catálogo CARGA (antes: ordenado por created_at → error → sin insumos)', async () =>
             assert.ok(await p.evaluate(() => (_cacheInsumosReq || []).length) >= 1200));
-        await caso('…completo y paginado: entran los 1,202 de esta sucursal aunque pasen de 1000', async () =>
-            assert.equal(await p.evaluate(() => document.getElementById('cntPend').textContent), '1202'));
+        await caso('…completo y paginado: entran los 1,203 de esta sucursal aunque pasen de 1000', async () =>
+            assert.equal(await p.evaluate(() => document.getElementById('cntPend').textContent), '1203'));
         await caso('…solo los de esta sucursal y sin sub-recetas', async () => {
             const ids = await p.evaluate(() => insumos.map(x => x.id));
             assert.ok(ids.indexOf('a_mezcal') > -1 && ids.indexOf('a_limon') > -1);
@@ -129,12 +133,83 @@ const foto = (page, nombre) => process.env.SHOTS ? page.waitForTimeout(800).then
             assert.notEqual(await p.evaluate(() => document.getElementById('kviCard').style.display), 'none');
             assert.equal(await p.evaluate(() => _cacheCortesReq.length), 1);
         });
+
+        console.log('\n══ Requisiciones · contar uno por uno ══');
+        await p.evaluate(() => { irPaso(1); setVistaCapt('rapida'); _rapidaSel = 'a_coca'; renderRapida(); });
+        await p.waitForTimeout(200);
+        const tarjeta = () => p.evaluate(() => document.getElementById('rcCard').textContent.replace(/\s+/g, ' '));
+        const resultado = () => p.evaluate(() => document.getElementById('rcRes').textContent.replace(/\s+/g, ' '));
+        await caso('la tarjeta dice cómo se compra, lo que cuesta la caja y la pieza, y el stock EN CAJAS', async () => {
+            const t = await tarjeta();
+            assert.match(t, /Se compra por\s*Caja de 24 piezas\s*cada una de 355 ml/);
+            assert.match(t, /\$480\.00 por caja\s*\$20\.00 por pieza/);
+            assert.match(t, /mín 2 · máx 6\s*en cajas/);
+        });
+        await caso('se cuenta en cajas cerradas + piezas sueltas (24 por caja), no en «onzas sueltas»', async () =>
+            assert.match(await tarjeta(), /cajas cerradas.*Piezas sueltas \(24 por caja\)/));
+        await caso('sin capturar, la tarjeta pide la existencia', async () => assert.match(await resultado(), /Captura lo que hay/));
+        let campos = await p.$$('#rcCard .rc-dos input');
+        await campos[0].type('1'); await campos[1].type('12');
+        await caso('AL TECLEAR (sin salir del campo): 1 caja + 12 piezas = 1.5 ≤ mínimo 2 → pedir hasta 6: 5 cajas · $2,400', async () => {
+            const r = await resultado();
+            assert.match(r, /Hay pedido: 5 cajas · \$2,400\.00/);
+            assert.match(r, /Tienes 1\.5 cajas y el mínimo es 2: se pide hasta el máximo \(6\)/);
+            assert.match(await p.evaluate(() => document.getElementById('rcExist').textContent), /1\.5 cajas/);
+        });
+        await campos[0].fill('3');
+        await caso('…y con 3 cajas + 12 piezas (3.5 > 2): «No hay pedido», al momento', async () =>
+            assert.match(await resultado(), /No hay pedido.*Tienes 3\.5 cajas: más que el mínimo \(2\)/));
+        await foto(p, 'r4-tarjeta');
+        await campos[0].fill('2'); await campos[1].fill('0');
+        await caso('existencia IGUAL al mínimo (2) también pide: 4 cajas · $1,920', async () =>
+            assert.match(await resultado(), /Hay pedido: 4 cajas · \$1,920\.00/));
+        await caso('el costo del pedido va por CAJA (antes: por pieza, 24 veces más barato)', async () =>
+            assert.equal(await p.evaluate(() => { const c = calcItem(insumos.find(x => x.id === 'a_coca'), reqData.a_coca); return pedidoFinal(c, reqData.a_coca) * c.costoUnitPieza; }), 1920));
+        await p.evaluate(() => { window._pedirClaveAdmin = (a, cb) => cb(); });
+        await p.click('#rcCard >> text=Ficha técnica'); await p.waitForTimeout(250);
+        await caso('«Ficha técnica» abre el editor real del insumo en ventana flotante', async () =>
+            assert.match(await p.evaluate(() => (document.querySelector('#reqEditorOv iframe') || { getAttribute: () => '' }).getAttribute('src')), /\/recetas\/insumos\.html\?solo=1&id=a_coca/));
+        await p.evaluate(() => {
+            const c = JSON.parse(JSON.stringify(insumos.find(x => x.id === 'a_coca'))); c.presentaciones[0].stockMax = '10';
+            window.postMessage({ type: 'insumoGuardado', insumos: [c] }, location.origin);
+        });
+        await p.waitForTimeout(400);
+        await caso('…al guardar, se cierra y la requisición toma el cambio al momento (máx 10 → pedir 8)', async () => {
+            assert.equal(await p.evaluate(() => !!document.getElementById('reqEditorOv')), false);
+            assert.match(await tarjeta(), /mín 2 · máx 10/);
+            assert.match(await resultado(), /Hay pedido: 8 cajas/);
+        });
+        await p.waitForTimeout(900);   // se guarda en la nube 0.7 s después de la última tecla
+        await caso('lo capturado se guarda en la requisición de ESTA sucursal', async () => {
+            const d = await p.evaluate(() => JSON.parse(localStorage.getItem('__nube')).req_pedido[0].datos);
+            assert.equal(d.__v, 2);
+            assert.equal(d.porSucursal.suc_principal.items.a_coca.existencia, 2);
+        });
+        await p.evaluate(() => finalizarRequisicion()); await p.waitForTimeout(600);
+        await caso('«Finalizar» la guarda en el historial con su sucursal y su costo, y deja la pantalla en blanco', async () => {
+            const n = await p.evaluate(() => JSON.parse(localStorage.getItem('__nube')));
+            const h = n.req_historial[0].datos;
+            assert.deepEqual([h.sucursalId, h.resumen.totalItems, h.resumen.totalCosto], ['suc_principal', 1, 3840]);
+            assert.equal(await p.evaluate(() => document.getElementById('cntReg').textContent), '0');
+            assert.match(await p.evaluate(() => document.getElementById('reqAviso').textContent), /Requisición finalizada/);
+        });
+
+        console.log('\n══ Requisiciones · otra sucursal ══');
+        await p.evaluate(() => { reqData.a_limon = { existencia: 4 }; setReqData(reqData); });
+        await p.waitForTimeout(900);
+        await p.evaluate(() => localStorage.setItem('etaax_sucursal_activa', 'suc_dos'));
+        await p.reload();
+        await p.waitForFunction(() => typeof insumos !== 'undefined' && insumos.length > 0, null, { timeout: 20000 });
+        await caso('el Limón (compartido) NO trae la existencia que se capturó en la Matriz', async () =>
+            assert.equal(await p.evaluate(() => (reqData.a_limon || {}).existencia), undefined));
+        await caso('…y el historial de esta sucursal no trae la requisición de la Matriz', async () =>
+            assert.equal(await p.evaluate(() => getHistorial().length), 0));
         await a.ctx.close();
 
         console.log('\n══ Requisiciones · solo Cost·ax ══');
         const b = await abrir(browser, nube({ sucursales: { suc_principal: ['costax'] } }));
         const q = b.page;
-        await caso('carga igual su catálogo', async () => assert.equal(await q.evaluate(() => document.getElementById('cntPend').textContent), '1202'));
+        await caso('carga igual su catálogo', async () => assert.equal(await q.evaluate(() => document.getElementById('cntPend').textContent), '1203'));
         await caso('NO lee las ventas de Fin·ax (cortes)', async () => assert.equal(await q.evaluate(() => _cacheCortesReq.length), 0));
         await q.evaluate(() => irPaso(3)); await q.waitForTimeout(300);
         await caso('…ni enseña «Compra vs venta»: el pedido se arma y se manda igual', async () => {

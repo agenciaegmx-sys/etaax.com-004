@@ -18329,6 +18329,56 @@ console.log('\n══ BH88 · Cost·ax y Fin·ax independientes; requisiciones c
         eq(/from\('(recetas|negocio_insumos)'\)/.test(codigo(est)) || /function renderRecetas/.test(est) || /id="chRecetas"/.test(est), false));
 }
 
+/* ═══════════ SUITE BH89 · REQUISICIONES: LA REGLA DEL PEDIDO Y SU COSTO ═════════
+   Edwin, 23-nov: «si la existencia es igual o menos que el stock mínimo se lanza
+   pedido automático para llegar al stock máximo; si es mayor, no hay pedido».
+   Y el costo del pedido va en la unidad del stock: destilados/licores/vinos en
+   botellas; lo demás en unidades de compra (caja, rejilla, kilo…). Antes se
+   multiplicaba por el costo de la PIEZA: una caja de 24 salía 24 veces más
+   barata. La regla vive en el núcleo (EtaaxCore). */
+console.log('\n══ BH89 · Requisiciones: la regla del pedido y su costo ══');
+{
+    const P = Core.pedidoRequisicion, R = Core.referenciaCompra;
+    test('existencia IGUAL al mínimo → se pide hasta el máximo', () => eq(JSON.stringify(P(2, 2, 6)), '{"estado":"critico","pedido":4}'));
+    test('existencia menor al mínimo → hasta el máximo, hacia arriba (1.5 → 5)', () => eq(P(1.5, 2, 6).pedido, 5));
+    test('existencia mayor al mínimo → NO hay pedido (aunque falte para el máximo)', () => eq(P(2.5, 2, 6).pedido + '|' + P(2.5, 2, 6).estado, '0|bajo'));
+    test('en cero → todo el máximo', () => eq(P(0, 2, 6).pedido, 6));
+    test('sin capturar → sin datos; sin máximo → no hay a dónde surtir', () =>
+        eq(P('', 2, 6).estado + '|' + P(1, 2, 0).estado + '|' + P(1, 2, '').pedido, 'sin-datos|sin-stock|0'));
+    const caja = R({ tipoInsumo: 'refresco' }, { presentacionCompra: 'Caja', cantPresCompra: '24', precio: '480', incluyeImpuesto: '1', contNeto: '355', umContenido: 'ML' });
+    test('refresco por caja de 24: el stock va en CAJAS y cada caja cuesta $480 (no $20)', () =>
+        eq([caja.unidadStock, caja.piezasPorCompra, caja.costoPieza, caja.costoUnidadStock, caja.contenido].join('|'), 'Caja|24|20|480|355 ml'));
+    const bot = R({ tipoInsumo: 'destilado' }, { presentacionCompra: 'Caja', cantPresCompra: '12', precio: '2400', costoPieza: '200', incluyeImpuesto: '1' });
+    test('destilado: el stock va en BOTELLAS y cuesta lo de la botella aunque se compre por caja', () =>
+        eq([bot.porPieza, bot.unidadStock, bot.costoUnidadStock, bot.precioCompra].join('|'), 'true|botellas|200|2400'));
+    test('el precio sin impuestos se lleva con IVA cuando la ficha lo pide', () =>
+        eq(R({ tipoInsumo: 'abarrote' }, { presentacionCompra: 'Bolsa', precio: '100', incluyeImpuesto: '0', ivaCheck: '1' }).costoUnidadStock, 116));
+    test('a granel (kilo): una compra = un kilo, no se divide entre piezas', () => {
+        const k = R({ tipoInsumo: 'fruta' }, { presentacionCompra: 'Kilo', umPresCompra: 'KG', cantPresCompra: '5', precio: '90', incluyeImpuesto: '1' });
+        return eq([k.granel, k.piezasPorCompra, k.costoUnidadStock].join('|'), 'true|1|90');
+    });
+    test('fichas viejas sin precio: el costo sale de la pieza × las piezas de la compra', () =>
+        eq(R({ tipoInsumo: 'cerveza' }, { presentacionCompra: 'Rejilla', cantPresCompra: '12', costoPieza: '18' }).costoUnidadStock, 216));
+    // requisiciones.html usa el núcleo y guarda por sucursal
+    const req = fs.readFileSync(path.join(RAIZ, 'recetas/requisiciones.html'), 'utf8');
+    test('requisiciones calcula con el núcleo (no con su propia copia de la regla)', () =>
+        eq(/EtaaxCore\.pedidoRequisicion\(reqItem\.existencia, pres\.stockMin, pres\.stockMax\)/.test(req) &&
+           /costoUnitPieza: ref\.costoUnidadStock/.test(req) && !/exist <= sMin/.test(req), true));
+    test('las «piezas» de la captura salen de la presentación de compra, no del rendimiento en onzas', () =>
+        eq(/parseFloat\(pres\.rendimiento\) \|\| parseFloat\(pres\.piezas\)/.test(req), false));
+    test('una requisición abierta por sucursal; el historial lleva la sucursal', () =>
+        eq(/porSucursal\[_reqSuc\(\)\]/.test(req) && /sucursalId: _reqSuc\(\)/.test(req), true));
+    test('«cerradas + sueltas» calcula aunque nadie haya tocado el botón del método (antes: «— uds.»)', () =>
+        eq(/var modo = ri\.modoCapt \|\| pi\.modo;/.test(req), true));
+    test('el resultado se ve al teclear (sin esperar a salir del campo)', () =>
+        eq(/function guardarExistSilent[\s\S]{0,200}_pintarVivo\(id\)/.test(req) && /function setCapt[\s\S]{0,200}_pintarVivo\(id\)/.test(req), true));
+    test('hay «Nueva requisición» y «Finalizar», y la ficha técnica abre el editor real', () =>
+        eq(/onclick="nuevaRequisicion\(\)"/.test(req) && /onclick="finalizarRequisicion\(\)"/.test(req) && /insumos\.html\?solo=1&id=/.test(req), true));
+    const insjs = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    test('el editor de insumo espera a que el catálogo termine de bajar (no 2.5 s) y busca la copia de la sucursal', () =>
+        eq(/window\._insNubeLista/.test(insjs) && /intento < 300/.test(insjs) && /x\.origenId === id/.test(insjs), true));
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.
@@ -21212,12 +21262,16 @@ console.log('\n══ BH28 · La ventana que abría en blanco ══');
 
     /* Se corre el abridor de verdad con un reloj en la mano: el catálogo
        aparece en el intento que uno decida, y se mira si lo esperó. */
-    function abridor(apareceEnIntento) {
+    /* `nubeLista`: ¿ya terminó de bajar el catálogo de la nube? (24-nov) Mientras
+       no termine se espera (hasta 30 s); terminado, y el insumo no está, se dice. */
+    function abridor(apareceEnIntento, nubeLista, vueltas) {
         const pendientes = [];
         const estado = { abrio: null, avisos: [], intentos: 0 };
         const body = { appendChild(el) { estado.avisos.push(el.innerHTML || ''); } };
         const c = { console, setTimeout(f, ms) { pendientes.push(f); return pendientes.length; },
-            document: { body, createElement: () => ({ style:{}, set innerHTML(v) { this._h = v; },
+            _insNubeLista: nubeLista === undefined ? true : nubeLista,
+            localStorage: { getItem() { return ''; } },
+            document: { body, getElementById() { return null; }, createElement: () => ({ style:{}, set innerHTML(v) { this._h = v; },
                                                       get innerHTML() { return this._h || ''; } }) },
             getInsumos() {
                 estado.intentos++;
@@ -21226,11 +21280,12 @@ console.log('\n══ BH28 · La ventana que abría en blanco ══');
             editarInsumo(id) { estado.abrio = id; } };
         c.window = c;
         vm.createContext(c);
-        vm.runInContext(fnDe(ij, '_abrirInsumoPedido'), c);
+        vm.runInContext(fnDe(ij, '_buscarInsumoPedido') + '\n' + fnDe(ij, '_avisoCargandoInsumo') + '\n' + fnDe(ij, '_abrirInsumoPedido'), c);
         c._abrirInsumoPedido('ins1', 0);
-        /* Se deja correr el reloj hasta 40 vueltas: más que el tope del propio
-           abridor, para ver también qué hace cuando se rinde. */
-        for (let k = 0; k < 40 && pendientes.length; k++) (pendientes.shift())();
+        /* Se deja correr el reloj más vueltas que el tope del propio abridor,
+           para ver también qué hace cuando se rinde. */
+        for (let k = 0; k < (vueltas || 40) && pendientes.length; k++) (pendientes.shift())();
+        estado.errores = estado.avisos.filter(a => a.indexOf('No se pudo abrir') > -1);
         return estado;
     }
 
@@ -21247,13 +21302,35 @@ console.log('\n══ BH28 · La ventana que abría en blanco ══');
        manda a reportar «no carga»; esto manda a mirar si el insumo existe. */
     test('si de plano no llega, lo DICE en vez de dejar el hueco negro', () => {
         const e = abridor(9999);
-        return eq(e.abrio === null && e.avisos.length === 1, true, 'con mensaje');
+        return eq(e.abrio === null && e.errores.length === 1, true, 'con mensaje');
     });
     test('…y el mensaje dice qué pasó y qué hacer', () => {
-        const h = abridor(9999).avisos[0] || '';
+        const h = abridor(9999).errores[0] || '';
         return eq(h.indexOf('No se pudo abrir este insumo') > -1 &&
-                  h.indexOf('ya no existe') > -1 &&
+                  h.indexOf('ya no está en el catálogo') > -1 &&
                   h.indexOf('vuelve a intentarlo') > -1, true, 'útil');
+    });
+    /* EL CASO DE EDWIN (24-nov): en la tablet un catálogo de 1,000+ insumos
+       tarda más de 2.5 s en bajar. Mientras la nube no termine, se sigue
+       esperando (con aviso de «cargando») en vez de rendirse. */
+    test('mientras el catálogo sigue bajando de la nube, espera más (aparece a los 10 s)', () =>
+        eq(abridor(100, false, 400).abrio, 'ins1', 'ya no se rinde a los 2.5 s'));
+    test('…enseña «Cargando el insumo…» mientras tanto', () =>
+        eq(abridor(100, false, 400).avisos.some(a => a.indexOf('Cargando el insumo') > -1), true));
+    test('…y si la nube nunca termina, se rinde a los 30 s diciendo que revise la conexión', () => {
+        const e = abridor(99999, false, 400);
+        return eq(e.abrio === null && e.intentos <= 302 && /revisa tu conexión/.test(e.errores[0] || ''), true, 'intentos ' + e.intentos);
+    });
+    test('si piden el maestro y la sucursal trabaja con su copia, abre la copia', () => {
+        const e = { abrio: null };
+        const c = { console, setTimeout() {}, _insNubeLista: true, localStorage: { getItem() { return ''; } },
+            document: { body: { appendChild() {} }, getElementById() { return null; }, createElement: () => ({ style: {} }) },
+            getInsumos() { return [{ id: 'copia1', origenId: 'maestro1', nombre: 'Ron' }]; },
+            editarInsumo(id) { e.abrio = id; } };
+        c.window = c; vm.createContext(c);
+        vm.runInContext(fnDe(ij, '_buscarInsumoPedido') + '\n' + fnDe(ij, '_avisoCargandoInsumo') + '\n' + fnDe(ij, '_abrirInsumoPedido'), c);
+        c._abrirInsumoPedido('maestro1', 0);
+        return eq(e.abrio, 'copia1');
     });
     /* Y no insiste para siempre: 25 intentos de 100 ms. Sin tope, una ventana
        abierta por error seguiría preguntando mientras la pestaña viva. */

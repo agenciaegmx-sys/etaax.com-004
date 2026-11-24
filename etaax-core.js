@@ -1972,6 +1972,51 @@
         return (p.ivaCheck === '1' ? 1.16 : 1) *
             (p.iepsCheck === '1' ? 1 + n(p.iepsTasa || '26.5') / 100 : 1);
     }
+    /* ── REQUISICIONES: en qué se cuenta, cuánto cuesta y cuánto se pide ──────
+       Edwin, 23-nov. El stock de una presentación se define en la unidad del
+       editor de Insumos (_renderStockBlock): destilados, licores y vinos en
+       BOTELLAS (la pieza); todo lo demás en UNIDADES DE COMPRA (la caja, la
+       rejilla, el kilo, el manojo…). El costo de lo que se pide tiene que ir en
+       esa MISMA unidad: antes se multiplicaba por el costo de la PIEZA y una
+       caja de 24 refrescos salía 24 veces más barata. */
+    var _PIEZA_STOCK = ['destilado', 'licor', 'vino'];
+    function referenciaCompra(ins, pres) {
+        ins = ins || {}; pres = pres || {};
+        var porPieza = _PIEZA_STOCK.indexOf(ins.tipoInsumo) >= 0;
+        var compraNom = String(pres.presentacionCompra || pres.umPresCompra || '').trim();
+        var umCompra = String(pres.umPresCompra || '').toUpperCase();
+        var granel = /^(kilo|kilos|litro|litros|gramo|gramos|granel|a granel.*)$/i.test(compraNom) || ['KG', 'LT', 'G', 'ML'].indexOf(umCompra) >= 0;
+        var cant = n(pres.cantPresCompra) > 0 ? n(pres.cantPresCompra) : 1;
+        var piezasPorCompra = (!granel && cant > 1) ? cant : 1;
+        var precioCompra = n(pres.precio) * factorImpuestoPresentacion(pres);
+        var costoPieza = n(pres.costoPieza) || (piezasPorCompra > 1 ? precioCompra / piezasPorCompra : precioCompra) || n(pres.costoUnitario);
+        if (!(precioCompra > 0)) precioCompra = costoPieza * piezasPorCompra;
+        var contenido = [pres.contNeto, String(pres.umContenido || '').toLowerCase()].filter(function (x) { return x !== '' && x != null; }).join(' ');
+        var nSub = n(pres.unidadesPorPieza);
+        return {
+            porPieza: porPieza,                                     // ¿el stock va en piezas (botellas)?
+            compra: compraNom || (porPieza ? 'Botella' : 'Pieza'),  // cómo se compra: Caja, Rejilla, Kilo, Manojo…
+            granel: granel, cantCompra: cant, umCompra: umCompra,
+            piezasPorCompra: piezasPorCompra,                       // piezas dentro de cada compra (caja de 24)
+            contenido: contenido,                                   // lo que trae cada pieza: 355 ml, 1 kg…
+            subUnidades: nSub > 1 ? nSub : 0, nombreSubUnidad: pres.nombreSubUnidad || 'piezas', costoSubUnidad: n(pres.costoSubUnidad),
+            precioCompra: precioCompra,                             // lo que cuesta una compra (con impuestos)
+            costoPieza: costoPieza,                                 // lo que cuesta cada pieza
+            unidadStock: porPieza ? 'botellas' : (compraNom || 'unidades'),
+            costoUnidadStock: porPieza ? costoPieza : precioCompra  // el costo de UNA unidad de stock (lo que se pide)
+        };
+    }
+    /* La regla del pedido (Edwin): existencia IGUAL O MENOR al mínimo → se pide
+       lo que falta para llegar al MÁXIMO; mayor al mínimo → no se pide. Sin
+       máximo no hay a dónde surtir. En la unidad del stock, hacia arriba. */
+    function pedidoRequisicion(existencia, stockMin, stockMax) {
+        var e = (existencia === '' || existencia === null || existencia === undefined) ? NaN : parseFloat(existencia);
+        if (isNaN(e)) return { estado: 'sin-datos', pedido: 0 };
+        var min = n(stockMin), max = n(stockMax);
+        if (!(max > 0)) return { estado: 'sin-stock', pedido: 0 };
+        if (e <= min) return { estado: 'critico', pedido: Math.max(0, Math.ceil(max - e)) };
+        return { estado: e < max ? 'bajo' : 'ok', pedido: 0 };
+    }
     // En frutas/proteínas a granel el editor anterior podía guardar 1 KG
     // como peso de CADA fruto y multiplicarlo por 160. Reconocer únicamente
     // esa referencia exacta (la compra o una unidad de compra), sin reinterpretar
@@ -2234,6 +2279,7 @@
         cantidadFilaInventario: cantidadFilaInventario,
         contenidoUtilPresentacion: contenidoUtilPresentacion,
         factorImpuestoPresentacion: factorImpuestoPresentacion,
+        referenciaCompra: referenciaCompra, pedidoRequisicion: pedidoRequisicion,
         costosAbarrote: costosAbarrote,
         costosPresentacion: costosAbarrote,
         contenidoCompraPresentacion: contenidoCompraPresentacion,

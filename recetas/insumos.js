@@ -3042,10 +3042,36 @@
       un aparato recién estrenado), así que se reintenta con un tope: dos
       segundos y medio es más de lo que tarda cualquiera de los dos, y pasado
       eso lo honesto es decir que no está. */
+   /* «No se pudo abrir este insumo» salía seguido en la tablet (Edwin, 23-nov):
+      se esperaban 2.5 s y un catálogo de 1,000+ insumos tarda más en bajar de
+      la nube. Ahora se espera a que la nube TERMINE (hasta 30 s, con aviso de
+      «cargando») y, si piden el maestro y esta sucursal trabaja con su copia,
+      se abre la copia. Solo si de verdad no está, se dice. */
+   function _buscarInsumoPedido(id) {
+       var lista = (typeof getInsumos === 'function') ? (getInsumos() || []) : [];
+       var ins = lista.find(function (x) { return x && x.id === id; });
+       if (ins) return ins;
+       var suc = (typeof _getSucActivaIns === 'function') ? _getSucActivaIns() : (localStorage.getItem('etaax_sucursal_activa') || '');
+       var copias = lista.filter(function (x) { return x && x.origenId === id; });
+       return copias.find(function (x) { return !suc || !window._insumoActivoEnSuc || window._insumoActivoEnSuc(x, suc); }) || copias[0] || null;
+   }
+   function _avisoCargandoInsumo(mostrar) {
+       var el = document.getElementById('insCargandoPedido');
+       if (!mostrar) { if (el) el.remove(); return; }
+       if (el || !document.body) return;
+       el = document.createElement('div');
+       el.id = 'insCargandoPedido';
+       el.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:inherit;z-index:99998;pointer-events:none';
+       el.innerHTML = '<div style="font-size:13px;color:var(--text-muted,#999)">Cargando el insumo…</div>';
+       document.body.appendChild(el);
+   }
    function _abrirInsumoPedido(id, intento) {
-       var ins = (typeof getInsumos === 'function') ? getInsumos().find(function (x) { return x.id === id; }) : null;
-       if (ins) { editarInsumo(id); return; }
-       if (intento < 25) { setTimeout(function () { _abrirInsumoPedido(id, intento + 1); }, 100); return; }
+       var ins = _buscarInsumoPedido(id);
+       if (ins) { _avisoCargandoInsumo(false); editarInsumo(ins.id); return; }
+       var nubeLista = !!window._insNubeLista;
+       if (intento === 8) _avisoCargandoInsumo(true);
+       if ((!nubeLista && intento < 300) || intento < 25) { setTimeout(function () { _abrirInsumoPedido(id, intento + 1); }, 100); return; }
+       _avisoCargandoInsumo(false);
        /* Se acabó la espera. Un hueco negro manda a reportar «no carga»; esto
           manda a mirar si el insumo sigue existiendo, que es lo que pasó. */
        var b = document.body;
@@ -3058,7 +3084,8 @@
            '<div style="font-size:14px;font-weight:600;color:var(--text,#eee);margin-bottom:8px">' +
            'No se pudo abrir este insumo</div>' +
            '<div style="font-size:12.5px;color:var(--text-muted,#999);line-height:1.65">' +
-           'El catálogo no terminó de cargar, o el insumo ya no existe en esta sucursal.<br>' +
+           (window._insNubeLista ? 'Ese insumo ya no está en el catálogo de este negocio (se borró o se cambió).<br>'
+                                 : 'El catálogo no terminó de cargar (revisa tu conexión).<br>') +
            'Cierra esta ventana y vuelve a intentarlo.</div></div>';
        b.appendChild(d);
    }
@@ -6707,7 +6734,8 @@
        // Primera carga: sincronizar con Supabase en background
        if (!_insumosSupaCargado && getNegocioActivo()) {
            _insumosSupaCargado = true;
-           _cargarInsumosDeSupabase();
+           /* La ficha que se abre por id (?solo=1&id) espera a esto. */
+           Promise.resolve(_cargarInsumosDeSupabase()).then(function () { window._insNubeLista = true; }, function () { window._insNubeLista = true; });
            _cargarProveedoresIns(); // catálogo de proveedores para el editor
        }
    }
