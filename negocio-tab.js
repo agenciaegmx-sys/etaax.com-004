@@ -157,22 +157,36 @@
             ov.id = 'salirOverlay';
             ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:99800;' +
                 'display:flex;align-items:center;justify-content:center;padding:20px';
+            /* Colores PROPIOS, no las variables de la página: el admin usa
+               --s1/--s2, el hub claro no define --surface2… y el respaldo oscuro
+               (#1d1d1d) caía en un modal claro con letra oscura → el botón
+               «Seguir aquí» salía negro y sin texto. Aquí se pregunta el tema
+               y se pinta con su paleta completa. */
+            var claro = false;
+            try { claro = document.documentElement.getAttribute('data-theme') === 'light'; } catch (e) {}
+            var P = claro
+                ? { bg: '#ffffff', borde: '#d9d4ca', txt: '#1a1916', dim: '#666157', btn: '#f1eee8', btnTxt: '#1a1916',
+                    ok: '#b8401f', okBg: 'rgba(192,68,42,.08)', okBorde: 'rgba(192,68,42,.45)', velo: 'rgba(20,18,14,.45)', sombra: 'rgba(0,0,0,.18)', ic: '#b8401f' }
+                : { bg: '#171611', borde: '#3a3830', txt: '#f0ece4', dim: '#b5afa3', btn: '#24221d', btnTxt: '#f0ece4',
+                    ok: '#ff8a6a', okBg: 'rgba(224,90,58,.12)', okBorde: 'rgba(224,90,58,.55)', velo: 'rgba(0,0,0,.72)', sombra: 'rgba(0,0,0,.6)', ic: '#ff8a6a' };
+            ov.style.background = P.velo;
+            var ic = (typeof window.etaaxIcono === 'function') ? window.etaaxIcono('cerrar-sesion', { tam: 30 }) : '';
             ov.innerHTML =
-                '<div style="background:var(--surface,#141414);border:1px solid var(--border,#2a2a2a);' +
+                '<div style="background:' + P.bg + ';border:1px solid ' + P.borde + ';color:' + P.txt + ';' +
                      'border-radius:16px;padding:26px 26px 22px;max-width:360px;width:100%;text-align:center;' +
-                     'box-shadow:0 24px 64px rgba(0,0,0,.6)">' +
-                    '<div style="font-size:34px;margin-bottom:10px">👋</div>' +
+                     'box-shadow:0 24px 64px ' + P.sombra + '">' +
+                    (ic ? '<div style="display:flex;justify-content:center;margin-bottom:10px;color:' + P.ic + ';--etx-color:' + P.ic + '">' + ic + '</div>' : '') +
                     '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;' +
-                         'color:var(--text,#eee);margin-bottom:6px">¿Cerrar sesión?</div>' +
-                    '<div style="font-size:13px;color:var(--text-dim,#888);margin-bottom:20px">' +
+                         'color:' + P.txt + ';margin-bottom:6px">¿Cerrar sesión?</div>' +
+                    '<div style="font-size:13px;color:' + P.dim + ';margin-bottom:20px">' +
                         'Tu información queda guardada. Al volver, inicia sesión otra vez.</div>' +
                     '<div style="display:flex;gap:10px;justify-content:center">' +
-                        '<button id="salirCancelBtn" style="flex:1;background:var(--surface2,#1d1d1d);' +
-                            'border:1px solid var(--border,#2a2a2a);color:var(--text,#eee);border-radius:10px;' +
-                            'padding:11px 0;font-size:13px;cursor:pointer">Seguir aquí</button>' +
-                        '<button id="salirOkBtn" style="flex:1;background:rgba(224,90,58,.12);' +
-                            'border:1px solid rgba(224,90,58,.55);color:#ff8a6a;border-radius:10px;' +
-                            'padding:11px 0;font-size:13px;cursor:pointer;font-weight:600">Cerrar sesión</button>' +
+                        '<button id="salirCancelBtn" style="flex:1;background:' + P.btn + ';' +
+                            'border:1px solid ' + P.borde + ';color:' + P.btnTxt + ';border-radius:10px;' +
+                            'padding:11px 0;font-size:13px;cursor:pointer;font-family:inherit">Seguir aquí</button>' +
+                        '<button id="salirOkBtn" style="flex:1;background:' + P.okBg + ';' +
+                            'border:1px solid ' + P.okBorde + ';color:' + P.ok + ';border-radius:10px;' +
+                            'padding:11px 0;font-size:13px;cursor:pointer;font-weight:600;font-family:inherit">Cerrar sesión</button>' +
                     '</div>' +
                 '</div>';
             document.body.appendChild(ov);

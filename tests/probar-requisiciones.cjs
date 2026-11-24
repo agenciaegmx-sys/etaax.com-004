@@ -10,6 +10,11 @@
      · El botón de los pasos es el de inventarios («① Existencias ▾»).
      · Cost·ax es independiente: con Cost·ax solo no se leen las ventas (cortes)
        ni se enseña «Compra vs venta»; con el paquete, sí.
+     · (24-nov) El encabezado y el Paso 1 son los de inventarios: «Paso 1 —
+       Existencias», Info general · Historial · Salir · Finalizar requisición, el
+       buscador con Pendientes/Registrados y UNA vista en dos columnas; la captura
+       en modal. La ficha técnica se VE sin contraseña; EDITAR sí la pide. Sin
+       emojis: íconos de la app.
 
    Ejecutar: NODE_PATH=<playwright>/node_modules node tests/probar-requisiciones.cjs */
 'use strict';
@@ -71,6 +76,10 @@ async function abrir(browser, n) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await ctx.route('**/*', async (route) => {
         const url = new URL(route.request().url());
+        /* El editor de insumos (el iframe de «Editar ficha») es pesado y aquí solo
+           importa QUÉ abre: se sirve una página ligera para no tumbar el navegador. */
+        if (url.origin === ORIGEN && url.pathname === '/recetas/insumos.html')
+            return route.fulfill({ status: 200, body: '<!doctype html><meta charset="utf-8"><title>Editor de insumo</title>', headers: { 'content-type': 'text/html' } });
         if (url.origin === ORIGEN) {
             const p = path.join(RAIZ, decodeURIComponent(url.pathname));
             if (p.startsWith(RAIZ) && fs.existsSync(p) && fs.statSync(p).isFile())
@@ -116,9 +125,41 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             assert.match(await p.evaluate(() => document.getElementById('btnPasoMenu').innerText.replace(/\s+/g, ' ')), /1 ?Existencias ▾/);
             assert.equal(await p.evaluate(() => !!document.querySelector('.req-steps') || !!document.getElementById('stepBtn1')), false);
         });
+        await caso('el encabezado es el de inventarios: «Paso 1 — Existencias», guardado y Info general · Historial · Salir · Finalizar', async () => {
+            const h = await p.evaluate(() => ({
+                paso: document.getElementById('stepLabel').textContent, ind: document.getElementById('autoGuardarInd').textContent,
+                bot: [...document.querySelectorAll('#hdrBtns > button')].filter(b => b.offsetParent).map(b => b.textContent.trim()),
+                fijo: getComputedStyle(document.getElementById('reqHeader')).position }));
+            assert.equal(h.paso, 'Paso 1 — Existencias');
+            assert.equal(h.ind, 'Todos los cambios guardados');
+            assert.deepEqual(h.bot, ['Info general', 'Historial', 'Salir', 'Finalizar requisición']);
+            assert.equal(h.fijo, 'sticky');
+        });
+        await caso('…con la barra del paso: «Buscar producto…», Pendientes y Registrados, lista o iconos', async () => {
+            const t = await p.evaluate(() => ({ ph: document.getElementById('reqBuscador').placeholder,
+                ind: [...document.querySelectorAll('#pasoHerr .ph-ind > span')].map(x => x.textContent.replace(/\s+/g, ' ').trim()).join(' | '), vt: document.querySelectorAll('#pasoHerr .vista-toggle button').length }));
+            assert.deepEqual([t.ph, t.ind, t.vt], ['Buscar producto…', 'Pendientes 1203 | Registrados 0', 2]);
+        });
+        await caso('UNA sola vista en dos columnas, Pendientes | Registrados (sin «Uno por uno» ni «Lista completa»)', async () => {
+            const v = await p.evaluate(() => ({ cab: [...document.querySelectorAll('.p12-cab')].map(c => c.textContent.replace(/\s+/g, ' ').trim()),
+                pend: document.querySelectorAll('#p1Pend .p12-item').length, viejo: !!document.getElementById('vChipRapida') || !!document.getElementById('tablaReq') || /Uno por uno|Lista completa/.test(document.body.innerText) }));
+            assert.deepEqual(v.cab, ['Pendientes1203', 'Registrados0']);
+            assert.equal(v.pend, 1203);
+            assert.equal(v.viejo, false);
+        });
+        await p.fill('#reqBuscador', 'coca'); await p.waitForTimeout(150);
+        await caso('el buscador filtra las dos columnas y no pierde el foco', async () => {
+            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#p1Pend .p12-item')].map(b => b.dataset.id)), ['a_coca']);
+            assert.equal(await p.evaluate(() => document.activeElement && document.activeElement.id), 'reqBuscador');
+            assert.equal(await p.evaluate(() => document.getElementById('p1NPend').textContent), '1 de 1203');
+        });
+        await p.fill('#reqBuscador', ''); await p.waitForTimeout(150);
+        await caso('sin emojis en la pantalla: íconos de la app', async () => {
+            const t = await p.evaluate(() => document.getElementById('mainContent').innerText);
+            assert.equal(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(t), false, t.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u));
+            assert.ok(await p.evaluate(() => document.querySelectorAll('#reqHeader svg.inv-ic').length >= 4));
+        });
         await foto(p, 'r1-existencias');
-        await p.evaluate(() => setVistaCapt('lista')); await foto(p, 'r2-lista');
-        await p.evaluate(() => setVistaCapt('rapida'));
         await p.click('#btnPasoMenu'); await p.waitForTimeout(150);
         await foto(p, 'r3-menu');
         await caso('…despliega los tres pasos, con «estás aquí»', async () =>
@@ -134,9 +175,11 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             assert.equal(await p.evaluate(() => _cacheCortesReq.length), 1);
         });
 
-        console.log('\n══ Requisiciones · contar uno por uno ══');
-        await p.evaluate(() => { irPaso(1); setVistaCapt('rapida'); _rapidaSel = 'a_coca'; renderRapida(); });
-        await p.waitForTimeout(200);
+        console.log('\n══ Requisiciones · contar en el modal ══');
+        await p.evaluate(() => irPaso(1)); await p.waitForTimeout(150);
+        await p.click('#p1Pend .p12-item[data-id="a_coca"]'); await p.waitForTimeout(200);
+        await caso('tocar un pendiente abre su captura en un modal', async () =>
+            assert.deepEqual(await p.evaluate(() => [document.getElementById('reqCaptModal').style.display, document.getElementById('rcCard').dataset.id]), ['flex', 'a_coca']));
         const tarjeta = () => p.evaluate(() => document.getElementById('rcCard').textContent.replace(/\s+/g, ' '));
         const resultado = () => p.evaluate(() => document.getElementById('rcRes').textContent.replace(/\s+/g, ' '));
         await caso('la tarjeta dice cómo se compra, lo que cuesta la caja y la pieza, y el stock EN CAJAS', async () => {
@@ -160,15 +203,28 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
         await caso('…y con 3 cajas + 12 piezas (3.5 > 2): «No hay pedido», al momento', async () =>
             assert.match(await resultado(), /No hay pedido.*Tienes 3\.5 cajas: más que el mínimo \(2\)/));
         await foto(p, 'r4-tarjeta');
+        await caso('con existencia, el botón dice «Registrado — Siguiente»', async () =>
+            assert.match(await p.evaluate(() => document.getElementById('rcSig').textContent), /^Registrado — Siguiente$/));
         await campos[0].fill('2'); await campos[1].fill('0');
         await caso('existencia IGUAL al mínimo (2) también pide: 4 cajas · $1,920', async () =>
             assert.match(await resultado(), /Hay pedido: 4 cajas · \$1,920\.00/));
         await caso('el costo del pedido va por CAJA (antes: por pieza, 24 veces más barato)', async () =>
             assert.equal(await p.evaluate(() => { const c = calcItem(insumos.find(x => x.id === 'a_coca'), reqData.a_coca); return pedidoFinal(c, reqData.a_coca) * c.costoUnitPieza; }), 1920));
-        await p.evaluate(() => { window._pedirClaveAdmin = (a, cb) => cb(); });
+        await p.evaluate(() => { window.__claves = 0; window._pedirClaveAdmin = (a, cb) => { window.__claves++; cb(); }; });
         await p.click('#rcCard >> text=Ficha técnica'); await p.waitForTimeout(250);
-        await caso('«Ficha técnica» abre el editor real del insumo en ventana flotante', async () =>
-            assert.match(await p.evaluate(() => (document.querySelector('#reqEditorOv iframe') || { getAttribute: () => '' }).getAttribute('src')), /\/recetas\/insumos\.html\?solo=1&id=a_coca/));
+        await caso('«Ficha técnica» se VE sin pedir contraseña (Edwin, 24-nov)', async () => {
+            const f = await p.evaluate(() => ({ claves: window.__claves, ov: !!document.getElementById('reqFichaOv'), editor: !!document.getElementById('reqEditorOv'),
+                txt: (document.getElementById('reqFichaOv') || { textContent: '' }).textContent.replace(/\s+/g, ' ') }));
+            assert.deepEqual([f.claves, f.ov, f.editor], [0, true, false]);
+            assert.match(f.txt, /Coca-Cola.*Presentaciones.*Se compra por\s*Caja de 24 piezas.*mín 2 · máx 6/);
+        });
+        await foto(p, 'r5-ficha');
+        await p.click('#reqFichaOv >> text=Editar ficha'); await p.waitForTimeout(250);
+        await caso('…«Editar ficha» SÍ pide la contraseña y abre el editor real del insumo en ventana flotante', async () => {
+            assert.equal(await p.evaluate(() => window.__claves), 1);
+            assert.equal(await p.evaluate(() => !!document.getElementById('reqFichaOv')), false);
+            assert.match(await p.evaluate(() => (document.querySelector('#reqEditorOv iframe') || { getAttribute: () => '' }).getAttribute('src')), /\/recetas\/insumos\.html\?solo=1&id=a_coca/);
+        });
         await p.evaluate(() => {
             const c = JSON.parse(JSON.stringify(insumos.find(x => x.id === 'a_coca'))); c.presentaciones[0].stockMax = '10';
             window.postMessage({ type: 'insumoGuardado', insumos: [c] }, location.origin);
@@ -179,7 +235,34 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             assert.match(await tarjeta(), /mín 2 · máx 10/);
             assert.match(await resultado(), /Hay pedido: 8 cajas/);
         });
+        await caso('mientras espera la pausa de teclas dice «Guardando…»', async () =>
+            assert.equal(await p.evaluate(() => { setReqData(reqData); return document.getElementById('autoGuardarInd').textContent; }), 'Guardando…'));
         await p.waitForTimeout(900);   // se guarda en la nube 0.7 s después de la última tecla
+        await caso('…y luego «Todos los cambios guardados»', async () =>
+            assert.equal(await p.evaluate(() => document.getElementById('autoGuardarInd').textContent), 'Todos los cambios guardados'));
+        await p.click('#rcSig'); await p.waitForTimeout(250);
+        await caso('«Registrado — Siguiente» pasa al siguiente PENDIENTE (Limón) y la Coca queda en Registrados con su pedido', async () => {
+            assert.equal(await p.evaluate(() => document.getElementById('rcCard').dataset.id), 'a_limon');
+            assert.match(await p.evaluate(() => document.querySelector('#p1Reg .p12-item[data-id="a_coca"]').textContent.replace(/\s+/g, ' ')), /Pedir 8 cajas · \$3,840\.00\s*Hay 2 cajas/);
+            assert.equal(await p.evaluate(() => document.getElementById('cntReg').textContent), '1');
+        });
+        await caso('sin existencia, el botón ofrece «Registrar en cero — Siguiente»', async () =>
+            assert.match(await p.evaluate(() => document.getElementById('rcSig').textContent), /^Registrar en cero — Siguiente$/));
+        await p.click('#rcCard .rc-x'); await p.waitForTimeout(150);
+        await caso('cerrar el modal NO registra (el Limón sigue pendiente)', async () => {
+            assert.equal(await p.evaluate(() => document.getElementById('reqCaptModal').style.display), 'none');
+            assert.equal(await p.evaluate(() => esRegistrado(reqData.a_limon)), false);
+        });
+        await p.click('#btnInfoReq'); await p.waitForTimeout(150);
+        await caso('«Info general»: sucursal, revisados, lo que va del pedido, cargar anteriores y nueva requisición', async () => {
+            const t = await p.evaluate(() => document.getElementById('infoReqBody').textContent.replace(/\s+/g, ' '));
+            assert.match(t, /Sucursal\s*Matriz/);
+            assert.match(t, /Insumos revisados\s*1 de 1203/);
+            assert.match(t, /A pedir\s*1 insumo\s*Costo estimado\s*\$3,840\.00/);
+            assert.match(t, /Cargar existencias anteriores.*Nueva requisición/);
+        });
+        await foto(p, 'r6-info');
+        await p.evaluate(() => cerrarInfoReq());
         await caso('lo capturado se guarda en la requisición de ESTA sucursal', async () => {
             const d = await p.evaluate(() => JSON.parse(localStorage.getItem('__nube')).req_pedido[0].datos);
             assert.equal(d.__v, 2);
@@ -193,6 +276,14 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             assert.equal(await p.evaluate(() => document.getElementById('cntReg').textContent), '0');
             assert.match(await p.evaluate(() => document.getElementById('reqAviso').textContent), /Requisición finalizada/);
         });
+        await p.click('#p1Pend .p12-item[data-id="a_limon"]'); await p.waitForTimeout(150);
+        await p.click('#rcSig'); await p.waitForTimeout(250);
+        await caso('«Registrar en cero — Siguiente» registra la existencia en 0 (en cero: se pide todo el máximo)', async () => {
+            assert.equal(await p.evaluate(() => reqData.a_limon.existencia), 0);
+            assert.match(await p.evaluate(() => document.querySelector('#p1Reg .p12-item[data-id="a_limon"]').textContent.replace(/\s+/g, ' ')), /Pedir 6/);
+            assert.equal(await p.evaluate(() => document.getElementById('rcCard').dataset.id), 'a_mezcal');
+        });
+        await p.evaluate(() => _cerrarCapturaReq());
 
         console.log('\n══ Requisiciones · otra sucursal ══');
         await p.evaluate(() => { reqData.a_limon = { existencia: 4 }; setReqData(reqData); });

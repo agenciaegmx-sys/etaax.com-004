@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
-<script src="/negocio-tab.js?v=185d735a"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
+<script src="/negocio-tab.js?v=39197e12"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js?v=efd50067"></script>
     <meta charset="UTF-8">
     <script src="/theme.js?v=64b86f6e"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
@@ -184,8 +184,27 @@ document.addEventListener('DOMContentLoaded', function(){
         .btn-sm:hover { border-color: var(--green); color: var(--green); }
         .btn-sm.danger:hover { border-color: var(--red); color: var(--red); }
 
-        /* ══ Wizard requisiciones ══ */
-        .req-steps{display:flex;align-items:center;gap:8px;padding:0 20px;margin:4px 0 14px}
+        /* ══ ENCABEZADO Y PASO 1: los MISMOS de inventarios (Edwin, 24-nov) ══════
+           Antes había dos vistas (tarjeta por tarjeta y una tabla larga), tarjetas de
+           resumen y una barra de filtros. Ahora, como el Paso 1 de inventarios:
+           el encabezado fijo con su botón de pasos, el buscador con Pendientes y
+           Registrados, y UNA vista en dos columnas. Al tocar un insumo su captura
+           se abre en un modal. En una requisición hay que revisar la existencia de
+           CADA insumo: lo que falta queda a la vista a la izquierda. */
+        .inv-wizard-header { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
+            padding: 8px 18px; background: var(--bg); border-bottom: 1px solid var(--border);
+            position: sticky; top: 96px; z-index: 92; min-height: 60px; }
+        body:not(.has-ctx) .inv-wizard-header { top: 48px; }
+        .inv-wizard-header > div { flex-wrap: wrap; min-width: 0; }
+        .inv-wizard-header > div:first-child { margin-right: auto; }
+        #hdrBtns { display: contents !important; }
+        body.etx-modulos-ui #mainContent > .inv-wizard-header { margin-top: -24px; }
+        @media (max-width: 600px) { body.etx-modulos-ui #mainContent > .inv-wizard-header { margin-top: -16px; } }
+        .inv-wizard-header .btn-vista { padding: 8px 13px; font-size: 13px; white-space: nowrap; }
+        #btnFinalizarReq { color: var(--green); border-color: var(--green); }
+        .req-guardado { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: var(--green); }
+        .req-guardado.pend { color: var(--text-dim); }
+        .req-guardado .inv-ic { margin-right: 0; color: inherit; }
         /* El botón de los pasos: el MISMO de inventarios (recetas/inventarios.html). */
         .inv-paso-menu { position: relative; display: inline-flex; }
         #btnPasoMenu { display: inline-flex; align-items: center; gap: 7px; border-color: var(--accent); color: var(--text); font-weight: 600; }
@@ -204,69 +223,178 @@ document.addEventListener('DOMContentLoaded', function(){
         .inv-paso-pop .actual { background: color-mix(in srgb, var(--accent) 13%, transparent); font-weight: 600; }
         .inv-paso-pop .actual .n { border-color: var(--accent); color: var(--accent); }
         .inv-paso-pop small { margin-left: auto; font-size: 11px; color: var(--text-dim); font-weight: 400; }
+        /* La barra del paso (buscador · Pendientes · Registrados · lista/iconos). */
+        .paso-herr { flex: 1 1 100%; display: flex; flex-wrap: nowrap; justify-content: flex-start; gap: 8px; align-items: center;
+            padding-top: 8px; margin-top: 2px; border-top: 1px solid var(--border); }
+        .paso-herr:empty { display: none; }
+        .ph-izq, .ph-der { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+        .ph-izq { flex: 0 1 auto; }
+        .ph-der { flex: 0 0 auto; margin-left: auto; }
+        @media (max-width: 900px) { .paso-herr { flex-wrap: wrap; } .ph-der { flex: 0 1 auto; } }
+        .ph-n { display: inline-block; min-width: 16px; padding: 0 5px; margin-left: 3px; border-radius: 8px; font-size: 10.5px;
+            line-height: 16px; text-align: center; background: color-mix(in srgb, currentColor 18%, transparent); }
+        .ph-buscar { flex: 0 1 250px; width: 250px; min-width: 150px; max-width: 250px; box-sizing: border-box; background: var(--surface2);
+            border: 1px solid var(--border); color: var(--text); border-radius: 9px; padding: 8px 12px; font: inherit; font-size: 13px; outline: none; }
+        .ph-buscar:focus { border-color: var(--accent); }
+        .ph-ind { display: inline-flex; gap: 6px; flex-shrink: 0; }
+        .ph-ind > span { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 9px; padding: 7px 11px;
+            font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
+        .ph-ind > span > svg.inv-ic { margin-right: 0; }
+        .vista-toggle { display: flex; gap: 3px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 3px; }
+        .vista-toggle button { padding: 5px 10px; border-radius: 5px; border: none; background: transparent; color: var(--text-muted);
+            font-size: 11px; cursor: pointer; transition: all .15s; font-family: 'DM Sans', sans-serif; }
+        .vista-toggle button.active { background: var(--surface); color: var(--text); }
+        .vista-toggle button .inv-ic { margin-right: 0; }
+        /* Íconos de la app dentro de botones y etiquetas (en vez de emojis). */
+        .inv-ic { display: inline-block; vertical-align: -3px; margin-right: 6px; flex-shrink: 0; color: var(--etx-ui-cyan, #2a9aa5); }
+        svg.etx-ic.inv-ic { width: 16px; height: 16px; }
+        svg.etx-ic.inv-ic[width="14"] { width: 14px; height: 14px; }
+        svg.etx-ic.inv-ic[width="15"] { width: 15px; height: 15px; }
+        svg.etx-ic.inv-ic[width="18"] { width: 18px; height: 18px; }
+        svg.etx-ic.inv-ic[width="20"] { width: 20px; height: 20px; }
+        svg.etx-ic.inv-ic[width="30"] { width: 30px; height: 30px; }
+        :is(button, label):has(> svg.inv-ic), .p12-cab > span { display: inline-flex; align-items: center; }
+        :is(button, label):has(> svg.inv-ic) { justify-content: center; gap: 5px; }
+        :is(button, label):has(> svg.inv-ic) > svg.inv-ic { margin-right: 1px; }
+        .p12-cab > span { gap: 5px; }
+        .p12-cab > span > svg.inv-ic { margin-right: 0; }
+        /* Las dos columnas (las de inventarios). */
+        .p12-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 12px 18px 40px; align-items: start; }
+        .p12-col { min-width: 0; }
+        .p12-cab { display: flex; align-items: center; gap: 10px; margin: 0 2px 8px; font-size: 11px; color: var(--text-dim);
+            text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+        .p12-cab b { color: var(--text); font-size: 13px; letter-spacing: 0; text-transform: none; }
+        .p12-lista { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+        .p12-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 14px; border: 0;
+            border-bottom: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+        .p12-item:last-child { border-bottom: 0; }
+        .p12-item:hover { background: var(--surface2); }
+        .p12-nom { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+        .p12-nom small { display: block; font-size: 11px; font-weight: 400; color: var(--text-dim); margin-top: 2px; }
+        .p12-ant { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+        .p12-der { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+        .p12-der small { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+        .p12-vacio { padding: 22px; text-align: center; color: var(--text-dim); font-size: 13px; }
+        .p12-lista.p12-iconos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; border: 0; background: transparent; overflow: visible; }
+        .p12-iconos .p12-item { flex-direction: column; align-items: flex-start; gap: 8px; min-height: 92px; border: 1px solid var(--border);
+            border-radius: 11px; background: var(--surface); }
+        .p12-iconos .p12-item.reg { border-color: rgba(61,190,122,.45); }
+        .p12-iconos .p12-der { align-items: flex-start; text-align: left; }
+        @media (max-width: 900px) { .p12-split { grid-template-columns: minmax(0, 1fr); } }
+        /* El aviso de arriba de las columnas (el del Paso 1 de inventarios). */
+        .req-banner { margin: 12px 18px 0; padding: 10px 14px; border: 1px solid var(--border); border-left: 3px solid var(--accent);
+            border-radius: 8px; background: var(--surface); font-size: 12.5px; color: var(--text-dim); line-height: 1.5;
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .req-banner > span { flex: 1 1 260px; min-width: 0; }
+        .req-banner b { color: var(--text); }
+        .req-banner .btn-vista { padding: 6px 12px; font-size: 12px; }
+        /* La captura de un insumo, en modal. */
+        .p12-modal { position: fixed; inset: 0; z-index: 3000; background: rgba(0,0,0,.55); align-items: flex-start; justify-content: center;
+            padding: 6vh 16px 16px; overflow-y: auto; }
+        .p12-modal-caja { width: min(640px, 100%); }
+        .ent-form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+        .ent-tipo-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .ent-tipo-btn { padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px; background: transparent;
+            color: var(--text-muted); font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; transition: all .15s; }
+        .ent-tipo-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .ent-tipo-btn.active { border-color: var(--accent); background: var(--accent); color: var(--bg); font-weight: 600; }
+        .ent-tipo-btn.active .inv-ic { color: inherit; }
+        .btn-ver-prod { background: none; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; color: var(--text-dim);
+            font-size: 11px; padding: 4px 9px; font-family: 'DM Sans', sans-serif; transition: all .12s; }
+        .btn-ver-prod:hover { border-color: var(--accent); color: var(--accent); }
+        .inv-tag { font-size: 10px; padding: 2px 8px; border-radius: 20px; background: var(--bg); border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
+        .rc-x { background: none; border: 0; cursor: pointer; color: var(--text-dim); padding: 2px; line-height: 0; }
+        .rc-x .inv-ic { margin-right: 0; color: var(--text-dim); }
         /* Ficha técnica flotante: la misma ventana de inventarios. */
-        .inv-editor-ov { position: fixed; inset: 0; z-index: 9600; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; padding: 2%; box-sizing: border-box; }
+        .inv-editor-ov { position: fixed; inset: 0; z-index: 9600; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center;
+            padding: 14px; box-sizing: border-box; }
         .inv-editor-caja { width: min(980px, 100%); height: 100%; max-height: 820px; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border); border-radius: 14px;
-            display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
-        .inv-editor-hd { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--text); }
-        .inv-editor-hd button { background: none; border: 0; cursor: pointer; padding: 4px 8px; color: var(--text); font-size: 16px; }
+            display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.45); }
+        .inv-editor-hd { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border);
+            font-weight: 600; font-size: 14px; color: var(--text); background: var(--surface); }
+        .inv-editor-hd span { display: inline-flex; align-items: center; gap: 6px; }
+        .inv-editor-hd button { background: none; border: 0; cursor: pointer; padding: 4px; line-height: 0; }
+        .inv-editor-hd button .inv-ic { margin-right: 0; color: var(--text-dim); }
         .inv-editor-caja iframe { flex: 1 1 0; min-height: 0; width: 100%; border: 0; background: var(--bg); }
-        /* La tarjeta «uno por uno» */
+        /* La ficha para VER (sin contraseña). Editar sí la pide. */
+        #reqFichaOv { z-index: 9500; }
+        .rf-caja { width: min(640px, 100%); max-height: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border); border-radius: 14px;
+            display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.45); }
+        .rf-body { padding: 18px; overflow-y: auto; }
+        .rf-top { display: flex; gap: 14px; align-items: flex-start; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+        .rf-foto { width: 72px; height: 72px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+            display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .rf-foto img { width: 100%; height: 100%; object-fit: cover; }
+        .rf-foto .inv-ic { margin-right: 0; }
+        .rf-fam { font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+        .rf-nom { font-size: 19px; font-weight: 600; color: var(--text); line-height: 1.25; }
+        .rf-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .rf-sec { font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--text-dim); font-weight: 600; margin: 16px 0 8px; }
+        .rf-pres + .rf-pres { margin-top: 12px; }
+        .rf-pres-tit { font-size: 13.5px; font-weight: 600; color: var(--text); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+        .rf-pres-tit small { font-weight: 400; font-size: 11.5px; color: var(--text-dim); }
+        .rf-pres .rq-ref { margin-top: 8px; }
+        .rf-notas { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin: 0; white-space: pre-wrap; }
+        .rf-pie { flex-shrink: 0; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--surface); }
+        .rf-editar { color: var(--accent); border-color: var(--accent); }
+        /* Información general. */
+        .ri-lista { margin-top: 14px; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; }
+        .ri-fila { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text-dim); }
+        .ri-fila:last-child { border-bottom: 0; }
+        .ri-fila b { color: var(--text); font-weight: 600; text-align: right; }
+        .ri-acc { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+        .ri-acc .btn-vista { flex: 1 1 200px; }
+        .ri-acc .btn-vista:disabled { opacity: .4; cursor: default; }
+        /* La tarjeta de captura */
         .rc-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-        .rc-acc { display: flex; gap: 6px; flex-shrink: 0; }
-        .rc-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+        .rc-titulo { font-size: 17px; font-weight: 700; color: var(--text); display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; }
+        .rc-var { color: var(--text-dim); font-weight: 400; }
+        .rc-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+        .rc-ant { font-size: 11px; color: var(--text-dim); }
+        .rc-acc { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+        .rc-lbl { font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-dim); font-weight: 500; margin: 16px 0 8px; }
         .rc-nota { text-transform: none; letter-spacing: 0; font-weight: 400; }
         .rc-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .rc-dos .rc-lbl { margin-top: 0; }
+        .rc-in { width: 100%; box-sizing: border-box; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+            border-radius: 10px; padding: 14px; font-size: 20px; font-weight: 600; text-align: center; font-family: 'DM Sans', sans-serif; outline: none; }
+        .rc-in:focus { border-color: var(--accent); }
+        .rq-pres { width: 100%; max-width: none; font-size: 13px; padding: 9px 10px; }
         .rq-ref { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface2); }
         .rq-ref-l { font-size: 9px; letter-spacing: 1.8px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
         .rq-ref-v { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.35; }
         .rq-ref-v span { font-weight: 400; color: var(--text-dim); font-size: 12px; }
         .rq-ref-v small { display: block; font-weight: 400; color: var(--text-dim); font-size: 11.5px; margin-top: 2px; }
         .rq-ref-v .rq-min { color: var(--red); } .rq-ref-v .rq-max { color: var(--green); } .rq-ref-v .rq-sin { color: var(--accent); font-weight: 600; font-size: 13px; }
-        .rc-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; font-size: 12px; color: var(--text-dim); }
+        .rc-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-dim); }
         .rc-total b { font-size: 18px; color: var(--text); }
+        .rc-copiar { width: 100%; margin-top: 10px; }
         .rq-res { margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
-        .rq-res b { font-size: 16px; } .rq-res span { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+        .rq-res b { font-size: 16px; display: inline-flex; align-items: center; gap: 6px; } .rq-res span { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+        .rq-res b .inv-ic, .rq-mini .inv-ic { color: inherit; margin-right: 0; }
         .rq-res.pedir { border-color: rgba(224,90,58,.55); background: rgba(224,90,58,.08); } .rq-res.pedir b { color: var(--red); }
         .rq-res.ok { border-color: rgba(61,190,122,.5); background: rgba(61,190,122,.08); } .rq-res.ok b { color: var(--green); }
         .rq-res.aviso { border-color: rgba(224,169,61,.55); background: rgba(224,169,61,.08); } .rq-res.aviso b { color: var(--accent); }
         .rq-res.neutro b { color: var(--text-muted, var(--text)); }
         .rc-ajuste { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
         .rc-ajuste .req-input { width: 100%; font-size: 14px; }
-        /* La lista */
-        .rq-ficha-mini { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; font-size: 11px; cursor: pointer; vertical-align: middle; }
-        .rq-ref-mini { font-size: 10.5px; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-        .rq-ref-chip { background: rgba(155,141,232,.1); border: 1px solid rgba(155,141,232,.3); color: var(--viol); border-radius: 4px; padding: 1px 7px; font-weight: 600; }
-        .rq-ref-costo { color: var(--green); }
-        .rq-res-celda small { display: block; font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
-        .rq-mini { font-size: 12px; font-weight: 700; white-space: nowrap; }
+        .rc-nopedir-on { color: var(--red); border-color: rgba(224,90,58,.55); }
+        .rc-sig { width: 100%; margin-top: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            background: rgba(61,190,122,.15); border: 1px solid var(--green); color: var(--green);
+            border-radius: 12px; padding: 14px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; }
+        .rc-sig.cero { background: rgba(245,200,66,.08); border-color: var(--accent); color: var(--accent); }
+        .rc-sig .inv-ic { color: inherit; margin-right: 0; }
+        .rq-mini { font-size: 12px; font-weight: 700; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
         .rq-mini.pedir { color: var(--red); } .rq-mini.ok { color: var(--green); } .rq-mini.aviso { color: var(--accent); } .rq-mini.neutro { color: var(--text-dim); }
-        .req-aviso { margin: 0 20px 12px; padding: 10px 14px; border: 1px solid rgba(61,190,122,.5); background: rgba(61,190,122,.08); color: var(--text); border-radius: 10px; font-size: 13px; }
+        .req-aviso { margin: 12px 18px 0; padding: 10px 14px; border: 1px solid rgba(61,190,122,.5); background: rgba(61,190,122,.08); color: var(--text); border-radius: 10px; font-size: 13px; }
         .req-aviso[hidden] { display: none; }
         @media (max-width: 760px) { .rq-ref { grid-template-columns: 1fr; } .rc-ajuste { grid-template-columns: 1fr; } }
-        .req-barra { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; }
-        .req-seg { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-        .req-step{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);
-            color:var(--text-dim);border-radius:22px;padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:12.5px;cursor:pointer}
-        .req-step .rs-n{width:20px;height:20px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);
-            display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
-        .req-step.activo{color:var(--viol);border-color:rgba(155,141,232,.5);background:rgba(155,141,232,.08)}
-        .req-step.activo .rs-n{background:var(--viol);color:#fff;border-color:var(--viol)}
-        .rs-sep{flex:0 0 26px;height:1px;background:var(--border)}
-        .req-chip{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:18px;
-            padding:7px 14px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer}
-        .req-chip.activo{color:var(--viol);border-color:rgba(155,141,232,.5);background:rgba(155,141,232,.1);font-weight:600}
+        /* Pasos 2 y 3 */
         .req-chip-mini{background:transparent;border:none;color:var(--text-muted);padding:5px 11px;border-radius:6px;
             font-family:'DM Sans',sans-serif;font-size:11.5px;cursor:pointer}
         .req-chip-mini.activo{background:var(--surface);color:var(--viol);font-weight:600;border:1px solid var(--border)}
-        .capt-modo{background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:4px;
-            padding:1px 6px;font-size:8.5px;cursor:pointer;font-family:'DM Sans',sans-serif}
-        .capt-modo.on{color:var(--viol);border-color:rgba(155,141,232,.5);background:rgba(155,141,232,.1);font-weight:700}
-        .acc-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;
-            width:26px;height:26px;cursor:pointer;font-size:12px;line-height:1}
-        .acc-btn:hover{border-color:var(--green);color:var(--green)}
-        .acc-btn.rojo{border-color:rgba(224,90,58,.5);color:var(--red);background:rgba(224,90,58,.1)}
-        .nota-chip{cursor:pointer;font-size:11px}
+        .nota-chip{cursor:help;display:inline-flex;vertical-align:middle}
+        .nota-chip .inv-ic{margin-right:0}
         .p2-titulo{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--text);margin:18px 0 10px}
         .p2-grupo{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
         .p2-grupo summary{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;font-size:13px;
@@ -274,42 +402,12 @@ document.addEventListener('DOMContentLoaded', function(){
         .p2-grupo summary::-webkit-details-marker{display:none}
         .p2-grupo[open] summary{border-bottom:1px solid var(--border)}
         .p2-grupo table{margin:0}
-        /* ══ Lista completa: filas e inputs GRANDES (legible en operación) ══ */
-        .req-table td{padding:16px 10px !important;font-size:14px}
-        .req-table .insumo-nombre{font-size:15.5px}
-        .req-table .insumo-sub{font-size:12px}
-        .req-table .req-input{font-size:16px;padding:10px 8px;min-width:64px}
-        .req-table .req-input.req-num{width:74px}
-        .req-table .pres-select{font-size:13px;padding:9px 8px}
-        .req-table .chip{font-size:11px;padding:4px 10px}
-        .capt-modo{font-size:10px;padding:3px 8px}
-        .acc-btn{width:34px;height:34px;font-size:15px}
-        .btn-cargar-ant{font-size:11px;padding:4px 9px}
-        /* ══ Modo búsqueda rápida (card enfocada, como inventarios) ══ */
-        .vista-chip{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:10px;
-            padding:10px 20px;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer}
-        .vista-chip.activo{background:var(--viol);border-color:var(--viol);color:#fff}
-        .rapida-wrap{max-width:760px;margin:0 auto;padding:0 16px 60px}
-        .rapida-buscar{width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);
-            border-radius:14px;padding:16px 18px;font-family:'DM Sans',sans-serif;font-size:16px;outline:none}
-        .rapida-buscar:focus{border-color:var(--viol)}
-        .rapida-res{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-top:8px;overflow:hidden}
-        .rapida-res-it{padding:13px 16px;font-size:14px;color:var(--text-muted);cursor:pointer;border-bottom:1px solid var(--border)}
-        .rapida-res-it:last-child{border-bottom:none}
-        .rapida-res-it:hover{background:var(--surface2);color:var(--text)}
-        .rapida-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;margin-top:14px}
-        .rapida-card .rc-titulo{font-size:19px;font-weight:700;color:var(--text)}
-        .rapida-card .rc-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:16px 0 7px}
-        .rapida-card input.rc-in{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);
-            border-radius:10px;padding:15px 14px;font-size:20px;font-weight:600;text-align:center;font-family:'DM Sans',sans-serif;outline:none}
-        .rapida-card input.rc-in:focus{border-color:var(--viol)}
-        .rc-modos{display:flex;gap:8px}
-        .rc-modo{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);border-radius:10px;
-            padding:12px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer}
-        .rc-modo.on{background:rgba(155,141,232,.15);border-color:var(--viol);color:var(--viol)}
-        .rc-total{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);margin-top:18px;padding-top:14px}
-        .rc-sig{width:100%;margin-top:14px;background:rgba(61,190,122,.1);border:1px solid var(--green);color:var(--green);
-            border-radius:12px;padding:15px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer}
+        .p2-grupo summary > span:first-child{display:inline-flex;align-items:center}
+        .req-tit-ic{display:inline-flex;align-items:center;gap:6px}
+        .req-tit-ic > svg.inv-ic{margin-right:0}
+        svg.inv-ic.ped-ic{color:currentColor;margin-right:0}
+        .e-icon .inv-ic{margin-right:0;color:var(--text-dim)}
+        #vistaPaso2 > .wrap, #vistaPaso3 > .wrap { padding-top: 16px; }
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=e08f9762">
@@ -358,13 +456,14 @@ document.addEventListener('DOMContentLoaded', function(){
 
     <main class="main-content expandido" id="mainContent">
 
-        <!-- HEADER -->
-        <div class="header">
-            <div class="brand">
-                <span class="brand-label">Sistema de</span>
-                <span class="brand-title">Requisición</span>
+        <!-- ENCABEZADO: el MISMO de inventarios (título, guardado, pasos, botones y la barra del paso). -->
+        <div class="inv-wizard-header" id="reqHeader">
+            <div>
+                <span class="brand-label" id="stepLabel">Paso 1 — Existencias</span>
+                <div class="brand-title" style="font-size:21px;line-height:1" id="reqTitulo">Requisición</div>
+                <span id="autoGuardarInd" class="req-guardado">Todos los cambios guardados</span>
             </div>
-            <div class="hdr-acts">
+            <div id="hdrBtns">
                 <!-- Los pasos: un botón que dice en cuál estás y despliega los tres (como inventarios). -->
                 <div class="inv-paso-menu" id="pasoMenuWrap">
                     <button class="btn-vista" id="btnPasoMenu" onclick="_togglePasoMenuReq(event)" aria-haspopup="true" aria-expanded="false" title="Cambiar de paso">
@@ -372,116 +471,31 @@ document.addEventListener('DOMContentLoaded', function(){
                     </button>
                     <div id="pasoMenuPop" class="inv-paso-pop" role="menu" hidden></div>
                 </div>
-                <span id="fechaReq" style="font-size:12px;color:var(--text-dim);padding:0 4px"></span>
-                <button class="btn-vista" id="btnHistorialReq" onclick="abrirHistorial()">📋 Historial</button>
-                <button class="btn-vista" onclick="cargarTodasAnteriores()" title="Cargar existencias vacías desde la última requisición archivada">↩ Cargar anteriores</button>
-                <button class="btn-primary" onclick="guardarExistencias()">💾 Guardar</button>
-                <button class="btn-vista" id="btnNuevaReq" onclick="nuevaRequisicion()" title="Empezar una requisición nueva en esta sucursal">＋ Nueva requisición</button>
-                <button class="btn-danger" id="btnFinalizarReq" onclick="finalizarRequisicion()" title="Guardarla en el historial y dejar la pantalla lista para una nueva">✅ Finalizar</button>
+                <button class="btn-vista" id="btnInfoReq" onclick="abrirInfoReq()" title="Sucursal, fechas, resumen, cargar las existencias anteriores o empezar una nueva">Info general</button>
+                <button class="btn-vista" id="btnHistorialReq" onclick="abrirHistorial()" title="Las requisiciones finalizadas de esta sucursal">Historial</button>
+                <button class="btn-vista" id="btnSalirReq" onclick="salirReq()" title="Guardar y salir: al volver sigues donde te quedaste">Salir</button>
+                <button class="btn-vista" id="btnFinalizarReq" onclick="finalizarRequisicion()" title="Guardarla en el historial y dejar la pantalla lista para una nueva">Finalizar requisición</button>
             </div>
+            <div id="pasoHerr" class="paso-herr"></div>
         </div>
-
 
         <div id="reqAviso" class="req-aviso" role="status" hidden></div>
-        <!-- ═══════════ PASO 1 · EXISTENCIAS ═══════════ -->
+        <!-- ═══════════ PASO 1 · EXISTENCIAS: PENDIENTES | REGISTRADOS ═══════════ -->
         <div id="vistaPaso1">
-        <div class="wrap" style="padding-bottom:0">
-            <div class="summary-grid" id="summaryCards">
-                <div class="summary-card">
-                    <div class="s-label">Insumos críticos</div>
-                    <div class="s-val red" id="sCriticos">—</div>
-                </div>
-                <div class="summary-card">
-                    <div class="s-label">Insumos bajos</div>
-                    <div class="s-val amber" id="sBajos">—</div>
-                </div>
-                <div class="summary-card">
-                    <div class="s-label">Ítems a pedir</div>
-                    <div class="s-val" id="sItems">—</div>
-                </div>
-                <div class="summary-card">
-                    <div class="s-label">Costo total estimado</div>
-                    <div class="s-val green" id="sCosto">—</div>
-                </div>
+            <div id="reqBanner"></div>
+            <div class="p12-split">
+                <section class="p12-col">
+                    <div class="p12-cab"><span data-ic="adm-pendiente" data-ic-tam="14">Pendientes</span><b id="p1NPend"></b></div>
+                    <div id="p1Pend"></div>
+                </section>
+                <section class="p12-col">
+                    <div class="p12-cab"><span data-ic="adm-pagado" data-ic-tam="14">Registrados</span><b id="p1NReg"></b></div>
+                    <div id="p1Reg"></div>
+                </section>
             </div>
-
-            <!-- UNA sola barra (antes eran dos renglones): cómo capturar | qué ver. -->
-            <div class="req-barra">
-                <div class="req-seg">
-                    <button class="vista-chip activo" id="vChipRapida" onclick="setVistaCapt('rapida')">🔍 Uno por uno</button>
-                    <button class="vista-chip" id="vChipLista" onclick="setVistaCapt('lista')">≡ Lista completa</button>
-                </div>
-                <div class="req-seg">
-                    <button class="req-chip activo" id="chipPend" onclick="setRegFiltro('pend',this)">Por contar (<span id="cntPend">0</span>)</button>
-                    <button class="req-chip" id="chipReg" onclick="setRegFiltro('reg',this)">Contados (<span id="cntReg">0</span>)</button>
-                    <button class="req-chip" id="chipTodos" onclick="setRegFiltro('',this)">Todos</button>
-                </div>
-            </div>
-            <div class="filter-bar" id="filtrosLista">
-                <input type="text" id="buscarReq" placeholder="🔍 Buscar en la lista…" oninput="renderReq()">
-                <select id="filtroFamilia" onchange="renderReq()">
-                    <option value="">Todas las familias</option>
-                </select>
-                <select id="filtroArea" onchange="renderReq()">
-                    <option value="">Todas las áreas</option>
-                    <option value="cocina">🍳 Cocina</option>
-                    <option value="barra">🍸 Barra</option>
-                    <option value="bodega">📦 Bodega</option>
-                </select>
-                <select id="filtroEstado" onchange="renderReq()">
-                    <option value="">Todos los estados</option>
-                    <option value="critico">🔴 Críticos primero</option>
-                    <option value="pedir">Solo los que pedir</option>
-                    <option value="ok">Solo OK</option>
-                </select>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);cursor:pointer">
-                    <input type="checkbox" id="ocultarNoPedir" onchange="renderReq()"> Ocultar "No pedir"
-                </label>
-            </div>
-        </div>
-
-        <!-- ── MODO BÚSQUEDA RÁPIDA ── -->
-        <div class="rapida-wrap" id="vistaRapida">
-            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Buscar insumo</div>
-            <input type="text" class="rapida-buscar" id="buscarRapida" placeholder="Escribe el nombre del insumo…" oninput="renderRapida()">
-            <div id="rapidaCont"></div>
-        </div>
-
-        <div class="card" id="listaWrap" style="overflow:visible;max-width:none;margin:0 16px;margin-bottom:60px;display:none">
-                <div id="tablaWrap">
-                    <table class="req-table" id="tablaReq">
-                        <thead>
-                            <tr>
-                                <th style="width:28px">#</th>
-                                <th style="min-width:250px">Insumo</th>
-                                <th class="col-center">Stock<br>Mín / Máx</th>
-                                <th class="col-center" style="min-width:190px">Existencia actual<br><span style="font-size:8px;opacity:.6;font-weight:400">según su presentación de compra</span></th>
-                                <th class="col-center">Resultado</th>
-                                <th class="col-right">Pedido<br>sugerido</th>
-                                <th class="col-right" style="min-width:150px">Pedido final<br><span style="font-size:8px;opacity:.6;font-weight:400">✓ sugerido · ✏️ modificar · 🚫 no pedir</span></th>
-                                <th>Presentación<br><span style="font-size:8px;opacity:.6;font-weight:400">lo que se pide</span></th>
-                                <th class="col-right">Costo<br>pedido</th>
-                                <th class="col-center">Registrar</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbodyReq"></tbody>
-                    </table>
-                    <div id="emptyReq" class="empty-state" style="display:none">
-                        <div class="e-icon">📋</div>
-                        <div>No hay insumos que coincidan</div>
-                    </div>
-                </div>
-                <div class="req-footer">
-                    <div>
-                        <div class="f-label">Ítems a pedir</div>
-                        <div style="font-size:16px;font-weight:700;color:var(--text)" id="footerItems">0</div>
-                    </div>
-                    <div>
-                        <div class="f-label">Costo total del pedido</div>
-                        <div class="f-val" id="footerCosto">$0.00</div>
-                    </div>
-                    <button class="btn-vista" onclick="irPaso(2)" style="color:var(--viol);border-color:rgba(155,141,232,.5)">Siguiente: Proyección →</button>
-                </div>
+            <!-- La captura de un insumo, en modal (como inventarios). Cerrar NO lo marca como registrado. -->
+            <div id="reqCaptModal" class="p12-modal" style="display:none" onclick="if(event.target===this)_cerrarCapturaReq()">
+                <div class="p12-modal-caja"><div id="reqCardWrap"></div></div>
             </div>
         </div>
 
@@ -505,7 +519,7 @@ document.addEventListener('DOMContentLoaded', function(){
                 <div class="card" id="kviCard" style="max-width:none;margin-bottom:14px">
                     <div class="card-body" style="padding:16px 18px">
                         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-                            <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text)">📐 Compra vs Venta</div>
+                            <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text)" class="req-tit-ic" data-ic="fin-estadisticas" data-ic-tam="18">Compra vs Venta</div>
                             <div style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px">
                                 <button class="req-chip-mini activo" data-d="7" onclick="setRangoVenta(7,this)">7 días</button>
                                 <button class="req-chip-mini" data-d="14" onclick="setRangoVenta(14,this)">14 días</button>
@@ -522,17 +536,17 @@ document.addEventListener('DOMContentLoaded', function(){
                 <!-- Export -->
                 <div class="card" style="max-width:none;margin-bottom:14px">
                     <div class="card-body" style="padding:16px 18px">
-                        <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text);margin-bottom:10px">📤 Exportar pedido</div>
+                        <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text);margin-bottom:10px" class="req-tit-ic" data-ic="adm-exportar-csv" data-ic-tam="18">Exportar pedido</div>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-                            <button class="btn-vista" id="btnExpCompleto" onclick="exportarPedido('','')" style="color:var(--green);border-color:var(--green)">🖨️ Pedido completo</button>
+                            <button class="btn-vista" id="btnExpCompleto" onclick="exportarPedido('','')" style="color:var(--green);border-color:var(--green)" data-ic="adm-imprimir">Pedido completo</button>
                             <select id="expProv" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:7px;font-family:inherit;font-size:12px"></select>
-                            <button class="btn-vista" id="btnExpProv" onclick="exportarPedido('prov',document.getElementById('expProv').value)">🖨️ Por proveedor</button>
+                            <button class="btn-vista" id="btnExpProv" onclick="exportarPedido('prov',document.getElementById('expProv').value)" data-ic="adm-imprimir">Por proveedor</button>
                             <select id="expArea" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:7px;font-family:inherit;font-size:12px">
-                                <option value="cocina">🍳 Cocina</option><option value="barra">🍸 Barra</option><option value="bodega">📦 Bodega</option>
+                                <option value="cocina">Cocina</option><option value="barra">Barra</option><option value="bodega">Bodega</option>
                             </select>
-                            <button class="btn-vista" id="btnExpArea" onclick="exportarPedido('area',document.getElementById('expArea').value)">🖨️ Por área</button>
-                            <button class="btn-vista" id="btnExpCSV" onclick="exportarCSV()">⬇️ CSV</button>
-                            <button class="btn-vista" id="btnVistaAdminReq" onclick="verPedidoAdmin()" style="color:var(--accent);border-color:var(--accent)">🔒 Vista admin (con costos)</button>
+                            <button class="btn-vista" id="btnExpArea" onclick="exportarPedido('area',document.getElementById('expArea').value)" data-ic="adm-imprimir">Por área</button>
+                            <button class="btn-vista" id="btnExpCSV" onclick="exportarCSV()" data-ic="adm-exportar-csv">CSV</button>
+                            <button class="btn-vista" id="btnVistaAdminReq" onclick="verPedidoAdmin()" style="color:var(--accent);border-color:var(--accent)" data-ic="aut-candado">Vista admin (con costos)</button>
                         </div>
                         <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Los comentarios de "pedido modificado" y "no pedir" van incluidos en el export.</div>
                     </div>
@@ -547,6 +561,11 @@ document.addEventListener('DOMContentLoaded', function(){
     </main>
 </div>
 
+<!-- MODAL INFO GENERAL -->
+<div id="modalInfoReq" class="p12-modal" style="display:none" onclick="if(event.target===this)cerrarInfoReq()">
+    <div class="p12-modal-caja" style="width:min(520px,100%)"><div class="ent-form-card" id="infoReqBody"></div></div>
+</div>
+
 <!-- MODAL HISTORIAL -->
 <div id="modalHistorial" onclick="if(event.target===this)cerrarHistorial()"
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9900;
@@ -556,8 +575,7 @@ document.addEventListener('DOMContentLoaded', function(){
         <div style="display:flex;align-items:center;justify-content:space-between;
                     padding:16px 20px;border-bottom:1px solid var(--border)">
             <div style="font-size:14px;font-weight:600">Historial de requisiciones</div>
-            <button onclick="cerrarHistorial()"
-                    style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer">✕</button>
+            <button onclick="cerrarHistorial()" class="rc-x" title="Cerrar" data-ic="adm-cerrar" data-ic-tam="20"></button>
         </div>
         <div id="historialBody" style="padding:8px 0"></div>
     </div>
@@ -573,8 +591,8 @@ document.addEventListener('DOMContentLoaded', function(){
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9905;align-items:center;justify-content:center;padding:20px">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:420px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.5)">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">
-            <div style="font-size:14px;font-weight:600" id="notaTitulo">📝 Comentario</div>
-            <button onclick="cerrarNota()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer">✕</button>
+            <div style="font-size:14px;font-weight:600;display:inline-flex;align-items:center" id="notaTitulo">Comentario</div>
+            <button onclick="cerrarNota()" class="rc-x" title="Cerrar" data-ic="adm-cerrar" data-ic-tam="20"></button>
         </div>
         <div style="padding:16px 18px">
             <div id="notaSub" style="font-size:12px;color:var(--text-dim);margin-bottom:10px"></div>
@@ -583,7 +601,7 @@ document.addEventListener('DOMContentLoaded', function(){
         </div>
         <div style="display:flex;justify-content:flex-end;gap:8px;padding:0 18px 16px">
             <button class="btn-vista" onclick="cerrarNota()">Cancelar</button>
-            <button class="btn-vista" onclick="guardarNota()" style="color:var(--green);border-color:var(--green)">💾 Guardar</button>
+            <button class="btn-vista" onclick="guardarNota()" style="color:var(--green);border-color:var(--green)" data-ic="adm-guardar">Guardar</button>
         </div>
     </div>
 </div>
@@ -671,6 +689,7 @@ function setReqData(items) {
     _cacheReqData = doc;
     clearTimeout(_reqSaveTimer);
     _reqSaveTimer = setTimeout(_reqGuardarNube, 700);
+    _indGuardado('pend');
 }
 /* Guarda SOLO lo de esta sucursal: relee el documento y reemplaza su parte
    (otra sucursal pudo guardar la suya mientras tanto). */
@@ -687,6 +706,8 @@ async function _reqGuardarNube() {
         }
     } catch (e) {}
     _sbSaveReqData(doc);
+    _indGuardado('ok');
+    _pintarTituloReq();
 }
 window.addEventListener('pagehide', function () { if (_reqSaveTimer) _reqGuardarNube(); });
 function _agregarSnapshot(snap) {
@@ -781,29 +802,74 @@ function fmtMXN(n) {
 // ── Render principal (WIZARD de 3 pasos) ─────────────────────
 var reqData   = {};
 var insumos   = [];
-var familias  = [];
-var _regFiltro = 'pend';   // '' | 'pend' | 'reg'
-var _pasoReq   = 1;
-var _vistaCapt = 'rapida'; // 'rapida' | 'lista'
-var _rapidaSel = null;     // insumo enfocado en búsqueda rápida
-var _keepVisible = {};     // filas recién registradas: se quedan visibles en Pendientes
-                           // (antes desaparecían al instante y no se veía pedido/costo)
+var _pasoReq  = 1;
+var _reqBusq  = '';           // lo tecleado en «Buscar producto…»
+var _reqSel   = null;         // el insumo abierto en el modal de captura
+var _reqModoLista = 'lista';  // 'lista' | 'galeria' (como inventarios)
+try { if (localStorage.getItem('etaax_req_vista') === 'galeria') _reqModoLista = 'galeria'; } catch (e) {}
+
+/* ══ ÍCONOS DE LA APP EN VEZ DE EMOJIS (Edwin, 24-nov) ══════════════════════
+   Los mismos SVG de inventarios (etaax-iconos.js). Si el archivo de iconos no
+   cargó, no se pinta nada: el texto basta. En el HTML fijo se piden con
+   data-ic="nombre" y se ponen al cargar. */
+function _icReq(nombre, tam) {
+    return (typeof window.etaaxIcono === 'function') ? window.etaaxIcono(nombre, { tam: tam || 16, clase: 'inv-ic' }) : '';
+}
+var _ICONOS_HDR_REQ = [['btnInfoReq', 'sto-detalle', 'Info general'], ['btnHistorialReq', 'ins-historial', 'Historial'],
+    ['btnSalirReq', 'cerrar-sesion', 'Salir'], ['btnFinalizarReq', 'adm-pagado', 'Finalizar requisición']];
+function _iconosReq() {
+    if (typeof window.etaaxIcono !== 'function') return;
+    _ICONOS_HDR_REQ.forEach(function (x) { var b = document.getElementById(x[0]); if (b && !b.querySelector('.inv-ic')) b.innerHTML = _icReq(x[1]) + x[2]; });
+    document.querySelectorAll('[data-ic]').forEach(function (el) {
+        if (!el.querySelector('.inv-ic')) el.insertAdjacentHTML('afterbegin', _icReq(el.getAttribute('data-ic'), parseInt(el.getAttribute('data-ic-tam'), 10) || 16));
+    });
+}
+document.addEventListener('DOMContentLoaded', function () { try { _iconosReq(); } catch (e) {} });
 
 function init() {
-    insumos  = getInsumosCatalogo();
-    reqData  = getReqData();
-    familias = [...new Set(insumos.map(function(x) { return x.familia || ''; }).filter(Boolean))].sort();
-    var selFam = document.getElementById('filtroFamilia');
-    selFam.innerHTML = '<option value="">Todas las familias</option>' +
-        familias.map(function(f) { return '<option value="' + _esc(f) + '">' + _esc(f) + '</option>'; }).join('');
-    /* La fecha es la de INICIO de esta requisición (no la de hoy). */
-    var _ab = _reqAbierta();
-    var _f = (_ab && _ab.inicio) ? new Date(_ab.inicio) : null;
-    document.getElementById('fechaReq').textContent = _f
-        ? 'Iniciada el ' + _f.toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long' })
-        : 'Requisición nueva';
-    setVistaCapt(_vistaCapt);
+    insumos = getInsumosCatalogo();
+    reqData = getReqData();
+    _pintarTituloReq();
+    _indGuardado(_reqSaveTimer ? 'pend' : 'ok');
+    renderReq();
+    _ajustarStickyReq();
 }
+
+/* El título dice de cuándo es la requisición (la fecha de INICIO, no la de hoy). */
+function _pintarTituloReq() {
+    var ab = _reqAbierta(), f = (ab && ab.inicio) ? new Date(ab.inicio) : null;
+    /* Título corto: con la fecha los botones ya no cabían en un renglón y
+       «Finalizar» caía solo abajo. La fecha de inicio está en «Info general» y
+       en el globito del título. */
+    var t = document.getElementById('reqTitulo');
+    if (t) {
+        t.textContent = 'Requisición';
+        t.title = f ? 'Iniciada el ' + f.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Requisición nueva';
+    }
+    var sl = document.getElementById('stepLabel');
+    if (sl) sl.textContent = 'Paso ' + _pasoReq + ' — ' + (PASO_REQ[_pasoReq] || '');
+}
+/* «Todos los cambios guardados», como inventarios: se guarda solo 0.7 s después
+   de la última tecla; mientras tanto dice «Guardando…». */
+function _indGuardado(estado) {
+    var el = document.getElementById('autoGuardarInd'); if (!el) return;
+    if (estado === 'pend') { el.className = 'req-guardado pend'; el.textContent = 'Guardando…'; }
+    else { el.className = 'req-guardado'; el.innerHTML = _icReq('adm-pagado', 14) + 'Todos los cambios guardados'; }
+}
+/* El encabezado se pega justo donde termina la barra del negocio (la misma
+   cuenta que inventarios: _ajustarStickyInv). */
+function _ajustarStickyReq() {
+    try {
+        var base = document.body.classList.contains('has-ctx') ? 96 : 48;
+        var bar = document.getElementById('ctxBar');
+        if (bar && bar.getClientRects().length) {
+            var pos = getComputedStyle(bar).position;
+            if (pos === 'fixed' || pos === 'sticky') base = Math.max(base, Math.round(bar.getBoundingClientRect().bottom));
+        }
+        var h = document.getElementById('reqHeader'); if (h) h.style.top = base + 'px';
+    } catch (e) {}
+}
+window.addEventListener('resize', _ajustarStickyReq);
 
 function irPaso(n) {
     /* Los pasos SON el permiso: el 2 es la proyección de compra y el 3 el
@@ -814,13 +880,16 @@ function irPaso(n) {
         if (n === 3 && !_exigeReq('exportar', 'No puedes armar ni exportar el pedido.')) return;
     }
     _pasoReq = n;
+    if (n !== 1 && _reqSel) _cerrarCapturaReq();
     document.getElementById('vistaPaso1').style.display = n===1?'':'none';
     document.getElementById('vistaPaso2').style.display = n===2?'':'none';
     document.getElementById('vistaPaso3').style.display = n===3?'':'none';
     _pintarPasoMenuReq();
-    if (n===1) renderReq();
+    _pintarTituloReq();
+    if (n===1) renderReq(); else _pintarHerrReq();
     if (n===2) renderPaso2();
     if (n===3) renderPaso3();
+    _ajustarStickyReq();
     try { window.scrollTo({top:0,behavior:'smooth'}); } catch(e) {}
 }
 /* ══ LOS PASOS, EN UN BOTÓN DEL ENCABEZADO (igual que inventarios) ══════════
@@ -871,71 +940,179 @@ function _togglePasoMenuReq(ev) {
     }, 0);
 }
 function _irPasoMenuReq(n) { _cerrarPasoMenuReq(); if (n !== _pasoReq) irPaso(n); }
-function setRegFiltro(v, btn) {
-    _regFiltro = v;
-    document.querySelectorAll('.req-chip').forEach(function(b){ b.classList.toggle('activo', b===btn); });
-    _rapidaSel = null;
-    _keepVisible = {};
+
+/* ══ LA BARRA DEL PASO, FIJA EN EL ENCABEZADO (la de inventarios) ═════════
+   Buscador · Pendientes · Registrados a la izquierda; lista o iconos a la
+   derecha. Solo en el Paso 1. Lo tecleado no cuenta para repintarla: si solo
+   cambió eso, no se toca y el campo conserva el foco y el cursor. */
+var _herrUltimoReq = null;
+function _herrReqHTML(nPend, nReg) {
+    if (_pasoReq !== 1) return '';
+    return '<div class="ph-izq">' +
+            '<input type="search" class="ph-buscar" id="reqBuscador" value="' + _val(_reqBusq) + '" placeholder="Buscar producto…" oninput="buscarReq(this.value)" autocomplete="off">' +
+            '<div class="ph-ind"><span>' + _icReq('adm-pendiente', 14) + 'Pendientes <span class="ph-n" id="cntPend">' + nPend + '</span></span>' +
+            '<span>' + _icReq('adm-pagado', 14) + 'Registrados <span class="ph-n" id="cntReg">' + nReg + '</span></span></div>' +
+        '</div>' +
+        '<div class="ph-der"><div class="vista-toggle" title="Ver en lista o en iconos">' +
+            '<button class="' + (_reqModoLista === 'lista' ? 'active' : '') + '" onclick="setModoListaReq(\'lista\')" title="Lista">' + (_icReq('ins-lista', 14) || '≡') + '</button>' +
+            '<button class="' + (_reqModoLista === 'galeria' ? 'active' : '') + '" onclick="setModoListaReq(\'galeria\')" title="Iconos">' + (_icReq('ins-galeria', 14) || '⊞') + '</button>' +
+        '</div></div>';
+}
+function _pintarHerrReq(nPend, nReg) {
+    var el = document.getElementById('pasoHerr'); if (!el) return;
+    if (nPend === undefined) { var c = _conteoReq(); nPend = c.pend; nReg = c.reg; }
+    var html = _herrReqHTML(nPend, nReg);
+    var llave = html.replace(/ value="[^"]*"/g, '');
+    if (llave === _herrUltimoReq) return;
+    var act = document.activeElement, fid = (act && el.contains(act) && act.id) ? act.id : '', s0 = null, s1 = null;
+    if (fid) { try { s0 = act.selectionStart; s1 = act.selectionEnd; } catch (e) {} }
+    el.innerHTML = html; _herrUltimoReq = llave;
+    if (fid) { var nd = document.getElementById(fid); if (nd) { nd.focus(); try { if (s0 !== null) nd.setSelectionRange(s0, s1); } catch (e) {} } }
+    _ajustarStickyReq();
+}
+function buscarReq(v) { _reqBusq = v || ''; renderReq(); }
+function setModoListaReq(m) {
+    _reqModoLista = m === 'galeria' ? 'galeria' : 'lista';
+    try { localStorage.setItem('etaax_req_vista', _reqModoLista); } catch (e) {}
     renderReq();
 }
-function setVistaCapt(v) {
-    _vistaCapt = v;
-    document.getElementById('vChipRapida').classList.toggle('activo', v==='rapida');
-    document.getElementById('vChipLista').classList.toggle('activo', v==='lista');
-    document.getElementById('vistaRapida').style.display = v==='rapida' ? '' : 'none';
-    document.getElementById('listaWrap').style.display  = v==='lista' ? '' : 'none';
-    document.getElementById('filtrosLista').style.display = v==='lista' ? '' : 'none';
-    renderReq();
+function _reqPasaBusq(ins) {
+    var q = String(_reqBusq || '').trim().toLowerCase();
+    if (!q) return true;
+    return [ins.nombre, ins.variedad, ins.marca, ins.familia].some(function (t) { return String(t || '').toLowerCase().indexOf(q) > -1; });
+}
+function _conteoReq() {
+    var r = 0;
+    insumos.forEach(function (x) { if (esRegistrado(reqData[x.id])) r++; });
+    return { pend: insumos.length - r, reg: r };
 }
 
-/* ── MODO BÚSQUEDA RÁPIDA: card enfocada + "Registrado — Siguiente" ── */
-function _poolRapida() {
-    return insumos.filter(function(ins){
-        var ri = reqData[ins.id] || {};
-        if (_regFiltro==='pend' && esRegistrado(ri)) return false;
-        if (_regFiltro==='reg' && !esRegistrado(ri)) return false;
-        return true;
+/* ══ EL PASO 1 EN DOS COLUMNAS (como inventarios, Edwin 24-nov) ═══════════
+   PENDIENTES a la izquierda —lo que falta revisar— y REGISTRADOS a la derecha
+   con su resultado (cuánto pedir o «sin pedido»). El buscador filtra las dos.
+   Al tocar un insumo su captura se abre en un modal; «Registrado — Siguiente»
+   pasa al siguiente pendiente. */
+function renderReq() {
+    var c = _conteoReq();
+    _pintarHerrReq(c.pend, c.reg);
+    var pend = document.getElementById('p1Pend'), regEl = document.getElementById('p1Reg');
+    if (!pend || !regEl) return;
+    var q = String(_reqBusq || '').trim();
+    var P = [], R = [];
+    insumos.forEach(function (ins) {
+        if (!_reqPasaBusq(ins)) return;
+        (esRegistrado(reqData[ins.id]) ? R : P).push(ins);
     });
+    var cls = 'p12-lista' + (_reqModoLista === 'galeria' ? ' p12-iconos' : '');
+    var vacio = function (t) { return '<div class="p12-vacio">' + t + '</div>'; };
+    pend.className = cls; regEl.className = cls;
+    pend.innerHTML = P.length ? P.map(function (x) { return _reqItemHTML(x, false); }).join('')
+        : vacio(q ? 'Sin pendientes con «' + _esc(q) + '»' : (insumos.length ? 'Ya se revisaron todos los insumos' : 'No hay insumos activos en esta sucursal'));
+    regEl.innerHTML = R.length ? R.map(function (x) { return _reqItemHTML(x, true); }).join('')
+        : vacio(q ? 'Sin registrados con «' + _esc(q) + '»' : 'Aún no hay existencias registradas');
+    var np = document.getElementById('p1NPend'), nr = document.getElementById('p1NReg');
+    if (np) np.textContent = P.length + (q ? ' de ' + c.pend : '');
+    if (nr) nr.textContent = R.length + (q ? ' de ' + c.reg : '');
+    _pintarBannerReq(c);
 }
-function renderRapida() {
-    var cont = document.getElementById('rapidaCont');
-    var q = (document.getElementById('buscarRapida').value||'').toLowerCase();
-    var pool = _poolRapida();
-    if (_rapidaSel) {
-        var ins = insumos.find(function(x){return x.id===_rapidaSel;});
-        if (ins) { cont.innerHTML=''; cont.appendChild(_cardRapida(ins)); return; }
-        _rapidaSel = null;
-    }
-    if (!q) {
-        cont.innerHTML = '<div class="empty-state" style="display:block;padding:34px 0"><div class="e-icon">🔍</div>'+
-            '<div>Busca un insumo para capturarlo — quedan <b>'+pool.length+'</b> en este filtro.</div>'+
-            (pool.length?'<button class="btn-vista" style="margin-top:12px" onclick="_rapidaSel=\''+pool[0].id+'\';renderRapida()">▶ Empezar con: '+_esc(pool[0].nombre)+'</button>':'')+
-            '</div>';
-        return;
-    }
-    var res = pool.filter(function(ins){
-        return (ins.nombre||'').toLowerCase().includes(q) || (ins.marca||'').toLowerCase().includes(q) || (ins.variedad||'').toLowerCase().includes(q);
-    }).slice(0,8);
-    if (!res.length) { cont.innerHTML = '<div class="empty-state" style="display:block;padding:30px 0"><div class="e-icon">🤷</div><div>Sin coincidencias en este filtro.</div></div>'; return; }
-    if (res.length===1) { _rapidaSel = res[0].id; renderRapida(); return; }
-    cont.innerHTML = '<div class="rapida-res">'+res.map(function(ins){
-        return '<div class="rapida-res-it" onclick="_rapidaSel=\''+ins.id+'\';renderRapida()">'+_esc(ins.nombre)+
-            (ins.variedad?' <span style="color:var(--text-dim)">'+_esc(ins.variedad)+'</span>':'')+
-            ' <span style="float:right;color:var(--text-dim);font-size:11px">'+_esc(ins.familia||'')+'</span></div>';
-    }).join('')+'</div>';
+/* Cómo se compra, corto, para la lista: «Caja de 24», «Kilo», «Botella 750 ml». */
+function _compraCorta(ref) {
+    var t = ref.piezasPorCompra > 1 ? ref.compra + ' de ' + ref.piezasPorCompra : ref.compra;
+    if (ref.contenido && ref.piezasPorCompra <= 1) t += ' ' + ref.contenido;
+    return t;
 }
-/* ── LA TARJETA «UNO POR UNO» (Edwin, 23-nov) ─────────────────────────────
+function _reqItemHTML(ins, reg) {
+    var ri = reqData[ins.id] || {};
+    var calc = calcItem(ins, ri), ref = calc.ref, pres = calc.pres;
+    var meta = [ins.familia, _compraCorta(ref)].filter(Boolean).map(_esc).join(' · ');
+    var dato;
+    if (reg) {
+        var e = _num(ri.existencia);
+        dato = '<span class="p12-der">' + _resultadoFilaHTML(ins, ri) + '<small>Hay ' + e + ' ' + _esc(_uni(ref, e)) + '</small></span>';
+    } else {
+        var hayStock = parseFloat(pres.stockMax) > 0 || parseFloat(pres.stockMin) > 0;
+        dato = '<span class="p12-ant">' + (hayStock ? 'mín ' + _num(pres.stockMin) + ' · máx ' + _num(pres.stockMax) + ' ' + _esc(_uni(ref, 2)) : 'Sin stock definido') + '</span>';
+    }
+    return '<button class="p12-item' + (reg ? ' reg' : '') + '" data-id="' + _esc(ins.id) + '" onclick="abrirCapturaReq(\'' + ins.id + '\')">' +
+        '<span class="p12-nom">' + _esc(ins.nombre) + (ins.variedad ? ' ' + _esc(ins.variedad) : '') + (meta ? '<small>' + meta + '</small>' : '') + '</span>' +
+        dato + '</button>';
+}
+/* El aviso de arriba de las columnas: qué hacer o, ya con capturas, lo que va
+   del pedido. */
+function _pintarBannerReq(c) {
+    var el = document.getElementById('reqBanner'); if (!el) return;
+    c = c || _conteoReq();
+    if (!insumos.length) { el.innerHTML = ''; return; }
+    var txt, res = calcResumen();
+    if (!c.reg) {
+        txt = '<b>Revisa la existencia de cada insumo.</b> Tócalo en «Pendientes» y captura lo que hay: si llega al stock mínimo, se pide lo que falta para el máximo.';
+    } else {
+        var sinStock = 0;
+        insumos.forEach(function (ins) {
+            var ri = reqData[ins.id];
+            if (esRegistrado(ri) && !ri.noPedir && calcItem(ins, ri).estado === 'sin-stock') sinStock++;
+        });
+        txt = 'A pedir: <b>' + res.totalItems + '</b> insumo' + (res.totalItems === 1 ? '' : 's') + ' · <b>' + fmtMXN(res.totalCosto) + '</b> estimado' +
+            ' · Revisados <b>' + c.reg + '</b> de <b>' + insumos.length + '</b>' +
+            (sinStock ? ' · <b>' + sinStock + '</b> sin stock mínimo/máximo (defínelo en su ficha técnica)' : '');
+    }
+    el.innerHTML = '<div class="req-banner">' + _icReq(c.reg ? 'ins-stock' : 'sto-detalle', 18) + '<span>' + txt + '</span>' +
+        (c.reg && _puedeReq('verProyeccion') ? '<button class="btn-vista" onclick="irPaso(2)">Ver proyección' + _icReq('sto-siguiente', 14) + '</button>' : '') + '</div>';
+}
+
+/* ── LA CAPTURA DE UN INSUMO, EN MODAL ─────────────────────────────────── */
+function abrirCapturaReq(id) {
+    _reqSel = id;
+    _pintarCardReq();
+    var m = document.getElementById('reqCaptModal'); if (m) { m.style.display = 'flex'; m.scrollTop = 0; }
+    setTimeout(function () { var i = document.querySelector('#rcCard input.rc-in'); if (i) i.focus(); }, 40);
+}
+function _pintarCardReq() {
+    var w = document.getElementById('reqCardWrap'); if (!w) return;
+    var ins = _reqSel ? insumos.find(function (x) { return x.id === _reqSel; }) : null;
+    w.innerHTML = '';
+    if (ins) w.appendChild(_cardCaptura(ins));
+}
+/* Cerrar NO marca como registrado: es «todavía no». */
+function _cerrarCapturaReq() {
+    _reqSel = null;
+    var m = document.getElementById('reqCaptModal'); if (m) m.style.display = 'none';
+    var w = document.getElementById('reqCardWrap'); if (w) w.innerHTML = '';
+    renderReq();
+}
+/* «Registrado — Siguiente»: sin existencia se registra EN CERO (como
+   inventarios) y pasa al siguiente PENDIENTE de la lista, con el mismo filtro
+   del buscador, para revisar de corrido. */
+function _reqSiguiente(id) {
+    var ri = reqData[id] || {};
+    if (!esRegistrado(ri)) { registrarFila(id); if (!esRegistrado(reqData[id])) return; }
+    else setReqData(reqData);
+    var i = insumos.findIndex(function (x) { return x.id === id; });
+    var pend = insumos.filter(function (x) { return !esRegistrado(reqData[x.id]) && _reqPasaBusq(x); });
+    var sig = pend.find(function (x) { return insumos.indexOf(x) > i; }) || pend[0];
+    if (sig) { renderReq(); abrirCapturaReq(sig.id); return; }
+    _cerrarCapturaReq();
+    _reqAviso('Ya se revisaron todos los insumos' + (String(_reqBusq || '').trim() ? ' de esta búsqueda' : '') + '. Revisa el pedido o finaliza la requisición.');
+}
+function _refrescarReq() { renderReq(); if (_reqSel) _pintarCardReq(); }
+
+/* ── LA TARJETA DE CAPTURA (Edwin, 23-nov) ─────────────────────────────────
    Arriba, la referencia para contar sin adivinar: cómo se compra (caja de 24,
    rejilla, manojo, kilo…), lo que cuesta la compra y cada pieza, y el stock
    mínimo/máximo EN LA UNIDAD EN QUE SE CUENTA. Al teclear la existencia, el
    resultado aparece en ese momento: hay pedido (cuánto y cuánto cuesta) o no
-   hay pedido. Y «Ficha técnica» abre el editor real del insumo. */
+   hay pedido. «Ficha técnica» la enseña (y desde ahí se edita, con contraseña). */
 function _uni(ref, n) {
     var base = ref.porPieza ? 'botella' : String(ref.compra || 'unidad').toLowerCase();
     if (n === 1) return base;
     return /s$/.test(base) ? base : (/[aeiouáéíóú]$/.test(base) ? base + 's' : base + 'es');
 }
 function _num(v) { var f = parseFloat(v); return isNaN(f) ? 0 : Math.round(f * 100) / 100; }
+/* Un valor para un atributo: el 0 se queda (el _esc de abajo lo borraba). */
+function _val(v) {
+    if (v === undefined || v === null) return '';
+    return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 function _refCompraHTML(ins, pres, ref) {
     var compra = ref.compra, comp = compra.toLowerCase();
     var seCompra = ref.piezasPorCompra > 1
@@ -960,19 +1137,23 @@ function _resultadoHTML(ins, ri) {
     var calc = calcItem(ins, ri), ref = calc.ref, pres = calc.pres;
     var pFin = pedidoFinal(calc, ri), e = parseFloat(ri.existencia);
     var hasManual = ri.pedidoManual !== '' && ri.pedidoManual !== null && ri.pedidoManual !== undefined;
-    if (ri.noPedir) return '<div class="rq-res neutro"><b>🚫 No pedir</b><span>Lo quitaste del pedido.</span></div>';
+    if (ri.noPedir) return '<div class="rq-res neutro"><b>' + _icReq('adm-cerrar', 16) + 'No pedir</b><span>Lo quitaste del pedido.</span></div>';
     if (calc.estado === 'sin-datos') return '<div class="rq-res neutro"><b>Captura lo que hay</b><span>Al teclear la existencia te digo si hay pedido.</span></div>';
-    if (calc.estado === 'sin-stock') return '<div class="rq-res aviso"><b>Sin stock mínimo/máximo</b><span>Defínelo en la ficha técnica para saber cuánto pedir.' +
+    if (calc.estado === 'sin-stock') return '<div class="rq-res aviso"><b>' + _icReq('rem-alerta', 16) + 'Sin stock mínimo/máximo</b><span>Defínelo en la ficha técnica para saber cuánto pedir.' +
         (hasManual && pFin > 0 ? ' Pediste a mano: ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '.' : '') + '</span></div>';
     var tienes = 'Tienes ' + _num(e) + ' ' + _esc(_uni(ref, _num(e)));
-    if (pFin > 0) return '<div class="rq-res pedir"><b>🛒 Hay pedido: ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '</b>' +
+    if (pFin > 0) return '<div class="rq-res pedir"><b>' + _icReq('ins-stock', 16) + 'Hay pedido: ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '</b>' +
         '<span>' + (hasManual ? 'Cantidad que pusiste a mano (la sugerida es ' + calc.pedidoSugerido + ').'
             : tienes + ' y el mínimo es ' + _num(pres.stockMin) + ': se pide hasta el máximo (' + _num(pres.stockMax) + ').') +
         (ref.porPieza && ref.piezasPorCompra > 1 ? ' Son ' + _num(pFin / ref.piezasPorCompra) + ' ' + _esc(ref.compra.toLowerCase()) + '(s) de ' + ref.piezasPorCompra + '.' : '') + '</span></div>';
-    return '<div class="rq-res ok"><b>✓ No hay pedido</b><span>' + (hasManual ? 'Lo pusiste en 0 a mano.' : tienes + ': más que el mínimo (' + _num(pres.stockMin) + ').') + '</span></div>';
+    return '<div class="rq-res ok"><b>' + _icReq('adm-pagado', 16) + 'No hay pedido</b><span>' + (hasManual ? 'Lo pusiste en 0 a mano.' : tienes + ': más que el mínimo (' + _num(pres.stockMin) + ').') + '</span></div>';
 }
-function _cardRapida(ins) {
-    var ri   = reqData[ins.id] || { presIdx: 0 };
+function _sigTxt(reg) {
+    return reg ? _icReq('adm-pagado', 16) + 'Registrado — Siguiente' : _icReq('adm-pendiente', 16) + 'Registrar en cero — Siguiente';
+}
+function _cardCaptura(ins) {
+    var id   = ins.id;
+    var ri   = reqData[id] || { presIdx: 0 };
     var calc = calcItem(ins, ri);
     var pres = calc.pres;
     var pi   = presInfo(pres, ins);
@@ -980,97 +1161,93 @@ function _cardRapida(ins) {
     var modoCapt = ri.modoCapt || pi.modo;
     var reg  = esRegistrado(ri);
     var d = document.createElement('div');
-    d.className = 'rapida-card';
-    d.id = 'rcCard'; d.dataset.id = ins.id;
+    d.className = 'ent-form-card';
+    d.id = 'rcCard'; d.dataset.id = id;
     var unidadPl = _uni(ref, 2), compraPl = String(ref.compra).toLowerCase();
-    var modos = [['simple','# Directo'],['paq','📦 + piezas'],['niv','🧴 + %']].map(function(m){
-        return '<button class="rc-modo'+(modoCapt===m[0]?' on':'')+'" onclick="setCapt(\''+ins.id+'\',\'modoCapt\',\''+m[0]+'\');renderRapida()">'+m[1]+'</button>';
+    var modos = [['simple', 'ins-unidad', 'Directo'], ['paq', 'ins-stock', 'Cerradas + piezas'], ['niv', 'ins-contenido', 'Llenas + %']].map(function (m) {
+        return '<button class="ent-tipo-btn' + (modoCapt === m[0] ? ' active' : '') + '" onclick="setCapt(\'' + id + '\',\'modoCapt\',\'' + m[0] + '\');_pintarCardReq()">' + _icReq(m[1], 15) + m[2] + '</button>';
     }).join('');
     var inp = function (campo, valor, ph) {
-        return '<input class="rc-in" type="text" inputmode="decimal" value="'+(valor===undefined||valor===null?'':valor)+'" placeholder="'+ph+'" '+
-            'oninput="setCapt(\''+ins.id+'\',\''+campo+'\',this.value)">';
+        return '<input class="rc-in" type="text" inputmode="decimal" value="' + _val(valor) + '" placeholder="' + ph + '" ' +
+            'oninput="setCapt(\'' + id + '\',\'' + campo + '\',this.value)">';
     };
     var captura = '';
-    if (modoCapt==='paq') {
+    if (modoCapt === 'paq') {
         captura = '<div class="rc-dos">' +
-            '<div><div class="rc-lbl" style="margin-top:0">'+_esc(unidadPl)+' cerradas</div>'+inp('existCerr', ri.existCerr, '0')+'</div>'+
-            '<div><div class="rc-lbl" style="margin-top:0">Piezas sueltas <span class="rc-nota">('+pi.piezas+' por '+_esc(compraPl)+')</span></div>'+inp('existSuel', ri.existSuel, '0')+'</div>'+
+            '<div><div class="rc-lbl">' + _esc(unidadPl) + ' cerradas</div>' + inp('existCerr', ri.existCerr, '0') + '</div>' +
+            '<div><div class="rc-lbl">Piezas sueltas <span class="rc-nota">(' + pi.piezas + ' por ' + _esc(compraPl) + ')</span></div>' + inp('existSuel', ri.existSuel, '0') + '</div>' +
             '</div>';
-    } else if (modoCapt==='niv') {
+    } else if (modoCapt === 'niv') {
         captura = '<div class="rc-dos">' +
-            '<div><div class="rc-lbl" style="margin-top:0">'+_esc(unidadPl)+' llenas / cerradas</div>'+inp('existCerr', ri.existCerr, '0')+'</div>'+
-            '<div><div class="rc-lbl" style="margin-top:0">% de la abierta</div>'+inp('existPct', ri.existPct, '0-100')+'</div>'+
+            '<div><div class="rc-lbl">' + _esc(unidadPl) + ' llenas / cerradas</div>' + inp('existCerr', ri.existCerr, '0') + '</div>' +
+            '<div><div class="rc-lbl">% de la abierta</div>' + inp('existPct', ri.existPct, '0-100') + '</div>' +
             '</div>';
     } else {
-        var existVal = (ri.existencia!==''&&ri.existencia!==undefined&&ri.existencia!==null)?ri.existencia:'';
-        captura = '<input class="rc-in" type="text" inputmode="decimal" value="'+existVal+'" placeholder="¿Cuántas '+_esc(unidadPl)+' hay?" '+
-            'oninput="guardarExistSilent(\''+ins.id+'\',this.value)">';
+        captura = '<input class="rc-in" type="text" inputmode="decimal" value="' + _val(ri.existencia) + '" placeholder="¿Cuántas ' + _esc(unidadPl) + ' hay?" ' +
+            'oninput="guardarExistSilent(\'' + id + '\',this.value)">';
     }
+    var presArr = ins.presentaciones || [];
+    var selPres = presArr.length > 1
+        ? '<div class="rc-lbl">Presentación que se pide</div><select class="pres-select rq-pres" onchange="cambiarPres(\'' + id + '\',this.value)">' +
+            presArr.map(function (p, k) {
+                return '<option value="' + k + '"' + (k === (ri.presIdx || 0) ? ' selected' : '') + '>' + _esc(p.nombre || p.presentacionCompra || ('Presentación ' + (k + 1))) + '</option>';
+            }).join('') + '</select>'
+        : '';
     var hist = getHistorial();
-    var antVal = hist.length ? ((hist[0].items||{})[ins.id]||{}).existencia : undefined;
-    var hayAnt = antVal!==undefined && antVal!=='' && antVal!==null;
-    var hasManual = (ri.pedidoManual!==''&&ri.pedidoManual!==null&&ri.pedidoManual!==undefined);
+    var antVal = hist.length ? ((hist[0].items || {})[id] || {}).existencia : undefined;
+    var hayAnt = antVal !== undefined && antVal !== '' && antVal !== null;
+    var hasManual = ri.pedidoManual !== '' && ri.pedidoManual !== null && ri.pedidoManual !== undefined;
+    var tags = [ins.familia, ins.area, ins.marca].filter(Boolean).map(function (t) { return '<span class="inv-tag">' + _esc(t) + '</span>'; }).join('');
     d.innerHTML =
-        '<div class="rc-cab">'+
-            '<div style="min-width:0"><div class="rc-titulo">'+_esc(ins.nombre)+(ins.variedad?' <span style="color:var(--text-dim);font-weight:400">'+_esc(ins.variedad)+'</span>':'')+'</div>'+
-            '<div class="rc-sub">'+[ins.familia, ins.area, ins.marca].filter(Boolean).map(_esc).join(' · ')+(hayAnt?' · anterior: <b>'+antVal+'</b>':'')+'</div></div>'+
-            '<div class="rc-acc">'+
-                '<button class="btn-vista" onclick="_reqFicha(\''+ins.id+'\')" title="Ver y editar la ficha técnica del insumo">📋 Ficha técnica</button>'+
-                '<button class="btn-vista" onclick="_rapidaSel=null;document.getElementById(\'buscarRapida\').value=\'\';renderRapida()" title="Cerrar">✕</button>'+
-            '</div>'+
-        '</div>'+
-        _refCompraHTML(ins, pres, ref)+
-        '<div class="rc-lbl">Cómo contar</div>'+
-        '<div class="rc-modos">'+modos+'</div>'+
-        '<div class="rc-lbl">Existencia actual <span class="rc-nota">en '+_esc(unidadPl)+'</span></div>'+ captura +
-        '<div class="rc-total"><span>Existencia</span><b id="rcExist">'+(esRegistrado(ri)?_num(ri.existencia):'—')+' '+_esc(unidadPl)+'</b></div>'+
-        (hayAnt?'<button class="btn-vista" style="width:100%;margin-top:8px;color:var(--blue);border-color:rgba(120,160,240,.4)" onclick="cargarExistenciaAnterior(\''+ins.id+'\');renderRapida()">📋 Copiar existencia anterior ('+antVal+')</button>':'')+
-        '<div id="rcRes">'+_resultadoHTML(ins, ri)+'</div>'+
-        '<div class="rc-ajuste">'+
-            '<button class="btn-vista" onclick="usarSugerido(\''+ins.id+'\');renderRapida()" title="Usar lo que dice la regla">✓ Usar sugerido</button>'+
-            '<input type="number" class="req-input req-num" min="0" placeholder="Pedir otra cantidad" value="'+(hasManual?ri.pedidoManual:'')+'" onchange="modificarPedido(\''+ins.id+'\',this.value);renderRapida()">'+
-            '<button class="btn-vista" style="color:'+(ri.noPedir?'var(--red)':'var(--text-muted)')+'" onclick="toggleNoPedirNota(\''+ins.id+'\')">🚫 No pedir</button>'+
-        '</div>'+
-        '<button class="rc-sig" onclick="rapidaSiguiente(\''+ins.id+'\')">'+(reg?'✓ Contado — Siguiente →':'Siguiente →')+'</button>';
+        '<div class="rc-cab">' +
+            '<div style="min-width:0"><div class="rc-titulo">' + _esc(ins.nombre) + (ins.variedad ? ' <span class="rc-var">' + _esc(ins.variedad) + '</span>' : '') + '</div>' +
+            '<div class="rc-tags">' + tags + (hayAnt ? '<span class="rc-ant">Anterior: ' + _esc(String(antVal)) + ' ' + _esc(unidadPl) + '</span>' : '') + '</div></div>' +
+            '<div class="rc-acc">' +
+                '<button class="btn-ver-prod" onclick="_reqFicha(\'' + id + '\')" title="Ver la ficha técnica del insumo">' + _icReq('ins-ficha', 14) + 'Ficha técnica</button>' +
+                '<button class="rc-x" onclick="_cerrarCapturaReq()" title="Cerrar sin marcar como registrado">' + (_icReq('adm-cerrar', 20) || '×') + '</button>' +
+            '</div>' +
+        '</div>' +
+        _refCompraHTML(ins, pres, ref) + selPres +
+        '<div class="rc-lbl">Cómo contar</div>' +
+        '<div class="ent-tipo-row">' + modos + '</div>' +
+        '<div class="rc-lbl">Existencia actual <span class="rc-nota">en ' + _esc(unidadPl) + '</span></div>' + captura +
+        '<div class="rc-total"><span>Existencia</span><b id="rcExist">' + (reg ? _num(ri.existencia) : '—') + ' ' + _esc(unidadPl) + '</b></div>' +
+        (hayAnt ? '<button class="btn-vista rc-copiar" onclick="cargarExistenciaAnterior(\'' + id + '\')">' + _icReq('ins-historial', 14) + 'Copiar existencia anterior (' + _esc(String(antVal)) + ')</button>' : '') +
+        '<div id="rcRes">' + _resultadoHTML(ins, ri) + '</div>' +
+        '<div class="rc-ajuste">' +
+            '<button class="btn-vista" onclick="usarSugerido(\'' + id + '\')" title="Usar lo que dice la regla">' + _icReq('adm-pagado', 14) + 'Usar sugerido</button>' +
+            '<input type="number" class="req-input req-num" min="0" placeholder="Pedir otra cantidad" value="' + (hasManual ? _val(ri.pedidoManual) : '') + '" onchange="modificarPedido(\'' + id + '\',this.value)">' +
+            '<button class="btn-vista' + (ri.noPedir ? ' rc-nopedir-on' : '') + '" onclick="toggleNoPedirNota(\'' + id + '\')">' + _icReq('adm-cerrar', 14) + 'No pedir</button>' +
+        '</div>' +
+        '<button class="rc-sig' + (reg ? '' : ' cero') + '" id="rcSig" onclick="_reqSiguiente(\'' + id + '\')">' + _sigTxt(reg) + '</button>';
     return d;
 }
 /* Lo capturado se refleja al momento, sin repintar la tarjeta (no se pierde el
-   foco del campo): la existencia, el resultado y, en la lista, su renglón. */
+   foco del campo): la existencia, el resultado y el botón de abajo. */
 function _pintarVivo(id) {
     var ins = insumos.find(function (x) { return x.id === id; }); if (!ins) return;
     var ri = reqData[id] || {};
     var card = document.getElementById('rcCard');
     if (card && card.dataset.id === id) {
+        var reg = esRegistrado(ri);
         var pi = presInfo((calcItem(ins, ri)).pres, ins);
-        var ex = document.getElementById('rcExist'); if (ex) ex.textContent = (esRegistrado(ri) ? _num(ri.existencia) : '—') + ' ' + _uni(pi.ref, 2);
+        var ex = document.getElementById('rcExist'); if (ex) ex.textContent = (reg ? _num(ri.existencia) : '—') + ' ' + _uni(pi.ref, 2);
         var rs = document.getElementById('rcRes'); if (rs) rs.innerHTML = _resultadoHTML(ins, ri);
+        var sg = document.getElementById('rcSig'); if (sg) { sg.innerHTML = _sigTxt(reg); sg.classList.toggle('cero', !reg); }
     }
-    var fila = document.getElementById('rq_res_' + id);
-    if (fila) fila.innerHTML = _resultadoFilaHTML(ins, ri);
 }
-/* El mismo resultado, corto, para el renglón de la lista. */
+/* El mismo resultado, corto, para la columna de registrados. */
 function _resultadoFilaHTML(ins, ri) {
     var calc = calcItem(ins, ri), ref = calc.ref, pFin = pedidoFinal(calc, ri);
-    if (ri.noPedir) return '<span class="rq-mini neutro">🚫 No pedir</span>';
+    if (ri.noPedir) return '<span class="rq-mini neutro">No pedir</span>';
     if (calc.estado === 'sin-datos') return '<span class="rq-mini neutro">—</span>';
     if (calc.estado === 'sin-stock' && !(pFin > 0)) return '<span class="rq-mini aviso">Sin stock definido</span>';
-    if (pFin > 0) return '<span class="rq-mini pedir">🛒 ' + pFin + ' ' + _esc(_uni(ref, pFin)) + '</span><small>' + fmtMXN(pFin * calc.costoUnitPieza) + '</small>';
-    return '<span class="rq-mini ok">✓ No hay pedido</span>';
-}
-function rapidaSiguiente(idActual) {
-    var pool = _poolRapida().filter(function(x){ return x.id !== idActual; });
-    document.getElementById('buscarRapida').value = '';
-    _rapidaSel = pool.length ? pool[0].id : null;
-    renderRapida();
-    if (!pool.length) {
-        document.getElementById('rapidaCont').innerHTML =
-            '<div class="empty-state" style="display:block;padding:34px 0"><div class="e-icon">🎉</div><div>¡No quedan insumos en este filtro!</div></div>';
-    }
-    renderReq(); // refrescar contadores
+    if (pFin > 0) return '<span class="rq-mini pedir">Pedir ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '</span>';
+    return '<span class="rq-mini ok">Sin pedido</span>';
 }
 // ¿La fila ya está REGISTRADA? (existencia capturada = pedido de insumo hecho)
 function esRegistrado(ri) {
-    return ri && ri.existencia !== '' && ri.existencia !== null && ri.existencia !== undefined && !isNaN(parseFloat(ri.existencia));
+    return !!(ri && ri.existencia !== '' && ri.existencia !== null && ri.existencia !== undefined && !isNaN(parseFloat(ri.existencia)));
 }
 
 /* ── CAPTURA INTELIGENTE según la presentación de compra ──
@@ -1111,7 +1288,7 @@ function _recalcExist(id) {
         ri.existencia = (llenos===null&&pct===null) ? '' :
             Math.round(((llenos||0) + (pct||0)/100)*100)/100;
     }
-    // modo simple escribe ri.existencia directo (actualizarExistencia)
+    // modo simple escribe ri.existencia directo (guardarExistSilent)
 }
 function setCapt(id, campo, val) {
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
@@ -1119,203 +1296,6 @@ function setCapt(id, campo, val) {
     _recalcExist(id);
     setReqData(reqData);
     _pintarVivo(id);
-}
-function setCaptBlur(id) { _keepVisible[id] = 1; setReqData(reqData); renderReq(); }
-
-function renderReq() {
-    var q         = (document.getElementById('buscarReq').value || '').toLowerCase();
-    var famFil    = document.getElementById('filtroFamilia').value;
-    var areaFil   = document.getElementById('filtroArea').value;
-    var estadoFil = document.getElementById('filtroEstado').value;
-    var ocultarNP = document.getElementById('ocultarNoPedir').checked;
-
-    var lista = insumos.filter(function(ins) {
-        if (q && !(ins.nombre || '').toLowerCase().includes(q) &&
-                 !(ins.marca  || '').toLowerCase().includes(q) &&
-                 !(ins.variedad||'').toLowerCase().includes(q) &&
-                 !(ins.familia|| '').toLowerCase().includes(q)) return false;
-        if (famFil && ins.familia !== famFil) return false;
-        if (areaFil && (ins.area||'') !== areaFil) return false;
-        return true;
-    });
-
-    var tbody = document.getElementById('tbodyReq');
-    tbody.innerHTML = '';
-    var totalCosto=0, totalItems=0, nCriticos=0, nBajos=0, nPend=0, nReg=0, numVisible=0;
-
-    lista.forEach(function(ins) {
-        var ri   = reqData[ins.id] || { presIdx: 0, existencia: '', pedidoManual: '', noPedir: false };
-        var calc = calcItem(ins, ri);
-        var pFin = pedidoFinal(calc, ri);
-        var costoRow = pFin * calc.costoUnitPieza;
-        var reg = esRegistrado(ri);
-
-        if (calc.estado === 'critico') nCriticos++;
-        if (calc.estado === 'bajo')    nBajos++;
-        if (pFin > 0) { totalItems++; totalCosto += costoRow; }
-        if (reg) nReg++; else nPend++;
-
-        // filtro registrados/pendientes (las recién registradas se quedan a la vista)
-        if (_regFiltro==='pend' && reg && !_keepVisible[ins.id]) return;
-        if (_regFiltro==='reg' && !reg) return;
-        if (estadoFil === 'critico' && calc.estado !== 'critico' && calc.estado !== 'bajo') return;
-        if (estadoFil === 'pedir'   && pFin === 0) return;
-        if (estadoFil === 'ok'      && calc.estado !== 'ok') return;
-        if (ocultarNP && ri.noPedir) return;
-
-        numVisible++;
-        var pres    = calc.pres;
-        var presArr = ins.presentaciones || [];
-        var presIdx = ri.presIdx || 0;
-        var pi      = presInfo(pres, ins);
-
-        var chipHtml = '';
-        if      (calc.estado === 'critico')   chipHtml = '<span class="chip chip-red">🔴 CRÍTICO</span>';
-        else if (calc.estado === 'bajo')      chipHtml = '<span class="chip chip-amber">🟡 BAJO</span>';
-        else if (calc.estado === 'ok')        chipHtml = '<span class="chip chip-green">🟢 OK</span>';
-        else if (calc.estado === 'sin-datos') chipHtml = '<span class="chip" style="opacity:.5">Sin datos</span>';
-        else                                  chipHtml = '<span class="chip" style="opacity:.5">Sin stock</span>';
-
-        var unidadCompra = pi.compra;
-        var pedSugHtml = calc.pedidoSugerido > 0
-            ? '<span style="font-weight:700;color:var(--red)">' + calc.pedidoSugerido + '</span>'
-            + '<span style="font-size:11px;color:var(--text-dim);margin-left:5px">' + _esc(unidadCompra) + '</span>'
-            : '<span style="color:var(--text-dim)">—</span>';
-        var hasManual = (ri.pedidoManual !== '' && ri.pedidoManual !== null && ri.pedidoManual !== undefined);
-
-        // ── captura inteligente: elegir modo (guardado o derivado de la presentación) ──
-        var modoCapt = ri.modoCapt || pi.modo;
-        var captHtml = '';
-        var modosBtn =
-            '<div style="display:flex;gap:3px;justify-content:center;margin-top:4px">' +
-            ['simple','paq','niv'].map(function(m){
-                var lbl = m==='simple'?'#':(m==='paq'?'📦+pzas':'🧴+%');
-                return '<button class="capt-modo'+(modoCapt===m?' on':'')+'" title="'+(m==='simple'?'Captura directa':(m==='paq'?'Cerradas + sueltas':'Llenos + % del abierto'))+'" '+
-                    'onclick="setCapt(\''+ins.id+'\',\'modoCapt\',\''+m+'\');renderReq()">'+lbl+'</button>';
-            }).join('') + '</div>';
-        if (modoCapt==='paq') {
-            captHtml =
-                '<div class="req-cell center" style="gap:4px">' +
-                    '<input type="text" inputmode="decimal" class="req-input req-num" style="width:52px" value="'+(ri.existCerr!==undefined&&ri.existCerr!==null?ri.existCerr:'')+'" placeholder="0" ' +
-                        'title="'+_esc(unidadCompra)+' cerradas" oninput="setCapt(\''+ins.id+'\',\'existCerr\',this.value)" onblur="setCaptBlur(\''+ins.id+'\')">' +
-                    '<span style="font-size:9px;color:var(--text-dim)">'+_esc(unidadCompra)+'</span>' +
-                    '<input type="text" inputmode="decimal" class="req-input req-num" style="width:52px" value="'+(ri.existSuel!==undefined&&ri.existSuel!==null?ri.existSuel:'')+'" placeholder="0" ' +
-                        'title="'+_esc(pi.umInt)+' sueltas ('+pi.piezas+' por '+_esc(unidadCompra)+')" oninput="setCapt(\''+ins.id+'\',\'existSuel\',this.value)" onblur="setCaptBlur(\''+ins.id+'\')">' +
-                    '<span style="font-size:9px;color:var(--text-dim)">'+_esc(pi.umInt)+'</span>' +
-                '</div>' +
-                '<div style="font-size:9px;color:var(--viol);margin-top:2px">= '+(esRegistrado(ri)?ri.existencia:'—')+' '+_esc(unidadCompra)+'</div>' + modosBtn;
-        } else if (modoCapt==='niv') {
-            captHtml =
-                '<div class="req-cell center" style="gap:4px">' +
-                    '<input type="text" inputmode="decimal" class="req-input req-num" style="width:52px" value="'+(ri.existCerr!==undefined&&ri.existCerr!==null?ri.existCerr:'')+'" placeholder="0" ' +
-                        'title="Llenos / cerrados" oninput="setCapt(\''+ins.id+'\',\'existCerr\',this.value)" onblur="setCaptBlur(\''+ins.id+'\')">' +
-                    '<span style="font-size:9px;color:var(--text-dim)">llenos</span>' +
-                    '<input type="text" inputmode="decimal" class="req-input req-num" style="width:48px" value="'+(ri.existPct!==undefined&&ri.existPct!==null?ri.existPct:'')+'" placeholder="%" ' +
-                        'title="% del abierto (0-100)" oninput="setCapt(\''+ins.id+'\',\'existPct\',this.value)" onblur="setCaptBlur(\''+ins.id+'\')">' +
-                    '<span style="font-size:9px;color:var(--text-dim)">%</span>' +
-                '</div>' +
-                '<div style="font-size:9px;color:var(--viol);margin-top:2px">= '+(esRegistrado(ri)?ri.existencia:'—')+' '+_esc(unidadCompra)+'</div>' + modosBtn;
-        } else {
-            var existVal = (ri.existencia !== '' && ri.existencia !== undefined && ri.existencia !== null) ? ri.existencia : '';
-            captHtml =
-                '<div class="req-cell center">' +
-                    '<input type="text" inputmode="decimal" class="req-input req-num" value="' + existVal + '" placeholder="—" ' +
-                        'oninput="guardarExistSilent(\'' + ins.id + '\',this.value)" ' +
-                        'onblur="actualizarExistencia(\'' + ins.id + '\',this.value)">' +
-                    '<span style="font-size:9px;color:var(--text-dim)">'+_esc(unidadCompra)+'</span>' +
-                '</div>' + modosBtn;
-        }
-        // botón cargar anterior (junto a captura)
-        var historial  = getHistorial();
-        var existAnterior = historial.length ? (historial[0].items[ins.id] || {}).existencia : undefined;
-        var hayAnterior = existAnterior !== undefined && existAnterior !== '' && existAnterior !== null;
-        if (hayAnterior) captHtml += '<button class="btn-cargar-ant" style="margin-top:3px" onclick="cargarExistenciaAnterior(\''+ins.id+'\')" title="Cargar anterior: '+existAnterior+'">↩ '+existAnterior+'</button>';
-
-        var notaChip = ri.nota
-            ? '<span class="nota-chip" title="'+_esc(ri.nota)+'" onclick="abrirNota(\''+ins.id+'\')">📝</span>' : '';
-
-        var tr = document.createElement('tr');
-        tr.className = (ri.noPedir ? 'no-pedir ' : '') + (calc.estado === 'ok' ? 'ok' : '');
-        tr.innerHTML =
-            '<td style="color:var(--text-dim)">' + numVisible + '</td>' +
-            '<td style="min-width:250px">' +
-                '<div class="insumo-nombre">' + _esc(ins.nombre) + (ins.variedad?' <span style="color:var(--text-dim);font-weight:400">'+_esc(ins.variedad)+'</span>':'') + ' ' + notaChip +
-                    ' <button class="rq-ficha-mini" onclick="_reqFicha(\''+ins.id+'\')" title="Ficha técnica: ver y editar el insumo">📋</button>' +
-                    (reg?' <span class="chip chip-green" style="font-size:8px;padding:1px 6px">✓</span>':'') +
-                '</div>' +
-                '<div class="insumo-sub">' +
-                    (ins.familia   ? '<span style="margin-right:6px">' + _esc(ins.familia)   + '</span>' : '') +
-                    (ins.area      ? '<span style="color:var(--viol)">' + _esc(ins.area) + '</span>' : '') +
-                    (ins.marca     ? '<span style="color:var(--text-dim);margin-left:4px">· ' + _esc(ins.marca) + '</span>' : '') +
-                '</div>' +
-                (function() {
-                    /* Cómo se compra y lo que cuesta, del núcleo (referenciaCompra). */
-                    var ref = calc.ref;
-                    var txt = ref.piezasPorCompra > 1 ? ref.compra + ' de ' + ref.piezasPorCompra + (ref.porPieza ? ' botellas' : ' piezas') : ref.compra;
-                    if (ref.contenido) txt += ' · ' + ref.contenido;
-                    return '<div class="rq-ref-mini"><span class="rq-ref-chip">📦 ' + _esc(txt) + '</span>' +
-                        (ref.precioCompra > 0 ? '<span class="rq-ref-costo">' + fmtMXN(ref.precioCompra) + ' / ' + _esc(ref.compra.toLowerCase()) +
-                            ((ref.piezasPorCompra > 1 || ref.porPieza) && ref.costoPieza > 0 ? ' · ' + fmtMXN(ref.costoPieza) + ' c/' + (ref.porPieza ? 'botella' : 'pza') : '') + '</span>' : '') +
-                    '</div>';
-                })() +
-            '</td>' +
-            '<td class="col-center" style="font-size:13px">' +
-                (pres.stockMin || pres.stockMax
-                    ? '<span style="color:var(--red);font-weight:600">' + (pres.stockMin || '—') + '</span>' +
-                      '<span style="color:var(--text-dim);padding:0 4px">/</span>' +
-                      '<span style="color:var(--green);font-weight:600">' + (pres.stockMax || '—') + '</span>'
-                    : '<span style="opacity:.4;font-size:11px">Sin definir</span>') +
-                '<div style="font-size:9px;color:var(--text-dim);margin-top:2px">en ' + _esc(_uni(calc.ref, 2)) + '</div>' +
-            '</td>' +
-            '<td class="col-center">' + captHtml + '</td>' +
-            /* Resultado al momento (se repinta al teclear: _pintarVivo). */
-            '<td class="col-center rq-res-celda" id="rq_res_' + ins.id + '">' + _resultadoFilaHTML(ins, ri) + '</td>' +
-            '<td class="col-right">' + pedSugHtml + '</td>' +
-            '<td class="col-right">' +
-                '<div class="req-cell right" style="gap:4px">' +
-                    '<button class="acc-btn" title="Usar el pedido sugerido" onclick="usarSugerido(\''+ins.id+'\')">✓</button>' +
-                    '<input type="number" class="req-input req-num' + (hasManual ? ' override' : '') + '" min="0" step="1" style="width:56px" ' +
-                        'value="' + (hasManual ? ri.pedidoManual : '') + '" placeholder="auto" ' +
-                        'onchange="modificarPedido(\'' + ins.id + '\',this.value)">' +
-                    '<button class="acc-btn' + (ri.noPedir ? ' rojo' : '') + '" title="' + (ri.noPedir ? 'Excluido — clic para volver a incluir' : 'No pedir este insumo') + '" ' +
-                        'onclick="toggleNoPedirNota(\'' + ins.id + '\')">🚫</button>' +
-                '</div>' +
-                '<div style="font-size:9px;color:var(--text-dim);margin-top:2px;text-align:right">'+_esc(unidadCompra)+'</div>' +
-            '</td>' +
-            '<td style="white-space:nowrap">' +
-                '<div style="font-size:13px;font-weight:600;color:' + (pFin > 0 ? 'var(--text)' : 'var(--text-dim)') + '">' +
-                    (pFin > 0 ? pFin + ' ' + _esc(unidadCompra) : '—') + '</div>' +
-                (presArr.length > 1
-                    ? '<select class="pres-select" style="margin-top:4px" onchange="cambiarPres(\'' + ins.id + '\',this.value)">' +
-                        presArr.map(function(p, pi2) {
-                            return '<option value="' + pi2 + '"' + (pi2 === presIdx ? ' selected' : '') + '>' +
-                                _esc(p.nombre || ('Presentación ' + (pi2+1))) + '</option>';
-                        }).join('') + '</select>'
-                    : '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">' + _esc(pres.nombre || pi.compra) + '</div>') +
-            '</td>' +
-            '<td class="col-right" style="font-weight:700;font-size:14px;color:' + (costoRow > 0 ? 'var(--green)' : 'var(--text-dim)') + '">' +
-                (costoRow > 0 ? fmtMXN(costoRow) : (ri.noPedir ? '<span style="font-size:10px">No pedir</span>' : '—')) +
-                (calc.costoUnitPieza > 0 && pFin > 0 ? '<div style="font-size:9px;color:var(--text-dim);font-weight:400">' + fmtMXN(calc.costoUnitPieza) + ' c/u</div>' : '') +
-            '</td>' +
-            '<td class="col-center">' +
-                (reg
-                    ? '<span class="chip chip-green" style="font-size:10px;white-space:nowrap">✓ Registrado</span>'
-                    : '<button class="btn-vista" style="font-size:11px;padding:6px 10px;white-space:nowrap" title="Registrar existencia EN CERO" ' +
-                        'onclick="registrarFila(\'' + ins.id + '\')">⊘ En cero</button>') +
-            '</td>';
-        tbody.appendChild(tr);
-    });
-
-    document.getElementById('emptyReq').style.display = numVisible === 0 ? 'block' : 'none';
-    document.getElementById('sCriticos').textContent = nCriticos;
-    document.getElementById('sBajos').textContent    = nBajos;
-    document.getElementById('sItems').textContent    = totalItems;
-    document.getElementById('sCosto').textContent    = fmtMXN(totalCosto);
-    document.getElementById('footerItems').textContent = totalItems + ' ítem' + (totalItems !== 1 ? 's' : '');
-    document.getElementById('footerCosto').textContent = fmtMXN(totalCosto);
-    document.getElementById('cntPend').textContent = nPend;
-    document.getElementById('cntReg').textContent  = nReg;
-    if (_vistaCapt==='rapida') renderRapida();
 }
 
 // ── Acciones de fila ──────────────────────────────────────────
@@ -1328,7 +1308,6 @@ function guardarExistSilent(id, val) {
 function actualizarExistencia(id, val) {
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
     reqData[id].existencia = val === '' ? '' : parseFloat(val);
-    _keepVisible[id] = 1;
     setReqData(reqData);
     renderReq();
 }
@@ -1338,7 +1317,6 @@ function registrarFila(id) {
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
     var ri = reqData[id];
     if (!esRegistrado(ri)) { ri.existencia = 0; ri.modoCapt = ri.modoCapt || 'simple'; }
-    _keepVisible[id] = 1;
     setReqData(reqData);
     renderReq();
 }
@@ -1347,26 +1325,27 @@ function usarSugerido(id) {
     reqData[id].pedidoManual = '';   // vacío = usa el sugerido
     reqData[id].noPedir = false;
     setReqData(reqData);
-    renderReq();
+    _refrescarReq();
 }
 function modificarPedido(id, val) {
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
     reqData[id].pedidoManual = val === '' ? '' : parseInt(val);
     setReqData(reqData);
-    if (val !== '') abrirNota(id, 'mod'); else renderReq();
+    if (val !== '') abrirNota(id, 'mod'); else _refrescarReq();
 }
 function toggleNoPedirNota(id) {
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
     reqData[id].noPedir = !reqData[id].noPedir;
     setReqData(reqData);
-    if (reqData[id].noPedir) abrirNota(id, 'nopedir'); else renderReq();
+    if (reqData[id].noPedir) abrirNota(id, 'nopedir'); else _refrescarReq();
 }
 function cambiarPres(id, idx) {
     if (!reqData[id]) reqData[id] = {};
     reqData[id].presIdx = parseInt(idx);
     delete reqData[id].modoCapt; // la nueva presentación decide el modo de captura
+    _recalcExist(id);
     setReqData(reqData);
-    renderReq();
+    _refrescarReq();
 }
 function cargarExistenciaAnterior(id) {
     var hist = getHistorial();
@@ -1377,9 +1356,10 @@ function cargarExistenciaAnterior(id) {
     reqData[id].existencia = val;
     reqData[id].modoCapt = 'simple';
     setReqData(reqData);
-    renderReq();
+    _refrescarReq();
 }
 function cargarTodasAnteriores() {
+    cerrarInfoReq();
     var hist = getHistorial();
     if (!hist.length) { alert('No hay requisición archivada para cargar.'); return; }
     var prev = hist[0].items || {};
@@ -1402,13 +1382,13 @@ var _notaId = null;
 function abrirNota(id, tipo) {
     _notaId = id;
     var ins = insumos.find(function(x){return x.id===id;}) || {};
-    document.getElementById('notaTitulo').textContent = tipo==='nopedir' ? '🚫 No pedir — comentario' : '📝 Comentario del pedido';
+    document.getElementById('notaTitulo').innerHTML = _icReq(tipo==='nopedir' ? 'adm-cerrar' : 'adm-notas', 16) + (tipo==='nopedir' ? 'No pedir — comentario' : 'Comentario del pedido');
     document.getElementById('notaSub').textContent = (ins.nombre||'') + ' · el comentario aparece en el export del pedido';
     document.getElementById('notaTexto').value = (reqData[id]&&reqData[id].nota)||'';
     document.getElementById('modalNota').style.display = 'flex';
     setTimeout(function(){ document.getElementById('notaTexto').focus(); }, 60);
 }
-function cerrarNota() { document.getElementById('modalNota').style.display='none'; _notaId=null; renderReq(); }
+function cerrarNota() { document.getElementById('modalNota').style.display='none'; _notaId=null; _refrescarReq(); }
 function guardarNota() {
     if (_notaId) {
         if (!reqData[_notaId]) reqData[_notaId] = { presIdx: 0 };
@@ -1424,7 +1404,7 @@ function guardarExistencias() {
     setReqData(reqData);
     _reqGuardarNube();   // «Guardar» guarda YA, sin esperar la pausa de teclas
     var msg = document.createElement('div');
-    msg.textContent = '✓ Existencias guardadas';
+    msg.textContent = 'Existencias guardadas';
     msg.style.cssText = 'position:fixed;bottom:80px;right:24px;background:var(--green);color:#fff;' +
         'padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;' +
         'box-shadow:0 4px 16px rgba(0,0,0,0.3);transition:opacity .4s';
@@ -1449,7 +1429,8 @@ function _empezarEnBlanco() {
     delete doc.porSucursal[_reqSuc()];
     _cacheReqData = doc;
     reqData = {};
-    _keepVisible = {}; _rapidaSel = null;
+    _reqSel = null; _reqBusq = '';
+    var m = document.getElementById('reqCaptModal'); if (m) m.style.display = 'none';
     _reqGuardarNube();
     init();
     irPaso(1);
@@ -1469,13 +1450,14 @@ function finalizarRequisicion() {
         resumen: res
     });
     _empezarEnBlanco();
-    _reqAviso('✓ Requisición finalizada y guardada en el historial (' + res.totalItems + ' a pedir · ' + fmtMXN(res.totalCosto) + ').');
+    _reqAviso('Requisición finalizada y guardada en el historial (' + res.totalItems + ' a pedir · ' + fmtMXN(res.totalCosto) + ').');
 }
 function nuevaRequisicion() {
+    cerrarInfoReq();
     if (typeof _exigeReq === 'function' && !_exigeReq('crear', 'No puedes capturar requisiciones.')) return;
     if (_hayCapturas() && !confirm('Esta requisición tiene capturas sin finalizar.\n\n¿Empezar una nueva desde cero? Lo capturado se pierde.\n(Para guardarla en el historial, usa «Finalizar».)')) return;
     _empezarEnBlanco();
-    _reqAviso('Requisición nueva. Usa «Cargar anteriores» si quieres partir de la última.');
+    _reqAviso('Requisición nueva. En «Info general» puedes cargar las existencias de la última.');
 }
 // Compatibilidad: quien todavía llame al nombre viejo, finaliza.
 function cerrarRequisicion() { finalizarRequisicion(); }
@@ -1486,15 +1468,49 @@ function _reqAviso(txt) {
     clearTimeout(el._t); el._t = setTimeout(function () { el.hidden = true; }, 6000);
 }
 
-/* ── FICHA TÉCNICA: el editor REAL del insumo, en una ventana flotante ──────
-   Igual que inventarios: pide la contraseña general y abre insumos.html?solo=1.
-   Al guardar, el editor avisa (insumoGuardado) y la requisición toma el cambio
-   en ese momento: stock, presentación y costos nuevos, sin recargar. */
+/* ── FICHA TÉCNICA (Edwin, 24-nov): VER no pide contraseña; EDITAR sí ───────
+   «Ficha técnica» enseña el insumo (presentaciones, cómo se compra, costos y
+   stock) en una ventana de solo lectura. «Editar ficha» pide la contraseña
+   general y abre el editor REAL (insumos.html?solo=1), como inventarios. Al
+   guardar, el editor avisa (insumoGuardado) y la requisición toma el cambio en
+   ese momento: stock, presentación y costos nuevos, sin recargar. */
+function _reqInsumoPorId(id) { return getInsumos().find(function (x) { return x && x.id === id; }); }
 function _reqFicha(id) {
-    var ins = getInsumos().find(function (x) { return x && x.id === id; });
+    var ins = _reqInsumoPorId(id);
     if (!ins) { alert('No se encontró el insumo en el catálogo.'); return; }
+    _reqCerrarFicha();
     var nom = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
-    var abrir = function () { _reqAbrirEditor('/recetas/insumos.html?solo=1&id=' + encodeURIComponent(ins.id), 'Ficha técnica · ' + nom); };
+    var presArr = ins.presentaciones || [];
+    var cuerpoPres = presArr.length ? presArr.map(function (p, k) {
+        var ref = EtaaxCore.referenciaCompra(ins, p);
+        return '<div class="rf-pres"><div class="rf-pres-tit">' + _esc(p.nombre || p.presentacionCompra || ('Presentación ' + (k + 1))) +
+            (p.proveedor ? '<small>Proveedor: ' + _esc(p.proveedor) + '</small>' : '') + '</div>' + _refCompraHTML(ins, p, ref) + '</div>';
+    }).join('') : '<div class="p12-vacio">Sin presentaciones registradas</div>';
+    var foto = (ins.foto && /^(https?:|data:image\/)/.test(String(ins.foto))) ? '<img src="' + _val(ins.foto) + '" alt="">' : _icReq('cat-insumos', 30);
+    var ov = document.createElement('div');
+    ov.id = 'reqFichaOv'; ov.className = 'inv-editor-ov';
+    ov.innerHTML = '<div class="rf-caja" role="dialog" aria-label="Ficha técnica">' +
+        '<div class="inv-editor-hd"><span>' + _icReq('ins-ficha', 18) + 'Ficha técnica</span><button onclick="_reqCerrarFicha()" title="Cerrar">' + (_icReq('adm-cerrar', 18) || '×') + '</button></div>' +
+        '<div class="rf-body">' +
+            '<div class="rf-top"><div class="rf-foto">' + foto + '</div><div style="min-width:0">' +
+                '<div class="rf-fam">' + [ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).map(_esc).join(' · ') + '</div>' +
+                '<div class="rf-nom">' + _esc(nom) + '</div>' +
+                '<div class="rf-meta">' + [ins.marca, ins.area ? 'Área: ' + ins.area : ''].filter(Boolean).map(_esc).join(' · ') + '</div>' +
+            '</div></div>' +
+            '<div class="rf-sec">Presentaciones</div>' + cuerpoPres +
+            (ins.notas ? '<div class="rf-sec">Notas</div><p class="rf-notas">' + _esc(ins.notas) + '</p>' : '') +
+        '</div>' +
+        '<div class="rf-pie"><button class="btn-vista" onclick="_reqCerrarFicha()">Cerrar</button>' +
+            '<button class="btn-vista rf-editar" onclick="_reqFichaEditar(\'' + ins.id + '\')" title="Pide la contraseña general">' + _icReq('ins-editar', 15) + 'Editar ficha</button></div>' +
+    '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) _reqCerrarFicha(); });
+    document.body.appendChild(ov);
+}
+function _reqCerrarFicha() { var ov = document.getElementById('reqFichaOv'); if (ov) ov.remove(); }
+function _reqFichaEditar(id) {
+    var ins = _reqInsumoPorId(id); if (!ins) return;
+    var nom = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
+    var abrir = function () { _reqCerrarFicha(); _reqAbrirEditor('/recetas/insumos.html?solo=1&id=' + encodeURIComponent(ins.id), 'Editar insumo · ' + nom); };
     if (typeof window._pedirClaveAdmin === 'function') window._pedirClaveAdmin('Editar ' + nom, abrir, 'Confirmar');
     else abrir();
 }
@@ -1502,8 +1518,8 @@ function _reqAbrirEditor(url, titulo) {
     _reqCerrarEditor();
     var ov = document.createElement('div');
     ov.id = 'reqEditorOv'; ov.className = 'inv-editor-ov';
-    ov.innerHTML = '<div class="inv-editor-caja"><div class="inv-editor-hd"><span>📋 ' + _esc(titulo || 'Ficha técnica') + '</span>' +
-        '<button onclick="_reqCerrarEditor()" title="Cerrar">✕</button></div>' +
+    ov.innerHTML = '<div class="inv-editor-caja"><div class="inv-editor-hd"><span>' + _icReq('rec-editar', 18) + _esc(titulo || 'Ficha técnica') + '</span>' +
+        '<button onclick="_reqCerrarEditor()" title="Cerrar">' + (_icReq('adm-cerrar', 18) || '×') + '</button></div>' +
         '<iframe src="' + url + '" title="' + _esc(titulo || 'Ficha técnica') + '"></iframe></div>';
     ov.addEventListener('click', function (e) { if (e.target === ov) _reqCerrarEditor(); });
     document.body.appendChild(ov);
@@ -1519,9 +1535,8 @@ function _reqTomarCambio(lista) {
         });
         _cacheInsumosReq = cat;
     }
-    var sel = _rapidaSel;
     init();
-    if (sel) { _rapidaSel = sel; renderRapida(); }
+    if (_reqSel) _pintarCardReq();
 }
 window.addEventListener('message', function (e) {
     if (!e.data || !e.data.type || (e.origin !== location.origin && e.origin !== 'null')) return;
@@ -1539,6 +1554,47 @@ function calcResumen() {
         if (pFin > 0) { totalItems++; totalCosto += pFin * calc.costoUnitPieza; }
     });
     return { totalItems: totalItems, totalCosto: totalCosto };
+}
+
+// ── Info general (como inventarios) ───────────────────────────
+function _reqSucNombre() {
+    var suc = _reqSuc();
+    try {
+        var l = JSON.parse(localStorage.getItem('etaax_' + _reqNeg() + '_sucursales') || '[]');
+        var s = (l || []).find(function (x) { return x && x.id === suc; });
+        if (s && s.nombre) return s.nombre;
+    } catch (e) {}
+    try { var c = JSON.parse(localStorage.getItem('etaax_ctx') || '{}'); if (c && c.sucNombre) return c.sucNombre; } catch (e) {}
+    return suc === 'suc_principal' ? 'Matriz' : suc;
+}
+function abrirInfoReq() {
+    var ab = _reqAbierta() || {}, res = calcResumen(), c = _conteoReq();
+    var f = function (iso) { return iso ? new Date(iso).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '—'; };
+    var fila = function (l, v) { return '<div class="ri-fila"><span>' + l + '</span><b>' + v + '</b></div>'; };
+    var hayHist = getHistorial().length > 0;
+    document.getElementById('infoReqBody').innerHTML =
+        '<div class="rc-cab"><div class="rc-titulo">' + _icReq('sto-detalle', 18) + 'Información general</div>' +
+            '<button class="rc-x" onclick="cerrarInfoReq()" title="Cerrar">' + (_icReq('adm-cerrar', 20) || '×') + '</button></div>' +
+        '<div class="ri-lista">' +
+            fila('Sucursal', _esc(_reqSucNombre())) +
+            fila('Iniciada', ab.inicio ? _esc(f(ab.inicio)) : 'Todavía sin capturas') +
+            fila('Última captura', _esc(f(ab.actualizado))) +
+            fila('Insumos revisados', c.reg + ' de ' + insumos.length) +
+            fila('A pedir', res.totalItems + ' insumo' + (res.totalItems === 1 ? '' : 's')) +
+            fila('Costo estimado', fmtMXN(res.totalCosto)) +
+        '</div>' +
+        '<div class="ri-acc">' +
+            '<button class="btn-vista" onclick="cargarTodasAnteriores()"' + (hayHist ? '' : ' disabled') + ' title="Llena las existencias vacías con las de la última requisición finalizada">' + _icReq('ins-historial', 15) + 'Cargar existencias anteriores</button>' +
+            '<button class="btn-vista" id="btnNuevaReq" onclick="nuevaRequisicion()" title="Empezar una requisición nueva en esta sucursal">' + _icReq('adm-agregar', 15) + 'Nueva requisición</button>' +
+        '</div>';
+    document.getElementById('modalInfoReq').style.display = 'flex';
+}
+function cerrarInfoReq() { var m = document.getElementById('modalInfoReq'); if (m) m.style.display = 'none'; }
+/* «Salir» guarda lo pendiente (sin esperar la pausa de teclas) y vuelve al
+   panel de Recetas e insumos. Al volver, la requisición sigue donde quedó. */
+async function salirReq() {
+    try { if (_reqSaveTimer) await _reqGuardarNube(); } catch (e) {}
+    window.location.href = 'index.html';
 }
 
 // ── Historial ─────────────────────────────────────────────────
@@ -1598,7 +1654,7 @@ function _esc(s) {
 
 
 // ═══════════ PASO 2 · PROYECCIÓN (por área / proveedor / total) ═══════════
-var AREA_LBL = { cocina:'🍳 Cocina', barra:'🍸 Barra', bodega:'📦 Bodega' };
+var AREA_LBL = { cocina:'Cocina', barra:'Barra', bodega:'Bodega' };
 function _itemsPedido() {
     var out = [];
     insumos.forEach(function(ins) {
@@ -1618,7 +1674,7 @@ function _itemsPedido() {
 }
 function _grupoTabla(titulo, items, total) {
     var filas = items.sort(function(a,b){return b.costo-a.costo;}).map(function(it){
-        return '<tr><td>'+_esc(it.ins.nombre)+(it.ri.nota?' <span class="nota-chip" title="'+_esc(it.ri.nota)+'">📝</span>':'')+'</td>'+
+        return '<tr><td>'+_esc(it.ins.nombre)+(it.ri.nota?' <span class="nota-chip" title="'+_esc(it.ri.nota)+'">'+(_icReq('adm-notas',14)||'*')+'</span>':'')+'</td>'+
             '<td class="col-center">'+it.pFin+' '+_esc(it.compra)+'</td>'+
             '<td>'+_esc(it.proveedor)+'</td>'+
             '<td class="col-right" style="color:var(--green);font-weight:600">'+fmtMXN(it.costo)+'</td></tr>';
@@ -1647,18 +1703,18 @@ function renderPaso2() {
     document.getElementById('p2Cards').innerHTML = cards;
 
     // grupos por área
-    var htmlA = '<div class="p2-titulo">📍 Proyección por área</div>';
+    var htmlA = '<div class="p2-titulo req-tit-ic">'+_icReq('ins-zona',18)+'Proyección por área</div>';
     Object.keys(porArea).sort().forEach(function(a){
         htmlA += _grupoTabla(_esc(AREA_LBL[a]||a), items.filter(function(it){return it.area===a;}), porArea[a].c);
     });
-    document.getElementById('p2Areas').innerHTML = items.length ? htmlA : '<div class="empty-state" style="display:block"><div class="e-icon">📋</div><div>Sin ítems a pedir — captura existencias en el Paso 1</div></div>';
+    document.getElementById('p2Areas').innerHTML = items.length ? htmlA : '<div class="empty-state" style="display:block"><div class="e-icon">'+_icReq('adm-sin-registros',30)+'</div><div>Sin ítems a pedir — captura existencias en el Paso 1</div></div>';
 
     // grupos por proveedor
     var porProv = {};
     items.forEach(function(it){ porProv[it.proveedor]=porProv[it.proveedor]||{n:0,c:0}; porProv[it.proveedor].n++; porProv[it.proveedor].c+=it.costo; });
-    var htmlP = items.length ? '<div class="p2-titulo">🚚 Proyección por proveedor</div>' : '';
+    var htmlP = items.length ? '<div class="p2-titulo req-tit-ic">'+_icReq('adm-proveedor',18)+'Proyección por proveedor</div>' : '';
     Object.keys(porProv).sort().forEach(function(p){
-        htmlP += _grupoTabla('🚚 '+_esc(p), items.filter(function(it){return it.proveedor===p;}), porProv[p].c);
+        htmlP += _grupoTabla(_icReq('adm-proveedor',15)+_esc(p), items.filter(function(it){return it.proveedor===p;}), porProv[p].c);
     });
     document.getElementById('p2Provs').innerHTML = htmlP;
 }
@@ -1709,7 +1765,7 @@ function renderPaso3() {
         '<div class="summary-card"><div class="s-label">Costo del pedido</div><div class="s-val" style="color:var(--viol)">'+fmtMXN(costo)+'</div>'+
             '<div style="font-size:10px;color:var(--text-dim)">'+items.length+' ítems</div></div>'+
         '<div class="summary-card"><div class="s-label">Compra vs venta</div><div class="s-val" style="color:'+col+'">'+(pct===null?'—':pct.toFixed(1)+'%')+'</div>'+
-            '<div style="font-size:10px;color:var(--text-dim)">'+(pct===null?'sin ventas en el rango':(pct<=30?'🟢 sano (≤30%)':pct<=40?'🟡 vigilar (≤40%)':'🔴 alto (>40%)'))+'</div></div>';
+            '<div style="font-size:10px;color:var(--text-dim)">'+(pct===null?'sin ventas en el rango':(pct<=30?'sano (≤30%)':pct<=40?'vigilar (≤40%)':'alto (>40%)'))+'</div></div>';
 
     // poblar select proveedores
     var provs = [...new Set(items.map(function(it){return it.proveedor;}))].sort();
@@ -1718,10 +1774,10 @@ function renderPaso3() {
     // resumen agrupado
     var porProv = {};
     items.forEach(function(it){ porProv[it.proveedor]=porProv[it.proveedor]||[]; porProv[it.proveedor].push(it); });
-    var html = items.length ? '<div class="p2-titulo">📄 Pedido final por proveedor</div>' : '<div class="empty-state" style="display:block"><div class="e-icon">📋</div><div>Sin ítems a pedir</div></div>';
+    var html = items.length ? '<div class="p2-titulo req-tit-ic">'+_icReq('adm-comprobante',18)+'Pedido final por proveedor</div>' : '<div class="empty-state" style="display:block"><div class="e-icon">'+_icReq('adm-sin-registros',30)+'</div><div>Sin ítems a pedir</div></div>';
     Object.keys(porProv).sort().forEach(function(p){
         var its=porProv[p], tot=its.reduce(function(s,it){return s+it.costo;},0);
-        html += _grupoTabla('🚚 '+_esc(p), its, tot);
+        html += _grupoTabla(_icReq('adm-proveedor',15)+_esc(p), its, tot);
     });
     document.getElementById('p3Resumen').innerHTML = html;
 }
@@ -1740,10 +1796,10 @@ function exportarPedido(tipo, valor) {
     items.forEach(function(it){ porProv[it.proveedor]=porProv[it.proveedor]||[]; porProv[it.proveedor].push(it); });
     var cuerpo = '';
     Object.keys(porProv).sort().forEach(function(p){
-        cuerpo += '<tr class="ped-prov-hdr"><td colspan="4">🚚 '+_esc(p)+'</td></tr>';
+        cuerpo += '<tr class="ped-prov-hdr"><td colspan="4">'+_esc(p)+'</td></tr>';
         porProv[p].sort(function(a,b){return a.ins.nombre.localeCompare(b.ins.nombre,'es');}).forEach(function(it){
             cuerpo += '<tr><td>'+_esc(it.ins.nombre)+(it.ins.variedad?' '+_esc(it.ins.variedad):'')+
-                (it.ri.nota?'<div style="font-size:9px;color:#996">📝 '+_esc(it.ri.nota)+'</div>':'')+'</td>'+
+                (it.ri.nota?'<div style="font-size:9px;color:#996">Nota: '+_esc(it.ri.nota)+'</div>':'')+'</td>'+
                 '<td class="tc" style="font-weight:700">'+it.pFin+'</td>'+
                 '<td class="tc">'+_esc(it.compra)+'</td>'+
                 '<td>'+_esc(AREA_LBL[it.area]||it.area)+'</td></tr>';
@@ -1752,13 +1808,13 @@ function exportarPedido(tipo, valor) {
     // no-pedir con nota (informativo al final)
     var noPed = insumos.filter(function(ins){ var ri=reqData[ins.id]||{}; return ri.noPedir && ri.nota; });
     var notasNP = noPed.length
-        ? '<div style="margin-top:14px;font-size:10px;color:#666"><b>🚫 Excluidos con comentario:</b> '+
+        ? '<div style="margin-top:14px;font-size:10px;color:#666"><b>Excluidos con comentario:</b> '+
             noPed.map(function(ins){ return _esc(ins.nombre)+' ('+_esc(reqData[ins.id].nota)+')'; }).join(' · ')+'</div>'
         : '';
     var ov = document.createElement('div');
     ov.id = 'pedOverlay';
     ov.style.cssText = 'position:fixed;inset:0;z-index:9990;background:#333;overflow:auto';
-    ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedOverlay','📄 '+titulo) +
+    ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedOverlay', titulo) +
         '<div class="ped-paper">'+
         '<div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid #3dbe7a;padding-bottom:10px;margin-bottom:14px">'+
             (m.logo?'<img src="'+m.logo+'" style="width:46px;height:46px;object-fit:cover;border-radius:8px">':'')+
@@ -1848,10 +1904,10 @@ function _pedToolbar(overlayId, title) {
         <span style="color:#f5f0e8;font-size:14px;font-weight:700">${title}</span>
         <div style="display:flex;gap:8px">
             <button onclick="window.print()" style="padding:7px 18px;border-radius:6px;cursor:pointer;
-                font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">🖨️ Imprimir / PDF</button>
+                font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none;display:inline-flex;align-items:center;gap:6px">${_icReq('adm-imprimir',15).replace('inv-ic','inv-ic ped-ic')}Imprimir / PDF</button>
             <button onclick="document.getElementById('${overlayId}').remove()" style="padding:7px 14px;
                 border-radius:6px;cursor:pointer;font-size:12px;background:transparent;
-                border:1px solid rgba(255,255,255,.3);color:#f5f0e8">✕ Cerrar</button>
+                border:1px solid rgba(255,255,255,.3);color:#f5f0e8;display:inline-flex;align-items:center;gap:6px">${_icReq('adm-cerrar',15).replace('inv-ic','inv-ic ped-ic')}Cerrar</button>
         </div>
     </div>`;
 }
@@ -1882,20 +1938,20 @@ function verPedido() {
                 <td style="color:#666">${_esc(it.proveedor)}</td>
             </tr>`;
         }).join('');
-        return `<tr class="ped-prov-hdr"><td colspan="5">🏪 ${_esc(prov)} — ${list.length} ítem${list.length!==1?'s':''}</td></tr>` + filas;
+        return `<tr class="ped-prov-hdr"><td colspan="5">${_esc(prov)} — ${list.length} ítem${list.length!==1?'s':''}</td></tr>` + filas;
     }).join('');
 
     document.getElementById('pedOverlay')?.remove();
     var ov = document.createElement('div');
     ov.id = 'pedOverlay';
     ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9998;overflow-y:auto;background:#1a1916';
-    ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedOverlay', '📄 Pedido de Compra — ' + items.length + ' ítems') + `
+    ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedOverlay', 'Pedido de Compra — ' + items.length + ' ítems') + `
     <div class="ped-paper">
         ${typeof etaaxReporteHeader === 'function' ? '<div style="margin-bottom:12px">' + etaaxReporteHeader('Requisición · Pedido de compra') + '</div>' : ''}
         <div style="display:flex;justify-content:space-between;align-items:flex-start;
                     margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #1a1916">
             <div>
-                <div style="font-size:22px;font-weight:900;margin-bottom:3px">📋 Pedido de Compra</div>
+                <div style="font-size:22px;font-weight:900;margin-bottom:3px">Pedido de Compra</div>
                 <div style="font-size:11px;color:#888">${fecha}</div>
             </div>
             <div style="text-align:right;font-size:11px;color:#888;line-height:1.8">
@@ -1962,7 +2018,7 @@ function verPedidoAdmin() {
             <td class="tr" style="font-weight:700;color:#1a7a4a">${fmtMXN(subTotal)}</td>
         </tr>`;
         return `<tr class="ped-prov-hdr" data-prov="${_esc(prov)}">
-            <td colspan="7">🏪 ${_esc(prov)} — ${list.length} ítem${list.length!==1?'s':''}</td>
+            <td colspan="7">${_esc(prov)} — ${list.length} ítem${list.length!==1?'s':''}</td>
         </tr>${filas}${subRow}`;
     }).join('');
 
@@ -1970,13 +2026,13 @@ function verPedidoAdmin() {
     var ov = document.createElement('div');
     ov.id = 'pedAdminOverlay';
     ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9998;overflow-y:auto;background:#1a1916';
-    ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedAdminOverlay', '🔒 Vista Admin — Costo del Pedido') + `
+    ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedAdminOverlay', 'Vista Admin — Costo del Pedido') + `
     <div class="ped-paper">
         ${typeof etaaxReporteHeader === 'function' ? '<div style="margin-bottom:12px">' + etaaxReporteHeader('Requisición · Vista administrativa') + '</div>' : ''}
         <div style="display:flex;justify-content:space-between;align-items:flex-start;
                     margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #1a1916">
             <div>
-                <div style="font-size:22px;font-weight:900;margin-bottom:3px">🔒 Resumen Administrativo del Pedido</div>
+                <div style="font-size:22px;font-weight:900;margin-bottom:3px">Resumen Administrativo del Pedido</div>
                 <div style="font-size:11px;color:#888">${fecha}</div>
             </div>
             <div style="text-align:right">
@@ -2044,15 +2100,13 @@ function filtrarPedProv(val) {
     }
 }
 
-// ── Init ──────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function() {
-    init(); // render inmediato con cache vacío
-    _sbInitReq(); // carga desde Supabase y re-renderiza
-});
-
 // ── Arranque ──────────────────────────────────────────────────
+/* Antes había DOS arranques y cada uno llamaba a _sbInitReq: el catálogo
+   completo (miles de insumos) se bajaba dos veces. */
 document.addEventListener('DOMContentLoaded', function() {
-    _sbInitReq();
+    init();        // pinta al momento con lo que haya en caché
+    _sbInitReq();  // baja de Supabase y vuelve a pintar
+    setTimeout(_ajustarStickyReq, 600);   // la barra del negocio se arma después
 });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>

@@ -18379,6 +18379,65 @@ console.log('\n══ BH89 · Requisiciones: la regla del pedido y su costo ═�
         eq(/window\._insNubeLista/.test(insjs) && /intento < 300/.test(insjs) && /x\.origenId === id/.test(insjs), true));
 }
 
+/* ═══════════ SUITE BH90 · REQUISICIONES COMO INVENTARIOS; SALIR SE LEE ══════════
+   Edwin, 24-nov: (1) la ficha técnica en requisiciones se VE sin contraseña y
+   solo EDITAR la pide; (2) el diálogo de «¿Cerrar sesión?» traía «Seguir aquí»
+   negro y sin texto en el admin y en el tema claro (las variables --surface2 no
+   existen ahí y caía en el respaldo oscuro); (3) el encabezado de requisiciones
+   es el de inventarios y hay UNA vista en dos columnas; (4) sin emojis. */
+console.log('\n══ BH90 · Requisiciones como inventarios; «Cerrar sesión» se lee ══');
+{
+    const req = fs.readFileSync(path.join(RAIZ, 'recetas/requisiciones.html'), 'utf8');
+    const cuerpo = (n) => { const i = req.indexOf('function ' + n + '('); return i < 0 ? '' : req.slice(i, req.indexOf('\nfunction ', i + 10)); };
+    test('ver la ficha técnica NO pide contraseña', () =>
+        eq(cuerpo('_reqFicha') !== '' && cuerpo('_reqFicha').indexOf('_pedirClaveAdmin') === -1 && cuerpo('_reqFicha').indexOf("_reqFichaEditar(") > -1, true));
+    test('…editarla SÍ la pide y abre el editor real del insumo', () =>
+        eq(/_pedirClaveAdmin\(/.test(cuerpo('_reqFichaEditar')) && /insumos\.html\?solo=1&id=/.test(cuerpo('_reqFichaEditar')), true));
+    test('el encabezado es el de inventarios (fijo, con la barra del paso)', () =>
+        eq(/class="inv-wizard-header" id="reqHeader"/.test(req) && /id="stepLabel"/.test(req) && /id="autoGuardarInd"/.test(req) &&
+           /id="pasoHerr" class="paso-herr"/.test(req) && /id="btnInfoReq"/.test(req) && /id="btnSalirReq"/.test(req), true));
+    test('una sola vista en dos columnas: sin «Uno por uno» ni «Lista completa»', () =>
+        eq(/id="p1Pend"/.test(req) && /id="p1Reg"/.test(req) && !/setVistaCapt\(|Uno por uno|Lista completa|id="tablaReq"/.test(req), true));
+    test('la captura va en modal y cerrarlo NO registra', () =>
+        eq(/id="reqCaptModal" class="p12-modal"/.test(req) && !/registrarFila|existencia\s*=/.test(cuerpo('_cerrarCapturaReq')), true));
+    test('sin emojis (fuera del menú lateral, que se cambia por íconos al cargar)', () => {
+        const sinNav = req.replace(/<nav[\s\S]*?<\/nav>/, '').replace(/<a [^>]*class="topbar-home"[^>]*>[^<]*<\/a>/, '');
+        const m = sinNav.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2B00}-\u{2BFF}\u{FE0F}]/u);
+        return eq(m ? m[0] : '', '');
+    });
+    test('el catálogo se baja UNA vez al abrir (antes dos arranques llamaban a _sbInitReq)', () =>
+        eq((req.match(/^\s*_sbInitReq\(\);/gm) || []).length, 1));
+
+    /* El diálogo de cerrar sesión, montado de verdad en tema claro y oscuro. */
+    const negtab = fs.readFileSync(path.join(RAIZ, 'negocio-tab.js'), 'utf8');
+    function montar(tema) {
+        let montado = null; const nodos = {};
+        const ctx = { document: { documentElement: { getAttribute: (a) => a === 'data-theme' ? tema : null },
+                                  getElementById: (id) => nodos[id] || null,
+                                  createElement: () => ({ id: '', style: { cssText: '' },
+                                      set innerHTML(v) { this._html = v; ['salirCancelBtn', 'salirOkBtn'].forEach(b => { if (v.indexOf(b) > -1) nodos[b] = { onclick: null, focus() {} }; }); },
+                                      get innerHTML() { return this._html; }, addEventListener() {}, remove() {} }),
+                                  body: { appendChild: (n) => { montado = n; } }, addEventListener() {}, removeEventListener() {} },
+                      Promise, String, Object };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        const i = negtab.indexOf('window.etaaxConfirmSalir');
+        vm.runInContext(negtab.slice(negtab.lastIndexOf('(function () {', i)), ctx, { filename: 'confirmSalir-' + tema });
+        ctx.window.etaaxConfirmSalir();
+        const h = montado ? montado.innerHTML : '';
+        const btn = (h.match(/<button id="salirCancelBtn" style="([^"]*)"/) || [])[1] || '';
+        return { h, btn, velo: montado && montado.style.background };
+    }
+    const claro = montar('light'), oscuro = montar('dark');
+    test('ya no depende de variables que el admin y el hub claro no tienen', () =>
+        eq(/var\(--surface2?,|var\(--text,/.test(claro.h), false));
+    test('tema claro: tarjeta blanca y «Seguir aquí» claro con letra oscura (antes: negro y sin texto)', () =>
+        eq([/background:#ffffff/.test(claro.h), /background:#f1eee8/.test(claro.btn), /color:#1a1916/.test(claro.btn)].join('|'), 'true|true|true'));
+    test('tema oscuro: tarjeta oscura y «Seguir aquí» con letra clara', () =>
+        eq([/background:#171611/.test(oscuro.h), /background:#24221d/.test(oscuro.btn), /color:#f0ece4/.test(oscuro.btn)].join('|'), 'true|true|true'));
+    test('sin el emoji de la mano: ícono de la app (o nada)', () => eq(/👋/.test(negtab), false));
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.
