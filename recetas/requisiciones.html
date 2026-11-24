@@ -398,6 +398,31 @@ document.addEventListener('DOMContentLoaded', function(){
         .rc-lbl { font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-dim); font-weight: 500; margin: 16px 0 8px; }
         .rc-nota { text-transform: none; letter-spacing: 0; font-weight: 400; }
         .rc-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        /* Cantidad + su unidad en un solo campo (como copas/onzas en ventas). */
+        .rc-cant { display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface2); }
+        .rc-cant:focus-within { border-color: var(--accent); }
+        .rc-cant .rc-in { flex: 1 1 auto; min-width: 0; border: 0; border-radius: 0; background: transparent; }
+        .rc-cant select { flex: 0 0 auto; max-width: 52%; border: 0; border-left: 1px solid var(--border); background: var(--surface); color: var(--text);
+            padding: 0 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; outline: none; }
+        .rc-ayuda { font-size: 11.5px; color: var(--text-dim); margin-top: 6px; }
+        .rq-res-txt { display: flex; flex-direction: column; gap: 3px; }
+        .rc-ped { display: grid; grid-template-columns: auto minmax(120px, 170px) auto 1fr; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px;
+            border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+        .rc-ped[hidden] { display: none; }
+        .rc-ped-l { font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+        .rc-cant-ped input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--text); text-align: center;
+            font-family: 'DM Sans', sans-serif; font-size: 18px; font-weight: 700; padding: 8px; outline: none; }
+        .rc-cant-ped input[readonly] { color: var(--text-muted); cursor: default; }
+        .rc-cant-ped:not(.edita) { background: transparent; }
+        .rc-cant-ped.edita { border-color: var(--accent); }
+        .rc-u { display: flex; align-items: center; padding: 0 10px; border-left: 1px solid var(--border); font-size: 12.5px; color: var(--text-dim); background: var(--surface); }
+        .rc-ped-costo { font-size: 15px; color: var(--text); white-space: nowrap; }
+        .rc-ped-acc { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+        .rc-ped-acc .btn-vista { padding: 7px 11px; font-size: 12.5px; }
+        .rc-ped-acc .btn-vista:disabled { opacity: .45; cursor: default; }
+        .rc-ped-nota { grid-column: 1 / -1; font-size: 11.5px; color: var(--text-dim); }
+        .rc-ped-nota:empty { display: none; }
+        @media (max-width: 640px) { .rc-ped { grid-template-columns: auto 1fr auto; } .rc-ped-acc { grid-column: 1 / -1; justify-content: stretch; } .rc-ped-acc .btn-vista { flex: 1; } }
         .rc-dos .rc-lbl { margin-top: 0; }
         .rc-in { width: 100%; box-sizing: border-box; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
             border-radius: 10px; padding: 14px; font-size: 20px; font-weight: 600; text-align: center; font-family: 'DM Sans', sans-serif; outline: none; }
@@ -1185,79 +1210,130 @@ function _val(v) {
     if (v === undefined || v === null) return '';
     return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+/* ══ LA TARJETA DE CAPTURA, MÁS SENCILLA (Edwin, 24-nov) ═══════════════════
+   Arriba, la PRESENTACIÓN DE COMPRA en una línea («Botella de 750 ml» o «Caja
+   de 12 botellas de 750 ml c/u»), el PRECIO sin repetirse (por caja y por
+   pieza solo si se compra por caja) y el STOCK. Abajo, la existencia en DOS
+   cantidades, cada una con su unidad (cajas, piezas o % de una abierta), como
+   las copas u onzas de ventas en inventarios: ya no hay «Directo / Cerradas +
+   piezas / Llenas + %». Y el pedido es un campo: lo sugerido viene escrito y
+   «Pedir otra cantidad» deja cambiarlo. «Usar sugerido» se fue: al registrar,
+   lo sugerido ya queda. */
 function _refCompraHTML(ins, pres, ref) {
-    var compra = ref.compra, comp = compra.toLowerCase();
-    var seCompra = ref.piezasPorCompra > 1
-        ? _esc(compra) + ' de ' + ref.piezasPorCompra + ' ' + (ref.porPieza ? 'botellas' : 'piezas') + (ref.contenido ? '<small>cada una de ' + _esc(ref.contenido) + '</small>' : '')
-        : _esc(compra) + (ref.contenido ? '<small>' + _esc(ref.contenido) + '</small>' : '');
-    if (ref.subUnidades) seCompra += '<small>' + ref.subUnidades + ' ' + _esc(ref.nombreSubUnidad) + ' por pieza</small>';
-    var costo = (ref.precioCompra > 0 ? fmtMXN(ref.precioCompra) + ' <span>por ' + _esc(comp) + '</span>' : '<span>Sin costo</span>') +
-        ((ref.piezasPorCompra > 1 || ref.porPieza) && ref.costoPieza > 0 ? '<small>' + fmtMXN(ref.costoPieza) + ' por ' + (ref.porPieza ? 'botella' : 'pieza') + '</small>' : '') +
+    var compra = ref.compra, comp = compra.toLowerCase(), caja = ref.piezasPorCompra > 1;
+    var pieza = ref.porPieza ? 'botella' : 'pieza';
+    var presTxt = caja
+        ? _esc(compra) + ' de ' + ref.piezasPorCompra + ' ' + pieza + 's' + (ref.contenido ? ' de ' + _esc(ref.contenido) + ' c/u' : '')
+        : _esc(compra) + (ref.contenido ? ' de ' + _esc(ref.contenido) : '');
+    if (ref.subUnidades) presTxt += '<small>' + ref.subUnidades + ' ' + _esc(ref.nombreSubUnidad) + ' por pieza</small>';
+    var precio = (ref.precioCompra > 0 ? fmtMXN(ref.precioCompra) + ' <span>por ' + _esc(comp) + '</span>' : '<span>Sin precio</span>') +
+        (caja && ref.costoPieza > 0 ? '<small>' + fmtMXN(ref.costoPieza) + ' por ' + pieza + '</small>' : '') +
         (ref.costoSubUnidad > 0 ? '<small>' + fmtMXN(ref.costoSubUnidad) + ' por ' + _esc(ref.nombreSubUnidad) + '</small>' : '');
     var hayStock = parseFloat(pres.stockMax) > 0 || parseFloat(pres.stockMin) > 0;
     var stock = hayStock
         ? 'mín <b class="rq-min">' + _num(pres.stockMin) + '</b> · máx <b class="rq-max">' + _num(pres.stockMax) + '</b><small>en ' + _esc(_uni(ref, 2)) + '</small>'
         : '<span class="rq-sin">Sin definir</span><small>defínelo en la ficha técnica</small>';
     return '<div class="rq-ref">' +
-        '<div><div class="rq-ref-l">Se compra por</div><div class="rq-ref-v">' + seCompra + '</div></div>' +
-        '<div><div class="rq-ref-l">Costo</div><div class="rq-ref-v">' + costo + '</div></div>' +
+        '<div><div class="rq-ref-l">Presentación de compra</div><div class="rq-ref-v">' + presTxt + '</div></div>' +
+        '<div><div class="rq-ref-l">Precio de compra</div><div class="rq-ref-v">' + precio + '</div></div>' +
         '<div><div class="rq-ref-l">Stock</div><div class="rq-ref-v">' + stock + '</div></div>' +
     '</div>';
 }
-/* El resultado de lo capturado, al momento. */
-function _resultadoHTML(ins, ri) {
+
+/* ── LAS DOS CANTIDADES Y SU UNIDAD ──────────────────────────────────────────
+   Unidades: la caja/paquete (solo si se compra así), la pieza (botella, o la
+   presentación misma si no hay caja) y el % de una abierta. Todo se pasa a
+   piezas y de ahí a la unidad del stock (cajas para un refresco por caja;
+   botellas para los destilados, aunque se compren por caja). */
+function _unidadesCapt(ref) {
+    var caja = ref.piezasPorCompra > 1, l = [];
+    if (caja) l.push(['caja', _plur(String(ref.compra || 'caja').toLowerCase())]);
+    l.push(['pieza', caja ? (ref.porPieza ? 'botellas' : 'piezas') : _uni(ref, 2)]);
+    l.push(['abierta', '% abierta']);
+    return l;
+}
+function _plur(t) { t = String(t || ''); return /s$/.test(t) ? t : (/[aeiouáéíóú]$/.test(t) ? t + 's' : t + 'es'); }
+function _uniStockCapt(ref) { return (ref.piezasPorCompra > 1 && !ref.porPieza) ? 'caja' : 'pieza'; }
+/* Lo capturado, con las unidades por omisión. Lo que venía de antes (un número
+   suelto, «cerradas + sueltas», «llenas + %») se lee aquí sin perder nada. */
+function _captDe(ri, ref) {
+    var caja = ref.piezasPorCompra > 1;
+    var c = { c1: ri.c1, u1: ri.u1 || (caja ? 'caja' : 'pieza'), c2: ri.c2, u2: ri.u2 || (caja ? 'pieza' : 'abierta') };
+    if (c.c1 === undefined && c.c2 === undefined) {
+        var e = ri.existencia, m = ri.modoCapt;
+        if (m === 'paq' && (ri.existCerr !== undefined || ri.existSuel !== undefined)) { c.c1 = ri.existCerr; c.u1 = 'caja'; c.c2 = ri.existSuel; c.u2 = 'pieza'; }
+        else if (m === 'niv' && (ri.existCerr !== undefined || ri.existPct !== undefined)) { c.c1 = ri.existCerr; c.u1 = 'pieza'; c.c2 = ri.existPct; c.u2 = 'abierta'; }
+        else if (e !== undefined && e !== null && e !== '') { c.c1 = e; c.u1 = _uniStockCapt(ref); c.c2 = ''; }
+    }
+    return c;
+}
+function _existDeCapt(c, ref) {
+    var ppc = ref.piezasPorCompra > 1 ? ref.piezasPorCompra : 1;
+    var a = _numOrEmpty(c.c1), b = _numOrEmpty(c.c2);
+    if (a === null && b === null) return '';
+    var aPiezas = function (n, u) { if (n === null) return 0; return u === 'caja' ? n * ppc : (u === 'abierta' ? n / 100 : n); };
+    var piezas = aPiezas(a, c.u1) + aPiezas(b, c.u2);
+    var e = (ref.piezasPorCompra > 1 && !ref.porPieza) ? piezas / ppc : piezas;
+    return Math.round(e * 100) / 100;
+}
+/* Un número directo (copiar la anterior, en cero): se enseña en la unidad del stock. */
+function _fijarExistencia(ri, val) {
+    ri.existencia = val;
+    ['c1', 'c2', 'u1', 'u2', 'modoCapt', 'existCerr', 'existSuel', 'existPct'].forEach(function (k) { delete ri[k]; });
+}
+
+/* El resultado de lo capturado, al momento: qué pasa y por qué. */
+function _resultadoInfo(ins, ri) {
     var calc = calcItem(ins, ri), ref = calc.ref, pres = calc.pres;
     var pFin = pedidoFinal(calc, ri), e = parseFloat(ri.existencia);
     var hasManual = ri.pedidoManual !== '' && ri.pedidoManual !== null && ri.pedidoManual !== undefined;
-    if (ri.noPedir) return '<div class="rq-res neutro"><b>' + _icReq('adm-cerrar', 16) + 'No pedir</b><span>Lo quitaste del pedido.</span></div>';
-    if (calc.estado === 'sin-datos') return '<div class="rq-res neutro"><b>Captura lo que hay</b><span>Al teclear la existencia te digo si hay pedido.</span></div>';
-    if (calc.estado === 'sin-stock') return '<div class="rq-res aviso"><b>' + _icReq('rem-alerta', 16) + 'Sin stock mínimo/máximo</b><span>Defínelo en la ficha técnica para saber cuánto pedir.' +
-        (hasManual && pFin > 0 ? ' Pediste a mano: ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '.' : '') + '</span></div>';
+    if (ri.noPedir) return { cls: 'neutro', html: '<b>' + _icReq('adm-cerrar', 16) + 'No pedir</b><span>Lo quitaste del pedido.</span>' };
+    if (calc.estado === 'sin-datos') return { cls: 'neutro', html: '<b>Captura lo que hay</b><span>Al teclear la existencia te digo si hay pedido.</span>' };
+    if (calc.estado === 'sin-stock') return { cls: 'aviso', html: '<b>' + _icReq('rem-alerta', 16) + 'Sin stock mínimo/máximo</b><span>Defínelo en la ficha técnica para saber cuánto pedir.' +
+        (hasManual && pFin > 0 ? ' Pediste a mano: ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '.' : '') + '</span>' };
     var tienes = 'Tienes ' + _num(e) + ' ' + _esc(_uni(ref, _num(e)));
-    if (pFin > 0) return '<div class="rq-res pedir"><b>' + _icReq('ins-stock', 16) + 'Hay pedido: ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '</b>' +
+    if (pFin > 0) return { cls: 'pedir', html: '<b>' + _icReq('ins-stock', 16) + 'Hay pedido: ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '</b>' +
         '<span>' + (hasManual ? 'Cantidad que pusiste a mano (la sugerida es ' + calc.pedidoSugerido + ').'
             : tienes + ' y el mínimo es ' + _num(pres.stockMin) + ': se pide hasta el máximo (' + _num(pres.stockMax) + ').') +
-        (ref.porPieza && ref.piezasPorCompra > 1 ? ' Son ' + _num(pFin / ref.piezasPorCompra) + ' ' + _esc(ref.compra.toLowerCase()) + '(s) de ' + ref.piezasPorCompra + '.' : '') + '</span></div>';
-    return '<div class="rq-res ok"><b>' + _icReq('adm-pagado', 16) + 'No hay pedido</b><span>' + (hasManual ? 'Lo pusiste en 0 a mano.' : tienes + ': más que el mínimo (' + _num(pres.stockMin) + ').') + '</span></div>';
+        (ref.porPieza && ref.piezasPorCompra > 1 ? ' Son ' + _num(pFin / ref.piezasPorCompra) + ' ' + _esc(ref.compra.toLowerCase()) + '(s) de ' + ref.piezasPorCompra + '.' : '') + '</span>' };
+    return { cls: 'ok', html: '<b>' + _icReq('adm-pagado', 16) + 'No hay pedido</b><span>' + (hasManual ? 'Lo pusiste en 0 a mano.' : tienes + ': más que el mínimo (' + _num(pres.stockMin) + ').') + '</span>' };
 }
+function _resultadoHTML(ins, ri) { var r = _resultadoInfo(ins, ri); return '<div class="rq-res ' + r.cls + '">' + r.html + '</div>'; }
 function _sigTxt(reg) {
     return reg ? _icReq('adm-pagado', 16) + 'Registrado — Siguiente' : _icReq('adm-pendiente', 16) + 'Registrar en cero — Siguiente';
+}
+/* El pedido: lo sugerido viene escrito; «Pedir otra cantidad» lo deja cambiar. */
+var _reqPedEdit = {};
+function _pedidoEstado(ins, ri) {
+    var calc = calcItem(ins, ri), ref = calc.ref, pFin = pedidoFinal(calc, ri);
+    var manual = ri.pedidoManual !== '' && ri.pedidoManual !== null && ri.pedidoManual !== undefined;
+    var valor = ri.noPedir ? 0 : (manual ? ri.pedidoManual : (calc.estado === 'sin-datos' ? '' : calc.pedidoSugerido));
+    var nota = ri.noPedir ? 'Quitado del pedido.'
+        : manual ? 'Cantidad a mano. La sugerida es ' + calc.pedidoSugerido + ' (bórrala para volver a ella).'
+        : (_reqPedEdit[ins.id] ? 'Escribe la cantidad. Vacío = la sugerida (' + calc.pedidoSugerido + ').' : '');
+    return { valor: valor, costo: pFin * calc.costoUnitPieza, unidad: _uni(ref, pFin === 1 ? 1 : 2), editable: !ri.noPedir && (manual || !!_reqPedEdit[ins.id]),
+             nota: nota, oculto: calc.estado === 'sin-datos' && !ri.noPedir && !manual };
 }
 function _cardCaptura(ins) {
     var id   = ins.id;
     var ri   = reqData[id] || { presIdx: 0 };
     var calc = calcItem(ins, ri);
-    var pres = calc.pres;
-    var pi   = presInfo(pres, ins);
-    var ref  = pi.ref;
-    var modoCapt = ri.modoCapt || pi.modo;
+    var pres = calc.pres, ref = calc.ref;
     var reg  = esRegistrado(ri);
     var d = document.createElement('div');
     d.className = 'ent-form-card';
     d.id = 'rcCard'; d.dataset.id = id;
-    var unidadPl = _uni(ref, 2), compraPl = String(ref.compra).toLowerCase();
-    var modos = [['simple', 'ins-unidad', 'Directo'], ['paq', 'ins-stock', 'Cerradas + piezas'], ['niv', 'ins-contenido', 'Llenas + %']].map(function (m) {
-        return '<button class="ent-tipo-btn' + (modoCapt === m[0] ? ' active' : '') + '" onclick="setCapt(\'' + id + '\',\'modoCapt\',\'' + m[0] + '\');_pintarCardReq()">' + _icReq(m[1], 15) + m[2] + '</button>';
-    }).join('');
-    var inp = function (campo, valor, ph) {
-        return '<input class="rc-in" type="text" inputmode="decimal" value="' + _val(valor) + '" placeholder="' + ph + '" ' +
-            'oninput="setCapt(\'' + id + '\',\'' + campo + '\',this.value)">';
+    var unidadPl = _uni(ref, 2);
+    var cap = _captDe(ri, ref), unidades = _unidadesCapt(ref);
+    var campo = function (k) {
+        var c = cap['c' + k], u = cap['u' + k];
+        return '<div class="rc-cant">' +
+            '<input class="rc-in" type="text" inputmode="decimal" value="' + _val(c) + '" placeholder="0" aria-label="Cantidad ' + k + '" ' +
+                'oninput="setCantReq(\'' + id + '\',' + k + ',this.value)">' +
+            '<select aria-label="Unidad ' + k + '" onchange="setUniReq(\'' + id + '\',' + k + ',this.value)">' +
+                unidades.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === u ? ' selected' : '') + '>' + _esc(x[1]) + '</option>'; }).join('') +
+            '</select></div>';
     };
-    var captura = '';
-    if (modoCapt === 'paq') {
-        captura = '<div class="rc-dos">' +
-            '<div><div class="rc-lbl">' + _esc(unidadPl) + ' cerradas</div>' + inp('existCerr', ri.existCerr, '0') + '</div>' +
-            '<div><div class="rc-lbl">Piezas sueltas <span class="rc-nota">(' + pi.piezas + ' por ' + _esc(compraPl) + ')</span></div>' + inp('existSuel', ri.existSuel, '0') + '</div>' +
-            '</div>';
-    } else if (modoCapt === 'niv') {
-        captura = '<div class="rc-dos">' +
-            '<div><div class="rc-lbl">' + _esc(unidadPl) + ' llenas / cerradas</div>' + inp('existCerr', ri.existCerr, '0') + '</div>' +
-            '<div><div class="rc-lbl">% de la abierta</div>' + inp('existPct', ri.existPct, '0-100') + '</div>' +
-            '</div>';
-    } else {
-        captura = '<input class="rc-in" type="text" inputmode="decimal" value="' + _val(ri.existencia) + '" placeholder="¿Cuántas ' + _esc(unidadPl) + ' hay?" ' +
-            'oninput="guardarExistSilent(\'' + id + '\',this.value)">';
-    }
     var presArr = ins.presentaciones || [];
     var selPres = presArr.length > 1
         ? '<div class="rc-lbl">Presentación que se pide</div><select class="pres-select rq-pres" onchange="cambiarPres(\'' + id + '\',this.value)">' +
@@ -1268,7 +1344,7 @@ function _cardCaptura(ins) {
     var hist = getHistorial();
     var antVal = hist.length ? ((hist[0].items || {})[id] || {}).existencia : undefined;
     var hayAnt = antVal !== undefined && antVal !== '' && antVal !== null;
-    var hasManual = ri.pedidoManual !== '' && ri.pedidoManual !== null && ri.pedidoManual !== undefined;
+    var res = _resultadoInfo(ins, ri), ped = _pedidoEstado(ins, ri);
     var tags = [ins.familia, ins.area, ins.marca].filter(Boolean).map(function (t) { return '<span class="inv-tag">' + _esc(t) + '</span>'; }).join('');
     d.innerHTML =
         '<div class="rc-cab">' +
@@ -1280,35 +1356,88 @@ function _cardCaptura(ins) {
             '</div>' +
         '</div>' +
         _refCompraHTML(ins, pres, ref) + selPres +
-        '<div class="rc-lbl">Cómo contar</div>' +
-        '<div class="ent-tipo-row">' + modos + '</div>' +
-        '<div class="rc-lbl">Existencia actual <span class="rc-nota">en ' + _esc(unidadPl) + '</span></div>' + captura +
+        '<div class="rc-lbl">Existencia actual</div>' +
+        '<div class="rc-dos">' + campo(1) + campo(2) + '</div>' +
+        '<div class="rc-ayuda">Dos cantidades, cada una con su unidad. Ej.: 2 ' + _esc(unidades[0][1]) + ' + 5 ' + _esc((unidades[1] || unidades[0])[1]) + '.</div>' +
         '<div class="rc-total"><span>Existencia</span><b id="rcExist">' + (reg ? _num(ri.existencia) : '—') + ' ' + _esc(unidadPl) + '</b></div>' +
         (hayAnt ? '<button class="btn-vista rc-copiar" onclick="cargarExistenciaAnterior(\'' + id + '\')">' + _icReq('ins-historial', 14) + 'Copiar existencia anterior (' + _esc(String(antVal)) + ')</button>' : '') +
-        '<div id="rcRes">' + _resultadoHTML(ins, ri) + '</div>' +
-        '<div class="rc-ajuste">' +
-            '<button class="btn-vista" onclick="usarSugerido(\'' + id + '\')" title="Usar lo que dice la regla">' + _icReq('adm-pagado', 14) + 'Usar sugerido</button>' +
-            '<input type="number" class="req-input req-num" min="0" placeholder="Pedir otra cantidad" value="' + (hasManual ? _val(ri.pedidoManual) : '') + '" onchange="modificarPedido(\'' + id + '\',this.value)">' +
-            '<button class="btn-vista' + (ri.noPedir ? ' rc-nopedir-on' : '') + '" onclick="toggleNoPedirNota(\'' + id + '\')">' + _icReq('adm-cerrar', 14) + 'No pedir</button>' +
+        '<div class="rq-res ' + res.cls + '" id="rcRes">' +
+            '<div id="rcResTxt" class="rq-res-txt">' + res.html + '</div>' +
+            '<div class="rc-ped" id="rcPedRow"' + (ped.oculto ? ' hidden' : '') + '>' +
+                '<div class="rc-ped-l">Pedido</div>' +
+                '<div class="rc-cant rc-cant-ped' + (ped.editable ? ' edita' : '') + '">' +
+                    '<input id="rcPed" type="text" inputmode="numeric" value="' + _val(ped.valor) + '"' + (ped.editable ? '' : ' readonly') + ' aria-label="Cantidad a pedir" ' +
+                        'oninput="setPedidoReq(\'' + id + '\',this.value)" onchange="notaPedidoReq(\'' + id + '\',this.value)">' +
+                    '<span class="rc-u" id="rcPedU">' + _esc(ped.unidad) + '</span></div>' +
+                '<b class="rc-ped-costo" id="rcPedCosto">' + fmtMXN(ped.costo) + '</b>' +
+                '<div class="rc-ped-acc">' +
+                    '<button class="btn-vista" id="rcPedEditar" onclick="editarPedidoReq(\'' + id + '\')"' + (ri.noPedir ? ' disabled' : '') + '>' + _icReq('rec-editar', 14) + 'Pedir otra cantidad</button>' +
+                    '<button class="btn-vista' + (ri.noPedir ? ' rc-nopedir-on' : '') + '" onclick="toggleNoPedirNota(\'' + id + '\')">' + _icReq('adm-cerrar', 14) + (ri.noPedir ? 'Sí pedir' : 'No pedir') + '</button>' +
+                '</div>' +
+                '<div class="rc-ped-nota" id="rcPedNota">' + _esc(ped.nota) + '</div>' +
+            '</div>' +
         '</div>' +
         '<button class="rc-sig' + (reg ? '' : ' cero') + '" id="rcSig" onclick="_reqSiguiente(\'' + id + '\')">' + _sigTxt(reg) + '</button>';
     return d;
 }
 /* Lo capturado se refleja al momento, sin repintar la tarjeta (no se pierde el
-   foco del campo): la existencia, el resultado y el botón de abajo. */
+   foco del campo): la existencia, el resultado, el pedido y el botón de abajo. */
 function _pintarVivo(id) {
     var ins = insumos.find(function (x) { return x.id === id; }); if (!ins) return;
     var ri = reqData[id] || {};
     var card = document.getElementById('rcCard');
-    if (card && card.dataset.id === id) {
-        var reg = esRegistrado(ri);
-        var pi = presInfo((calcItem(ins, ri)).pres, ins);
-        var ex = document.getElementById('rcExist'); if (ex) ex.textContent = (reg ? _num(ri.existencia) : '—') + ' ' + _uni(pi.ref, 2);
-        var rs = document.getElementById('rcRes'); if (rs) rs.innerHTML = _resultadoHTML(ins, ri);
-        var sg = document.getElementById('rcSig'); if (sg) { sg.innerHTML = _sigTxt(reg); sg.classList.toggle('cero', !reg); }
-    }
+    if (!card || card.dataset.id !== id) return;
+    var reg = esRegistrado(ri), ref = calcItem(ins, ri).ref;
+    var ex = document.getElementById('rcExist'); if (ex) ex.textContent = (reg ? _num(ri.existencia) : '—') + ' ' + _uni(ref, 2);
+    var r = _resultadoInfo(ins, ri), ped = _pedidoEstado(ins, ri);
+    var box = document.getElementById('rcRes'); if (box) box.className = 'rq-res ' + r.cls;
+    var tx = document.getElementById('rcResTxt'); if (tx) tx.innerHTML = r.html;
+    var row = document.getElementById('rcPedRow'); if (row) row.hidden = ped.oculto;
+    var inp = document.getElementById('rcPed');
+    if (inp && document.activeElement !== inp) inp.value = (ped.valor === undefined || ped.valor === null) ? '' : ped.valor;
+    var pu = document.getElementById('rcPedU'); if (pu) pu.textContent = ped.unidad;
+    var pc = document.getElementById('rcPedCosto'); if (pc) pc.textContent = fmtMXN(ped.costo);
+    var pn = document.getElementById('rcPedNota'); if (pn) pn.textContent = ped.nota;
+    var sg = document.getElementById('rcSig'); if (sg) { sg.innerHTML = _sigTxt(reg); sg.classList.toggle('cero', !reg); }
 }
-/* El mismo resultado, corto, para la columna de registrados. */
+function setCantReq(id, k, val) {
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    var ri = reqData[id], ins = insumos.find(function (x) { return x.id === id; }); if (!ins) return;
+    var ref = calcItem(ins, ri).ref, c = _captDe(ri, ref);
+    c['c' + k] = val;
+    ri.c1 = c.c1 === undefined ? '' : c.c1; ri.u1 = c.u1; ri.c2 = c.c2 === undefined ? '' : c.c2; ri.u2 = c.u2;
+    _recalcExist(id);
+    setReqData(reqData);
+    _pintarVivo(id);
+}
+function setUniReq(id, k, u) {
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    var ri = reqData[id], ins = insumos.find(function (x) { return x.id === id; }); if (!ins) return;
+    var ref = calcItem(ins, ri).ref, c = _captDe(ri, ref);
+    c['u' + k] = u;
+    ri.c1 = c.c1 === undefined ? '' : c.c1; ri.u1 = c.u1; ri.c2 = c.c2 === undefined ? '' : c.c2; ri.u2 = c.u2;
+    _recalcExist(id);
+    setReqData(reqData);
+    _pintarVivo(id);
+}
+function editarPedidoReq(id) {
+    _reqPedEdit[id] = true;
+    var inp = document.getElementById('rcPed'), box = inp && inp.parentNode;
+    if (inp) { inp.readOnly = false; if (box) box.classList.add('edita'); inp.focus(); try { inp.select(); } catch (e) {} }
+    _pintarVivo(id);
+}
+/* Al teclear: el costo y el resultado cambian al momento (vacío = la sugerida). */
+function setPedidoReq(id, val) {
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    var n = parseInt(String(val).replace(/[^0-9]/g, ''), 10);
+    reqData[id].pedidoManual = String(val).trim() === '' || isNaN(n) ? '' : n;
+    reqData[id].noPedir = false;
+    setReqData(reqData);
+    _pintarVivo(id);
+}
+/* Al salir del campo con una cantidad a mano: el porqué, para el pedido. */
+function notaPedidoReq(id, val) { if (String(val).trim() !== '') abrirNota(id, 'mod'); }
+// El mismo resultado, corto, para la columna de registrados.
 function _resultadoFilaHTML(ins, ri) {
     var calc = calcItem(ins, ri), ref = calc.ref, pFin = pedidoFinal(calc, ri);
     if (ri.noPedir) return '<span class="rq-mini neutro">No pedir</span>';
@@ -1321,46 +1450,21 @@ function _resultadoFilaHTML(ins, ri) {
 function esRegistrado(ri) {
     return !!(ri && ri.existencia !== '' && ri.existencia !== null && ri.existencia !== undefined && !isNaN(parseFloat(ri.existencia)));
 }
-
-/* ── CAPTURA INTELIGENTE según la presentación de compra ──
-   paq: la presentación agrupa piezas (caja de 12 rollos) → cerradas + sueltas
-   niv: líquido/granel (frasco, botella, kg)             → llenos + % del abierto
-   simple: número directo                                  */
-/* En qué se cuenta y cómo conviene capturar. Antes las «piezas» salían del
-   rendimiento (onzas por botella): un vodka se capturaba como «uds. cerradas +
-   58.33 oz sueltas». Ahora salen de la presentación de compra (caja de 24,
-   rejilla de 12…), del núcleo: referenciaCompra. */
+/* En qué se cuenta y lo que cuesta, del núcleo (referenciaCompra). `compra` es
+   la unidad del stock; lo usan el pedido y la exportación. */
 function presInfo(pres, ins) {
     pres = pres || {};
     var ref = EtaaxCore.referenciaCompra(ins || {}, pres);
-    var umCont = String(pres.umContenido || '').toUpperCase();
-    var esPaquete = !ref.porPieza && ref.piezasPorCompra > 1;
-    var esNivel = !esPaquete && (ref.porPieza || ref.granel || ['ML', 'LT', 'KG', 'G'].indexOf(umCont) >= 0 ||
-                  /frasco|botella|galon|garraf|bidon|cubeta/.test(ref.compra.toLowerCase()));
-    return { modo: esPaquete ? 'paq' : (esNivel ? 'niv' : 'simple'), piezas: ref.piezasPorCompra, umInt: 'piezas',
-             compra: ref.unidadStock, ref: ref };
+    return { piezas: ref.piezasPorCompra, compra: ref.unidadStock, ref: ref };
 }
 function _numOrEmpty(v){ var f=parseFloat(v); return isNaN(f)?null:f; }
-// Recalcula ri.existencia (en unidades de COMPRA) desde los campos inteligentes.
+// Recalcula ri.existencia (en la unidad del stock) desde las dos cantidades.
 function _recalcExist(id) {
     var ri = reqData[id]; if (!ri) return;
     var ins = insumos.find(function(x){return x.id===id;}); if (!ins) return;
-    var pres = (ins.presentaciones||[])[ri.presIdx||0] || (ins.presentaciones||[])[0] || {};
-    var pi = presInfo(pres, ins);
-    /* El modo es el elegido o, si nadie tocó el botón, el que sugiere la
-       presentación. Antes solo se calculaba con el modo GUARDADO: sin tocar el
-       botón, «cerradas + sueltas» nunca daba existencia («— uds.»). */
-    var modo = ri.modoCapt || pi.modo;
-    if (modo==='paq') {
-        var cerr=_numOrEmpty(ri.existCerr), suel=_numOrEmpty(ri.existSuel);
-        ri.existencia = (cerr===null&&suel===null) ? '' :
-            Math.round(((cerr||0) + (pi.piezas>0?(suel||0)/pi.piezas:0))*100)/100;
-    } else if (modo==='niv') {
-        var llenos=_numOrEmpty(ri.existCerr), pct=_numOrEmpty(ri.existPct);
-        ri.existencia = (llenos===null&&pct===null) ? '' :
-            Math.round(((llenos||0) + (pct||0)/100)*100)/100;
-    }
-    // modo simple escribe ri.existencia directo (guardarExistSilent)
+    var ref = calcItem(ins, ri).ref;
+    if (ri.c1 === undefined && ri.c2 === undefined) return;   // número directo (copiar la anterior, en cero)
+    ri.existencia = _existDeCapt(_captDe(ri, ref), ref);
 }
 function setCapt(id, campo, val) {
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
@@ -1369,8 +1473,6 @@ function setCapt(id, campo, val) {
     setReqData(reqData);
     _pintarVivo(id);
 }
-
-// ── Acciones de fila ──────────────────────────────────────────
 function guardarExistSilent(id, val) {
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
     reqData[id].existencia = val;
@@ -1388,7 +1490,7 @@ function registrarFila(id) {
     if (typeof _exigeReq === 'function' && !_exigeReq('crear', 'No puedes capturar requisiciones.')) return;
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
     var ri = reqData[id];
-    if (!esRegistrado(ri)) { ri.existencia = 0; ri.modoCapt = ri.modoCapt || 'simple'; }
+    if (!esRegistrado(ri)) _fijarExistencia(ri, 0);
     setReqData(reqData);
     renderReq();
 }
@@ -1425,8 +1527,7 @@ function cargarExistenciaAnterior(id) {
     var val = (hist[0].items[id] || {}).existencia;
     if (val === undefined || val === null || val === '') return;
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
-    reqData[id].existencia = val;
-    reqData[id].modoCapt = 'simple';
+    _fijarExistencia(reqData[id], val);
     setReqData(reqData);
     _refrescarReq();
 }
@@ -1439,10 +1540,7 @@ function cargarTodasAnteriores() {
         var val = prev[id].existencia;
         if (val !== undefined && val !== null && val !== '') {
             if (!reqData[id]) reqData[id] = { presIdx: 0 };
-            if (reqData[id].existencia === '' || reqData[id].existencia === undefined || reqData[id].existencia === null) {
-                reqData[id].existencia = val;
-                reqData[id].modoCapt = 'simple';
-            }
+            if (reqData[id].existencia === '' || reqData[id].existencia === undefined || reqData[id].existencia === null) _fijarExistencia(reqData[id], val);
         }
     });
     setReqData(reqData);

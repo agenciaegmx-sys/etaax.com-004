@@ -18376,8 +18376,10 @@ console.log('\n══ BH89 · Requisiciones: la regla del pedido y su costo ═�
         eq(/parseFloat\(pres\.rendimiento\) \|\| parseFloat\(pres\.piezas\)/.test(req), false));
     test('una requisición abierta por sucursal; el historial lleva la sucursal', () =>
         eq(/porSucursal\[_reqSuc\(\)\]/.test(req) && /sucursalId: _reqSuc\(\)/.test(req), true));
-    test('«cerradas + sueltas» calcula aunque nadie haya tocado el botón del método (antes: «— uds.»)', () =>
-        eq(/var modo = ri\.modoCapt \|\| pi\.modo;/.test(req), true));
+    /* (24-nov) «Directo / Cerradas + piezas / Llenas + %» se fue: dos cantidades,
+       cada una con su unidad. La regla se corre en BH93. */
+    test('la existencia sale de las dos cantidades con su unidad (sin elegir método)', () =>
+        eq(/ri\.existencia = _existDeCapt\(_captDe\(ri, ref\), ref\);/.test(req), true));
     test('el resultado se ve al teclear (sin esperar a salir del campo)', () =>
         eq(/function guardarExistSilent[\s\S]{0,200}_pintarVivo\(id\)/.test(req) && /function setCapt[\s\S]{0,200}_pintarVivo\(id\)/.test(req), true));
     test('hay «Nueva requisición» y «Finalizar», y la ficha técnica abre el editor real', () =>
@@ -18551,6 +18553,42 @@ console.log('\n══ BH92 · Insumos sube solo lo que cambió ══');
         const i = app.indexOf('function _subRecetasRealtime(');
         return eq(/clearTimeout\(_recRtT\);\s*_recRtT = setTimeout\(/.test(app.slice(i, i + 900)), true);
     });
+}
+
+/* ═══════════ SUITE BH93 · REQUISICIONES: LA TARJETA SENCILLA ════════════════════
+   Edwin, 24-nov: «Directo / Cerradas + piezas / Llenas + %» confundía. Ahora la
+   existencia son DOS cantidades, cada una con su unidad (cajas o paquetes si se
+   compra así, piezas, % de una abierta), y todo se pasa a la unidad del stock.
+   Arriba, la presentación de compra en una línea y el precio sin repetirse. */
+console.log('\n══ BH93 · Requisiciones: la tarjeta sencilla ══');
+{
+    const req = fs.readFileSync(path.join(RAIZ, 'recetas/requisiciones.html'), 'utf8');
+    const cuerpo = (n) => { const i = req.indexOf('function ' + n + '('); return i < 0 ? '' : req.slice(i, req.indexOf('\nfunction ', i + 10)); };
+    const c = { console, JSON, Object, Array, String, Math, parseFloat, isNaN, fmtMXN: (n) => '$' + (n || 0).toFixed(2) };
+    vm.createContext(c);
+    vm.runInContext(['_numOrEmpty', '_captDe', '_existDeCapt', '_uniStockCapt', '_plur', '_unidadesCapt', '_uni', '_num', '_esc', '_refCompraHTML'].map(cuerpo).join('\n'), c);
+    vm.runInContext(`var caja = { piezasPorCompra: 24, porPieza: false, compra: 'Caja', unidadStock: 'Caja', contenido: '355 ml', precioCompra: 480, costoPieza: 20 };
+        var bot = { piezasPorCompra: 12, porPieza: true, compra: 'Caja', unidadStock: 'botellas', contenido: '750 ml', precioCompra: 2400, costoPieza: 200 };
+        var una = { piezasPorCompra: 1, porPieza: true, compra: 'Botella', unidadStock: 'botellas', contenido: '750 ml', precioCompra: 2065, costoPieza: 2065 };`, c);
+    const E = (capt, ref) => vm.runInContext('_existDeCapt(' + JSON.stringify(capt) + ', ' + ref + ')', c);
+    test('refresco por caja de 24: 1 caja + 12 piezas = 1.5 cajas (el stock va en cajas)', () => eq(E({ c1: '1', u1: 'caja', c2: '12', u2: 'pieza' }, 'caja'), 1.5));
+    test('destilado por caja de 12: 1 caja + 3 botellas = 15 botellas (el stock va en botellas)', () => eq(E({ c1: '1', u1: 'caja', c2: '3', u2: 'pieza' }, 'bot'), 15));
+    test('una botella: 2 llenas + 40 % de la abierta = 2.4 botellas', () => eq(E({ c1: '2', u1: 'pieza', c2: '40', u2: 'abierta' }, 'una'), 2.4));
+    test('las dos vacías = sin capturar (no es cero)', () => eq(E({ c1: '', u1: 'caja', c2: '', u2: 'pieza' }, 'caja'), ''));
+    test('unidades que se ofrecen: cajas, piezas y % abierta (sin caja: solo botellas y % abierta)', () =>
+        eq(vm.runInContext('JSON.stringify([_unidadesCapt(caja).map(function(x){return x[1];}), _unidadesCapt(una).map(function(x){return x[1];})])', c),
+           JSON.stringify([['cajas', 'piezas', '% abierta'], ['botellas', '% abierta']])));
+    test('lo capturado antes (un número suelto) se lee en la unidad del stock', () =>
+        eq(vm.runInContext("JSON.stringify(_captDe({ existencia: 3 }, caja))", c), JSON.stringify({ c1: 3, u1: 'caja', c2: '', u2: 'pieza' })));
+    test('…y «cerradas + sueltas» de antes, como cajas + piezas', () =>
+        eq(vm.runInContext("JSON.stringify(_captDe({ modoCapt: 'paq', existCerr: '2', existSuel: '6', existencia: 2.25 }, caja))", c), JSON.stringify({ c1: '2', u1: 'caja', c2: '6', u2: 'pieza' })));
+    const txt = (ref) => vm.runInContext('_refCompraHTML({}, { stockMin: 2, stockMax: 6 }, ' + ref + ').replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ")', c);
+    test('presentación: «Caja de 24 piezas de 355 ml c/u», con precio por caja y por pieza', () =>
+        eq(/Caja de 24 piezas de 355 ml c\/u/.test(txt('caja')) && /\$480\.00 por caja \$20\.00 por pieza/.test(txt('caja')), true));
+    test('presentación de una sola botella: «Botella de 750 ml» y su precio UNA vez (antes salía dos)', () =>
+        eq(/Botella de 750 ml/.test(txt('una')) && (txt('una').match(/\$2065\.00/g) || []).length === 1, true));
+    test('ya no hay «Usar sugerido»: el pedido es un campo que se habilita con «Pedir otra cantidad»', () =>
+        eq(!/Usar sugerido/.test(cuerpo('_cardCaptura')) && /Pedir otra cantidad/.test(cuerpo('_cardCaptura')) && /' readonly'/.test(cuerpo('_cardCaptura')), true));
 }
 
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════

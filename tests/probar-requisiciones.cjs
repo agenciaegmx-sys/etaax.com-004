@@ -207,12 +207,17 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
         const resultado = () => p.evaluate(() => document.getElementById('rcRes').textContent.replace(/\s+/g, ' '));
         await caso('la tarjeta dice cómo se compra, lo que cuesta la caja y la pieza, y el stock EN CAJAS', async () => {
             const t = await tarjeta();
-            assert.match(t, /Se compra por\s*Caja de 24 piezas\s*cada una de 355 ml/);
+            assert.match(t, /Presentación de compra\s*Caja de 24 piezas de 355 ml c\/u/);
+            assert.equal((t.match(/\$20\.00 por pieza/g) || []).length, 1, 'el precio por pieza no se repite');
             assert.match(t, /\$480\.00 por caja\s*\$20\.00 por pieza/);
             assert.match(t, /mín 2 · máx 6\s*en cajas/);
         });
-        await caso('se cuenta en cajas cerradas + piezas sueltas (24 por caja), no en «onzas sueltas»', async () =>
-            assert.match(await tarjeta(), /cajas cerradas.*Piezas sueltas \(24 por caja\)/));
+        await caso('la existencia va en DOS cantidades con su unidad: cajas + piezas (o % de una abierta)', async () => {
+            const v = await p.evaluate(() => ({ sel: [...document.querySelectorAll('#rcCard .rc-dos select')].map(x => x.value),
+                ops: [...document.querySelector('#rcCard .rc-dos select').options].map(o => o.textContent),
+                viejo: !!document.querySelector('#rcCard .ent-tipo-btn') || /Directo|Llenas \+ %|Cerradas \+ piezas/.test(document.getElementById('rcCard').textContent) }));
+            assert.deepEqual([v.sel, v.ops, v.viejo], [['caja', 'pieza'], ['cajas', 'piezas', '% abierta'], false]);
+        });
         await caso('sin capturar, la tarjeta pide la existencia', async () => assert.match(await resultado(), /Captura lo que hay/));
         let campos = await p.$$('#rcCard .rc-dos input');
         await campos[0].type('1'); await campos[1].type('12');
@@ -231,6 +236,27 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
         await campos[0].fill('2'); await campos[1].fill('0');
         await caso('existencia IGUAL al mínimo (2) también pide: 4 cajas · $1,920', async () =>
             assert.match(await resultado(), /Hay pedido: 4 cajas · \$1,920\.00/));
+        await caso('el pedido viene escrito (lo sugerido: 4) y bloqueado; ya no hay «Usar sugerido»', async () => {
+            assert.deepEqual(await p.evaluate(() => [document.getElementById('rcPed').value, document.getElementById('rcPed').readOnly, document.getElementById('rcPedCosto').textContent]), ['4', true, '$1,920.00']);
+            assert.equal(/Usar sugerido/.test(await tarjeta()), false);
+        });
+        await p.click('#rcPedEditar'); await p.fill('#rcPed', '7'); await p.waitForTimeout(100);
+        await caso('«Pedir otra cantidad» lo deja escribir y el costo cambia al teclear: 7 cajas · $3,360', async () => {
+            assert.deepEqual(await p.evaluate(() => [document.getElementById('rcPed').readOnly, document.getElementById('rcPedCosto').textContent, reqData.a_coca.pedidoManual]), [false, '$3,360.00', 7]);
+            assert.match(await resultado(), /Hay pedido: 7 cajas · \$3,360\.00\s*Cantidad que pusiste a mano \(la sugerida es 4\)/);
+        });
+        await p.fill('#rcPed', ''); await p.waitForTimeout(100);
+        await caso('…y borrarla regresa a la sugerida', async () => {
+            assert.equal(await p.evaluate(() => reqData.a_coca.pedidoManual), '');
+            assert.match(await resultado(), /Hay pedido: 4 cajas/);
+        });
+        await p.evaluate(() => { delete _reqPedEdit.a_coca; _pintarCardReq(); });
+        await caso('con una de 1 sola botella: «Botella de 750 ml» y su precio una vez', async () => {
+            const t = await p.evaluate(() => { const r = EtaaxCore.referenciaCompra({ tipoInsumo: 'destilado' }, { presentacionCompra: 'Botella', precio: '2065', incluyeImpuesto: '1', contNeto: '750', umContenido: 'ML' });
+                const d = document.createElement('div'); d.innerHTML = _refCompraHTML({}, { presentacionCompra: 'Botella' }, r); return d.textContent.replace(/\s+/g, ' '); });
+            assert.match(t, /Presentación de compra\s*Botella de 750 ml/, t);
+            assert.equal((t.match(/\$2,065\.00/g) || []).length, 1, t);
+        });
         await caso('el costo del pedido va por CAJA (antes: por pieza, 24 veces más barato)', async () =>
             assert.equal(await p.evaluate(() => { const c = calcItem(insumos.find(x => x.id === 'a_coca'), reqData.a_coca); return pedidoFinal(c, reqData.a_coca) * c.costoUnitPieza; }), 1920));
         await p.evaluate(() => { window.__claves = 0; window._pedirClaveAdmin = (a, cb) => { window.__claves++; cb(); }; });
@@ -239,7 +265,7 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             const f = await p.evaluate(() => ({ claves: window.__claves, ov: !!document.getElementById('reqFichaOv'), editor: !!document.getElementById('reqEditorOv'),
                 txt: (document.getElementById('reqFichaOv') || { textContent: '' }).textContent.replace(/\s+/g, ' ') }));
             assert.deepEqual([f.claves, f.ov, f.editor], [0, true, false]);
-            assert.match(f.txt, /Coca-Cola.*Presentaciones.*Se compra por\s*Caja de 24 piezas.*mín 2 · máx 6/);
+            assert.match(f.txt, /Coca-Cola.*Presentaciones.*Presentación de compra\s*Caja de 24 piezas.*mín 2 · máx 6/);
         });
         await foto(p, 'r5-ficha');
         await p.click('#reqFichaOv >> text=Editar ficha'); await p.waitForTimeout(250);
