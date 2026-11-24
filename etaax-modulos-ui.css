@@ -747,3 +747,10 @@ body.etx-module-cards .etx-portada-modulos .etx-tool-card .cf-card-cta {padding-
   color:var(--etx-ui-cyan);border:1px solid var(--etx-ui-cyan-line);border-radius:999px;padding:3px 9px;}
 .etx-card-grupo + .cf-badge-soon {margin-left:6px;}
 @media (max-width:640px) {.cf-modules.etx-portada-modulos {grid-template-columns:1fr;column-gap:0!important;}}
+
+/* ══ LA SUCURSAL, CENTRADA DE VERDAD (Edwin, 24-nov) ═══════════════════════════
+   El centro se mide del círculo del logo a la ÚLTIMA LETRA DEL NOMBRE: el giro
+   de abajo («Restaurante bar», casi siempre más largo que el nombre) ya no
+   ensancha la caja ni corre el centro. Se queda debajo, alineado al nombre. */
+body.etx-modulos-ui .etx-ctx-isla .etx-ctx-ident .ctx-neg-id {overflow:visible;}
+body.etx-modulos-ui .etx-ctx-isla .etx-ctx-ident .ctx-neg-tipo {width:0;min-width:100%;overflow:visible;text-overflow:clip;}

@@ -48,9 +48,24 @@ Cambios de esquema: los archivos `supabase-migration-v*.sql` NO se aplican autom
   - **Equip·ax** (`equipo/index.html`, portada): las páginas del equipo viven en `administrativo/` (staff, horarios, checklists, organigrama, perfiles-puesto, evaluaciones, permisos; `RE_EQUIPO`) y se abren como PÁGINAS (ya no en ventana flotante). Submódulos: Catálogo, Operativo (Horarios, Checklists), Evaluaciones, Estructura de staff (Organigrama, Perfiles, Reglamento «próximamente»). La puerta de cada herramienta (su sub-permiso de staff) la pone page-guard (`SUB_RUTA`). `staff-hub.html` solo redirige a la portada.
   - **Las barras «Sub módulos»** de Equip·ax y Admin·ax (y Proveedores en Cost·ax) se arman de un solo lugar: `NAVS` en `etaax-modulos-ui.js` (renglón = submódulo; `g` = grupo con `hijos`; `sub` = sub-permiso de staff, `perm` = permiso de módulo).
   - Al agregar un módulo: `MODULOS` de `etaax-modulos-ui.js` **y** de `hub-modulos.js` (una prueba exige que coincidan), `MAPA` de `page-guard.js`, `etaax-sidebar.js` y `CATEGORIAS` de `administrativo/permisos.html`.
-- `recetas/` — insumos, inventarios, requisiciones.
 - `admin.html`, `admin-catalogo-insumos.html` — panel de administración de plataforma (solo platform admins).
 - `staff-etaax.html` — portada del **Staff ETAAX** (equipo de ETAAX: auditores/consultores). Entran en el login del hub con su usuario (sin @); el hub lo intenta al final, contra la cuenta de Auth `<usuario>@staff.etaax.app`. La portada lista sus negocios (`etx_mis_negocios()`); al elegir uno, el hub (`_etxEntrar`) vuelve a leer el acceso, enseña SOLO sus sucursales y luego sus módulos. Se da de alta y se le dan accesos en `admin.html` → «Staff ETAAX» (`admin-staff-etaax.js`).
+
+### Interfaz compartida de los módulos
+
+Una sola cara para todas las páginas de módulo (no se dibuja página por página):
+
+- **`etaax-header.js`** (`etaaxHeader(opc)`): la barra de arriba (marca, «Módulos» con Atrás/Adelante, tema, menú de la cuenta). `opc.extras` agrega entradas al menú de la cuenta (`{id, icono, texto, fn}`; así llegó «Información de sucursal»).
+- **`etaax-modulos-ui.js`** + `.css` (no aplica embebido, `?embed=1`/`?solo=1`):
+  - **La isla del negocio** (`etaaxDisenoCtxBar`, la llama `ctx-bar.js`): cápsula fija con el título de la pantalla a la izquierda, la sucursal (logo, pin, nombre y giro) centrada contra la PÁGINA, y a la derecha Cambiar sucursal / Cambiar módulo como botones chicos que despliegan su `<dialog>` debajo (`.etx-pop`).
+  - **El título sube a la isla** (`subirTitulo`/`pintarTitulo`): toma el `.brand-title`/`.dx-hero-title`/… visible, lo deja solo para lectores de pantalla y quita su rótulo y párrafo. Copia TEXTO, nunca HTML.
+  - **«Sub módulos»** (`subModulos` + `NAVS`): la barra lateral es un desplegable a la izquierda de la isla; el contenido usa todo el ancho (`--etx-sidebar-space` = 0).
+  - **Las portadas** de módulo llevan el nombre en una isla (`.etx-isla`, se encoge a «A·» al bajar: `vigilarIsla`) y sus tarjetas compactas en dos columnas con su grupo adentro (`portadaCompacta`; el pasillo central es para la isla).
+  - Las cabeceras pegajosas de cada página llevan arriba una franja del color del fondo (`--etx-ctx-fade`) para que nada se asome bajo la isla.
+- **Hub** (`hub-modulos.js` + `hub-modulos.css`): los módulos se eligen en una **media luna 3D** (`colocarRueda`: el elegido al centro, con tope en los extremos, NO da la vuelta); debajo, centrado, su nombre y lo que se hace ahí. La franja de la sucursal es la misma isla.
+- **`etaax-iconos.js`**: `etaaxIcono(nombre, {tam})` (iconos de la marca; nada de emojis en el cromo) y `etaaxIslaHTML(nombre)` (el nombre ·ax partido para la isla).
+
+**Pruebas de navegador** (Playwright en `~/.cache/etaax-pw`, nunca dentro del repo): `NODE_PATH=~/.cache/etaax-pw/node_modules node tests/<arnés>.cjs` — `probar-isla-negocio` (isla, títulos, Sub módulos, media luna, portadas), `probar-planes-apps`, `probar-staff-etaax`, `probar-requisiciones`, `probar-inventario-navegador` (~5 min). `probar-cuenta-header`, `probar-sidebar` y `probar-ventanas-insumos` piden el Chrome de Mac.
 
 ### Scripts compartidos (se incluyen con `<script src>` en cada página)
 

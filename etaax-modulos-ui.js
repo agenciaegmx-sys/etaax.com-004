@@ -373,7 +373,15 @@
         var cfg = leer('etaax_' + ctx.negId + '_suc_' + (ctx.sucId || '')) || {};
         var giro = window.EtaaxNegocio ? EtaaxNegocio.giro(cfg.giroK || EtaaxNegocio.adivinarGiro(cfg.giro || '')) : null;
         var titulo = contextoGlobal ? ctx.negNombre : (ctx.sucNombre || ctx.negNombre);
-        var logo = opciones.logo ? '<img src="' + esc(opciones.logo) + '" alt="">' : ic(giro ? giro.ic : (contextoGlobal ? 'org-corporativo' : 'sucursal'),28);
+        /* (24-nov) LA FOTO DEL NEGOCIO VA SOLO EN EL BOTÓN DE LA CUENTA: en la isla
+           se duplicaba. La isla lleva el logo PROPIO de la sucursal; sin él, el
+           icono de su giro (o el del corporativo en la vista global). */
+        var sucLogo = '', negFoto = '';
+        try {
+            if (!contextoGlobal && ctx.sucId) sucLogo = localStorage.getItem('etaax_' + ctx.negId + '_suc_' + ctx.sucId + '_logo') || '';
+            negFoto = localStorage.getItem('etaax_' + ctx.negId + '_logo') || '';
+        } catch (e) {}
+        var logo = sucLogo ? '<img src="' + esc(sucLogo) + '" alt="">' : ic(giro ? giro.ic : (contextoGlobal ? 'org-corporativo' : 'sucursal'),28);
         /* LA FRANJA DEL NEGOCIO ES UNA ISLA LARGA (Edwin, 24-nov): solo el logo,
            la sucursal con su pin y su giro; en medio, el título de la pantalla
            (subirTitulo); a la derecha, Cambiar sucursal y Cambiar módulo como
@@ -397,7 +405,7 @@
             (ctx.ctxType !== 'staff' ? acc('etxCambiarSucursal', 'sh-cambiar-sucursal', 'Cambiar sucursal') : '') +
             acc('etxCambiarModulo', 'sh-cambiar-negocio', 'Cambiar módulo')) + '</div></div>';
         if (opciones.editorNav && opciones.editorNav.remove) opciones.editorNav.remove();   // las de Escandallos también van en el encabezado
-        if (typeof window.etaaxHeader === 'function') window.etaaxHeader({marcaBase:'/marca/hub',usuario:ctx.userName,negocio:ctx.negNombre,plan:ctx.userBadge,inicio:'/hub.html',inicioTexto:'Módulos',nav:true,cerrarSesion:window.ctxSalir,
+        if (typeof window.etaaxHeader === 'function') window.etaaxHeader({marcaBase:'/marca/hub',usuario:ctx.userName,negocio:ctx.negNombre,plan:ctx.userBadge,logo:negFoto,inicio:'/hub.html',inicioTexto:'Módulos',nav:true,cerrarSesion:window.ctxSalir,
             extras: contextoGlobal ? [] : [{ id:'etxHdInfoSucOp', icono:'sh-info-sucursal', texto:'Información de sucursal', fn:abrirInfoSucursal }]});
         var cambiar = bar.querySelector('#etxCambiarModulo');
         if (cambiar) cambiar.onclick = abrirModulos;

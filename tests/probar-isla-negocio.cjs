@@ -317,6 +317,26 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             assert.equal(r.grupos, 'Personal,Operativo,Operativo,Desarrollo,Estructura de staff,Estructura de staff,Estructura de staff');
             assert.ok(r.alto <= 160, 'tarjeta de ' + r.alto + ' px');
         });
+        /* (24-nov) Centrado de verdad y la foto del negocio solo en el botón de la cuenta. */
+        await p.evaluate(() => localStorage.setItem('etaax_n1_logo', 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="4" height="4" fill="#c0442a"/></svg>')));
+        await p.goto(ORIGEN + '/hub.html?negocios=1'); await p.waitForFunction(() => document.querySelector('#brandInfoBar .hub-isla-ident'), null, { timeout: 20000 }); await p.waitForTimeout(600);
+        await caso('hub, página del negocio: la isla con su título, el negocio centrado en la página y su foto SOLO en la cuenta', async () => {
+            const r = await p.evaluate(() => {
+                const id = document.querySelector('#brandInfoBar .hub-isla-ident'), lg = id.querySelector('.neg-activo-emoji-wrap').getBoundingClientRect(), nm = id.querySelector('.neg-activo-nombre').getBoundingClientRect();
+                return { titulo: document.getElementById('negIslaTitulo').textContent.trim().toLowerCase(), centro: Math.abs((lg.left + nm.right) / 2 - innerWidth / 2) < 2,
+                         islaFoto: !!document.querySelector('#brandInfoBar img'), cuentaFoto: !!document.querySelector('#etaax-header .etx-hd-avatar img'),
+                         tituloGrande: !!document.getElementById('negHeroTitle').getClientRects().length };
+            });
+            assert.deepEqual(r, { titulo: 'administra tus sucursales', centro: true, islaFoto: false, cuentaFoto: true, tituloGrande: false });
+        });
+        await ir(p, '/recetas/inventarios.html');
+        await caso('módulo: la sucursal centrada del círculo a la última letra del nombre, y la foto del negocio solo en la cuenta', async () => {
+            const r = await p.evaluate(() => {
+                const id = document.querySelector('.etx-ctx-ident'), lg = id.querySelector('.ctx-neg-emoji-wrap').getBoundingClientRect(), nm = id.querySelector('.ctx-neg-name span').getBoundingClientRect();
+                return { centro: Math.abs((lg.left + nm.right) / 2 - innerWidth / 2) < 2, islaFoto: !!id.querySelector('img'), cuentaFoto: !!document.querySelector('#etaax-header .etx-hd-avatar img') };
+            });
+            assert.deepEqual(r, { centro: true, islaFoto: false, cuentaFoto: true });
+        });
         await ctx.close();
 
         const tel = await abrir(browser, 390);

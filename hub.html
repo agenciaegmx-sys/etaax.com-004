@@ -633,7 +633,7 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
 </style>
 <link rel="stylesheet" href="/hub-paleta.css?v=0ae181b1">
 <link rel="stylesheet" href="/hub-globales.css?v=e52b7f71">
-<link rel="stylesheet" href="/hub-modulos.css?v=ec6851b7">
+<link rel="stylesheet" href="/hub-modulos.css?v=b9f4b548">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 </head>
 <body class="hub-paleta">
@@ -744,9 +744,12 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
   <div id="viewNegocios" style="display:none">
 
     <!-- Un solo subheader: identidad del negocio, plan y configuración. -->
-    <div class="neg-activo-bar hub-negocio-bar" id="brandInfoBar"></div>
+    <!-- (24-nov) La franja del negocio es una isla, como la de la sucursal: el título a
+         la izquierda, el negocio al centro y sus botones a la derecha. El título
+         grande de abajo se queda oculto (la isla lo copia: _islaTituloNegocio). -->
+    <div class="neg-activo-bar hub-negocio-bar hub-modulos-bar" id="brandInfoBar"></div>
 
-    <div class="hub-hero" style="margin-bottom:28px">
+    <div class="hub-hero hub-negocio-hero" style="margin-bottom:28px">
       <div class="hub-eyebrow" id="negHeroEyebrow">Centro de operación</div>
       <div class="hub-title hub-operacion-title" id="negHeroTitle">ADMINISTRA TUS <span class="g">SUCURSALES</span></div>
       <div class="hub-subtitle" id="negHeroSub">Opera cada sucursal por separado y consulta los resultados de todo tu negocio.</div>
@@ -2637,7 +2640,6 @@ function _renderVistaNegocio() {
     var heroTitle = document.getElementById('negHeroTitle');
     var heroSub   = document.getElementById('negHeroSub');
     if (!marca) {
-        _renderBrandBar(null);
         document.getElementById('secCrearMarca').style.display = '';
         document.getElementById('secMarca').style.display = 'none';
         if (heroTitle) {
@@ -2645,6 +2647,7 @@ function _renderVistaNegocio() {
             heroTitle.innerHTML = 'Registra tu<br><span class="g">negocio</span>';
         }
         if (heroSub)   heroSub.textContent = 'Comienza registrando la información de tu marca';
+        _renderBrandBar(null);
         _renderColorPicker();
         return;
     }
@@ -2694,6 +2697,19 @@ function _subSucRealtime(negId) {
     });
 }
 
+/* El título de la página del negocio, en la isla: el mismo del título grande
+   (que se queda oculto), copiado como TEXTO con su acento. */
+function _islaTituloNegocio() {
+    var t = document.getElementById('negHeroTitle');
+    if (!t) return 'Administra tus <span class="g">sucursales</span>';
+    var h = '';
+    t.childNodes.forEach(function (n) {
+        var txt = (n.textContent || '').replace(/\s+/g, ' ');
+        if (!txt) return;
+        h += (n.nodeType === 1 && n.classList.contains('g')) ? '<span class="g">' + _esc(txt) + '</span>' : _esc(txt);
+    });
+    return h || 'Administra tus <span class="g">sucursales</span>';
+}
 function _renderBrandBar(neg) {
     var bar = document.getElementById('brandInfoBar');
     if (!bar) return;
@@ -2705,25 +2721,22 @@ function _renderBrandBar(neg) {
     var _org = neg && neg.organizacion ? EtaaxNegocio.org(neg.organizacion) : null;
     var detalle = neg ? (_org ? _org.nom : t.label) + ' · ' + sucs.length +
         ' sucursal' + (sucs.length === 1 ? '' : 'es') : 'Registra tu negocio para comenzar';
+    /* (24-nov) LA ISLA DEL NEGOCIO. La FOTO del negocio va solo en el botón de
+       la cuenta (arriba a la derecha): aquí se duplicaba. El círculo lleva el
+       icono de cómo está armado el negocio (PYME, cadena, franquicia…). */
+    void _logoBar;
     bar.innerHTML =
-        '<div class="hub-negocio-id">' +
-        /* SI HAY LOGO, MANDA EL LOGO; si no, el icono hace de foto de perfil.
-           Nunca los dos en el mismo círculo —serían dos cosas peleando por el
-           mismo lugar— y nunca el icono dos veces: cuando el círculo ya lo
-           lleva, el renglón de abajo no lo repite. */
-        (_logoBar
-            ? '<div class="neg-activo-emoji-wrap" style="background:#fff;border:1px solid var(--ui-borde);overflow:hidden;padding:0;border-radius:50%"><img src="' + _esc(_logoBar) + '" alt="" style="width:100%;height:100%;object-fit:cover"></div>'
-            : '<div class="neg-activo-emoji-wrap" style="background:var(--s2);border:1px solid var(--ui-borde);border-radius:50%">' +
-                  (_org ? _ic(_org.ic, 22) : _ic('matriz', 22)) + '</div>') +
+        '<h1 class="hub-isla-titulo" id="negIslaTitulo">' + _islaTituloNegocio() + '</h1>' +
+        '<div class="hub-isla-ident hub-negocio-id">' +
+        '<div class="neg-activo-emoji-wrap" style="background:var(--s2);border:1px solid var(--ui-borde);border-radius:50%">' +
+            (_org ? _ic(_org.ic, 22) : _ic('matriz', 22)) + '</div>' +
         /* Lo que identifica al negocio es cómo está armado — PYME, cadena,
            franquicia—, no a qué se dedica: eso es de cada sucursal. Mientras
            nadie lo haya elegido, no se inventa: se queda en blanco y el dueño
            lo pone al configurar. */
-        '<div class="hub-negocio-datos"><div class="neg-activo-nombre">' + _esc(neg ? neg.nombre : 'Tu negocio') + '</div>' +
-        '<div class="neg-activo-tipo' + (_logoBar ? ' ic-fila' : '') + '">' +
-            ((_org && _logoBar ? _ic(_org.ic, 14) : '') + _esc(detalle)) +
-        '</div></div></div>' +
-        '<div class="hub-negocio-actions">' +
+        '<div class="neg-activo-id hub-negocio-datos"><div class="hub-sucursal-nombre"><span class="neg-activo-nombre">' + _esc(neg ? neg.nombre : 'Tu negocio') + '</span></div>' +
+        '<div class="neg-activo-tipo">' + _esc(detalle) + '</div></div></div>' +
+        '<div class="hub-negocio-actions neg-activo-btns">' +
         (neg ? '<div class="user-badge"><span class="user-badge-plan ' + cat.planClass + '" id="negViewUserPlan">' + _esc(cat.nombre) + '</span></div>' : '') +
         /* El aviso de privacidad, a la mano. Estaba solo en el pie de la landing
            y en la palomita del registro: justo donde nadie vuelve a mirarlo. Un
@@ -3710,7 +3723,7 @@ function _showModulos(neg) {
     var giro = window.EtaaxNegocio ? EtaaxNegocio.giro(sucCfg.giroK || EtaaxNegocio.adivinarGiro(sucCfg.giro || '')) : null;
     // Logo base de la marca en lugar del emoji (si el negocio lo tiene cargado).
     var _wrapChip = document.getElementById('negActEmojiWrap');
-    var _logoChip = (sucId ? _getSucLogo(sucId, neg.id) : '') || _getNegLogo(neg.id); // jerarquía sucursal → negocio
+    var _logoChip = sucId ? _getSucLogo(sucId, neg.id) : ''; // (24-nov) solo el de la sucursal: la foto del negocio va en el botón de la cuenta
     if (_logoChip) {
         _wrapChip.innerHTML = '<img src="' + _esc(_logoChip) + '" alt="">';
     } else {

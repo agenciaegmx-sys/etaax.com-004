@@ -18666,6 +18666,26 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
     });
     test('…«Paquete completo» de cada sucursal, en el azul petróleo de la isla', () =>
         eq(/\[data-theme="light"\] \.neg-card-apps\{color:#17525a;\}/.test(fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8')), true));
+    /* (24-nov) El isotipo y el favicon con el punto azul del logotipo (no el verde viejo). */
+    test('el isotipo y el favicon llevan el punto azul de la marca', () =>
+        eq(['marca/etaax-isotipo.svg', 'favicon.svg'].every(f => { const t = fs.readFileSync(path.join(RAIZ, f), 'utf8'); return /fill="#247681"\/>/.test(t) && !/#3dbe7a/.test(t); }), true));
+    /* (24-nov) La foto del negocio va SOLO en el botón de la cuenta: en la isla se duplicaba. */
+    test('la isla de la sucursal lleva el logo PROPIO de la sucursal; la foto del negocio, el botón de la cuenta', () => {
+        const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8'), h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        return eq(/var logo = sucLogo \? '<img src="' \+ esc\(sucLogo\) \+ '" alt="">'/.test(mu) && /logo:negFoto,/.test(mu) &&
+                  /var _logoChip = sucId \? _getSucLogo\(sucId, neg\.id\) : '';/.test(h), true);
+    });
+    test('hub: la página del negocio es una isla (título a la izquierda, el negocio al centro sin su foto) y sin el título grande', () => {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8'), css = fs.readFileSync(path.join(RAIZ, 'hub-modulos.css'), 'utf8');
+        const i = h.indexOf('function _renderBrandBar(neg) {'), f = h.slice(i, h.indexOf('\nfunction ', i + 10));
+        return eq(/id="brandInfoBar"/.test(h) && /class="neg-activo-bar hub-negocio-bar hub-modulos-bar" id="brandInfoBar"/.test(h) &&
+                  /'<h1 class="hub-isla-titulo" id="negIslaTitulo">' \+ _islaTituloNegocio\(\)/.test(f) && !/<img /.test(f) &&
+                  /#viewNegocios \.hub-negocio-hero\{display:none;\}/.test(css), true);
+    });
+    test('…y la sucursal / el negocio se centran del círculo del logo a la última letra del nombre (el giro no ensancha la caja)', () => {
+        const css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8'), hcss = fs.readFileSync(path.join(RAIZ, 'hub-modulos.css'), 'utf8');
+        return eq(/\.etx-ctx-ident \.ctx-neg-tipo \{width:0;min-width:100%;overflow:visible;/.test(css) && /\.hub-isla-ident \.neg-activo-tipo\{width:0;min-width:100%;overflow:visible;/.test(hcss), true);
+    });
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
         return eq(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(cuerpo) || !/_insMenuItem\('ins-editar'/.test(cuerpo), false);
