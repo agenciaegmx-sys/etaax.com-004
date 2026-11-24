@@ -413,6 +413,7 @@
         if (sucursal) sucursal.onclick = abrirSucursales;
         if (window.ResizeObserver && !observadorBarra) { observadorBarra = new ResizeObserver(medirLayout);observadorBarra.observe(bar); }
         tituloFirma = ''; pintarTitulo();
+        if (typeof window.etaaxAutoCentrar === 'function') window.etaaxAutoCentrar(bar.querySelector('.etx-ctx-isla'), { ident:'.etx-ctx-ident', titulo:'.etx-ctx-titulo', botones:'.ctx-right' });
         medirLayout();
     };
     var dialogo;
@@ -585,6 +586,7 @@
             else slot.appendChild(document.createTextNode(p.t));
         });
         slot.hidden = !partes.length;
+        if (typeof window.etaaxRecentrar === 'function') window.etaaxRecentrar();   // el título cambió de largo
     }
     function subirTitulo() {
         if (embebido) return;

@@ -82,7 +82,7 @@
                caía 9 px a la izquierda y «Inicio» del hub 43. La isla del negocio sí
                se centra contra la página, así que no coincidían. En pantalla ancha
                el grupo se centra contra la barra entera (desde 1100 px, el mismo corte en que la isla centra a la sucursal contra la página); más angosto sigue en fila. */
-            '@media (min-width:1100px){.etx-hd-centro{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);flex:none;}.etx-hd-der{margin-left:auto;}}',
+            '.etx-hd.etx-hd-centrado .etx-hd-centro{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);flex:none;}.etx-hd.etx-hd-centrado .etx-hd-der{margin-left:auto;}',
             /* Atrás / Adelante, junto a «Módulos» (Edwin, 24-nov): antes iban en la
                tarjeta del negocio, chiquitos y con trazo delgado. */
             '.etx-hd-nav{padding:8px;min-width:40px;justify-content:center;}',
@@ -141,12 +141,77 @@
         (document.head || document.documentElement).appendChild(st);
     }
 
+    /* ══ CENTRADO AUTOMÁTICO (Edwin, 24-nov) ═════════════════════════════════════
+       «Inicio» / «Módulos» de arriba y el negocio o la sucursal de la isla van al
+       CENTRO DE LA PÁGINA siempre que quepan, sin importar el ancho: se mide
+       cuánto ocupan la marca y la cuenta (arriba) o el título y los botones (en la
+       isla). Si al centro exacto se encimarían, la isla se queda lo más cerca del
+       centro que quepa; si ni así, se acomoda en fila. Del logo a la última letra
+       del nombre: el renglón de abajo (giro) no cuenta. */
+    var islas = [];
+    function _centrarHeader(el) {
+        if (!el || !el.getClientRects().length) return;
+        var marca = el.querySelector('.etx-hd-marca'), centro = el.querySelector('.etx-hd-centro'), der = el.querySelector('.etx-hd-der');
+        if (!marca || !centro || !der) return;
+        /* El ancho de los BOTONES (no el del hueco: en fila, el grupo se estira). */
+        var a = centro.firstElementChild, z = centro.lastElementChild; if (!a) return;
+        var W = document.documentElement.clientWidth, cw = z.getBoundingClientRect().right - a.getBoundingClientRect().left;
+        var cabe = (W / 2 - cw / 2) >= marca.getBoundingClientRect().right + 10 && (W / 2 + cw / 2) <= der.getBoundingClientRect().left - 10;
+        el.classList.toggle('etx-hd-centrado', cabe);
+    }
+    function _centrarIsla(r) {
+        var isla = r.isla, ident = isla && isla.querySelector(r.ident);
+        if (!ident || !isla.isConnected || !isla.getClientRects().length) return;
+        var W = document.documentElement.clientWidth;
+        var enFila = function () { ident.style.position = 'static'; ident.style.left = ''; ident.style.top = ''; ident.style.height = ''; ident.style.transform = ''; ident.style.width = ''; isla.classList.remove('etx-ident-libre'); };
+        if (W <= 600) { enFila(); return; }
+        /* Se mide ya fuera de la fila: así los botones ya están a la derecha. */
+        ident.style.position = 'absolute'; ident.style.width = 'max-content'; isla.classList.add('etx-ident-libre');
+        var bi = isla.getBoundingClientRect(), w = ident.getBoundingClientRect().width, c = W / 2;
+        var izq = bi.left + 12, dch = bi.right - 12;
+        var t = r.titulo && isla.querySelector(r.titulo);
+        if (t && t.textContent.trim() && t.getClientRects().length) {
+            var rg = document.createRange(); rg.selectNodeContents(t);
+            izq = Math.max(izq, Math.min(rg.getBoundingClientRect().right, t.getBoundingClientRect().right) + 16);
+        }
+        var b = r.botones && isla.querySelector(r.botones);
+        if (b && b.getClientRects().length) { var bb = b.getBoundingClientRect(); if (bb.width) dch = Math.min(dch, bb.left - 16); }
+        var x = null;
+        if (c - w / 2 >= izq && c + w / 2 <= dch) x = c;                                   // al centro de la página
+        else if (w <= dch - izq) x = Math.min(Math.max(c, izq + w / 2), dch - w / 2);      // lo más cerca del centro que quepa
+        if (x === null) { enFila(); return; }
+        /* A lo alto, del mismo tamaño que la isla: así queda centrada también de alto. */
+        var cbr = ident.offsetParent ? ident.offsetParent.getBoundingClientRect() : { left: 0, top: 0 };
+        ident.style.left = (x - cbr.left).toFixed(1) + 'px'; ident.style.transform = 'translateX(-50%)';
+        ident.style.top = (bi.top - cbr.top).toFixed(1) + 'px'; ident.style.height = bi.height.toFixed(1) + 'px';
+        isla.classList.add('etx-ident-libre');
+    }
+    window.etaaxRecentrar = function () {
+        var hd = document.getElementById(ID); if (hd) _centrarHeader(hd);
+        islas = islas.filter(function (r) { return r.isla.isConnected; });
+        islas.forEach(_centrarIsla);
+    };
+    /* Una isla se registra una vez; se vuelve a centrar sola al cambiar de tamaño
+       (ella, la ventana o la letra) y cuando la página lo pide (etaaxRecentrar). */
+    window.etaaxAutoCentrar = function (isla, partes) {
+        if (!isla) return;
+        var r = islas.filter(function (x) { return x.isla === isla; })[0];
+        if (!r) {
+            r = { isla: isla, ident: partes.ident, titulo: partes.titulo, botones: partes.botones };
+            islas.push(r);
+            if (typeof ResizeObserver === 'function') new ResizeObserver(function () { _centrarIsla(r); }).observe(isla);
+        }
+        _centrarIsla(r);
+    };
+    window.addEventListener('resize', window.etaaxRecentrar);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(window.etaaxRecentrar);
     function _alto(el) {
         // La cuenta, la fuente y el viewport cambian el alto: medir evita que el
         // primer renglón quede tapado por los antiguos 64px escritos a mano.
         function medir() {
             var h = el.getBoundingClientRect ? Math.ceil(el.getBoundingClientRect().height) : 0;
             if (h && document.documentElement.style) document.documentElement.style.setProperty('--etx-header-h', h + 'px');
+            try { _centrarHeader(el); } catch (e) {}
         }
         medir();
         if (!observador && typeof ResizeObserver === 'function') {

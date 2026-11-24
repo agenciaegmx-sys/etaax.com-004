@@ -754,3 +754,7 @@ body.etx-module-cards .etx-portada-modulos .etx-tool-card .cf-card-cta {padding-
    ensancha la caja ni corre el centro. Se queda debajo, alineado al nombre. */
 body.etx-modulos-ui .etx-ctx-isla .etx-ctx-ident .ctx-neg-id {overflow:visible;}
 body.etx-modulos-ui .etx-ctx-isla .etx-ctx-ident .ctx-neg-tipo {width:0;min-width:100%;overflow:visible;text-overflow:clip;}
+
+/* Centrado automático (etaax-header.js: etaaxAutoCentrar): con la sucursal fuera de
+   la fila, los botones se van a la derecha a cualquier ancho. */
+body.etx-modulos-ui .etx-ctx-isla.etx-ident-libre .ctx-right {margin-left:auto!important;}

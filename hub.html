@@ -633,7 +633,7 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
 </style>
 <link rel="stylesheet" href="/hub-paleta.css?v=0ae181b1">
 <link rel="stylesheet" href="/hub-globales.css?v=e52b7f71">
-<link rel="stylesheet" href="/hub-modulos.css?v=b9f4b548">
+<link rel="stylesheet" href="/hub-modulos.css?v=0ad94b89">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 </head>
 <body class="hub-paleta">
@@ -2756,6 +2756,7 @@ function _renderBrandBar(neg) {
         '</div>';
     var configurar = document.getElementById('hubConfigNeg');
     if (neg && configurar) configurar.addEventListener('click', function (event) { abrirConfig(neg.id, event); });
+    if (window.etaaxAutoCentrar) etaaxAutoCentrar(bar, { ident: '.hub-isla-ident', titulo: '.hub-isla-titulo', botones: '.neg-activo-btns' });
 }
 
 function _migrarSucursalesLegacy(neg) {
@@ -3733,6 +3734,7 @@ function _showModulos(neg) {
     document.getElementById('chipNombre').textContent = sucNom || neg.nombre;
     document.getElementById('chipTipo').textContent = giro ? giro.nom : t.label;
     document.getElementById('negActBar').style.borderColor = 'var(--hub-brand)';
+    if (window.etaaxAutoCentrar) etaaxAutoCentrar(document.getElementById('negActBar'), { ident: '.hub-isla-ident', titulo: '.hub-isla-titulo', botones: '.neg-activo-btns' });
 
     // Una sola identidad de sucursal: pin + nombre junto al logo.
     var ubicacion = document.getElementById('chipUbicacionHub');
@@ -4852,7 +4854,7 @@ async function guardarNuevaPassword(){
 <script src="admin-guard.js"></script>
 <script src="/etaax-iconos.js?v=7a651810"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
-<script src="/etaax-header.js?v=a33ef18a"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
+<script src="/etaax-header.js?v=a0ec334a"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="/hub-interacciones.js?v=43cd2b2b"></script>
 <script src="/hub-modulos.js?v=215e805a"></script>
 <script src="security.js?v=c188734e"></script>

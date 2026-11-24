@@ -351,6 +351,23 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
         });
         await ctx.close();
 
+        /* (24-nov) El centrado automático no depende de un ancho fijo: a 1024 px también. */
+        const med = await abrir(browser, 1024), pm = med.page;
+        for (const ruta of ['/recetas/inventarios.html', '/hub.html?negocios=1']) {
+            await pm.goto(ORIGEN + ruta); await pm.waitForFunction(() => document.querySelector('.etx-ctx-ident, #brandInfoBar .hub-isla-ident'), null, { timeout: 20000 }); await pm.waitForTimeout(800);
+            await caso('a 1024 px, ' + ruta + ': el botón de arriba y la sucursal/negocio al centro de la página (y centrados de alto)', async () => {
+                const r = await pm.evaluate(() => {
+                    const W = document.documentElement.clientWidth / 2, hd = document.querySelector('#etaax-header .etx-hd-centro').getBoundingClientRect();
+                    const id = [...document.querySelectorAll('.etx-ctx-ident, .hub-isla-ident')].find(e => e.getClientRects().length);
+                    const lg = id.querySelector('.ctx-neg-emoji-wrap, .neg-activo-emoji-wrap').getBoundingClientRect(), nm = id.querySelector('.ctx-neg-name span, .neg-activo-nombre').getBoundingClientRect();
+                    const isla = id.closest('.etx-ctx-isla, .hub-modulos-bar').getBoundingClientRect();
+                    return { arriba: Math.abs((hd.left + hd.right) / 2 - W) < 1.5, isla: Math.abs((lg.left + nm.right) / 2 - W) < 1.5, alto: Math.abs((lg.top + lg.bottom) / 2 - (isla.top + isla.bottom) / 2) < 2 };
+                });
+                assert.deepEqual(r, { arriba: true, isla: true, alto: true });
+            });
+        }
+        await med.ctx.close();
+
         const tel = await abrir(browser, 390);
         for (const ruta of ['/administrativo/diario.html', '/administrativo/clientes.html', '/hub.html']) {
             await ir(tel.page, ruta);
