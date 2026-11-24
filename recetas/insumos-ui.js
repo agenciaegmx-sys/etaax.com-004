@@ -42,8 +42,8 @@
             '#btnQrInsumo':'celular',
             '#listaPresentaciones [onclick^="eliminarPresentacion"]':'eliminar','#listaPresentaciones [onclick^="abrirPanelProv"]':'proveedor',
             '#modalOverlay .foto-icon':'foto','#tbodyInsumos [onclick^="verFicha"]':'ficha','.ins-mas-btn':'mas',
-            '.ins-menu-pop [onclick*="verFicha"]':'ficha','.ins-menu-pop [onclick*="editarInsumo"]':'editar','.ins-menu-pop [onclick*="eliminarInsumo"]':'eliminar',
-            '.ins-menu-pop [onclick*="asignar"]':'negocio','#modalImportar .modal-footer [onclick]':'cerrar'
+            /* El menú «⋯» ya trae sus íconos (insumos.js, _insMenuItem): aquí salía doble. */
+            '#modalImportar .modal-footer [onclick]':'cerrar'
         };
         Object.keys(controles).forEach(function(s){cada(s,function(e){icono(e,controles[s]);});});
         cada('#filtroEstadoIns option,#ins-area option',function(e){if(e.hasAttribute('value')){var t=e.textContent.replace(prefijo,'');if(e.textContent!==t)e.textContent=t;}});

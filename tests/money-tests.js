@@ -18634,6 +18634,12 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         eq(/_stockUmSel\(p, i, 'stockMinUm'\)/.test(ins) && /_stockUmSel\(p, i, 'stockMaxUm'\)/.test(ins) && /updPres\(' \+ i \+ ',\\'' \+ campo \+ '\\',this\.value\)/.test(ins), true));
     test('…y si cambia cómo se compra, el selector se rehace', () =>
         eq(/\['presentacionCompra', 'cantPresCompra', 'umPresCompra'\]\.indexOf\(campo\) >= 0/.test(ins), true));
+    test('…con el mismo campo de la existencia en requisiciones (cantidad + unidad en una caja)', () =>
+        eq((ins.match(/<div class="i-stock-cant">/g) || []).length, 2));
+    test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
+        const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
+        return eq(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(cuerpo) || !/_insMenuItem\('ins-editar'/.test(cuerpo), false);
+    });
 
     const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
     const cuerpo = (n) => { const i = ijs.indexOf('function ' + n + '('); return i < 0 ? '' : ijs.slice(i, ijs.indexOf('\nfunction ', i + 10)); };

@@ -15,7 +15,7 @@
     <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
     <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=d35b2279">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
-    <link rel="preload" as="script" href="/recetas/insumos-ui.js?v=ba6cd0e3">
+    <link rel="preload" as="script" href="/recetas/insumos-ui.js?v=cfdd0a1e">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -538,7 +538,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script src="/etaax-core.js?v=def2b0d3"></script>
-<script src="/recetas/insumos.js?v=e2506855"></script>
+<script src="/recetas/insumos.js?v=09c59027"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -701,11 +701,19 @@ async function migrarFotosNegocio() {
    exactamente el tipo de cosa que se olvida. */
 body.ins-sin-costos .ins-col-costo,
 body.ins-sin-costos .ins-col-prov { display: none; }
-/* Stock mínimo / máximo con su unidad (piezas o la presentación de compra). */
-.i-stock-fila { display: flex; gap: 6px; align-items: stretch; }
-.i-stock-fila input { flex: 1 1 auto; min-width: 0; }
-.meta-item .i-stock-fila select.i-stock-um { flex: 0 0 auto; width: auto; max-width: 55%; font-weight: 600; cursor: pointer; }
-.i-stock-fila span.i-stock-um { display: flex; align-items: center; padding: 0 8px; font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+/* Stock mínimo / máximo: el MISMO campo que la existencia en requisiciones
+   (la cantidad y su unidad en una sola caja). Con !important porque las reglas
+   generales de .meta-item ponen width:100% a inputs y selects. */
+.meta-item .i-stock-cant { display: flex !important; align-items: stretch; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface2); }
+.meta-item .i-stock-cant:focus-within { border-color: var(--accent); }
+.meta-item .i-stock-cant input { flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; border: 0 !important; border-radius: 0 !important;
+    background: transparent !important; text-align: center; font-size: 20px !important; font-weight: 600; padding: 12px 10px !important; box-shadow: none !important; }
+.meta-item .i-stock-cant select.i-stock-um { flex: 0 0 auto !important; width: auto !important; max-width: 55%; border: 0 !important; border-radius: 0 !important;
+    border-left: 1px solid var(--border) !important; background: var(--surface) !important; color: var(--text); padding: 0 12px !important; font-size: 14px !important; font-weight: 600; cursor: pointer; box-shadow: none !important; }
+.meta-item .i-stock-cant span.i-stock-um { display: flex; align-items: center; padding: 0 12px; border-left: 1px solid var(--border); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--text-dim); white-space: nowrap; }
+.ins-menu-pop .ic { display: inline-flex; align-items: center; justify-content: center; width: 18px !important; }
+.ins-menu-pop .ic svg { width: 18px; height: 18px; }
+.ins-menu-pop button.peligro .ic { --etx-color: var(--red); color: var(--red); }
 </style>
 
 <style>
@@ -1483,6 +1491,6 @@ async function cgAgregar(id) {
 <script src="/etaax-header.js?v=15a5a6ef"></script>
 <script src="/etaax-modulos-ui.js?v=d35b2279"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
-<script src="/recetas/insumos-ui.js?v=ba6cd0e3"></script>
+<script src="/recetas/insumos-ui.js?v=cfdd0a1e"></script>
 </body>
 </html>

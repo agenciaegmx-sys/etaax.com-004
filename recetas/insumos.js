@@ -3542,9 +3542,12 @@
    });
    window.addEventListener('scroll', _insMenuCerrar, true);
    window.addEventListener('resize', _insMenuCerrar);
+   /* Íconos de la app (antes ✏️ 📋 🔗 ▶ 🚫 🗑️: el decorador ponía además su
+      ícono y salían los dos, Edwin 24-nov). */
    function _insMenuItem(icono, texto, accion, clase) {
+       var svg = (typeof window.etaaxIcono === 'function') ? window.etaaxIcono(icono, { tam: 18 }) : '';
        return '<button type="button" class="' + (clase || '') + '" onclick="_insMenuCerrar();' + accion + '">' +
-           '<span class="ic">' + icono + '</span>' + texto + '</button>';
+           '<span class="ic">' + svg + '</span>' + texto + '</button>';
    }
    function _insMenuAbrir(ev, id) {
        ev.stopPropagation();
@@ -3554,19 +3557,19 @@
        var ins = getInsumos().find(function (x) { return x.id === id; });
        if (!ins) return;
        var q = "'" + id + "'";
-       var items = [_insMenuItem('✏️', 'Editar', 'editarInsumo(' + q + ')')];
+       var items = [_insMenuItem('ins-editar', 'Editar', 'editarInsumo(' + q + ')')];
        if (!ins.esSubReceta)
-           items.push(_insMenuItem('📋', 'Copiar', 'copiarInsumo(' + q + ')'));
+           items.push(_insMenuItem('rec-duplicar', 'Copiar', 'copiarInsumo(' + q + ')'));
        if (_catGlobalIns())
-           items.push(_insMenuItem('🔗', 'Vincular a sucursal', 'abrirInsumoSuc(' + q + ')'));
+           items.push(_insMenuItem('rec-enlace', 'Vincular a sucursal', 'abrirInsumoSuc(' + q + ')'));
        if (!_catGlobalIns() && _getSucActivaIns() && ins.activo === '0')
-           items.push(_insMenuItem('▶', 'Activar en el negocio', 'activarInsumoGlobal(' + q + ')'));
+           items.push(_insMenuItem('ins-activo', 'Activar en el negocio', 'activarInsumoGlobal(' + q + ')'));
        if (ins.esSubReceta)
-           items.push(_insMenuItem(ins.ocultoInventario ? '📋' : '🚫',
+           items.push(_insMenuItem(ins.ocultoInventario ? 'aut-mostrar' : 'aut-ocultar',
                ins.ocultoInventario ? 'Mostrar en inventario' : 'Ocultar del inventario',
                'toggleVisibleInventario(' + q + ')'));
        items.push('<div class="sep"></div>');
-       items.push(_insMenuItem('🗑️', 'Eliminar', 'eliminarInsumo(' + q + ')', 'peligro'));
+       items.push(_insMenuItem('ins-eliminar', 'Eliminar', 'eliminarInsumo(' + q + ')', 'peligro'));
 
        var pop = document.createElement('div');
        pop.className = 'ins-menu-pop';
@@ -3629,7 +3632,7 @@
        var _conf = window.etaaxConfirm || function(t, m, onYes){ if (window.confirm(t + '\n' + m)) onYes(); };
        _conf('¿Copiar insumo?', '¿Deseas hacer una copia de "' + (ins.nombre || 'este insumo') + '"?', function(){
            _pedirClaveAdmin('Copiar insumo "' + (ins.nombre || '') + '"', function(){ _hacerCopiaInsumo(ins); });
-       }, null, { icon:'📋', yesLabel:'Sí, copiar', noLabel:'No', danger:false });
+       }, null, { icon:(typeof window.etaaxIcono === 'function' ? window.etaaxIcono('rec-duplicar', { tam: 30 }) : ' '), yesLabel:'Sí, copiar', noLabel:'No', danger:false });
    }
    function _hacerCopiaInsumo(ins) {
        const copia = JSON.parse(JSON.stringify(ins));
@@ -5291,16 +5294,16 @@
            <div class="meta-grid" style="grid-template-columns:1fr 1fr;gap:8px">
                <div class="meta-item">
                    <label>Stock mínimo</label>
-                   <div class="i-stock-fila">
-                       <input type="number" value="${p.stockMin||''}" placeholder="0" min="0" step="1"
+                   <div class="i-stock-cant">
+                       <input type="text" inputmode="decimal" value="${p.stockMin||''}" placeholder="0" aria-label="Stock mínimo"
                            oninput="updPres(${i},'stockMin',this.value)">
                        ${_stockUmSel(p, i, 'stockMinUm')}
                    </div>
                </div>
                <div class="meta-item">
                    <label>Stock máximo</label>
-                   <div class="i-stock-fila">
-                       <input type="number" value="${p.stockMax||''}" placeholder="0" min="0" step="1"
+                   <div class="i-stock-cant">
+                       <input type="text" inputmode="decimal" value="${p.stockMax||''}" placeholder="0" aria-label="Stock máximo"
                            oninput="updPres(${i},'stockMax',this.value)">
                        ${_stockUmSel(p, i, 'stockMaxUm')}
                    </div>
