@@ -525,17 +525,36 @@ body.etx-modulos-ui :is(#nav,#ctxBar,.etx-module-dialog) :is(a,button):focus-vis
 
 /* ══ EL NOMBRE DEL MÓDULO, EN UNA ISLA (Edwin, 24-nov) ═════════════════════════
    La portada de cada módulo lleva solo su nombre —Admin·ax, Cost·ax, Fin·ax,
-   Learn·ax— sin «Módulo» arriba ni el párrafo de abajo, en una cápsula negra
-   como la isla dinámica de Apple: negra en los dos temas, el ícono en su
-   círculo y el punto del nombre en el color de la marca. Abre con un pequeño
-   estirón, como la de verdad. */
-.etx-isla-wrap { display:flex !important; justify-content:center; padding:4px 0 22px !important; margin:0 !important; border:0 !important; max-width:none !important; text-align:center; }
-.etx-isla { display:inline-flex; align-items:center; gap:12px; padding:9px 26px 9px 9px; border-radius:999px;
-  background:#0b0b0c; color:#f5f3ee; box-shadow:0 14px 34px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.07);
-  animation:etxIslaAbre .65s cubic-bezier(.2,.9,.25,1.12) both; transform-origin:center; }
-.etx-isla-ic { width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,.09); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.etx-isla-ic svg.etx-ic { width:22px; height:22px; --etx-color:#f5f3ee; color:#f5f3ee; }
-.etx-isla-nombre { font-size:clamp(22px,2.4vw,30px); font-weight:700; letter-spacing:-.4px; line-height:1; white-space:nowrap; }
-.etx-isla-punto { color:var(--etx-ui-cyan,#2a9aa5); margin:0 1px; }
-@keyframes etxIslaAbre { 0% { transform:scale(.5,.72); opacity:0; } 55% { opacity:1; } 100% { transform:none; opacity:1; } }
+   Learn·ax— sin «Módulo» arriba ni el párrafo de abajo, en una cápsula como la
+   isla dinámica de Apple.
+   · Bajita y pegada a la tarjeta del negocio: antes dejaba mucho blanco
+     entre la tarjeta y los accesos.
+   · FIJA: se queda justo debajo de la tarjeta del negocio al bajar. Antes se
+     iba por debajo de ella y se veía cortada, con una orilla blanca.
+   · Azul petróleo de la paleta (el mismo en los dos temas), sin el aro
+     blanco ni el estirón al abrir: solo aparece. */
+body.etx-modulos-ui .cf-hero.etx-isla-wrap,
+body.etx-modulos-ui #moduloLanding .cf-hero.etx-isla-wrap,
+.cf-hero.etx-isla-wrap {
+  position:sticky; top:calc(var(--etx-shell-top,198px) + 8px); z-index:60;
+  display:flex !important; justify-content:center; pointer-events:none;
+  padding:0 0 14px !important; margin:-6px 0 0 !important; border:0 !important; max-width:none !important; text-align:center;
+}
+/* En Cost·ax la portada se desplaza dentro de su propio contenedor (ya empieza
+   debajo de la tarjeta del negocio): ahí la isla se pega a su borde de arriba. */
+body.etx-modulos-ui #moduloLanding .cf-hero.etx-isla-wrap { top:8px; }
+.etx-isla { pointer-events:auto; display:inline-flex; align-items:center; gap:9px; padding:7px 22px 7px 16px; border-radius:999px;
+  background:#8ce4ee; color:#161411; box-shadow:0 6px 16px rgba(0,0,0,.18); animation:etxIslaEntra .35s ease-out both; }
+/* Los mismos colores planos de la «Guía de operación» del hub: cian y terracota,
+   letra casi negra, el ícono sin círculo. Alternan como allá: Admin·ax y Fin·ax
+   en cian; Cost·ax y Learn·ax en terracota. */
+.etx-isla--cian { background:#8ce4ee; }
+.etx-isla--terra { background:#fb9b6f; }
+.etx-isla-ic { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+.etx-isla-ic svg.etx-ic { width:22px; height:22px; --etx-color:#161411; --green:#161411; color:#161411; }
+.etx-isla-nombre { font-size:clamp(17px,1.7vw,21px); font-weight:700; letter-spacing:-.2px; line-height:1; white-space:nowrap; }
+.etx-isla--cian .etx-isla-punto { color:#ad4b27; }
+.etx-isla--terra .etx-isla-punto { color:#1b5c65; }
+.etx-isla-punto { margin:0 1px; }
+@keyframes etxIslaEntra { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce) { .etx-isla { animation:none; } }
