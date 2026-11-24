@@ -427,7 +427,8 @@ body.etx-module-cards :is(.cf-grid,.dx-grid) {gap:16px;}
 .etx-recetas-menu .etx-recetas-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:28px;}
 .etx-recetas-menu .etx-recetas-label {font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--etx-ui-muted);margin:0 0 14px;}
 .etx-recetas-menu .etx-recetas-descripcion {color:var(--etx-ui-muted);font-size:13px;line-height:1.6;margin:14px 0 28px;}
-.etx-recetas-menu #btnEscSimple {width:100%;margin-bottom:28px;}
+/* «Receta simple» ya comparte renglón con «Menú de la sucursal» (24-nov): sin el margen de cuando iba sola. */
+.etx-recetas-menu #btnEscSimple {width:100%;margin-bottom:0;}
 .etx-module-dialog {
   position:fixed;inset:0;margin:auto;width:min(600px,calc(100% - 32px));max-height:calc(100dvh - 40px);
   padding:24px;border:1px solid var(--etx-ui-cyan);border-radius:18px;

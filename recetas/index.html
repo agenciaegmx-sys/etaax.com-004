@@ -3,7 +3,7 @@
 <head>
 <script src="/embed.js?v=e0d4595d"></script>
 <script src="/negocio-tab.js?v=39197e12"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
-<script src="/page-guard.js?v=efd50067"></script>
+<script src="/page-guard.js?v=61410f25"></script>
     <meta charset="UTF-8">
     <script src="/theme.js?v=64b86f6e"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,9 +11,9 @@
     <title>ETAAX - Escandallo</title>
     <!-- Presentación inicial: descargar antes de llegar a los scripts del final. -->
     <link rel="preload" as="script" href="/etaax-iconos.js?v=ce96904d">
-    <link rel="preload" as="script" href="/etaax-sidebar.js?v=fd2dac1b">
+    <link rel="preload" as="script" href="/etaax-sidebar.js?v=5844cd7a">
     <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=d35b2279">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=230ef5e8">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
     <link rel="preload" as="script" href="/recetas/recetas-ui.js?v=91eddf64">
 
@@ -32,7 +32,7 @@
         html.embed .header button[onclick*="eliminarRecetaActual"] { display:none !important; }
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=e08f9762">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1889a519">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 <link rel="stylesheet" href="/recetas/recetas-ui.css?v=e483f18f">
 </head>
@@ -532,12 +532,21 @@
                 </button>
             </div>
             <p class="etx-recetas-label">Crear preparación</p>
+            <div class="etx-recetas-grid">
                 <button id="btnEscSimple" onclick="abrirEscModal('simple')" class="cat-btn">
                     <span class="etx-tool-icon" aria-hidden="true"></span>
                     <span class="cat-btn-title">Receta simple</span>
                     <span class="cat-btn-desc">Empieza con nombre, grupo e ingredientes; elige el tipo después.</span>
                     <span class="etx-tool-cta">Crear preparación →</span>
                 </button>
+                <!-- (24-nov) El Menú de la sucursal se mudó aquí desde Control administrativo. -->
+                <button id="btnMenuSucursal" onclick="location.href='../administrativo/menu.html'" class="cat-btn">
+                    <span class="etx-tool-icon" aria-hidden="true"></span>
+                    <span class="cat-btn-title">Menú de la sucursal</span>
+                    <span class="cat-btn-desc">La carta activa: platillos, bebidas, precios y el QR de las mesas.</span>
+                    <span class="etx-tool-cta">Gestionar menú →</span>
+                </button>
+            </div>
             <p class="etx-recetas-label">O elige el tipo de preparación</p>
             <div class="etx-recetas-grid">
                 <button id="btnEscAlimentos" onclick="abrirEscModal('alimentos')" class="cat-btn">
@@ -993,7 +1002,7 @@
 <script src="/etaax-nav.js"></script>
 <script src="/qr-pairing.js"></script>
 <script src="../security.js?v=c188734e"></script>
-<script src="../app.js?v=d79e858b"></script>
+<script src="../app.js?v=bc2e88b5"></script>
 <script src="/recetas/subreceta-rendimientos.js?v=201d53b1"></script>
 <script>
 function toggleNav() {
@@ -2802,6 +2811,14 @@ function _recOcultar(id){ var el=document.getElementById(id); if(el) el.style.di
 /* Aplica TODOS los permisos del módulo a la pantalla abierta. Se llama cada vez
    que se pinta una receta: esconder una sola vez al cargar no basta, porque el
    editor se vuelve a armar en cada apertura y lo escondido reaparecería. */
+function _puedeMenuSucursal(){
+    var ctx = null; try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
+    var neg = (ctx && ctx.negId) || localStorage.getItem('etaax_negocio_activo');
+    if (typeof window.etaaxPermEnPlan === 'function' && typeof window.etaaxSucursalActiva === 'function' &&
+        !window.etaaxPermEnPlan(neg, window.etaaxSucursalActiva(), 'menu')) return false;
+    if (!ctx || ctx.ctxType !== 'staff' || (ctx.rol || '') === 'admin' || typeof window.etaaxPerm !== 'function') return true;
+    return !!window.etaaxPerm(neg, ctx.rol, 'menu');
+}
 function _aplicarPermisosRec(){
     /* Dinero dentro del escandallo. El botón de vista se va con él: con la vista
        admin el colaborador volvería a encender justo lo que el permiso acaba de
@@ -2814,6 +2831,9 @@ function _aplicarPermisosRec(){
     }
     /* Carátula: verla e imprimirla son dos permisos distintos, porque llevarse
        el comparativo de márgenes en papel es sacarlo del negocio. */
+    /* El Menú de la sucursal (tarjeta junto a «Receta simple», 24-nov) lleva su
+       propio permiso de módulo, «menu», y su app en el plan. */
+    if(!_puedeMenuSucursal()) _recOcultar('btnMenuSucursal');
     if(!_puedeRec('caratula')) _recOcultar('btnCaratula');
     if(!_puedeRec('caratulaImprimir')) _recOcultar('caratulaBtnPrint');
     if(!_puedeRec('verCatalogo')) _recOcultar('btnVerRecetas');
@@ -5005,10 +5025,10 @@ window.addEventListener('load', function() {
 <script src="/modal-dock.js?v=5cd269fc"></script>
 <script src="/novedades.js?v=94a2317e"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=ce96904d"></script>
-<script src="/etaax-sidebar.js?v=fd2dac1b"></script>
+<script src="/etaax-sidebar.js?v=5844cd7a"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=15a5a6ef"></script>
-<script src="/etaax-modulos-ui.js?v=d35b2279"></script>
+<script src="/etaax-modulos-ui.js?v=230ef5e8"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 <script src="/recetas/recetas-ui.js?v=91eddf64"></script>
 </body>

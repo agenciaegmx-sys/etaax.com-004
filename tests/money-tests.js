@@ -18646,6 +18646,29 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const ic = fs.readFileSync(path.join(RAIZ, 'etaax-iconos.js'), 'utf8');
         return eq(/stroke-width="2\.8"/.test(ic) && /_RE_INI = \/\^\\s\*\(←\|→\)\\s\*\//.test(ic) && /new MutationObserver/.test(ic), true);
     });
+    /* (24-nov) El Menú de la sucursal se mudó a Escandallos: una tarjeta junto a
+       «Receta simple», sin enlace en barras laterales ni en el hub. */
+    test('el Menú de la sucursal es una tarjeta dentro de Escandallos (junto a «Receta simple»)', () => {
+        const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+        const i = rec.indexOf('id="btnEscSimple"'), j = rec.indexOf('id="btnMenuSucursal"');
+        return eq(i > -1 && j > i && j - i < 1200 && /location\.href='\.\.\/administrativo\/menu\.html'/.test(rec), true);
+    });
+    test('…y ya no está en Control administrativo, ni en las barras laterales, ni en el hub', () => {
+        const adm = fs.readFileSync(path.join(RAIZ, 'administrativo/index.html'), 'utf8');
+        const navs = ['administrativo/staff.html', 'administrativo/clientes.html', 'administrativo/diario.html', 'recetas/index.html', 'recetas/insumos.html', 'recetas/inventarios.html', 'recetas/requisiciones.html']
+            .map(f => fs.readFileSync(path.join(RAIZ, f), 'utf8'));
+        const hubm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8');
+        return eq(/href="menu\.html"/.test(adm) || navs.some(t => /class="nav-link[^"]*"[^>]*>[\s\S]{0,80}Menú/.test(t) || /href="(\.\.\/administrativo\/)?menu\.html" class="nav-link/.test(t)) || /clave: 'menu'/.test(hubm), false);
+    });
+    test('el Menú va con Cost·ax (las recetas), y su página se ve dentro de Recetas e Insumos', () => {
+        const pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8'), mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        return eq(/menu: 'costax'/.test(pg) && !/menu: 'finax'/.test(pg) && /if \(\/\^\\\/administrativo\\\/menu/.test(mu), true);
+    });
+    test('escandallos: repintar la tabla de ingredientes regresa el cursor al campo (antes «me saca y debo dar clic otra vez»)', () => {
+        const app = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
+        const i = app.indexOf('function renderTabla('), cuerpo = app.slice(i, app.indexOf('\nfunction ', i + 10));
+        return eq(/const _focoAntes = _ingFocoActual\(\);/.test(cuerpo) && /_ingFocoRestaurar\(_focoAntes\);/.test(cuerpo) && /setTimeout\(poner, 0\)/.test(app), true);
+    });
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
         return eq(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(cuerpo) || !/_insMenuItem\('ins-editar'/.test(cuerpo), false);
@@ -29152,7 +29175,9 @@ console.log('\n══ BE19 · Cambiar de módulo entra al módulo ══');
         .map(m => ({ nombre: m[1], clave: m[2], pasos: m[3].split(/',\s*'/).length }));
 
     test('cada herramienta del hub enseña qué vas a encontrar dentro', () => {
-        eq(herramientas.length, 19, 'hay ' + herramientas.length + ' herramientas con guía, de 19');
+        // 18 desde el 24-nov: el Menú de la sucursal ya no es herramienta suelta del hub;
+        // se entra por su tarjeta dentro de Escandallos (pedido de Edwin).
+        eq(herramientas.length, 18, 'hay ' + herramientas.length + ' herramientas con guía, de 18');
         herramientas.forEach(h => eq(h.pasos >= 3, true, '«' + h.nombre + '» solo tiene ' + h.pasos + ' paso(s)'));
         return eq(/class="hub-visor"/.test(hub), true, 'la guía no se pinta en ningún lado');
     });

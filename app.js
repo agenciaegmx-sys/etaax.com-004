@@ -1825,12 +1825,57 @@ document.addEventListener('click', function(e) {
 });
 
 // ── Render tabla de ingredientes ────────────────────────────
+/* ══ EL REPINTADO NO TE SACA DEL CAMPO (Edwin, 24-nov) ══════════════════════
+   La tabla se rearma entera (al terminar de bajar el catálogo de insumos, al
+   cambiar la unidad, al reordenar…). Si en ese momento estabas tocando la
+   descripción o la cantidad, el campo desaparecía bajo el dedo y había que
+   volver a tocarlo; y al cambiar la unidad el «Tab» se quedaba sin dónde
+   seguir. Ahora se recuerda en qué renglón y en qué campo estabas —también el
+   que estabas TOCANDO en ese instante, aunque el foco no hubiera entrado— y se
+   regresa ahí, con el cursor donde iba. */
+var _ingToque = null;
+document.addEventListener('pointerdown', function (e) {
+    var tb = document.getElementById('tbodyIngredientes'), t = e.target;
+    if (tb && t && t.tagName && tb.contains(t) && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) _ingToque = { el: t, t: Date.now() };
+}, true);
+function _ingFocoActual() {
+    var tb = document.getElementById('tbodyIngredientes'); if (!tb) return null;
+    var el = document.activeElement;
+    if (!(el && el !== document.body && tb.contains(el))) {
+        if (_ingToque && Date.now() - _ingToque.t < 900 && tb.contains(_ingToque.el)) el = _ingToque.el;
+        else return null;
+    }
+    var tr = el.closest && el.closest('tr[data-ing-i]'); if (!tr) return null;
+    var campos = Array.prototype.slice.call(tr.querySelectorAll('input, select, textarea, button'));
+    var col = campos.indexOf(el); if (col < 0) return null;
+    var s0 = null, s1 = null;
+    if (el === document.activeElement) { try { s0 = el.selectionStart; s1 = el.selectionEnd; } catch (e) {} }
+    else { try { s0 = s1 = String(el.value || '').length; } catch (e) {} }   // el que se estaba tocando: cursor al final
+    return { fila: tr.getAttribute('data-ing-i'), col: col, s0: s0, s1: s1 };
+}
+function _ingFocoRestaurar(f) {
+    if (!f) return;
+    var poner = function () {
+        var tr = document.querySelector('#tbodyIngredientes tr[data-ing-i="' + f.fila + '"]'); if (!tr) return;
+        var el = tr.querySelectorAll('input, select, textarea, button')[f.col]; if (!el || document.activeElement === el) return;
+        var a = document.activeElement;
+        if (a && a !== document.body && !tr.parentNode.contains(a)) return;   // ya se fue a otro lado a propósito
+        try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+        if (f.s0 !== null && f.s0 !== undefined && el.setSelectionRange) { try { el.setSelectionRange(f.s0, f.s1); } catch (e) {} }
+    };
+    poner();
+    /* Si el repintado cayó a media pulsación, al soltar el dedo el navegador
+       manda el foco al fondo (el campo que se tocó ya no existe): se vuelve a
+       poner un instante después. */
+    setTimeout(poner, 0); setTimeout(poner, 120);
+}
 function renderTabla() {
     /* El permiso de costos se re-aplica en CADA pintado: el editor se vuelve a
        armar al abrir cada receta, así que esconder una sola vez al cargar la
        página dejaba el dinero a la vista en la segunda que se abriera. */
     if (typeof _aplicarPermisosRec === 'function') _aplicarPermisosRec();
     const tbody = document.getElementById('tbodyIngredientes');
+    const _focoAntes = _ingFocoActual();
     tbody.innerHTML = '';
 
     ingredientes.forEach((ing, i) => {
@@ -1889,6 +1934,7 @@ function renderTabla() {
 
     _engancharOrdenIng();
     calcularCosteos();
+    _ingFocoRestaurar(_focoAntes);
 }
 
 /* ── El orden de los ingredientes del escandallo ───────────────────────────
@@ -2648,8 +2694,8 @@ function initCtxBar() {
         '<div class="ctx-neg-id"><div class="ctx-neg-name">' + _esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + _esc(tipo) + '</div></div>' +
         pill +
         '<div class="ctx-nav-btns" id="ctxEditorNav">' +
-        '<button class="ctx-btn ctx-btn-icon" id="btnUndo" onclick="ctxNavBack()" title="Atrás">↩</button>' +
-        '<button class="ctx-btn ctx-btn-icon" id="btnRedo" onclick="ctxNavForward()" title="Adelante">↪</button>' +
+        '<button class="ctx-btn ctx-btn-icon" id="btnUndo" onclick="ctxNavBack()" title="Atrás" aria-label="Atrás">←</button>' +
+        '<button class="ctx-btn ctx-btn-icon" id="btnRedo" onclick="ctxNavForward()" title="Adelante" aria-label="Adelante">→</button>' +
         '</div>' +
         '<div class="ctx-right">' +
         '<div class="ctx-user-badge"><span>' + _esc(ctx.userName.split(' ')[0]) + '</span>' +

@@ -527,7 +527,8 @@ window.etaaxPermisosEtx = function (negId, sucId) {
 window.ETAAX_APPS_SUITE = ['costax', 'finax', 'equipax'];   // = precios.js appsDisponibles()
 window.ETAAX_APP_PERMISO = {
     recetas: 'costax', insumos: 'costax', inventarios: 'costax', requisiciones: 'costax',
-    ventas: 'finax', gastos: 'finax', menu: 'finax', proveedores: 'finax', clientes: 'finax', financiero: 'finax',
+    menu: 'costax',   // (24-nov) el Menú de la sucursal se mudó a Recetas e Insumos, junto a Escandallos
+    ventas: 'finax', gastos: 'finax', proveedores: 'finax', clientes: 'finax', financiero: 'finax',
     ventas_productos: ['costax', 'finax']
     /* staff, permisos y config: en todas. El catálogo de colaboradores es lo que
        da acceso a la gente; lo que vende Equip·ax es lo demás (abajo). */

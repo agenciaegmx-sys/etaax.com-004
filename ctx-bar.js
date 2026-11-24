@@ -50,8 +50,8 @@
                pinta presencia.js; este es solo su sitio. */
             '<div class="ctx-presencia" id="ctxPresencia"></div>' +
             '<div class="ctx-nav-btns">' +
-                '<button class="ctx-btn ctx-btn-icon" onclick="history.back()" title="Atrás">↩</button>' +
-                '<button class="ctx-btn ctx-btn-icon" onclick="history.forward()" title="Adelante">↪</button>' +
+                '<button class="ctx-btn ctx-btn-icon" onclick="history.back()" title="Atrás" aria-label="Atrás">←</button>' +
+                '<button class="ctx-btn ctx-btn-icon" onclick="history.forward()" title="Adelante" aria-label="Adelante">→</button>' +
             '</div>' +
             '<div class="ctx-right">' +
                 '<div class="ctx-user-badge"><span>' + esc(ctx.userName.split(' ')[0]) + '</span>' +

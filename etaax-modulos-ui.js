@@ -14,8 +14,8 @@
        entrar — dos pantallas para un movimiento lateral. Son las portadas que
        ya existen; no se inventa ninguna ruta. */
     var MODULOS = [
-        { id:'administrativo', nombre:'Control administrativo', icono:'mod-control-administrativo', portada:'/administrativo/index.html', permisos:['ventas','gastos','staff','proveedores','clientes','menu'] },
-        { id:'recetas', nombre:'Recetas e Insumos', icono:'mod-recetas-insumos', portada:'/recetas/index.html', permisos:['recetas','insumos','inventarios','requisiciones'] },
+        { id:'administrativo', nombre:'Control administrativo', icono:'mod-control-administrativo', portada:'/administrativo/index.html', permisos:['ventas','gastos','staff','proveedores','clientes'] },
+        { id:'recetas', nombre:'Recetas e Insumos', icono:'mod-recetas-insumos', portada:'/recetas/index.html', permisos:['recetas','insumos','inventarios','requisiciones','menu'] },
         { id:'financiero', nombre:'Salud financiera', icono:'mod-salud-financiera', portada:'/financiero/index.html', permisos:['financiero'] },
         { id:'consultoria', nombre:'Aprende y analiza', icono:'mod-aprende-analiza', portada:'/consultoria/index.html', permisos:[] }
     ];
@@ -33,7 +33,14 @@
     function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
     function ic(n, t) { return typeof window.etaaxIcono === 'function' ? window.etaaxIcono(n, { tam:t || 24 }) : ''; }
     function leer(k, almacen) { try { return JSON.parse((almacen || localStorage).getItem(k) || 'null'); } catch (e) { return null; } }
-    function moduloActual() { return MODULOS.find(function (m) { return m.id === location.pathname.split('/')[1]; }); }
+    /* El Menú de la sucursal se quedó en /administrativo/menu.html (su dirección
+       no cambia) pero ahora es de Recetas e Insumos, junto a Escandallos (24-nov). */
+    function moduloDeRuta() {
+        var p = location.pathname, id = p.split('/')[1];
+        if (/^\/administrativo\/menu(\.html)?\/?$/.test(p)) id = 'recetas';
+        return id;
+    }
+    function moduloActual() { var id = moduloDeRuta(); return MODULOS.find(function (m) { return m.id === id; }); }
     function permitido(m, c) {
         if (!m || !c || !c.negId) return false;
         /* Las apps que contrató la sucursal, para TODOS (page-guard). */
@@ -362,7 +369,7 @@
         mostrarDialogo(c.sucNombre || 'Información de sucursal','<p>' + esc(c.negNombre) + '</p><dl class="etx-sucursal-datos">' + filas.map(function(f){return '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1] || '—') + '</dd></div>';}).join('') + '</dl>',document.getElementById('etxInfoSucursal'));
     }
     function pintarTarjetas() {
-        var recetas = {btnVerRecetas:'cat-recetas',btnCaratula:'fin-resumen-resultados',btnEscSimple:'mod-escandallos',btnEscAlimentos:'giro-restaurante-bar',btnEscBebidas:'giro-bar',btnEscSubAlimentos:'cat-sub-recetas',btnEscSubBebidas:'giro-bar'};
+        var recetas = {btnVerRecetas:'cat-recetas',btnCaratula:'fin-resumen-resultados',btnEscSimple:'mod-escandallos',btnEscAlimentos:'giro-restaurante-bar',btnEscBebidas:'giro-bar',btnEscSubAlimentos:'cat-sub-recetas',btnEscSubBebidas:'giro-bar',btnMenuSucursal:'cor-comedor'};
         var diarios = {gastos:'fin-gastos',cortes:'fin-ventas',nominas:'cat-colaboradores',fijos:'sh-info-negocio',depositos:'fin-previsiones',mayores:'fin-gastos',caja:'candado',extras:'fin-ventas'};
         document.querySelectorAll('.cf-card,.dx-card,#vistaMenuReceta .cat-btn').forEach(function(card){
             card.classList.add('etx-tool-card');

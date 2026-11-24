@@ -111,6 +111,7 @@
         });
         var panel = nav.querySelector('.nav-top-actions a.nav-toggle');
         var modulo = (location.pathname.split('/')[1] || '');
+        if (/^\/administrativo\/menu(\.html)?\/?$/.test(location.pathname)) modulo = 'recetas';   // el Menú es de Recetas e Insumos
         var principal = global ? 'catalogos' : MODULOS[modulo];
         if (panel && /\/staff-hub\.html$/.test(ruta(panel)) && !global) principal = 'cat-colaboradores';
         pintar(panel, principal, 20);
