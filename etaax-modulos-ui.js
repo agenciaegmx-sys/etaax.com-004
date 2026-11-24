@@ -17,8 +17,8 @@
        Timbr·ax, cuando lleguen, van antes de Learn·ax). Equip·ax —el equipo— ya
        no es submódulo de Admin·ax: es módulo propio. */
     var MODULOS = [
-        { id:'recetas', nombre:'Cost·ax', icono:'mod-recetas-insumos', portada:'/recetas/index.html', permisos:['recetas','insumos','inventarios','requisiciones','menu'] },
-        { id:'administrativo', nombre:'Admin·ax', icono:'mod-control-administrativo', portada:'/administrativo/index.html', permisos:['ventas','gastos','proveedores','clientes'] },
+        { id:'recetas', nombre:'Cost·ax', icono:'mod-recetas-insumos', portada:'/recetas/index.html', permisos:['recetas','insumos','inventarios','requisiciones','menu','proveedores'] },
+        { id:'administrativo', nombre:'Admin·ax', icono:'mod-control-administrativo', portada:'/administrativo/index.html', permisos:['ventas','gastos','clientes','financiero'] },
         { id:'financiero', nombre:'Fin·ax', icono:'mod-salud-financiera', portada:'/financiero/index.html', permisos:['financiero'] },
         { id:'equipo', nombre:'Equip·ax', icono:'mod-equipax', portada:'/equipo/index.html', permisos:['staff'] },
         { id:'consultoria', nombre:'Learn·ax', icono:'mod-aprende-analiza', portada:'/consultoria/index.html', permisos:[] }
@@ -44,36 +44,88 @@
     var RE_EQUIPO = /^\/administrativo\/(staff-hub|staff|horarios|checklists|organigrama|perfiles-puesto|evaluaciones|permisos)(\.html)?\/?$/;
     function moduloDeRuta() {
         var p = location.pathname, id = p.split('/')[1];
-        if (/^\/administrativo\/menu(\.html)?\/?$/.test(p)) id = 'recetas';
+        if (/^\/administrativo\/(menu|proveedores)(\.html)?\/?$/.test(p)) id = 'recetas';      // el Menú y Proveedores son de Cost·ax
+        if (/^\/financiero\/(cuentas-bancarias|previsiones)(\.html)?\/?$/.test(p)) id = 'administrativo';   // su Configuración
         if (RE_EQUIPO.test(p)) id = 'equipo';
         return id;
     }
-    /* LA BARRA DE EQUIP·AX: cada página del equipo traía la suya (unas con las
-       de Admin·ax, otras con media lista, Checklists y Evaluaciones sin barra).
-       Ahora todas la arman de aquí, con lo que el rol y el plan permiten. */
-    var EQUIPO_NAV = [
-        ['/administrativo/staff.html', 'Catálogo', 'verCatalogo', 'cat-colaboradores'],
-        ['/administrativo/horarios.html', 'Horarios', 'horarios', 'cat-horarios'],
-        ['/administrativo/checklists.html', 'Checklists', 'checklists', 'mod-control-administrativo'],
-        ['/administrativo/organigrama.html', 'Organigrama', 'organigrama', 'org-corporativo'],
-        ['/administrativo/perfiles-puesto.html', 'Perfiles de puesto', 'perfiles', 'perfil'],
-        ['/administrativo/evaluaciones.html', 'Evaluaciones', 'evaluaciones', 'mod-control-administrativo']
-    ];
-    function armarNavEquipo(nav) {
-        var aqui = typeof window.etaaxRutaModulo === 'function' ? window.etaaxRutaModulo(location.pathname) : location.pathname;
-        var puede = function (sub) { return typeof window.etaaxPuedeSub === 'function' ? window.etaaxPuedeSub('staff', sub) : true; };
-        nav.querySelectorAll('.nav-section, :scope > a.nav-link:not(.etx-nav-back)').forEach(function (x) { x.remove(); });
-        var sec = document.createElement('div'); sec.className = 'nav-section etx-nav-equipo';
-        EQUIPO_NAV.forEach(function (e) {
-            if (!puede(e[2])) return;
-            var a = document.createElement('a'); a.href = e[0]; a.className = 'nav-link' + (aqui === e[0] ? ' active' : ''); a.dataset.tooltip = e[1];
-            a.innerHTML = '<span class="nav-icon etx-nav-icono" aria-hidden="true">' + ic(e[3], 22) + '</span><span class="nav-text">' + esc(e[1]) + '</span>';
-            sec.appendChild(a);
-        });
-        var salida = nav.querySelector('.etx-nav-back');
-        nav.insertBefore(sec, salida || null);
+    /* LAS BARRAS «SUB MÓDULOS», EN UN SOLO LUGAR (Edwin, 24-nov). Cada página
+       traía la suya y se iban separando (unas con media lista, otras con la de
+       otro módulo). Aquí vive la lista de Equip·ax, Admin·ax y lo que Cost·ax
+       ganó (Proveedores). Un renglón es un submódulo; un `g` es un grupo con sus
+       páginas (Operativo, Estructura de staff, Configuración). Se enseña solo lo
+       que el plan y el rol permiten: `sub` es un sub-permiso de Gestión de Staff
+       y `perm` un permiso de módulo. */
+    var NAVS = {
+        equipo: [
+            { t:'Catálogo', d:'Colaboradores', h:'/administrativo/staff.html', sub:'verCatalogo', ic:'cat-colaboradores' },
+            { g:'Operativo', hijos:[
+                { t:'Horarios', d:'Turnos y cobertura', h:'/administrativo/horarios.html', sub:'horarios', ic:'cat-horarios' },
+                { t:'Checklists', d:'Rutinas operativas', h:'/administrativo/checklists.html', sub:'checklists', ic:'mod-control-administrativo' } ] },
+            { t:'Evaluaciones', d:'Desempeño del equipo', h:'/administrativo/evaluaciones.html', sub:'evaluaciones', ic:'mod-control-administrativo' },
+            { g:'Estructura de staff', hijos:[
+                { t:'Organigrama', d:'Quién reporta a quién', h:'/administrativo/organigrama.html', sub:'organigrama', ic:'org-corporativo' },
+                { t:'Perfiles de puesto', d:'Funciones y puestos', h:'/administrativo/perfiles-puesto.html', sub:'perfiles', ic:'perfil' },
+                { t:'Reglamento', d:'Próximamente', pronto:true, ic:'catalogos' } ] }
+        ],
+        administrativo: [
+            { t:'Ingresos', d:'Cortes, ventas extras y anticipos', h:'/administrativo/diario.html?vista=ingresos', perm:['ventas'], ic:'fin-ventas' },
+            { t:'Egresos', d:'Gastos, movimientos, fijos y nóminas', h:'/administrativo/diario.html?vista=egresos', perm:['gastos','ventas'], ic:'fin-gastos' },
+            { t:'Gestión', d:'Caja fuerte', h:'/administrativo/diario.html?vista=gestion', perm:['ventas'], ic:'ev-caja-fuerte' },
+            { g:'Configuración', hijos:[
+                { t:'Cuentas bancarias', d:'Cuentas y comisiones', h:'/financiero/cuentas-bancarias.html', perm:['financiero'], ic:'fin-cuentas-bancarias' },
+                { t:'Previsiones', d:'Compromisos futuros', h:'/financiero/previsiones.html', perm:['financiero'], ic:'fin-previsiones' } ] },
+            { t:'Clientes', d:'Directorio de clientes', h:'/administrativo/clientes.html', perm:['clientes'], ic:'cat-clientes' }
+        ],
+        /* Cost·ax: sus páginas de /recetas/ ya traen su barra; Proveedores (que se
+           mudó desde Admin·ax) se les agrega, y en la suya se arma completa. */
+        recetas: [
+            { t:'Escandallos', d:'Costeo y escandallos', h:'/recetas/index.html?escandallos=1', perm:['recetas'], ic:'mod-escandallos' },
+            { t:'Insumos', d:'Materias primas', h:'/recetas/insumos.html', perm:['insumos'], ic:'mod-insumos' },
+            { t:'Inventarios', d:'Existencias', h:'/recetas/inventarios.html', perm:['inventarios'], ic:'mod-inventarios' },
+            { t:'Requisiciones', d:'Pedidos internos', h:'/recetas/requisiciones.html', perm:['requisiciones'], ic:'mod-requisiciones' },
+            { t:'Proveedores', d:'Abastecimiento', h:'/administrativo/proveedores.html', perm:['proveedores'], ic:'cat-proveedores' }
+        ]
+    };
+    function puedeItem(e) {
+        if (e.sub) return typeof window.etaaxPuedeSub === 'function' ? window.etaaxPuedeSub('staff', e.sub) : true;
+        if (e.perm) { var c = leer('etaax_ctx'); return !c || !c.negId || permitido({ permisos: e.perm }, c); }
+        return true;
     }
-    /* Checklists y Evaluaciones no traían barra: se les pone la de Equip·ax. */
+    function enlaceNav(e, aqui, vista) {
+        var partes = e.h ? e.h.split('?') : [''], q = partes[1] ? new URLSearchParams(partes[1]).get('vista') : null;
+        var activo = !!e.h && partes[0] === aqui && (q ? q === vista : !vista || !/\/diario\.html$/.test(aqui));
+        var cuerpo = '<span class="nav-icon etx-nav-icono" aria-hidden="true">' + ic(e.ic, 22) + '</span><span class="nav-text">' + esc(e.t) + '</span>' +
+                     '<span class="etx-nav-desc">' + esc(e.d || '') + '</span>';
+        if (e.pronto) return '<span class="nav-link etx-nav-pronto" aria-disabled="true">' + cuerpo + '</span>';
+        return '<a href="' + esc(e.h) + '" class="nav-link' + (activo ? ' active' : '') + '" data-tooltip="' + esc(e.t) + '">' + cuerpo + '</a>';
+    }
+    function armarNav(nav, lista) {
+        var aqui = typeof window.etaaxRutaModulo === 'function' ? window.etaaxRutaModulo(location.pathname) : location.pathname;
+        var vista = new URLSearchParams(location.search).get('vista');
+        nav.querySelectorAll('.nav-section, :scope > a.nav-link:not(.etx-nav-back)').forEach(function (x) { x.remove(); });
+        var html = lista.map(function (e) {
+            if (!e.g) return puedeItem(e) ? enlaceNav(e, aqui, vista) : '';
+            var hijos = e.hijos.filter(function (x) { return x.pronto || puedeItem(x); });
+            if (!hijos.some(function (x) { return !x.pronto; })) return '';
+            return '<div class="etx-nav-grupo">' + esc(e.g) + '</div>' + hijos.map(function (x) { return enlaceNav(x, aqui, vista); }).join('');
+        }).join('');
+        var sec = document.createElement('div'); sec.className = 'nav-section etx-nav-central'; sec.innerHTML = html;
+        nav.insertBefore(sec, nav.querySelector('.etx-nav-back') || null);
+    }
+    /* Cost·ax en /recetas/: su barra se queda; solo gana Proveedores. */
+    function agregarProveedores(nav) {
+        if (nav.querySelector('.etx-nav-prov') || nav.querySelector('a.nav-link[href*="proveedores.html"]')) return;
+        var e = NAVS.recetas[NAVS.recetas.length - 1]; if (!puedeItem(e)) return;
+        var sec = document.createElement('div'); sec.className = 'nav-section etx-nav-prov'; sec.innerHTML = enlaceNav(e, '', null);
+        nav.insertBefore(sec, nav.querySelector('.etx-nav-back') || null);
+    }
+    function navDelModulo(nav, modulo) {
+        if (contextoGlobal || !modulo) return;
+        if (modulo.id === 'recetas' && /^\/(recetas\/|administrativo\/menu)/.test(location.pathname)) { agregarProveedores(nav); return; }
+        if (NAVS[modulo.id] && !nav.querySelector('.etx-nav-central')) armarNav(nav, NAVS[modulo.id]);
+    }
+    /* Checklists y Evaluaciones no traían barra: se les pone una (la arma navDelModulo). */
     function crearNavEquipo() {
         var nav = document.createElement('nav'); nav.className = 'nav'; nav.id = 'nav';
         nav.innerHTML = '<div class="nav-top"><button type="button" class="nav-toggle nav-toggle-btn" id="navToggleBtn"><span class="nav-toggle-text" id="navToggleTxt"></span></button></div>';
@@ -247,7 +299,7 @@
         if (embebido || !nav) return;
         var modulo = moduloActual();
         if (!modulo) return;
-        if (modulo.id === 'equipo' && !contextoGlobal && !nav._etxEquipo) { nav._etxEquipo = true; armarNavEquipo(nav); }
+        navDelModulo(nav, modulo);
         var top = nav.querySelector('.nav-top'), panel = top && top.querySelector('a.nav-toggle');
         if (top && !top.querySelector('.etx-nav-identidad')) {
             var etiqueta = contextoGlobal ? (sessionStorage.getItem('etaax_fin_global') === '1' ? 'Financiero global' : 'Catálogos globales') : modulo.nombre;
@@ -470,7 +522,7 @@
         var diarios = {gastos:'fin-gastos',cortes:'fin-ventas',nominas:'cat-colaboradores',fijos:'sh-info-negocio',depositos:'fin-previsiones',mayores:'fin-gastos',caja:'candado',extras:'fin-ventas'};
         document.querySelectorAll('.cf-card,.dx-card,#vistaMenuReceta .cat-btn').forEach(function(card){
             card.classList.add('etx-tool-card');
-            var nombre = recetas[card.id] || diarios[card.dataset.fn], href = card.getAttribute('href');
+            var nombre = card.dataset.icono || recetas[card.id] || diarios[card.dataset.fn], href = card.getAttribute('href');
             var llamada = (card.getAttribute('onclick') || '').match(/abrirTool\('([^']+)'/);
             if (!nombre && (href || llamada)) { try { nombre = window.etaaxIconoRuta(new URL(href || llamada[1],location.href).pathname); } catch(e) {} }
             var slot = card.querySelector('.cf-card-icon,.dx-card-icon,.etx-tool-icon');
@@ -568,7 +620,9 @@
         /* Los permisos del rol llegan después: la barra de Equip·ax se vuelve a armar con ellos. */
         window.addEventListener('etaax:permisos', function () {
             var n = document.getElementById('nav');
-            if (n && n._etxEquipo) { armarNavEquipo(n); if (typeof window.etaaxPintarIconosNav === 'function') window.etaaxPintarIconosNav(); }
+            if (!n) return;
+            n.querySelectorAll('.etx-nav-central, .etx-nav-prov').forEach(function (x) { x.remove(); });
+            if (typeof window.etaaxPintarIconosNav === 'function') window.etaaxPintarIconosNav();
         });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',iniciar);else iniciar();

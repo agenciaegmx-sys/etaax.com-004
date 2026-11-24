@@ -104,6 +104,7 @@
         vigilar(nav);
         var global = enCatalogos();
         nav.querySelectorAll('a.nav-link').forEach(function (enlace) {
+            if (enlace.closest('.etx-nav-central, .etx-nav-prov')) return;   // traen su icono (etaax-modulos-ui.js)
             var destino = ruta(enlace), nombre = RUTAS[destino];
             if (global && destino === '/recetas/index.html') nombre = 'cat-recetas';
             if (global && destino === '/recetas/insumos.html') nombre = 'cat-insumos';

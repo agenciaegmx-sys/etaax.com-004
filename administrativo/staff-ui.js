@@ -214,7 +214,7 @@
         if (typeof window.etaaxIcono !== 'function') return;
         if (pagina === 'staff.html') pintarStaff();
         if (pagina === 'permisos.html') pintarPermisos();
-        if (pagina === 'staff-hub.html' || /^\/equipo(\/|\/index\.html)?$/.test(location.pathname)) pintarTool();   // la portada de Equip·ax
+        if (pagina === 'staff-hub.html') pintarTool();
     }
     function agendar() { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } }
     pintar();

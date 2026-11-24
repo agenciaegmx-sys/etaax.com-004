@@ -6,7 +6,6 @@
  if(pagina.indexOf('.')<0)pagina+='.html';
  var paginas={'horarios.html':'horarios','checklists.html':'checklists','organigrama.html':'organigrama','perfiles-puesto.html':'perfiles','evaluaciones.html':'evaluaciones'};
  var tipo=paginas[pagina], pendiente=false;
- if(/^\/equipo(\/|\/index\.html)?$/.test(location.pathname))pagina='staff-hub.html';   // la portada de Equip·ax (24-nov)
  if(!tipo&&pagina!=='staff-hub.html')return;
  if(tipo){document.body.classList.add('etx-op-page');document.body.dataset.opPagina=tipo;}
  var prefijo=/^(?:\s|[🗓📅🕒✅📋📱🧠📝🌐🖨💾✏✎🗑🔗✂📊💬✉⬇⧉⊞▦▤⟲◀▶▲▼↑↓✓✕✖＋+−—←👤💼🎂]|\uFE0F)+/u;

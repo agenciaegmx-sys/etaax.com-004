@@ -2,7 +2,7 @@
 <html lang="es" data-theme="dark">
 <head>
 <script src="/negocio-tab.js?v=39197e12"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
-<script src="/page-guard.js?v=01a940a8"></script>
+<script src="/page-guard.js?v=aacf90ce"></script>
     <meta charset="UTF-8">
     <script src="/theme.js?v=64b86f6e"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,9 +10,9 @@
     <title>ETAAX - Ventas y Gastos Diarios</title>
     <!-- Presentación inicial: descargar antes de llegar a los scripts del final. -->
     <link rel="preload" as="script" href="/etaax-iconos.js?v=7a651810">
-    <link rel="preload" as="script" href="/etaax-sidebar.js?v=8faeff96">
+    <link rel="preload" as="script" href="/etaax-sidebar.js?v=b1bccada">
     <link rel="preload" as="script" href="/etaax-header.js?v=2721a8a2">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=7733302c">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=2ae9008b">
     <link rel="preload" as="script" href="/administrativo/gastos-ui.js?v=93b54efc">
     <link rel="preload" as="script" href="/administrativo/cortes-ui.js?v=585bb93b">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
@@ -43,6 +43,8 @@
         .dx-hero-title { font-family:'Bebas Neue',sans-serif; font-size:44px; letter-spacing:3px; line-height:.95; color:var(--text); }
         .dx-hero-title .g { color: var(--viol); }
         .dx-hero-sub { font-size:12px; color:var(--text-dim); margin-top:8px; }
+        /* Lo que no es de la vista elegida (Ingresos / Egresos / Gestión). */
+        .dx-fuera-de-vista { display:none !important; }
 
         /* Barra superior de acciones (Reporte Directivo) */
         .dx-toolbar { display:flex; justify-content:center; gap:12px; margin-bottom:26px; animation: fadeUp .5s ease both; }
@@ -530,7 +532,7 @@
     
 </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=9e5333e9">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=225bef7b">
 <link rel="stylesheet" href="/administrativo/gastos-ui.css?v=6e39b31e">
 <link rel="stylesheet" href="/administrativo/cortes-ui.css?v=27878e84">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
@@ -643,6 +645,34 @@
                 </button>
             </div>
         </div>
+        <script>
+        /* ══ LAS VISTAS DE ADMIN·AX (Edwin, 24-nov) ══════════════════════════════
+           Esta pantalla son tres submódulos de Admin·ax: Ingresos (corte del día,
+           ventas especiales y anticipos), Egresos (gastos diarios, depósitos y
+           retiros, gastos fijos, nóminas y gasto mayor) y Gestión (caja fuerte y
+           el reporte directivo). `?vista=` dice cuál; sin ella se ve todo, como
+           antes. Solo se esconde lo que no es de la vista: los permisos de cada
+           tarjeta los sigue poniendo la página, y las fórmulas no se tocan. */
+        (function () {
+            var VISTAS = {
+                ingresos: { titulo: 'Ingresos', fns: ['cortes', 'extras'] },
+                egresos:  { titulo: 'Egresos', fns: ['gastos', 'depositos', 'fijos', 'nominas', 'mayores'], recordatorio: true },
+                gestion:  { titulo: 'Gestión', fns: ['caja'], reporte: true }
+            };
+            var v = null;
+            try { v = VISTAS[new URLSearchParams(location.search).get('vista')] || null; } catch (e) {}
+            if (!v) return;
+            document.body.dataset.dxVista = v.titulo;
+            document.querySelectorAll('.dx-card[data-fn]').forEach(function (b) {
+                var i = v.fns.indexOf(b.dataset.fn);
+                if (i < 0) b.classList.add('dx-fuera-de-vista'); else b.style.order = String(i);
+            });
+            if (!v.reporte) { var tb = document.querySelector('.dx-toolbar'); if (tb) tb.classList.add('dx-fuera-de-vista'); }
+            if (!v.recordatorio) { var rc = document.getElementById('dxRecordatorio'); if (rc) rc.classList.add('dx-fuera-de-vista'); }
+            var t = document.querySelector('.dx-hero-title'); if (t) t.textContent = v.titulo;
+            document.title = 'ETAAX - ' + v.titulo;
+        })();
+        </script>
 
     </main>
 </div>
@@ -10497,10 +10527,10 @@ function renderFijosPanel(){
 <script src="/novedades.js?v=94a2317e"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=7a651810"></script>
 <script src="/staff-area.js?v=f7366b4c"></script><!-- el área de un colaborador: fuente única (reparto de propinas) -->
-<script src="/etaax-sidebar.js?v=8faeff96"></script>
+<script src="/etaax-sidebar.js?v=b1bccada"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=2721a8a2"></script>
-<script src="/etaax-modulos-ui.js?v=7733302c"></script>
+<script src="/etaax-modulos-ui.js?v=2ae9008b"></script>
 <script src="/administrativo/gastos-ui.js?v=93b54efc"></script>
 <script src="/administrativo/cortes-ui.js?v=585bb93b"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>

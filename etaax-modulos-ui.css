@@ -717,3 +717,12 @@ body.etx-modulos-ui :is(.header,.inv-wizard-header):not(.etx-cab-vacia) {box-sha
   body.etx-modulos-ui .etx-ctx-ident {justify-content:flex-start;flex:1 1 0;}
   .etx-ctx-titulo {order:5;flex:1 0 100%;max-width:none;}
 }
+
+/* ══ «SUB MÓDULOS» CON GRUPOS (Edwin, 24-nov) ══════════════════════════════════
+   Operativo (Horarios, Checklists), Estructura de staff (Organigrama, Perfiles,
+   Reglamento) y Configuración (Cuentas bancarias, Previsiones): un rótulo chico
+   y sus páginas debajo. Lo que todavía no existe se ve, pero no se toca. */
+body.etx-modulos-ui #nav .etx-nav-grupo {font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:var(--etx-ui-muted);margin:10px 10px 4px;}
+body.etx-modulos-ui #nav .etx-nav-grupo:first-child {margin-top:2px;}
+body.etx-modulos-ui #nav .etx-nav-pronto {opacity:.45;cursor:default;}
+body.etx-modulos-ui #nav .etx-nav-pronto:hover {background:transparent;border-color:transparent;}

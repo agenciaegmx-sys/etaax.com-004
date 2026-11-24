@@ -9345,236 +9345,29 @@ console.log('\n══ BD5 · Escandallos: los diez permisos, conectados ══')
 }
 
 
-/* ═══════════ SUITE BD6 · LA VENTANA DE STAFF Y SUS SUB-PANTALLAS ═══════════
-   Roles y Permisos NO es otra herramienta: es una sub-pantalla del Catálogo de
-   Staff, a la que se entra navegando el MISMO iframe. Cerrarla tiraba la
-   ventana entera y sacaba al dueño del catálogo desde el que había entrado —
-   como si cerrar un cajón cerrara el mueble.
-
-   Ahora la ventana sabe dónde está parada: si estás adentro, cerrar te devuelve
-   al catálogo, y el encabezado dice el nombre de la sub-pantalla (si sigue
-   diciendo "Catálogo de Staff" mientras editas permisos, cerrar se siente como
-   cerrar el catálogo).                                                        */
-console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
+/* ═══════════ SUITE BD6 · EQUIP·AX: PÁGINAS, NO VENTANAS (24-nov) ═══════════
+   La portada de Gestión de Staff abría cada herramienta en una ventana flotante
+   (un iframe) y de ahí venían sus sub-pantallas, su Volver y su Cerrar. Edwin
+   pidió que fueran PÁGINAS, con su barra «Sub módulos»: la ventana se fue. Lo
+   que se cuida ahora: cada tarjeta lleva a su página con su permiso escrito,
+   volver a la portada rearma el candado del catálogo (antes lo hacía cerrar la
+   ventana) y cancelar la contraseña del catálogo, sin ventana, regresa aquí. */
+console.log('\n══ BD6 · Equip·ax: páginas, no ventanas ══');
 {
     const hub = fs.readFileSync(path.join(RAIZ, 'equipo/index.html'), 'utf8');
-
-    /* Se corre el código REAL de la ventana con un DOM de mentira, y se le pone
-       enfrente un iframe que "navegó" a donde diga cada prueba. */
-    function ventana(archivoEnElIframe) {
-        const nodos = {};
-        const nodo = (id) => (nodos[id] = nodos[id] || { id, style:{}, textContent:'', classList:{
-            _c:[], add(x){ this._c.push(x); }, remove(x){ this._c = this._c.filter(y=>y!==x); },
-            contains(x){ return this._c.indexOf(x) > -1; } } });
-        const frame = nodo('tmFrame');
-        frame.contentWindow = { location:{ pathname:'/administrativo/' + archivoEnElIframe },
-                                document:{ title:'Permisos · ETAAX' } };
-        /* La ventana escucha a su iframe: hace falta un window que de verdad
-           registre oyentes, y poder dispararlos. */
-        const oyentes = {};
-        const c = {
-            console, JSON, Object, Array, String, Number, Date, setTimeout, encodeURIComponent,
-            /* El hub pregunta por permisos antes de abrir una herramienta; aquí
-               se deja pasar todo, que lo que se prueba es la navegación. */
-            _puedeStaff: () => true, _exigeStaff: () => true,
-            localStorage:{ getItem:()=>'', setItem(){}, removeItem(){} },
-            sessionStorage:(function(){ const m={}; return { _m:m,
-                getItem:k=>(k in m?m[k]:null), setItem(k,v){ m[k]=String(v); }, removeItem(k){ delete m[k]; } }; })(),
-            document:{ getElementById:nodo, body:{ style:{} }, addEventListener(){} },
-            location:{ origin:'https://etaax.com' },
-            addEventListener(ev, fn){ (oyentes[ev] = oyentes[ev] || []).push(fn); },
-        };
-        c.window = c;
-        vm.createContext(c);
-        const i = hub.indexOf('/* De la página a su permiso: abrirTool recibe el archivo');
-        const fin = hub.indexOf("document.getElementById('toolModal').addEventListener");
-        vm.runInContext(hub.slice(i, fin), c, { filename:'staff-hub' });
-        const emitir = (ev, e) => (oyentes[ev] || []).forEach(fn => fn(e));
-        return { ctx:c, nodo, frame, emitir };
-    }
-
-    /* Abrir el catálogo y luego "entrar" a permisos. */
-    function enPermisos() {
-        const v = ventana('staff.html');
-        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
-        v.frame.contentWindow.location.pathname = '/administrativo/permisos.html';
-        v.ctx._tmSincronizar();
-        return v;
-    }
-
-    /* En el catálogo: una sola salida, y es Cerrar. Adentro: una sola salida, y
-       es Volver. Dos botones que hacen lo mismo —uno de ellos llamado "Cerrar"—
-       es justo la confusión que esto venía a quitar. */
-    test('en el catálogo no hay botón de volver', () => {
-        const v = ventana('staff.html');
-        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
-        v.ctx._tmSincronizar();
-        return eq(v.nodo('tmBack').style.display, 'none', 'sin volver');
+    const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+    test('la portada ya no abre ventanas flotantes', () =>
+        eq(/abrirTool|id="toolModal"|id="tmFrame"/.test(hub), false, 'sin iframe'));
+    [['staff', 'verCatalogo'], ['horarios', 'horarios'], ['checklists', 'checklists'], ['evaluaciones', 'evaluaciones'],
+     ['organigrama', 'organigrama'], ['perfiles-puesto', 'perfiles']].forEach(function (par) {
+        test('la tarjeta de ' + par[0] + ' lleva a su página y pide «' + par[1] + '»', () =>
+            eq(new RegExp('<a href="/administrativo/' + par[0] + '\\.html" class="cf-card"[^>]*data-perm="' + par[1] + '"').test(hub), true, 'enlace'));
     });
-    test('…y sí el de cerrar, que es la salida de la ventana', () => {
-        const v = ventana('staff.html');
-        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
-        v.ctx._tmSincronizar();
-        return eq(v.nodo('tmClose').style.display, '', 'con cerrar');
-    });
-    test('adentro de permisos se esconde Cerrar: la salida es Volver', () =>
-        eq(enPermisos().nodo('tmClose').style.display, 'none', 'una salida'));
-    test('al entrar a permisos aparece el botón de volver', () =>
-        eq(enPermisos().nodo('tmBack').style.display, '', 'con volver'));
-    test('…y el encabezado dice dónde estás: Roles y Permisos', () =>
-        eq(enPermisos().nodo('tmTitle').textContent, 'Roles y Permisos', 'rotulado'));
-
-    /* EL BUG: cerrar desde adentro tiraba la ventana entera. */
-    test('cerrar desde permisos NO cierra la ventana de staff', () => {
-        const v = enPermisos();
-        v.ctx.cerrarTool();
-        return eq(v.nodo('toolModal').classList.contains('on'), true, 'sigue abierta');
-    });
-    test('…sino que devuelve al catálogo de staff', () => {
-        const v = enPermisos();
-        v.ctx.cerrarTool();
-        return eq(v.nodo('tmFrame').src.indexOf('staff.html') === 0, true, 'de vuelta');
-    });
-    test('…y el encabezado vuelve a decir Catálogo de Staff', () => {
-        const v = enPermisos();
-        v.ctx.cerrarTool();
-        v.frame.contentWindow.location.pathname = '/administrativo/staff.html';
-        v.ctx._tmSincronizar();
-        return eq(v.nodo('tmTitle').textContent, 'Catálogo de Staff', 'de vuelta');
-    });
-    /* Al catálogo se entra con contraseña, y volver lo RECARGA. La gracia vive
-       en la PESTAÑA justamente para sobrevivir a esa recarga: volver no la toca.
-       EL ERROR QUE SE COMETIÓ AQUÍ: al principio volver la RENOVABA, así que
-       cada ida y vuelta a Roles y Permisos reiniciaba el reloj — y como cerrar
-       desde adentro ES volver, bastaba con entrar y salir para que el candado no
-       se armara nunca. */
-    test('volver al catálogo no pide la contraseña otra vez', () => {
-        const v = enPermisos();
-        v.ctx.sessionStorage.setItem('etaax_staff_gracia', String(Date.now() + 60000));
-        v.ctx.volverTool();
-        const hasta = parseInt(v.ctx.sessionStorage.getItem('etaax_staff_gracia') || '0', 10);
-        return eq(hasta > Date.now(), true, 'la gracia sigue viva');
-    });
-    test('…pero volver NO reinicia el reloj', () => {
-        const v = enPermisos();
-        const vence = Date.now() + 30000;
-        v.ctx.sessionStorage.setItem('etaax_staff_gracia', String(vence));
-        v.ctx.volverTool();
-        const hasta = parseInt(v.ctx.sessionStorage.getItem('etaax_staff_gracia') || '0', 10);
-        return eq(hasta, vence, 'sin estirarse');
-    });
-    /* Y cerrar la ventana REARMA el candado: cerrar es salirse a propósito. */
-    test('cerrar la ventana vuelve a armar el candado del catálogo', () => {
-        const v = ventana('staff.html');
-        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
-        v.ctx.sessionStorage.setItem('etaax_staff_gracia', String(Date.now() + 300000));
-        v.ctx.cerrarTool();
-        return eq(v.ctx.sessionStorage.getItem('etaax_staff_gracia'), null, 'rearmado');
-    });
-    test('…pero cerrar OTRA herramienta no toca ese candado', () => {
-        const v = ventana('horarios.html');
-        v.ctx.abrirTool('horarios.html', 'Horarios Operativos', '🗓️');
-        v.ctx.sessionStorage.setItem('etaax_staff_gracia', String(Date.now() + 300000));
-        v.ctx.cerrarTool();
-        return eq(v.ctx.sessionStorage.getItem('etaax_staff_gracia') !== null, true, 'ajeno');
-    });
-    test('…y el catálogo lee esa gracia de la pestaña, no de una variable', () => {
-        const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
-        return eq(stf.indexOf("sessionStorage.getItem(_GRACIA_K") > -1 &&
-                  stf.indexOf('var _okHasta') === -1, true, 'sobrevive la recarga');
-    });
-    test('los botones cambian al instante, sin esperar la carga', () => {
-        const i = hub.indexOf('function volverTool()');
-        const t = hub.slice(i, i + 1600);
-        return eq(t.indexOf("back.style.display='none'") > -1 &&
-                  t.indexOf("cerrar.style.display=''") > -1, true, 'sin parpadeo');
-    });
-
-    test('volver conserva el contexto del negocio en la URL', () => {
-        const v = enPermisos();
-        v.ctx.volverTool();
-        return eq(v.nodo('tmFrame').src.indexOf('embed=1') > -1, true, 'embebido');
-    });
-    /* Y desde el catálogo, cerrar sí cierra: la puerta de salida sigue ahí. */
-    test('estando en el catálogo, cerrar sí cierra la ventana', () => {
-        const v = ventana('staff.html');
-        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
-        v.ctx.cerrarTool();
-        return eq(v.nodo('toolModal').classList.contains('on'), false, 'cerrada');
-    });
-    /* El historial de un iframe es el MISMO del navegador: un "atrás" ahí puede
-       sacar de la página entera. Se vuelve recargando la base, no con back(). */
-    test('volver no usa el historial del navegador', () => {
-        const i = hub.indexOf('function volverTool()');
-        return eq(hub.slice(i, i + 400).indexOf('history.back') === -1, true, 'sin back');
-    });
-    /* Minimizar y Cerrar iban pegados al título, del lado izquierdo, mientras el
-       resto del sistema los tiene a la derecha: la mano va a donde siempre. */
-    const dock = fs.readFileSync(path.join(RAIZ, 'modal-dock.js'), 'utf8');
-    test('el grupo de botones va SIEMPRE a la derecha', () =>
-        eq(/\.etx-hd-btns\{[^}]*margin-left:auto!important/.test(dock), true, 'a la derecha'));
-    test('…y los botones propios de la ventana se van con el grupo', () =>
-        eq(dock.indexOf("querySelectorAll('.etx-hd-extra')") > -1, true, 'juntos'));
-    test('Volver está marcado para irse con el grupo', () =>
-        eq(/id="tmBack"[^>]*etx-hd-extra|etx-hd-extra[^>]*id="tmBack"/.test(hub), true, 'marcado'));
-
-    test('la sub-pantalla desconocida al menos dice su propio nombre', () => {
-        const v = ventana('staff.html');
-        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
-        v.frame.contentWindow.location.pathname = '/administrativo/otra-cosa.html';
-        v.ctx._tmSincronizar();
-        return eq(v.nodo('tmTitle').textContent, 'Permisos', 'por su título');
-    });
-
-    /* ── EL SUBTÍTULO VIENE DE ADENTRO ──────────────────────────────────────
-       La herramienta ya no repite su título —lo dice esta barra— pero sí sabe
-       algo que la barra no: de qué sucursal es el rol que se está viendo. Lo
-       manda por postMessage, y esto escribe en el encabezado de la ventana: hay
-       que mirar MUY bien de quién viene. */
-    function conSub(datos, delIframe, origen) {
-        const v = ventana('horarios.html');
-        v.ctx.abrirTool('horarios.html', 'Horarios Operativos', '🗓️');
-        v.emitir('message', {
-            origin: origen === undefined ? 'https://etaax.com' : origen,
-            source: delIframe === false ? { otra:'ventana' } : v.frame.contentWindow,
-            data: datos,
-        });
-        return v;
-    }
-    test('la herramienta dice de qué sucursal es y la barra lo pinta', () =>
-        eq(conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' }).nodo('tmSub').textContent,
-           'Rol semanal · Matriz', 'en la barra'));
-    test('…pero un mensaje de OTRO origen no escribe en el encabezado', () =>
-        eq(conSub({ etaax:'tool-sub', sub:'inyectado' }, true, 'https://otro.example').nodo('tmSub').textContent,
-           '', 'rechazado'));
-    test('…ni uno de otra ventana, aunque sea del mismo origen', () =>
-        eq(conSub({ etaax:'tool-sub', sub:'inyectado' }, false).nodo('tmSub').textContent, '', 'rechazado'));
-    test('…ni un mensaje que no sea de los nuestros', () =>
-        eq(conSub({ type:'webpack-ok' }).nodo('tmSub').textContent, '', 'ignorado'));
-    test('abrir otra herramienta borra el subtítulo de la anterior', () => {
-        const v = conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' });
-        v.ctx.abrirTool('checklists.html', 'Checklists Operativos', '✅');
-        return eq(v.nodo('tmSub').textContent, '', 'limpio');
-    });
-    /* LA TRAMPA DEL ORDEN: el aviso de la herramienta puede llegar ANTES de que
-       el iframe dispare su onload. Si sincronizar el encabezado limpiara
-       siempre, el subtítulo se borraría justo después de llegar y la barra se
-       quedaría muda hasta el siguiente repintado de adentro. */
-    test('sincronizar el encabezado en la herramienta base NO borra lo que ya dijo', () => {
-        const v = conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' });
-        v.ctx._tmSincronizar();
-        return eq(v.nodo('tmSub').textContent, 'Rol semanal · Matriz', 'conservado');
-    });
-    test('…pero entrar a una sub-pantalla sí lo borra: ya no habla de eso', () => {
-        const v = conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' });
-        v.frame.contentWindow.location.pathname = '/administrativo/permisos.html';
-        v.ctx._tmSincronizar();
-        return eq(v.nodo('tmSub').textContent, '', 'limpio');
-    });
-    test('cerrar la ventana también lo borra', () => {
-        const v = conSub({ etaax:'tool-sub', sub:'Rol semanal · Matriz' });
-        v.ctx.cerrarTool();
-        return eq(v.nodo('tmSub').textContent, '', 'limpio');
+    test('volver a la portada rearma el candado del catálogo', () =>
+        eq(/sessionStorage\.removeItem\('etaax_staff_gracia'\)/.test(hub), true, 'rearmado'));
+    test('cancelar la contraseña del catálogo sin ventana regresa a la portada de Equip·ax', () => {
+        const i = stf.indexOf('function _cerrarVentanaStaff()');
+        return eq(stf.slice(i, i + 520).indexOf("window.location.href = '/equipo/index.html'") > -1, true, 'a la portada');
     });
 }
 
@@ -9593,7 +9386,6 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
 console.log('\n══ BD7 · El "Volver" que se disfrazó de "Cerrar" ══');
 {
     const dock = fs.readFileSync(path.join(RAIZ, 'modal-dock.js'), 'utf8');
-    const hub  = fs.readFileSync(path.join(RAIZ, 'equipo/index.html'), 'utf8');
     const stf  = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
 
     /* Se corre el buscador REAL del dock contra un encabezado de mentira. */
@@ -9637,24 +9429,6 @@ console.log('\n══ BD7 · El "Volver" que se disfrazó de "Cerrar" ══');
         eq(findClose(encabezado([boton('','✕','cerrarModal()')])).textContent, '✕', 'sin romper'));
     test('y si no hay ninguno, no inventa uno', () =>
         eq(findClose(encabezado([boton('','Guardar','guardar()')])), null, 'nulo'));
-
-    /* En la página: Volver ya no comparte la clase con Cerrar. */
-    test('Volver tiene su propia clase, no la de Cerrar', () =>
-        eq(/id="tmBack"[^>]*class="tm-back|class="tm-back[^"]*"[^>]*id="tmBack"/.test(hub), true, 'propia'));
-    test('…y sigue marcado para viajar con el grupo de botones', () =>
-        eq(/id="tmBack"[^>]*etx-hd-extra|etx-hd-extra[^>]*id="tmBack"/.test(hub), true, 'en el grupo'));
-    /* DOS botones con margin-left:auto se reparten el espacio libre entre ellos
-       y terminan desperdigados por el encabezado — eso era lo que se veía. Solo
-       uno lo reclama (Cerrar, como respaldo si el dock no cargó); Volver no. */
-    test('solo un botón del encabezado reclama el espacio libre', () => {
-        const css = hub.slice(hub.indexOf('.tool-modal-hd {'), hub.indexOf('.tool-modal-hd .tm-open'))
-                       .replace(/\/\*[\s\S]*?\*\//g, '');   // los comentarios no son reglas
-        return eq((css.match(/margin-left:auto/g) || []).length, 1, 'uno solo');
-    });
-    test('…y no es Volver', () => {
-        const i = hub.indexOf('.tool-modal-hd .tm-back {');
-        return eq(hub.slice(i, i + 300).indexOf('margin-left:auto') === -1, true, 'no reclama');
-    });
 
     /* ── Cancelar la contraseña de entrada cierra la ventana ── */
     const G = crearContexto();
@@ -11253,28 +11027,29 @@ console.log('\n══ BE8 · Gestión de Staff, herramienta por herramienta ═�
         eq(SUB.some(x => x.pendiente), false, 'conectados'));
 
     /* ── El hub: la tarjeta que no se puede, no se pinta ── */
-    const MAPA = (() => {
-        const i = hub.indexOf('var STAFF_PERM = {');
-        const t = hub.slice(i, hub.indexOf('};', i));
-        const m = {}; t.replace(/'([\w.-]+)':'(\w+)'/g, (_, a, b) => { m[a] = b; return ''; });
+    /* (24-nov) Las herramientas se abren como páginas: la puerta de cada una la
+       pone page-guard (SUB_RUTA), con la misma llave que pedía la ventana. */
+    const SUBR = (() => {
+        const i = pg.indexOf('var SUB_RUTA = ['), t = pg.slice(i, pg.indexOf('];', i));
+        const m = {}; t.replace(/\\\/administrativo\\\/([\w-]+)\/, '(\w+)'/g, (_, a, b) => { m[a + '.html'] = b; return ''; });
         return m;
     })();
-    [['staff.html','verCatalogo'], ['horarios.html','horarios'], ['checklists.html','checklists'],
+    [['horarios.html','horarios'], ['checklists.html','checklists'],
      ['organigrama.html','organigrama'], ['perfiles-puesto.html','perfiles'],
      ['evaluaciones.html','evaluaciones']].forEach(function (par) {
-        test('abrir ' + par[0] + ' pide «' + par[1] + '»', () => eq(MAPA[par[0]], par[1], 'mapeada'));
+        test('abrir ' + par[0] + ' pide «' + par[1] + '»', () => eq(SUBR[par[0]], par[1], 'mapeada'));
     });
+    test('…y el catálogo se cuida solo, con «verCatalogo»', () =>
+        eq(stf.indexOf("etaaxPuedeSub('staff', sub)") > -1, true, 'propio'));
     test('cada tarjeta del hub lleva su clave escrita', () => {
         const cartas = [...hub.matchAll(/class="cf-card"[^>]*data-perm="(\w+)"/g)].map(m => m[1]);
         return eq(cartas.length, 6, cartas.join(','));
     });
     test('…y la que no se puede, se esconde', () =>
         eq(/data-perm[\s\S]{0,120}style\.display='none'/.test(hub), true, 'escondida'));
-    /* Esconder la tarjeta no es negar la herramienta. */
-    test('abrirTool se niega, no solo se esconde la tarjeta', () => {
-        const i = hub.indexOf('function abrirTool(page, titulo, icono){');
-        return eq(hub.slice(i, i + 260).indexOf('_exigeStaff(_clave') > -1, true, 'con puerta');
-    });
+    /* Esconder la tarjeta no es negar la herramienta: la página se niega. */
+    test('la página se niega, no solo se esconde la tarjeta', () =>
+        eq(/if \(ok && _sub && key === 'staff' && !window\.etaaxPuedeSub\('staff', _sub\)\)/.test(pg), true, 'con puerta'));
 
     /* ── El catálogo: cada acción, su llave ── */
     const G = (fn, clave) => {
@@ -16507,8 +16282,11 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
     test('el encabezado de la barra es el mismo para todas', () =>
         eq(nav.indexOf("data-tooltip=\"Panel Financiero\"") > -1 &&
            nav.indexOf('id="navToggleBtn"') > -1, true, 'uno solo'));
-    test('…y esa barra lleva a los siete sub-módulos', () =>
-        eq(PAGS.every(p => nav.indexOf("'" + p + ".html'") > -1), true, 'completa'));
+    /* (24-nov) Cuentas bancarias y Previsiones son la Configuración de Admin·ax:
+       sus páginas siguen en /financiero/, pero su barra es la de Admin·ax. */
+    const PAGS_FIN = ['ventas','gastos-globales','estadisticas','kpis','resumen'];
+    test('…y esa barra lleva a los cinco sub-módulos de Fin·ax', () =>
+        eq(PAGS_FIN.every(p => nav.indexOf("'" + p + ".html'") > -1) && !/cuentas-bancarias\.html|previsiones\.html/.test(nav), true, 'completa'));
     /* Sin marcar dónde estás, la barra deja de ser un mapa y es solo una lista
        de ligas. */
     test('…marcando en cuál estás parado', () =>
@@ -16532,10 +16310,10 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
         c.window = c; vm.createContext(c);
         vm.runInContext(nav, c, { filename:'nav.js' });
         return eq(pintado.indexOf('LO QUE TRAÍA LA PÁGINA') === -1 &&
-                  (pintado.match(/class="nav-section"/g) || []).length === 5, true, 'sin duplicar');
+                  (pintado.match(/class="nav-section"/g) || []).length === 4, true, 'sin duplicar');
     });
     /* Y que de verdad pinte la lista completa, con el activo donde toca. */
-    test('…y pintando los siete enlaces, con KPIs marcado al estar en KPIs', () => {
+    test('…y pintando los cinco enlaces, con KPIs marcado al estar en KPIs', () => {
         let pintado = '';
         const navEl = { set innerHTML(v) { pintado = v; }, get innerHTML() { return pintado; },
                         insertAdjacentHTML: (_, h) => { pintado += h; } };
@@ -16548,7 +16326,7 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
         /* El encabezado va en lo pintado, no solo en el archivo: sin él la barra
            se queda sin el botón de abrir/cerrar ni el atajo al panel, y buscar
            el texto en nav.js no lo nota —lo destapó la batería. */
-        return eq((pintado.match(/class="nav-link/g) || []).length === 7 &&
+        return eq((pintado.match(/class="nav-link/g) || []).length === 5 &&
                   pintado.indexOf('href="kpis.html" class="nav-link active"') > -1 &&
                   pintado.indexOf('href="resumen.html" class="nav-link"') > -1 &&
                   pintado.indexOf('id="navToggleBtn"') > -1 &&
@@ -18668,7 +18446,7 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
     });
     test('el Menú va con Cost·ax (las recetas), y su página se ve dentro de Recetas e Insumos', () => {
         const pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8'), mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
-        return eq(/menu: 'costax'/.test(pg) && !/menu: 'finax'/.test(pg) && /if \(\/\^\\\/administrativo\\\/menu/.test(mu), true);
+        return eq(/menu: 'costax'/.test(pg) && !/menu: 'finax'/.test(pg) && /if \(\/\^\\\/administrativo\\\/\(menu\|proveedores\)/.test(mu), true);
     });
     test('escandallos: repintar la tabla de ingredientes regresa el cursor al campo (antes «me saca y debo dar clic otra vez»)', () => {
         const app = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
@@ -18787,12 +18565,12 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const adm = fs.readFileSync(path.join(RAIZ, 'administrativo/index.html'), 'utf8');
         const navs = ['diario', 'proveedores', 'clientes'].map(f => fs.readFileSync(path.join(RAIZ, 'administrativo/' + f + '.html'), 'utf8'));
         const bloqueAdm = hubm.slice(hubm.indexOf("{ id: 'administrativo'"), hubm.indexOf("{ id: 'financiero'"));
-        return eq(/\{ id:'administrativo'[^}]*permisos:\['ventas','gastos','proveedores','clientes'\] \}/.test(mu) && !/clave: 'staff'/.test(bloqueAdm) &&
+        return eq(/\{ id:'administrativo'[^}]*permisos:\['ventas','gastos','clientes','financiero'\] \}/.test(mu) && !/clave: 'staff'/.test(bloqueAdm) &&
                   !/href="staff-hub\.html"/.test(adm) && navs.every(t => !/data-tooltip="Staff"/.test(t)), true);
     });
     test('…su portada es /equipo/index.html, con su isla y sus herramientas; la dirección vieja lleva a ella', () => {
         const eqp = fs.readFileSync(path.join(RAIZ, 'equipo/index.html'), 'utf8'), vieja = fs.readFileSync(path.join(RAIZ, 'administrativo/staff-hub.html'), 'utf8');
-        const tools = ['staff', 'horarios', 'checklists', 'organigrama', 'perfiles-puesto', 'evaluaciones'].every(f => eqp.indexOf("abrirTool('/administrativo/" + f + ".html'") > -1);
+        const tools = ['staff', 'horarios', 'checklists', 'organigrama', 'perfiles-puesto', 'evaluaciones'].every(f => eqp.indexOf('<a href="/administrativo/' + f + '.html" class="cf-card"') > -1);
         return eq(tools && /aria-label="Equip·ax"/.test(eqp) && !/<nav class="nav/.test(eqp) && /page-guard\.js/.test(eqp) &&
                   /location\.replace\('\/equipo\/index\.html' \+ location\.search/.test(vieja), true);
     });
@@ -18807,6 +18585,54 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8'), se = fs.readFileSync(path.join(RAIZ, 'staff-etaax.js'), 'utf8');
         return eq(/\{ label:'Equip·ax',\s*modulos:\['staff','permisos'\] \}/.test(per) && /key:'staff',[^}]*grupo:'Equip·ax'/.test(se), true);
     });
+    /* (24-nov, 2) SUBMÓDULOS NAVEGABLES. Equip·ax: Catálogo, Operativo (Horarios y
+       Checklists), Evaluaciones y Estructura de staff (Organigrama, Perfiles,
+       Reglamento). Admin·ax: Ingresos, Egresos, Gestión, Configuración (Cuentas
+       bancarias y Previsiones, que llegaron de Fin·ax) y Clientes. Proveedores se
+       mudó a Cost·ax. Las barras se arman de un solo lugar (NAVS). */
+    const muN = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+    const NAVS = (() => { const i = muN.indexOf('var NAVS = {'), j = muN.indexOf('\n    };', i); return new Function('return ' + muN.slice(i + 11, j + 6))(); })();
+    const plano = (l) => l.map(e => e.g ? e.g + '[' + e.hijos.map(x => x.t).join(',') + ']' : e.t).join(' · ');
+    test('Equip·ax: sus submódulos y sus grupos', () =>
+        eq(plano(NAVS.equipo), 'Catálogo · Operativo[Horarios,Checklists] · Evaluaciones · Estructura de staff[Organigrama,Perfiles de puesto,Reglamento]'));
+    test('…cada página pide su sub-permiso de Gestión de Staff (y Reglamento aún no se abre)', () => {
+        const todos = [].concat.apply([], NAVS.equipo.map(e => e.g ? e.hijos : [e]));
+        return eq(todos.map(e => e.pronto ? 'pronto' : e.sub).join(','), 'verCatalogo,horarios,checklists,evaluaciones,organigrama,perfiles,pronto');
+    });
+    test('Admin·ax: Ingresos, Egresos, Gestión, Configuración y Clientes', () =>
+        eq(plano(NAVS.administrativo), 'Ingresos · Egresos · Gestión · Configuración[Cuentas bancarias,Previsiones] · Clientes'));
+    test('…Ingresos, Egresos y Gestión son vistas de Ventas y Gastos Diarios', () =>
+        eq(NAVS.administrativo.slice(0, 3).map(e => e.h).join(','), '/administrativo/diario.html?vista=ingresos,/administrativo/diario.html?vista=egresos,/administrativo/diario.html?vista=gestion'));
+    test('…y cada vista enseña SUS tarjetas, en el orden que se pidió', () => {
+        const d = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        const i = d.indexOf('var VISTAS = {'), V = new Function('return ' + d.slice(i + 13, d.indexOf('};', i) + 1))();
+        return eq(['ingresos', 'egresos', 'gestion'].map(k => k + ':' + V[k].fns.join(',')).join(' | '),
+                  'ingresos:cortes,extras | egresos:gastos,depositos,fijos,nominas,mayores | gestion:caja');
+    });
+    test('…esconder lo que no es de la vista no compite con los permisos (clase con !important)', () => {
+        const d = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        return eq(/\.dx-fuera-de-vista \{ display:none !important; \}/.test(d) && /b\.classList\.add\('dx-fuera-de-vista'\)/.test(d), true);
+    });
+    test('Cuentas bancarias y Previsiones: viven en /financiero/ pero son de Admin·ax (barra, hub y portadas)', () => {
+        const hubm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8'), fin = fs.readFileSync(path.join(RAIZ, 'financiero/index.html'), 'utf8');
+        const adm = fs.readFileSync(path.join(RAIZ, 'administrativo/index.html'), 'utf8');
+        const bloque = (id, sig) => hubm.slice(hubm.indexOf("{ id: '" + id + "'"), hubm.indexOf("{ id: '" + sig + "'"));
+        return eq(/financiero\\\/\(cuentas-bancarias\|previsiones\)\(\\\.html\)\?\\\/\?\$\/\.test\(p\)\) id = 'administrativo'/.test(muN) &&
+                  /clave: 'cuentas'/.test(bloque('administrativo', 'financiero')) && /clave: 'previsiones'/.test(bloque('administrativo', 'financiero')) &&
+                  !/clave: 'cuentas'|clave: 'previsiones'/.test(bloque('financiero', 'equipo')) &&
+                  !/href="(previsiones|cuentas-bancarias)\.html"/.test(fin) && /href="\.\.\/financiero\/cuentas-bancarias\.html"/.test(adm) && /href="\.\.\/financiero\/previsiones\.html"/.test(adm), true);
+    });
+    test('Proveedores se mudó a Cost·ax (barra, hub, portada, roles) sin quitárselo a quien lo tenía con Fin·ax', () => {
+        const hubm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8'), pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+        const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8'), per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+        const bloque = (id, sig) => hubm.slice(hubm.indexOf("{ id: '" + id + "'"), hubm.indexOf("{ id: '" + sig + "'"));
+        return eq(NAVS.recetas[NAVS.recetas.length - 1].h === '/administrativo/proveedores.html' &&
+                  /clave: 'proveedores'/.test(bloque('recetas', 'administrativo')) && !/clave: 'proveedores'/.test(bloque('administrativo', 'financiero')) &&
+                  /proveedores: \['costax', 'finax'\]/.test(pg) && /href="\.\.\/administrativo\/proveedores\.html" class="cf-card cf-abasto"/.test(rec) &&
+                  /label:'Cost·ax', modulos:\[[^\]]*'proveedores'\]/.test(per), true);
+    });
+    test('…y las barras de Admin·ax ya no lo traen (las arma NAVS: ni Proveedores ni Staff)', () =>
+        eq(/proveedores|staff/.test(JSON.stringify(NAVS.administrativo)), false));
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
         return eq(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(cuerpo) || !/_insMenuItem\('ins-editar'/.test(cuerpo), false);

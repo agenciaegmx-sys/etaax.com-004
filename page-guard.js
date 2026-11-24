@@ -528,7 +528,9 @@ window.ETAAX_APPS_SUITE = ['costax', 'finax', 'equipax'];   // = precios.js apps
 window.ETAAX_APP_PERMISO = {
     recetas: 'costax', insumos: 'costax', inventarios: 'costax', requisiciones: 'costax',
     menu: 'costax',   // (24-nov) el Menú de la sucursal se mudó a Recetas e Insumos, junto a Escandallos
-    ventas: 'finax', gastos: 'finax', proveedores: 'finax', clientes: 'finax', financiero: 'finax',
+    /* (24-nov) Proveedores se mudó a Cost·ax; quien lo tenía con Fin·ax no lo pierde. */
+    proveedores: ['costax', 'finax'],
+    ventas: 'finax', gastos: 'finax', clientes: 'finax', financiero: 'finax',
     ventas_productos: ['costax', 'finax']
     /* staff, permisos y config: en todas. El catálogo de colaboradores es lo que
        da acceso a la gente; lo que vende Equip·ax es lo demás (abajo). */
@@ -802,10 +804,24 @@ window.etaaxPerm = function (negId, rol, path, sucId) {
     if (rol === 'admin') return;
     if (!key) return; // landings de módulo (administrativo/index) pasan
 
+    /* (24-nov) Las herramientas de Equip·ax ya se abren como páginas (antes, en
+       una ventana flotante que pedía su sub-permiso al abrir). Ahora la puerta
+       la pone la página: con «staff» pero sin, p. ej., «Horarios», no entra. */
+    var SUB_RUTA = [
+        [/\/administrativo\/horarios/, 'horarios'], [/\/administrativo\/checklists/, 'checklists'],
+        [/\/administrativo\/organigrama/, 'organigrama'], [/\/administrativo\/perfiles-puesto/, 'perfiles'],
+        [/\/administrativo\/evaluaciones/, 'evaluaciones']
+    ];
+    var _sub = null;
+    for (var _i = 0; _i < SUB_RUTA.length; _i++) if (SUB_RUTA[_i][0].test(path)) { _sub = SUB_RUTA[_i][1]; break; }
     function _evaluar(quieto) {
         var perms = window.etaaxPermisosRol(ctx.negId, rol);
         var keys  = Array.isArray(key) ? key : [key];
         var ok    = keys.some(function (k) { return perms[k]; });
+        if (ok && _sub && key === 'staff' && !window.etaaxPuedeSub('staff', _sub)) {
+            if (!_embed) window.location.replace('/hub.html?denegado=staff');
+            return false;
+        }
         if (!ok && !_embed) {
             if (quieto) console.warn('[etaax] permiso denegado al refrescar:', keys[0]);
             window.location.replace('/hub.html?denegado=' + keys[0]);

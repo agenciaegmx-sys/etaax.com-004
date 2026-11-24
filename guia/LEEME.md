@@ -17,19 +17,19 @@ Las capturas pendientes conservan su marco y no abren un visor vacío.
 
 | Módulo | Herramienta | Archivos |
 |---|---|---|
-| Control administrativo | Ventas y gastos diarios | **`diario-1.png` … `diario-10.png` ✅ puestas** |
-| | Proveedores | **`proveedores-1.png` … `proveedores-3.png` ✅ puestas** |
+| Admin·ax | Ingresos, egresos y caja | **`diario-1.png` … `diario-10.png` ✅ puestas** |
+| | Cuentas bancarias | `cuentas-1.png` … `-3.png` |
+| | Previsiones | `previsiones-1.png` … `-3.png` |
 | | Clientes | **`clientes-1.png` … `clientes-3.png` ✅ puestas** |
 | | Menú de la sucursal | **`menu-1.png` … `menu-3.png` ✅ puestas** |
 | Recetas e Insumos | Escandallos | **`escandallos-1.png` … `escandallos-7.png` ✅ puestas** |
 | | Insumos | **`insumos-1.png` … `insumos-7.png` ✅ puestas** |
 | | Inventarios | **`inventarios-1.png` … `inventarios-7.png` ✅ puestas** |
 | | Requisiciones | **`requisiciones-1.png` … `requisiciones-4.png` ✅ puestas** |
+| | Proveedores | **`proveedores-1.png` … `proveedores-3.png` ✅ puestas** |
 | Salud financiera | Resumen financiero | `resumen-1.png` … `-3.png` |
 | | Ventas totales | `ventas-1.png` … `-3.png` |
 | | Gastos totales | `gastos-1.png` … `-3.png` |
-| | Previsiones | `previsiones-1.png` … `-3.png` |
-| | Cuentas bancarias | `cuentas-1.png` … `-3.png` |
 | | KPIs | `kpis-1.png` … `-3.png` |
 | | Estadísticas | `estadisticas-1.png` … `-3.png` |
 | Equip·ax | Gestión del equipo | **`staff-1.png` … `staff-8.png` ✅ puestas** |

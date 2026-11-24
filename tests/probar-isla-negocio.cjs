@@ -205,19 +205,37 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             assert.equal(await p.evaluate(() => document.getElementById('etxCtxTitulo').textContent.trim().toLowerCase()), 'inventarios');
         });
 
-        /* (24-nov) Equip·ax: sus páginas viven en /administrativo/ pero son de Equip·ax,
-           con su propia barra (también Checklists y Evaluaciones, que no traían). */
-        for (const [ruta, activo] of [['/administrativo/horarios.html', 'Horarios'], ['/administrativo/checklists.html', 'Checklists']]) {
+        /* (24-nov) Las barras «Sub módulos» se arman de un solo lugar, con sus grupos.
+           Equip·ax: Catálogo, Operativo (Horarios, Checklists), Evaluaciones y
+           Estructura de staff. Admin·ax: Ingresos, Egresos, Gestión (vistas de Ventas
+           y Gastos Diarios), Configuración (Cuentas bancarias y Previsiones, que viven
+           en /financiero/) y Clientes. Proveedores se mudó a Cost·ax. */
+        const barra = () => p.evaluate(() => [...document.querySelectorAll('#nav .nav-section > *')].map(x => x.classList.contains('etx-nav-grupo') ? '[' + x.textContent + ']' :
+            ((x.querySelector('.nav-text') || x).textContent.trim() + (x.classList.contains('active') ? '*' : '') + (x.classList.contains('etx-nav-pronto') ? '(pronto)' : ''))).join(' · '));
+        const EQUIPO = (act) => ['Catálogo', '[Operativo]', 'Horarios', 'Checklists', 'Evaluaciones', '[Estructura de staff]', 'Organigrama', 'Perfiles de puesto', 'Reglamento(pronto)']
+            .map(x => x === act ? x + '*' : x).join(' · ');
+        const ADMIN = (act) => ['Ingresos', 'Egresos', 'Gestión', '[Configuración]', 'Cuentas bancarias', 'Previsiones', 'Clientes'].map(x => x === act ? x + '*' : x).join(' · ');
+        for (const [ruta, esperado] of [['/administrativo/horarios.html', EQUIPO('Horarios')], ['/administrativo/checklists.html', EQUIPO('Checklists')],
+                                        ['/administrativo/diario.html?vista=egresos', ADMIN('Egresos')], ['/financiero/cuentas-bancarias.html', ADMIN('Cuentas bancarias')],
+                                        ['/administrativo/proveedores.html', 'Escandallos · Insumos · Inventarios · Requisiciones · Proveedores*']]) {
             await ir(p, ruta);
-            await caso('Equip·ax, ' + ruta + ': «Sub módulos» con las seis herramientas del equipo', async () => {
-                await p.click('#navToggleBtn');
-                const r = await p.evaluate(() => ({ links: [...document.querySelectorAll('#nav .etx-nav-equipo a.nav-link .nav-text')].map(x => x.textContent),
-                    activo: (document.querySelector('#nav .etx-nav-equipo a.nav-link.active .nav-text') || {}).textContent,
-                    staffAdm: !!document.querySelector('#nav a[href$="diario.html"]') }));
-                assert.deepEqual(r, { links: ['Catálogo', 'Horarios', 'Checklists', 'Organigrama', 'Perfiles de puesto', 'Evaluaciones'], activo, staffAdm: false });
-                await p.keyboard.press('Escape');
+            await caso('«Sub módulos» en ' + ruta + ': ' + esperado, async () => assert.equal(await barra(), esperado));
+        }
+        await ir(p, '/recetas/insumos.html');
+        await caso('Cost·ax: sus páginas conservan su barra y ganan Proveedores', async () => {
+            const b = await barra();
+            assert.ok(/Insumos\*/.test(b) && / · Proveedores$/.test(b), b);
+        });
+        for (const [vista, titulo, fns] of [['ingresos', 'Ingresos', ['cortes', 'extras']], ['egresos', 'Egresos', ['gastos', 'depositos', 'fijos', 'nominas', 'mayores']], ['gestion', 'Gestión', ['caja']]]) {
+            await ir(p, '/administrativo/diario.html?vista=' + vista);
+            await caso('Admin·ax, ' + titulo + ': su título en la isla y SOLO sus tarjetas, en su orden', async () => {
+                const r = await p.evaluate(() => ({ t: document.getElementById('etxCtxTitulo').textContent,
+                    fns: [...document.querySelectorAll('.dx-card[data-fn]')].filter(b => b.offsetParent).sort((a, b) => (+getComputedStyle(a).order) - (+getComputedStyle(b).order)).map(b => b.dataset.fn),
+                    reporte: !!document.querySelector('.dx-toolbar').offsetParent }));
+                assert.deepEqual(r, { t: titulo, fns, reporte: vista === 'gestion' });
             });
         }
+        await ir(p, '/administrativo/horarios.html');
         await caso('Equip·ax: «Cambiar módulo» lo marca como el módulo actual (Módulo 4)', async () => {
             await p.click('#etxCambiarModulo');
             const r = await p.evaluate(() => { const b = document.querySelector('#etxModuleDialog [data-modulo="equipo"]'); return b && [b.getAttribute('aria-current'), b.textContent.replace(/\s+/g, ' ').trim()]; });

@@ -113,6 +113,11 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
             assert.deepEqual(filas, ['Gestión del equipo']);
             assert.equal(await page.evaluate(() => document.body.innerText.indexOf('Sin acceso para tu rol')), -1);
         });
+        await caso('…y Cost·ax trae Proveedores (se mudó de Admin·ax; con Cost·ax solo, también se ve)', async () => {
+            await page.evaluate(() => etaaxSeleccionarModulo('recetas'));
+            const filas = await page.evaluate(() => [...document.querySelectorAll('#hubHerramientasTarjetas .hub-tool-fila h3')].map(h => h.textContent));
+            assert.deepEqual(filas, ['Escandallos', 'Insumos', 'Inventarios', 'Requisiciones', 'Proveedores']);
+        });
         await caso('los módulos se numeran por lo que se ve', async () =>
             assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#hubModuloDock [data-modulo]:not([hidden]) .hub-module-numero')].map(x => x.textContent)),
                 ['Módulo 1', 'Módulo 2', 'Módulo 3']));

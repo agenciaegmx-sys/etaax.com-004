@@ -34,7 +34,7 @@
         { key:'menu',             label:'Menú',               grupo:'Cost·ax' },
         { key:'ventas',           label:'Ventas y Cortes',    grupo:'Admin·ax' },
         { key:'gastos',           label:'Gastos Diarios',     grupo:'Admin·ax' },
-        { key:'proveedores',      label:'Proveedores',        grupo:'Admin·ax' },
+        { key:'proveedores',      label:'Proveedores',        grupo:'Cost·ax' },   // (24-nov) se mudó a Cost·ax
         { key:'clientes',         label:'Clientes',           grupo:'Admin·ax' },
         { key:'financiero',       label:'Financiero',         grupo:'Fin·ax' },
         { key:'staff',            label:'Gestión de Staff',   grupo:'Equip·ax' },   // (24-nov) el equipo es su propio módulo

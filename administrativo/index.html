@@ -2,7 +2,7 @@
 <html lang="es" data-theme="dark">
 <head>
 <script src="/negocio-tab.js?v=39197e12"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
-<script src="/page-guard.js?v=01a940a8"></script>
+<script src="/page-guard.js?v=aacf90ce"></script>
     <meta charset="UTF-8">
     <script src="/theme.js?v=64b86f6e"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,9 +10,9 @@
     <title>ETAAX - Control Financiero</title>
     <!-- Presentación inicial: descargar antes de llegar a los scripts del final. -->
     <link rel="preload" as="script" href="/etaax-iconos.js?v=7a651810">
-    <link rel="preload" as="script" href="/etaax-sidebar.js?v=8faeff96">
+    <link rel="preload" as="script" href="/etaax-sidebar.js?v=b1bccada">
     <link rel="preload" as="script" href="/etaax-header.js?v=2721a8a2">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=7733302c">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=2ae9008b">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -197,7 +197,7 @@
 
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=9e5333e9">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=225bef7b">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -223,63 +223,96 @@
         <div class="etx-isla" role="heading" aria-level="1" aria-label="Admin·ax"><span class="etx-isla-nombre"><span class="etx-isla-ini">A</span><span class="etx-isla-resto">dmin</span><span class="etx-isla-punto">·</span><span class="etx-isla-resto">ax</span></span></div>
     </div>
 
+    <!-- (24-nov) Admin·ax en sus submódulos: Ingresos, Egresos, Gestión, Configuración y Clientes.
+         Ingresos, Egresos y Gestión son vistas de Ventas y Gastos Diarios (?vista=). Proveedores
+         se mudó a Cost·ax; Cuentas bancarias y Previsiones llegaron desde Fin·ax. -->
     <div class="cf-modules">
 
-        <!-- ══ SUB-MÓDULO 1: ADMIN ══ -->
         <div class="cf-section">
             <div class="cf-section-hdr">
-                <span class="cf-section-tag">Captura diaria</span>
-                <div class="cf-section-title">Admin</div>
-                <div class="cf-section-desc">Registro operativo del día a día. El equipo vive en Equip·ax.</div>
+                <span class="cf-section-tag">Operación diaria</span>
+                <div class="cf-section-title">Ingresos y egresos</div>
+                <div class="cf-section-desc">Lo que entra y lo que sale cada día.</div>
             </div>
             <div class="cf-grid cf-grid-2">
-                <a href="diario.html" class="cf-card highlight">
+                <a href="diario.html?vista=ingresos" class="cf-card" data-icono="fin-ventas">
                     <div class="cf-card-hdr">
-                        <div class="cf-card-icon">🧾</div>
+                        <div class="cf-card-icon"></div>
                         <span class="cf-badge-active">Activo</span>
                     </div>
-                    <div class="cf-card-title">Ventas y Gastos Diarios</div>
-                    <div class="cf-card-desc">Cortes de caja, gastos diarios y mayores, nóminas, gastos fijos, depósitos y retiros, caja fuerte y ventas especiales — todo en un solo lugar, con reporte directivo consolidado.</div>
+                    <div class="cf-card-title">Ingresos</div>
+                    <div class="cf-card-desc">Corte de caja del día por turno y sucursal, ventas especiales y anticipos.</div>
                     <div class="cf-card-cta">Abrir →</div>
                 </a>
-                <!-- Dashboard de KPIs: OCULTO por ahora. No se borra —kpis.html
-                     existe y funciona— pero anunciarlo como "próximamente" en la
-                     entrada del módulo promete algo que todavía no se puede abrir.
-                     Para devolverlo, quitar este comentario.
-                <a href="kpis.html" class="cf-card coming-soon">
+                <a href="diario.html?vista=egresos" class="cf-card" data-icono="fin-gastos">
                     <div class="cf-card-hdr">
-                        <div class="cf-card-icon">📊</div>
-                        <span class="cf-badge-soon">Próximamente</span>
+                        <div class="cf-card-icon"></div>
+                        <span class="cf-badge-active">Activo</span>
                     </div>
-                    <div class="cf-card-title">Dashboard de KPIs</div>
-                    <div class="cf-card-desc">Margen bruto, costo de ventas, ticket promedio, relación gastos/ingresos y tendencias semanales y mensuales. Cruza ventas diarias y gastos para generar indicadores automáticos.</div>
-                    <div class="cf-card-cta">En desarrollo</div>
+                    <div class="cf-card-title">Egresos</div>
+                    <div class="cf-card-desc">Gastos diarios, depósitos y retiros, gastos fijos, nóminas y gastos mayores.</div>
+                    <div class="cf-card-cta">Abrir →</div>
                 </a>
-                -->
             </div>
         </div>
 
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Gestión</span>
+                <div class="cf-section-title">Gestión</div>
+                <div class="cf-section-desc">El resguardo del negocio y su reporte directivo.</div>
+            </div>
+            <div class="cf-grid cf-grid-2">
+                <a href="diario.html?vista=gestion" class="cf-card" data-icono="ev-caja-fuerte">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon"></div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Caja fuerte</div>
+                    <div class="cf-card-desc">Saldo del resguardo, comisiones bancarias acumuladas y movimientos hacia banco, con el reporte directivo.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+            </div>
+        </div>
 
-        <!-- ══ SUB-MÓDULO 2: CATÁLOGOS ADMIN ══ -->
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Configuración</span>
+                <div class="cf-section-title">Configuración</div>
+                <div class="cf-section-desc">Las cuentas del negocio y lo que se aparta para después.</div>
+            </div>
+            <div class="cf-grid cf-grid-2">
+                <a href="../financiero/cuentas-bancarias.html" class="cf-card" data-icono="fin-cuentas-bancarias">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon"></div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Cuentas bancarias</div>
+                    <div class="cf-card-desc">Cuentas de débito y crédito, comisión por pago con tarjeta; límite, corte y pago en las de crédito.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+                <a href="../financiero/previsiones.html" class="cf-card" data-icono="fin-previsiones">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon"></div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Previsiones</div>
+                    <div class="cf-card-desc">Define y da seguimiento a lo que apartas cada mes por concepto, periodo y sucursal.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+            </div>
+        </div>
+
         <div class="cf-section">
             <div class="cf-section-hdr">
                 <span class="cf-section-tag">Directorios</span>
-                <div class="cf-section-title">Catálogos Admin</div>
-                <div class="cf-section-desc">Proveedores y clientes del negocio.</div>
+                <div class="cf-section-title">Clientes</div>
+                <div class="cf-section-desc">Tus clientes frecuentes.</div>
             </div>
             <div class="cf-grid cf-grid-2">
-                <a href="proveedores.html" class="cf-card">
+                <a href="clientes.html" class="cf-card" data-icono="cat-clientes">
                     <div class="cf-card-hdr">
-                        <div class="cf-card-icon">🚚</div>
-                        <span class="cf-badge-active">Activo</span>
-                    </div>
-                    <div class="cf-card-title">Proveedores</div>
-                    <div class="cf-card-desc">Directorio de proveedores, contactos clave y condiciones de abastecimiento.</div>
-                    <div class="cf-card-cta">Abrir →</div>
-                </a>
-                <a href="clientes.html" class="cf-card">
-                    <div class="cf-card-hdr">
-                        <div class="cf-card-icon">⭐</div>
+                        <div class="cf-card-icon"></div>
                         <span class="cf-badge-active">Activo</span>
                     </div>
                     <div class="cf-card-title">Clientes</div>
@@ -304,9 +337,9 @@
 <script src="/presencia.js?v=431b2b80"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="/novedades.js?v=94a2317e"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=7a651810"></script>
-<script src="/etaax-sidebar.js?v=8faeff96"></script>
+<script src="/etaax-sidebar.js?v=b1bccada"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=2721a8a2"></script>
-<script src="/etaax-modulos-ui.js?v=7733302c"></script>
+<script src="/etaax-modulos-ui.js?v=2ae9008b"></script>
 </body>
 </html>

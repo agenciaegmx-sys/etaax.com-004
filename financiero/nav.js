@@ -21,11 +21,9 @@
         { label: 'Egresos', links: [
             { href: 'gastos-globales.html', icon: '📤', text: 'Gastos Totales' }
         ]},
-        { label: 'Cuentas', links: [
-            { href: 'cuentas-bancarias.html', icon: '🏦', text: 'Cuentas Bancarias', soloSucursal: true }
-        ]},
+        /* (24-nov) Cuentas bancarias y Previsiones se mudaron a Admin·ax
+           (Configuración): sus páginas siguen aquí, su barra es la de Admin·ax. */
         { label: 'Análisis', links: [
-            { href: 'previsiones.html',  icon: '🔮', text: 'Previsiones' },
             { href: 'estadisticas.html', icon: '📊', text: 'Estadísticas' },
             { href: 'kpis.html',         icon: '🎯', text: 'KPIs' }
         ]}
