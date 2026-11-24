@@ -4733,6 +4733,12 @@
    function updPres(i, campo, val) {
        presentacionesTemp[i][campo] = val;
        const p = presentacionesTemp[i];
+       // Cambió cómo se compra: el selector de unidad del stock se rehace (aparece
+       // si ahora viene por caja, se va si ya no).
+       if (['presentacionCompra', 'cantPresCompra', 'umPresCompra'].indexOf(campo) >= 0) {
+           var _sb = document.getElementById('stockBlk-' + i);
+           if (_sb) { try { _sb.outerHTML = _renderStockBlock(p, i, _sb.getAttribute('data-copa') === '1'); } catch (e) {} }
+       }
        // Los tipos de compra por contenido capturan el total, no el peso individual.
        if (campo === 'contSub') _setContSub(p, val);
        // Cambiar cuántas sub-unidades trae la pieza recalcula el total con el mismo
@@ -5253,24 +5259,55 @@
       abarrotes, proteínas, frutas y verduras se quedaban SIN poder definir
       stocks, y son justo las que más se piden. El stock es planeación de
       compra, no precio de venta — por eso va en su propio bloque. */
+   /* EN QUÉ UNIDAD VA CADA UNO (Edwin, 24-nov): si se compra por caja, rejilla
+      o paquete, el mínimo y el máximo traen su selector: piezas (botellas…) o
+      la presentación de compra. Sin elegir vale PIEZA, que es como inventarios
+      lo leyó siempre. Inventarios y requisiciones lo enseñan tal cual y lo
+      convierten con EtaaxCore.stockDefinido. */
+   function _stockUnidades(p) {
+       var ref = (window.EtaaxCore && EtaaxCore.referenciaCompra) ? EtaaxCore.referenciaCompra({}, p) : { piezasPorCompra: 1 };
+       var compra = String(p.presentacionCompra || '').trim();
+       var pieza = String(p.umPresCompra || '').trim();
+       if (!pieza || /^(kg|g|lt|ml)$/i.test(pieza)) pieza = 'Piezas';
+       var plural = function (t) { t = String(t || ''); return /s$/i.test(t) ? t : (/[aeiouáéíóú]$/i.test(t) ? t + 's' : t + 'es'); };
+       return { varias: ref.piezasPorCompra > 1, compra: plural(compra || 'Cajas'), pieza: plural(pieza), factor: ref.piezasPorCompra };
+   }
+   function _stockUmTxt(p, campo) {
+       var u = _stockUnidades(p);
+       if (!u.varias) return String(p.presentacionCompra || p.umPresCompra || 'piezas').toLowerCase();
+       return (p[campo] === 'compra' ? u.compra : u.pieza).toLowerCase();
+   }
+   function _stockUmSel(p, i, campo) {
+       var u = _stockUnidades(p), val = p[campo] === 'compra' ? 'compra' : 'pieza';
+       if (!u.varias) return '<span class="i-stock-um">' + etx(String(p.presentacionCompra || p.umPresCompra || 'piezas').toLowerCase()) + '</span>';
+       return '<select class="i-stock-um" onchange="updPres(' + i + ',\'' + campo + '\',this.value)" aria-label="Unidad">' +
+           '<option value="pieza"' + (val === 'pieza' ? ' selected' : '') + '>' + etx(u.pieza) + '</option>' +
+           '<option value="compra"' + (val === 'compra' ? ' selected' : '') + '>' + etx(u.compra) + ' de ' + u.factor + '</option></select>';
+   }
    function _renderStockBlock(p, i, tieneCopa) {
-       var unidad = tieneCopa ? 'botellas' : 'unidades de compra';
-       return `<div class="i-stock-panel" style="padding-top:12px;border-top:1px solid var(--border)">
+       var u = _stockUnidades(p);
+       return `<div class="i-stock-panel" id="stockBlk-${i}" data-copa="${tieneCopa ? '1' : '0'}" style="padding-top:12px;border-top:1px solid var(--border)">
            <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--blue);margin-bottom:8px">Stock · para requisiciones y alertas</div>
            <div class="meta-grid" style="grid-template-columns:1fr 1fr;gap:8px">
                <div class="meta-item">
                    <label>Stock mínimo</label>
-                   <input type="number" value="${p.stockMin||''}" placeholder="0" min="0" step="1"
-                       oninput="updPres(${i},'stockMin',this.value)">
+                   <div class="i-stock-fila">
+                       <input type="number" value="${p.stockMin||''}" placeholder="0" min="0" step="1"
+                           oninput="updPres(${i},'stockMin',this.value)">
+                       ${_stockUmSel(p, i, 'stockMinUm')}
+                   </div>
                </div>
                <div class="meta-item">
                    <label>Stock máximo</label>
-                   <input type="number" value="${p.stockMax||''}" placeholder="0" min="0" step="1"
-                       oninput="updPres(${i},'stockMax',this.value)">
+                   <div class="i-stock-fila">
+                       <input type="number" value="${p.stockMax||''}" placeholder="0" min="0" step="1"
+                           oninput="updPres(${i},'stockMax',this.value)">
+                       ${_stockUmSel(p, i, 'stockMaxUm')}
+                   </div>
                </div>
            </div>
            <div style="font-size:10.5px;color:var(--text-dim);margin-top:7px;line-height:1.5">
-               En ${unidad}. El mínimo dispara la alerta de "hay que pedir"; el máximo es hasta dónde surtir.
+               ${u.varias ? 'Elige en qué va cada uno: ' + etx(u.pieza.toLowerCase()) + ' o ' + etx(u.compra.toLowerCase()) + ' de ' + u.factor + '. ' : ''}El mínimo dispara la alerta de "hay que pedir"; el máximo es hasta dónde surtir.
            </div>
        </div>`;
    }
@@ -6221,8 +6258,8 @@
                    <div style="background:var(--surface);border-radius:6px;padding:8px 10px;display:flex;gap:16px;flex-wrap:wrap">
                        ${p.precioCarta    ? `<span style="font-size:12px;color:var(--green)">Copa: $${(+p.precioCarta).toFixed(2)}</span>` : ''}
                        ${p.precioCartaBot ? `<span style="font-size:12px;color:var(--green)">Botella: $${(+p.precioCartaBot).toFixed(2)}</span>` : ''}
-                       ${p.stockMin ? `<span style="font-size:11px;color:var(--text-dim)">Stock min: ${p.stockMin}</span>` : ''}
-                       ${p.stockMax ? `<span style="font-size:11px;color:var(--text-dim)">Stock max: ${p.stockMax}</span>` : ''}
+                       ${p.stockMin ? `<span style="font-size:11px;color:var(--text-dim)">Stock mín: ${p.stockMin} ${etx(_stockUmTxt(p, 'stockMinUm'))}</span>` : ''}
+                       ${p.stockMax ? `<span style="font-size:11px;color:var(--text-dim)">Stock máx: ${p.stockMax} ${etx(_stockUmTxt(p, 'stockMaxUm'))}</span>` : ''}
                    </div>` : ''}
                    ${p.notas ? `<div style="font-size:11px;color:var(--text-dim);margin-top:6px">${p.notas}</div>` : ''}
                </div>`).join('')

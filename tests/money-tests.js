@@ -18370,7 +18370,7 @@ console.log('\n══ BH89 · Requisiciones: la regla del pedido y su costo ═�
     // requisiciones.html usa el núcleo y guarda por sucursal
     const req = fs.readFileSync(path.join(RAIZ, 'recetas/requisiciones.html'), 'utf8');
     test('requisiciones calcula con el núcleo (no con su propia copia de la regla)', () =>
-        eq(/EtaaxCore\.pedidoRequisicion\(reqItem\.existencia, pres\.stockMin, pres\.stockMax\)/.test(req) &&
+        eq(/EtaaxCore\.pedidoRequisicion\(reqItem\.existencia, st\.min, st\.max\)/.test(req) && /var st      = EtaaxCore\.stockRequisicion\(ins, pres\);/.test(req) &&
            /costoUnitPieza: ref\.costoUnidadStock/.test(req) && !/exist <= sMin/.test(req), true));
     test('las «piezas» de la captura salen de la presentación de compra, no del rendimiento en onzas', () =>
         eq(/parseFloat\(pres\.rendimiento\) \|\| parseFloat\(pres\.piezas\)/.test(req), false));
@@ -18564,9 +18564,9 @@ console.log('\n══ BH93 · Requisiciones: la tarjeta sencilla ══');
 {
     const req = fs.readFileSync(path.join(RAIZ, 'recetas/requisiciones.html'), 'utf8');
     const cuerpo = (n) => { const i = req.indexOf('function ' + n + '('); return i < 0 ? '' : req.slice(i, req.indexOf('\nfunction ', i + 10)); };
-    const c = { console, JSON, Object, Array, String, Math, parseFloat, isNaN, fmtMXN: (n) => '$' + (n || 0).toFixed(2) };
+    const c = { console, JSON, Object, Array, String, Math, parseFloat, isNaN, fmtMXN: (n) => '$' + (n || 0).toFixed(2), EtaaxCore: Core };
     vm.createContext(c);
-    vm.runInContext(['_numOrEmpty', '_captDe', '_existDeCapt', '_uniStockCapt', '_plur', '_unidadesCapt', '_uni', '_num', '_esc', '_refCompraHTML'].map(cuerpo).join('\n'), c);
+    vm.runInContext(['_numOrEmpty', '_captDe', '_existDeCapt', '_uniStockCapt', '_plur', '_unidadesCapt', '_uni', '_num', '_esc', '_uniDef', '_stockTxtHTML', '_refCompraHTML'].map(cuerpo).join('\n'), c);
     vm.runInContext(`var caja = { piezasPorCompra: 24, porPieza: false, compra: 'Caja', unidadStock: 'Caja', contenido: '355 ml', precioCompra: 480, costoPieza: 20 };
         var bot = { piezasPorCompra: 12, porPieza: true, compra: 'Caja', unidadStock: 'botellas', contenido: '750 ml', precioCompra: 2400, costoPieza: 200 };
         var una = { piezasPorCompra: 1, porPieza: true, compra: 'Botella', unidadStock: 'botellas', contenido: '750 ml', precioCompra: 2065, costoPieza: 2065 };`, c);
@@ -18589,6 +18589,74 @@ console.log('\n══ BH93 · Requisiciones: la tarjeta sencilla ══');
         eq(/Botella de 750 ml/.test(txt('una')) && (txt('una').match(/\$2065\.00/g) || []).length === 1, true));
     test('ya no hay «Usar sugerido»: el pedido es un campo que se habilita con «Pedir otra cantidad»', () =>
         eq(!/Usar sugerido/.test(cuerpo('_cardCaptura')) && /Pedir otra cantidad/.test(cuerpo('_cardCaptura')) && /' readonly'/.test(cuerpo('_cardCaptura')), true));
+}
+
+/* ═══════════ SUITE BH94 · EL STOCK EN SU UNIDAD; ENTRADAS EN PIEZAS Y CON SU HORA ══
+   Edwin, 24-nov: (1) el mínimo y el máximo se eligen en PIEZAS o en la
+   presentación de compra (caja, rejilla…), cada uno con su selector, y se leen
+   así en inventarios y requisiciones. Sin selector vale PIEZA: así lo contó
+   inventarios siempre (Topo Chico 12/24 eran piezas y requisiciones decía
+   «12/24 cajas»). (2) En entradas, «24 piezas» salía como «24 rejillas»: se
+   guardan en piezas y la etiqueta era la de la caja. (3) La hora de captura
+   viaja con cada entrada (decide el periodo de apertura/cierre). */
+console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su hora ══');
+{
+    const caja12 = { presentacionCompra: 'Caja', cantPresCompra: '12', umPresCompra: 'Piezas', precio: '199.13', incluyeImpuesto: '1' };
+    const S = (extra, tipo) => Core.stockRequisicion({ tipoInsumo: tipo || 'refresco' }, Object.assign({}, caja12, extra));
+    test('sin selector (lo de antes) el stock va en PIEZAS: 12/24 piezas = 1/2 cajas para el pedido', () => {
+        const r = S({ stockMin: '12', stockMax: '24' });
+        return eq([r.definido.umMin, r.definido.umMax, r.min, r.max, r.convierte].join('|'), 'pieza|pieza|1|2|true');
+    });
+    test('en cajas: 1/2 cajas se quedan 1/2 (sin conversión)', () => {
+        const r = S({ stockMin: '1', stockMax: '2', stockMinUm: 'compra', stockMaxUm: 'compra' });
+        return eq([r.min, r.max, r.convierte].join('|'), '1|2|false');
+    });
+    test('mezclados: mínimo 6 piezas y máximo 3 cajas → 0.5 y 3 cajas', () => {
+        const r = S({ stockMin: '6', stockMax: '3', stockMaxUm: 'compra' });
+        return eq([r.min, r.max].join('|'), '0.5|3');
+    });
+    test('destilado por caja de 12: el pedido va en botellas; 1 caja de máximo = 12 botellas', () => {
+        const r = S({ stockMin: '6', stockMax: '1', stockMaxUm: 'compra' }, 'destilado');
+        return eq([r.min, r.max].join('|'), '6|12');
+    });
+    test('con una sola unidad (botella suelta) el selector no aplica', () => {
+        const d = Core.stockDefinido({ presentacionCompra: 'Botella', cantPresCompra: '1', stockMin: '2', stockMax: '6', stockMinUm: 'compra' });
+        return eq([d.umMin, d.minPiezas, d.maxPiezas].join('|'), 'pieza|2|6');
+    });
+    test('vacío se queda vacío (no se vuelve cero)', () => eq(String(Core.stockDefinido(Object.assign({}, caja12, { stockMin: '', stockMax: '' })).minPiezas), ''));
+    test('la regla del pedido con 1.17 cajas y mín 12/máx 24 piezas: 1.17 > 1 caja → no se pide (antes pedía 23 cajas)', () => {
+        const r = S({ stockMin: '12', stockMax: '24' });
+        return eq(Core.pedidoRequisicion(1.17, r.min, r.max).pedido, 0);
+    });
+
+    const ins = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    test('editor de insumos: mínimo y máximo con su selector de unidad (piezas / caja de N)', () =>
+        eq(/_stockUmSel\(p, i, 'stockMinUm'\)/.test(ins) && /_stockUmSel\(p, i, 'stockMaxUm'\)/.test(ins) && /updPres\(' \+ i \+ ',\\'' \+ campo \+ '\\',this\.value\)/.test(ins), true));
+    test('…y si cambia cómo se compra, el selector se rehace', () =>
+        eq(/\['presentacionCompra', 'cantPresCompra', 'umPresCompra'\]\.indexOf\(campo\) >= 0/.test(ins), true));
+
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const cuerpo = (n) => { const i = ijs.indexOf('function ' + n + '('); return i < 0 ? '' : ijs.slice(i, ijs.indexOf('\nfunction ', i + 10)); };
+    test('inventarios: los límites se pasan a piezas con la regla del núcleo', () =>
+        eq(/EtaaxCore\.stockDefinido\(/.test(cuerpo('_parametrosStockFila')) && /stockMin: d\.minPiezas, stockMax: d\.maxPiezas/.test(cuerpo('_parametrosStockFila')), true));
+    /* La etiqueta de las entradas, corrida de verdad. */
+    const c = { console, JSON, Object, Array, String, Math, parseFloat };
+    vm.createContext(c);
+    vm.runInContext('var _UCOMPRA = { Caja: "caja", Pieza: "pza" }; var _INS = null; window = { _insumoResolver: function(){ return _INS; } };\n' +
+        ['_empaqueCompra', '_unidadCompra'].map(cuerpo).join('\n'), c);
+    vm.runInContext('_INS = { presentaciones: [{ presentacionCompra: "Rejilla", cantPresCompra: "24", umPresCompra: "Piezas" }] };', c);
+    test('entradas: lo que viene en rejilla de 24 se registra y se lee en PIEZAS (antes: «24 rejillas»)', () =>
+        eq(vm.runInContext('_unidadCompra({ insumoId: "x" })', c), 'pza'));
+    test('…en caja de botellas, en botellas', () =>
+        eq(vm.runInContext('_INS = { presentaciones: [{ presentacionCompra: "Caja", cantPresCompra: "12", umPresCompra: "Botellas" }] }; _unidadCompra({ insumoId: "x" })', c), 'bot'));
+    test('…y el formulario deja escoger «Recibe en» piezas o la rejilla (×24), y guarda piezas', () =>
+        eq(/const cant = _entCantAPiezas\(/.test(ijs) && /Math\.round\(cant \* e\.factor \* 1000\) \/ 1000/.test(cuerpo('_entCantAPiezas')) && /_entUmRapidaHTML\(\)/.test(ijs), true));
+    test('la entrada que se guarda DENTRO del inventario lleva su hora de captura', () =>
+        eq(/registrado: ahora,\s*origen: 'manual', sucursalId: suc,/.test(cuerpo('_entGuardarNuevas')), true));
+    test('…y el respaldo al registro general ya no pisa la hora de captura con la suya', () => {
+        const f = cuerpo('_importarEntradasQR');
+        return eq(/registrado: le\.registrado \|\| new Date\(\)\.toISOString\(\)/.test(f) && !/registrado: le\.registrado \|\| '',[\s\S]{0,300}registrado: new Date/.test(f), true);
+    });
 }
 
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════

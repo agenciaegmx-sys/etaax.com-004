@@ -642,6 +642,7 @@ let _paso4Tab = 'cancelaciones';
 // Vista entradas rápidas
 let _entRapidaInsumoId  = null;
 let _entRapidaTipo      = 'compra';
+let _entRapidaUm        = 'pza';      // 'pza' | 'pres' (caja/rejilla): se guarda SIEMPRE en piezas
 let _entRapidaBusqueda  = '';
 
 // Ficha técnica
@@ -2392,6 +2393,14 @@ function _parametrosStockFila(fila, sucursal) {
         if (ins && ins[k] != null) return ins[k];
         return fila[k];
     }
+    /* Cada límite puede venir en PIEZAS o en la presentación de compra (caja,
+       rejilla…), según su selector del editor (24-nov). Aquí todo se cuenta en
+       piezas: se convierte con la regla del núcleo. Sin selector vale pieza,
+       que es como se leyó siempre. */
+    if (p && p.stockMin != null && window.EtaaxCore && EtaaxCore.stockDefinido) {
+        var d = EtaaxCore.stockDefinido(Object.assign({}, p, { stockMin: leer('stockMin'), stockMax: leer('stockMax') }));
+        return { stockMin: d.minPiezas, stockMax: d.maxPiezas };
+    }
     return { stockMin:leer('stockMin'), stockMax:leer('stockMax') };
 }
 function _stockDeFila(fila, cantidad, sucursal) {
@@ -2954,10 +2963,11 @@ function _importarEntradasQR() {
                 nombre: le.nombreProducto || le.nombre || '—', familia: '',
                 cantidad: parseFloat(le.cantidad) || 0, costo: parseFloat(le.costo) || 0,
                 tipo: le.tipo || '', notas: le.notas || '', fecha: le.fecha || '',
-                origen: le.origen || 'manual', registrado: le.registrado || '',
+                origen: le.origen || 'manual',
                 foto_url: le.foto_url || '', foto_urls: le.foto_urls || [],
                 sucursalId: le.sucursalId || _sucActiva() || 'suc_principal',
-                importadoEnInv: invActual.id, registrado: new Date().toISOString()
+                // La hora en que se CAPTURÓ (la del respaldo solo si no la traía).
+                importadoEnInv: invActual.id, registrado: le.registrado || new Date().toISOString()
             });
             if (le.notaId) Object.assign(_gl[_gl.length - 1], _entNotaCampos(le));
             _glob[le.id] = 1; _added = true;
@@ -2985,6 +2995,14 @@ function _unidadCompra(o) {
     if (umP === 'ML')  return 'ml';
     if (umP === 'KG')  return 'kg';
     if (umP === 'G' || umP === 'GR') return 'g';
+    /* Si viene en caja/rejilla/paquete, las entradas se guardan en PIEZAS (como
+       el QR y el conteo): la etiqueta es la de la pieza, no la de la caja. Antes
+       decía «24 rejillas» cuando se habían registrado 24 piezas (Edwin, 24-nov). */
+    var _emp = _empaqueCompra(ins);
+    if (_emp) {
+        var _pz = String(_emp.um || 'Piezas').toLowerCase();
+        return /^bot/.test(_pz) ? 'bot' : /^pie|^pza/.test(_pz) ? 'pza' : /^lat/.test(_pz) ? 'lata' : _pz;
+    }
     // 2) Se compra por pieza/contenedor → usar el empaque que ve el usuario (Garrafa, Botella, Lata…).
     var emp = ((ins && ins.empaque) || '').toString().toLowerCase();
     if (emp.indexOf('garrafa') >= 0) return 'garrafa';
@@ -7346,7 +7364,8 @@ function guardarEntrada() {
         id: genId() + genId(),
         insumoId: _canonInsumoId(_entradaInsumoId), cantidad, costo, fecha, notas,
         sucursalId: (invActual && invActual.sucursalId) || _sucActiva() || 'suc_principal',
-        origen: 'manual'
+        origen: 'manual',
+        registrado: new Date().toISOString()   // hora de captura (periodo de apertura/cierre)
     });
     cerrarModalEntrada();
     renderStepContent();
@@ -13366,6 +13385,11 @@ function _entGuardarNuevas(regs) {
             invActual.entradasLog.push(Object.assign({
                 id: a.id, insumoId: a.r.insumoId, nombreProducto: a.etq,
                 tipo: a.r.tipo, cantidad: a.r.cantidad, fecha: a.r.fecha,
+                /* La hora de captura también en la copia de ADENTRO del
+                   inventario (24-nov): solo la llevaba la del registro general,
+                   y es la que decide si la entrada cayó antes o después del
+                   cierre. Sin ella el inventario la repartía por día. */
+                registrado: ahora,
                 origen: 'manual', sucursalId: suc,
                 foto_urls: a.fotos, foto_url: a.fotos[0] || ''
             }, a.nota));
@@ -13712,7 +13736,7 @@ function renderChipsEntrada() {
 function seleccionarProductoEntrada(insumoId) {
     /* Solo se cierra el QR de la entrada suelta: si el abierto es el de la
        nota, sigue esperando la foto del ticket mientras se suman productos. */
-    if (_entRapidaInsumoId !== insumoId) { _entRapidaFotos = []; if (_entRapidaQr) { _entRapidaQr = false; _qrEvidCerrar(); } }
+    if (_entRapidaInsumoId !== insumoId) { _entRapidaFotos = []; _entRapidaUm = 'pza'; if (_entRapidaQr) { _entRapidaQr = false; _qrEvidCerrar(); } }
     _entRapidaInsumoId = insumoId;
     renderChipsEntrada();
     renderFormEntrada();
@@ -13769,7 +13793,8 @@ function renderFormEntrada() {
                 <button class="ent-nota-cerrar" title="Cancelar" onclick="limpiarSeleccionEntrada()">✕</button>
             </div>
             <div class="ent-nota-pide-fila">
-                <label><span>Cantidad (${uN})</span>
+                ${_entUmRapidaHTML()}
+                <label><span>Cantidad (${etx(_entUmEtiqueta())})</span>
                     <input type="number" id="entRapidaCant" placeholder="0" min="0" step="any" inputmode="decimal"
                         onkeydown="if(event.key==='Enter')agregarEntradaRapida()"></label>
                 <button class="ent-nota-sumar" onclick="agregarEntradaRapida()">+ Agregar a la nota</button>
@@ -13803,7 +13828,8 @@ function renderFormEntrada() {
             </div>
             <div style="display:flex;gap:12px;align-items:flex-end;margin-top:16px;flex-wrap:wrap">
                 <div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cantidad (${_unidadCompra({insumoId:_entRapidaInsumoId})})</div>
+                    ${_entUmRapidaHTML()}
+                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cantidad (${etx(_entUmEtiqueta())})</div>
                     <input type="number" id="entRapidaCant" placeholder="0" min="0" step="1"
                         style="width:120px;height:52px;font-size:22px;text-align:center;border:1px solid var(--border);
                                border-radius:10px;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
@@ -13839,6 +13865,33 @@ function renderFormEntrada() {
     document.getElementById('entRapidaCant')?.focus();
 }
 
+/* «Recibe en»: piezas o la caja/rejilla de compra (×24). Lo tecleado en cajas
+   se pasa a piezas al registrar; el inventario solo guarda piezas. */
+function _entEmpRapida() { return _entRapidaInsumoId ? _empaqueDeFila({ insumoId: _entRapidaInsumoId }) : null; }
+function _entUmRapidaHTML() {
+    var e = _entEmpRapida(); if (!e) return '';
+    var b = function (m, txt, on) {
+        return '<button type="button" class="ent-um-btn' + (on ? ' on' : '') + '" onclick="setUmEntradaRapida(\'' + m + '\')">' + txt + '</button>';
+    };
+    return '<div class="ent-um"><span>Recibe en</span>' + b('pza', etx(e.um || 'Piezas'), _entRapidaUm !== 'pres') +
+        b('pres', etx(e.label) + ' <small>×' + e.factor + '</small>', _entRapidaUm === 'pres') + '</div>';
+}
+function setUmEntradaRapida(m) {
+    var v = (document.getElementById('entRapidaCant') || {}).value;
+    _entRapidaUm = m === 'pres' ? 'pres' : 'pza';
+    renderFormEntrada();
+    var i = document.getElementById('entRapidaCant'); if (i && v) i.value = v;
+}
+window.setUmEntradaRapida = setUmEntradaRapida;
+function _entUmEtiqueta() {
+    var e = _entEmpRapida();
+    if (e && _entRapidaUm === 'pres') return String(e.label).toLowerCase();
+    return _unidadCompra({ insumoId: _entRapidaInsumoId });
+}
+function _entCantAPiezas(cant) {
+    var e = _entEmpRapida();
+    return (e && _entRapidaUm === 'pres') ? Math.round(cant * e.factor * 1000) / 1000 : cant;
+}
 function setTipoEntrada(tipo) {
     _entRapidaTipo = tipo;
     renderFormEntrada();
@@ -13860,7 +13913,7 @@ function limpiarSeleccionEntrada() {
 
 function agregarEntradaRapida() {
     if (!_entRapidaInsumoId) return;
-    const cant = parseFloat(document.getElementById('entRapidaCant')?.value) || 0;
+    const cant = _entCantAPiezas(parseFloat(document.getElementById('entRapidaCant')?.value) || 0);   // cajas → piezas
     if (cant <= 0) { document.getElementById('entRapidaCant')?.focus(); return; }
     // Con una nota abierta, la cantidad se SUMA a la nota; se registra al final.
     if (_entNotaSync()) { _entNotaSumar(_entRapidaInsumoId, cant); return; }
@@ -15099,6 +15152,25 @@ function abrirFichaTecnica(insumoId) {
     _ftSetFooter('ver');
 }
 
+/* El stock en su unidad (piezas o la presentación de compra), como se definió. */
+function _stockUnidadesInv(p) {
+    var ref = (window.EtaaxCore && EtaaxCore.referenciaCompra) ? EtaaxCore.referenciaCompra({}, p) : { piezasPorCompra: 1 };
+    var pl = function (t) { t = String(t || ''); return /s$/i.test(t) ? t : (/[aeiouáéíóú]$/i.test(t) ? t + 's' : t + 'es'); };
+    var pieza = String(p.umPresCompra || '').trim(); if (!pieza || /^(kg|g|lt|ml)$/i.test(pieza)) pieza = 'Piezas';
+    return { varias: ref.piezasPorCompra > 1, compra: pl(String(p.presentacionCompra || 'Cajas')), pieza: pl(pieza), factor: ref.piezasPorCompra };
+}
+function _stockUmTxtInv(p, campo) {
+    var u = _stockUnidadesInv(p);
+    if (!u.varias) return String(p.presentacionCompra || p.umPresCompra || 'piezas').toLowerCase();
+    return (p[campo] === 'compra' ? u.compra : u.pieza).toLowerCase();
+}
+function _stockUmSelInv(p, id, campo) {
+    var u = _stockUnidadesInv(p); if (!u.varias) return '';
+    var v = p[campo] === 'compra' ? 'compra' : 'pieza';
+    return '<select id="' + id + '" class="ft-input" style="width:auto;flex:0 0 auto">' +
+        '<option value="pieza"' + (v === 'pieza' ? ' selected' : '') + '>' + etx(u.pieza) + '</option>' +
+        '<option value="compra"' + (v === 'compra' ? ' selected' : '') + '>' + etx(u.compra) + ' de ' + u.factor + '</option></select>';
+}
 function _ftRenderVer(ins) {
     document.getElementById('ftNombre').textContent = insumoTitulo(ins);
     const pres = ins.presentaciones || [];
@@ -15153,8 +15225,8 @@ function _ftRenderVer(ins) {
                 <div class="ft-pres-precios">
                     ${p.precioCarta    ? `<span style="font-size:12px;color:var(--green)">Copa: $${(+p.precioCarta).toFixed(2)}</span>` : ''}
                     ${p.precioCartaBot ? `<span style="font-size:12px;color:var(--green)">Botella: $${(+p.precioCartaBot).toFixed(2)}</span>` : ''}
-                    ${p.stockMin ? `<span style="font-size:11px;color:var(--text-dim)">Stock min: ${p.stockMin}</span>` : ''}
-                    ${p.stockMax ? `<span style="font-size:11px;color:var(--text-dim)">Stock max: ${p.stockMax}</span>` : ''}
+                    ${p.stockMin ? `<span style="font-size:11px;color:var(--text-dim)">Stock mín: ${p.stockMin} ${etx(_stockUmTxtInv(p, 'stockMinUm'))}</span>` : ''}
+                    ${p.stockMax ? `<span style="font-size:11px;color:var(--text-dim)">Stock máx: ${p.stockMax} ${etx(_stockUmTxtInv(p, 'stockMaxUm'))}</span>` : ''}
                 </div>` : ''}
                 ${p.notas ? `<div style="font-size:11px;color:var(--text-dim);margin-top:6px">${p.notas}</div>` : ''}
             </div>`).join('')
@@ -15177,8 +15249,8 @@ function _ftRenderEditar(ins) {
             <div><label class="ft-lbl">Familia</label><input id="ft_familia" class="ft-input" value="${(ins.familia||'').replace(/"/g,'&quot;')}"></div>
             <div><label class="ft-lbl">Categoría</label><input id="ft_categoria" class="ft-input" value="${(ins.categoria||'').replace(/"/g,'&quot;')}"></div>
             <div><label class="ft-lbl">Subcategoría</label><input id="ft_subcategoria" class="ft-input" value="${(ins.subcategoria||'').replace(/"/g,'&quot;')}"></div>
-            <div><label class="ft-lbl">Stock mínimo</label><input id="ft_stockMin" type="number" class="ft-input" value="${(p.stockMin!=null&&p.stockMin!=='')?p.stockMin:(ins.stockMin||0)}" min="0"></div>
-            <div><label class="ft-lbl">Stock máximo</label><input id="ft_stockMax" type="number" class="ft-input" value="${(p.stockMax!=null&&p.stockMax!=='')?p.stockMax:(ins.stockMax||0)}" min="0"></div>
+            <div><label class="ft-lbl">Stock mínimo</label><div style="display:flex;gap:6px"><input id="ft_stockMin" type="number" class="ft-input" style="flex:1;min-width:0" value="${(p.stockMin!=null&&p.stockMin!=='')?p.stockMin:(ins.stockMin||0)}" min="0">${_stockUmSelInv(p, 'ft_stockMinUm', 'stockMinUm')}</div></div>
+            <div><label class="ft-lbl">Stock máximo</label><div style="display:flex;gap:6px"><input id="ft_stockMax" type="number" class="ft-input" style="flex:1;min-width:0" value="${(p.stockMax!=null&&p.stockMax!=='')?p.stockMax:(ins.stockMax||0)}" min="0">${_stockUmSelInv(p, 'ft_stockMaxUm', 'stockMaxUm')}</div></div>
         </div>
         <div class="ft-section-title">Presentación principal</div>
         <div class="ft-grid">
@@ -15277,6 +15349,9 @@ function guardarFichaTecnica() {
     // stock desde la ficha no cambiaría nada. Se escriben los dos.
     p.stockMin          = ins.stockMin;
     p.stockMax          = ins.stockMax;
+    var _umMin = document.getElementById('ft_stockMinUm'), _umMax = document.getElementById('ft_stockMaxUm');
+    if (_umMin) p.stockMinUm = _umMin.value;
+    if (_umMax) p.stockMaxUm = _umMax.value;
     try { _skPut(_sk('insumos'), JSON.stringify(lista)); } catch(e) {}
     // Sync fila en inventario activo
     const fila = filasCaptura.find(f => f.insumoId === _ftInsumoId);

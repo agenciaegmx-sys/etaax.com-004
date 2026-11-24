@@ -2006,6 +2006,37 @@
             costoUnidadStock: porPieza ? costoPieza : precioCompra  // el costo de UNA unidad de stock (lo que se pide)
         };
     }
+    /* ── EL STOCK EN LA UNIDAD EN QUE SE DEFINIÓ (Edwin, 24-nov) ──────────────
+       El mínimo y el máximo se definen cada uno en PIEZAS o en la presentación
+       de compra (caja, rejilla, paquete…), con su selector en el editor de
+       Insumos (stockMinUm / stockMaxUm: 'pieza' | 'compra'). Sin selector —lo
+       de antes— vale PIEZA: así lo leía inventarios desde siempre (Topo Chico
+       12 / 24 eran piezas, y requisiciones lo enseñaba como 12 / 24 cajas).
+       Con una sola unidad (se compra por pieza, botella o a granel) no hay
+       nada que convertir. */
+    function stockDefinido(pres) {
+        pres = pres || {};
+        var ppc = referenciaCompra({}, pres).piezasPorCompra;
+        var um = function (u) { return (ppc > 1 && u === 'compra') ? 'compra' : 'pieza'; };
+        var uMin = um(pres.stockMinUm), uMax = um(pres.stockMaxUm);
+        var vacio = function (v) { return v == null || String(v).trim() === ''; };
+        var aPiezas = function (v, u) { return vacio(v) ? v : (u === 'compra' ? n(v) * ppc : n(v)); };
+        return { min: pres.stockMin, max: pres.stockMax, umMin: uMin, umMax: uMax, piezasPorCompra: ppc,
+                 minPiezas: aPiezas(pres.stockMin, uMin), maxPiezas: aPiezas(pres.stockMax, uMax) };
+    }
+    /* El mismo stock en la unidad en que la requisición cuenta y pide (la del
+       stock de referenciaCompra: cajas para un refresco por caja, botellas para
+       un destilado aunque se compre por caja). */
+    function stockRequisicion(ins, pres) {
+        var ref = referenciaCompra(ins, pres), d = stockDefinido(pres);
+        var porCompra = ref.piezasPorCompra > 1 && !ref.porPieza;
+        var enStock = function (v) {
+            if (v == null || String(v).trim() === '') return v;
+            return porCompra ? Math.round(n(v) / ref.piezasPorCompra * 10000) / 10000 : n(v);
+        };
+        return { min: enStock(d.minPiezas), max: enStock(d.maxPiezas), definido: d, ref: ref,
+                 convierte: ref.piezasPorCompra > 1 && (porCompra ? (d.umMin === 'pieza' || d.umMax === 'pieza') : (d.umMin === 'compra' || d.umMax === 'compra')) };
+    }
     /* La regla del pedido (Edwin): existencia IGUAL O MENOR al mínimo → se pide
        lo que falta para llegar al MÁXIMO; mayor al mínimo → no se pide. Sin
        máximo no hay a dónde surtir. En la unidad del stock, hacia arriba. */
@@ -2280,6 +2311,7 @@
         contenidoUtilPresentacion: contenidoUtilPresentacion,
         factorImpuestoPresentacion: factorImpuestoPresentacion,
         referenciaCompra: referenciaCompra, pedidoRequisicion: pedidoRequisicion,
+        stockDefinido: stockDefinido, stockRequisicion: stockRequisicion,
         costosAbarrote: costosAbarrote,
         costosPresentacion: costosAbarrote,
         contenidoCompraPresentacion: contenidoCompraPresentacion,

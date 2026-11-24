@@ -879,8 +879,11 @@ function calcItem(ins, reqItem) {
     var presIdx = reqItem.presIdx || 0;
     var pres    = (ins.presentaciones || [])[presIdx] || (ins.presentaciones || [])[0] || {};
     var ref     = EtaaxCore.referenciaCompra(ins, pres);
-    var r       = EtaaxCore.pedidoRequisicion(reqItem.existencia, pres.stockMin, pres.stockMax);
-    return { estado: r.estado, pedidoSugerido: r.pedido, costoUnitPieza: ref.costoUnidadStock, pres: pres, ref: ref };
+    /* El mínimo y el máximo, cada uno en la unidad en que se definió (piezas o
+       cajas), pasados a la unidad en que se cuenta y se pide (24-nov). */
+    var st      = EtaaxCore.stockRequisicion(ins, pres);
+    var r       = EtaaxCore.pedidoRequisicion(reqItem.existencia, st.min, st.max);
+    return { estado: r.estado, pedidoSugerido: r.pedido, costoUnitPieza: ref.costoUnidadStock, pres: pres, ref: ref, st: st };
 }
 
 function pedidoFinal(calc, reqItem) {
@@ -1127,8 +1130,7 @@ function _reqItemHTML(ins, reg) {
         var e = _num(ri.existencia);
         dato = '<span class="p12-der">' + _resultadoFilaHTML(ins, ri) + '<small>Hay ' + e + ' ' + _esc(_uni(ref, e)) + '</small></span>';
     } else {
-        var hayStock = parseFloat(pres.stockMax) > 0 || parseFloat(pres.stockMin) > 0;
-        dato = '<span class="p12-ant">' + (hayStock ? 'mín ' + _num(pres.stockMin) + ' · máx ' + _num(pres.stockMax) + ' ' + _esc(_uni(ref, 2)) : 'Sin stock definido') + '</span>';
+        dato = '<span class="p12-ant">' + _esc(_stockCorto(ins, pres, ref)) + '</span>';
     }
     return '<button class="p12-item' + (reg ? ' reg' : '') + '" data-id="' + _esc(ins.id) + '" onclick="abrirCapturaReq(\'' + ins.id + '\')">' +
         '<span class="p12-nom">' + _esc(ins.nombre) + (ins.variedad ? ' ' + _esc(ins.variedad) : '') + (meta ? '<small>' + meta + '</small>' : '') + '</span>' +
@@ -1229,15 +1231,41 @@ function _refCompraHTML(ins, pres, ref) {
     var precio = (ref.precioCompra > 0 ? fmtMXN(ref.precioCompra) + ' <span>por ' + _esc(comp) + '</span>' : '<span>Sin precio</span>') +
         (caja && ref.costoPieza > 0 ? '<small>' + fmtMXN(ref.costoPieza) + ' por ' + pieza + '</small>' : '') +
         (ref.costoSubUnidad > 0 ? '<small>' + fmtMXN(ref.costoSubUnidad) + ' por ' + _esc(ref.nombreSubUnidad) + '</small>' : '');
-    var hayStock = parseFloat(pres.stockMax) > 0 || parseFloat(pres.stockMin) > 0;
-    var stock = hayStock
-        ? 'mín <b class="rq-min">' + _num(pres.stockMin) + '</b> · máx <b class="rq-max">' + _num(pres.stockMax) + '</b><small>en ' + _esc(_uni(ref, 2)) + '</small>'
-        : '<span class="rq-sin">Sin definir</span><small>defínelo en la ficha técnica</small>';
+    var stock = _stockTxtHTML(ins, pres, ref);
     return '<div class="rq-ref">' +
         '<div><div class="rq-ref-l">Presentación de compra</div><div class="rq-ref-v">' + presTxt + '</div></div>' +
         '<div><div class="rq-ref-l">Precio de compra</div><div class="rq-ref-v">' + precio + '</div></div>' +
         '<div><div class="rq-ref-l">Stock</div><div class="rq-ref-v">' + stock + '</div></div>' +
     '</div>';
+}
+
+/* El stock TAL COMO SE DEFINIÓ en el editor (12 piezas, 1 caja…) y, si la
+   requisición lo cuenta en otra unidad, su equivalente para el pedido. */
+function _uniDef(ref, um, n) {
+    if (ref.piezasPorCompra > 1) {
+        if (um === 'compra') return n === 1 ? String(ref.compra).toLowerCase() : _plur(String(ref.compra).toLowerCase());
+        return ref.porPieza ? (n === 1 ? 'botella' : 'botellas') : (n === 1 ? 'pieza' : 'piezas');
+    }
+    return _uni(ref, n);
+}
+function _stockTxtHTML(ins, pres, ref) {
+    var st = EtaaxCore.stockRequisicion(ins, pres), d = st.definido;
+    var hay = parseFloat(d.max) > 0 || parseFloat(d.min) > 0;
+    if (!hay) return '<span class="rq-sin">Sin definir</span><small>defínelo en la ficha técnica</small>';
+    var mn = _num(d.min), mx = _num(d.max);
+    var txt = d.umMin === d.umMax
+        ? 'mín <b class="rq-min">' + mn + '</b> · máx <b class="rq-max">' + mx + '</b><small>en ' + _esc(_uniDef(ref, d.umMin, 2)) + '</small>'
+        : 'mín <b class="rq-min">' + mn + '</b> ' + _esc(_uniDef(ref, d.umMin, mn)) + ' · máx <b class="rq-max">' + mx + '</b> ' + _esc(_uniDef(ref, d.umMax, mx));
+    if (st.convierte) txt += '<small>Para el pedido: ' + _num(st.min) + ' – ' + _num(st.max) + ' ' + _esc(_uni(ref, 2)) + '</small>';
+    return txt;
+}
+/* Corto, para la lista de pendientes. */
+function _stockCorto(ins, pres, ref) {
+    var d = EtaaxCore.stockDefinido(pres);
+    if (!(parseFloat(d.max) > 0 || parseFloat(d.min) > 0)) return 'Sin stock definido';
+    return d.umMin === d.umMax
+        ? 'mín ' + _num(d.min) + ' · máx ' + _num(d.max) + ' ' + _uniDef(ref, d.umMin, 2)
+        : 'mín ' + _num(d.min) + ' ' + _uniDef(ref, d.umMin, _num(d.min)) + ' · máx ' + _num(d.max) + ' ' + _uniDef(ref, d.umMax, _num(d.max));
 }
 
 /* ── LAS DOS CANTIDADES Y SU UNIDAD ──────────────────────────────────────────
@@ -1292,11 +1320,16 @@ function _resultadoInfo(ins, ri) {
     if (calc.estado === 'sin-stock') return { cls: 'aviso', html: '<b>' + _icReq('rem-alerta', 16) + 'Sin stock mínimo/máximo</b><span>Defínelo en la ficha técnica para saber cuánto pedir.' +
         (hasManual && pFin > 0 ? ' Pediste a mano: ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '.' : '') + '</span>' };
     var tienes = 'Tienes ' + _num(e) + ' ' + _esc(_uni(ref, _num(e)));
+    var st = calc.st, dd = st.definido;
+    var limTxt = function (v, def, um) {
+        return _num(v) + (st.convierte && um !== (ref.piezasPorCompra > 1 && !ref.porPieza ? 'compra' : 'pieza') ? ' (' + _num(def) + ' ' + _esc(_uniDef(ref, um, _num(def))) + ')' : '');
+    };
+    var minTxt = limTxt(st.min, dd.min, dd.umMin), maxTxt = limTxt(st.max, dd.max, dd.umMax);
     if (pFin > 0) return { cls: 'pedir', html: '<b>' + _icReq('ins-stock', 16) + 'Hay pedido: ' + pFin + ' ' + _esc(_uni(ref, pFin)) + ' · ' + fmtMXN(pFin * calc.costoUnitPieza) + '</b>' +
         '<span>' + (hasManual ? 'Cantidad que pusiste a mano (la sugerida es ' + calc.pedidoSugerido + ').'
-            : tienes + ' y el mínimo es ' + _num(pres.stockMin) + ': se pide hasta el máximo (' + _num(pres.stockMax) + ').') +
+            : tienes + ' y el mínimo es ' + minTxt + ': se pide hasta el máximo (' + maxTxt + ').') +
         (ref.porPieza && ref.piezasPorCompra > 1 ? ' Son ' + _num(pFin / ref.piezasPorCompra) + ' ' + _esc(ref.compra.toLowerCase()) + '(s) de ' + ref.piezasPorCompra + '.' : '') + '</span>' };
-    return { cls: 'ok', html: '<b>' + _icReq('adm-pagado', 16) + 'No hay pedido</b><span>' + (hasManual ? 'Lo pusiste en 0 a mano.' : tienes + ': más que el mínimo (' + _num(pres.stockMin) + ').') + '</span>' };
+    return { cls: 'ok', html: '<b>' + _icReq('adm-pagado', 16) + 'No hay pedido</b><span>' + (hasManual ? 'Lo pusiste en 0 a mano.' : tienes + ': más que el mínimo (' + minTxt + ').') + '</span>' };
 }
 function _resultadoHTML(ins, ri) { var r = _resultadoInfo(ins, ri); return '<div class="rq-res ' + r.cls + '">' + r.html + '</div>'; }
 function _sigTxt(reg) {
@@ -2486,7 +2519,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="../supabase-config.js"></script>
 <script src="/reporte-marca.js?v=90a9c06c"></script>
 <script src="/insumo-label.js?v=789551ec"></script>
-<script src="/etaax-core.js?v=cbd0e7ae"></script>
+<script src="/etaax-core.js?v=def2b0d3"></script>
 <script src="/etaax-store.js?v=3bbcc75c"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="../security.js?v=c188734e"></script>

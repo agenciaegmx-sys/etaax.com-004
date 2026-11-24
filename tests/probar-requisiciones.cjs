@@ -50,7 +50,7 @@ function nube(plan) {
             // Refresco por caja de 24: el stock va en CAJAS y cada caja cuesta $480.
             ins('a_coca', { nombre: 'Coca-Cola', familia: 'Refrescos', area: 'barra', tipoInsumo: 'refresco', sucursales: ['suc_principal'],
                 presentaciones: [{ nombre: 'Caja', presentacionCompra: 'Caja', cantPresCompra: '24', precio: '480', incluyeImpuesto: '1', costoPieza: '20',
-                                   contNeto: '355', umContenido: 'ML', stockMin: '2', stockMax: '6' }] }),
+                                   contNeto: '355', umContenido: 'ML', stockMin: '2', stockMax: '6', stockMinUm: 'compra', stockMaxUm: 'compra' }] }),
             ins('a_limon', { nombre: 'Limón', familia: 'Frutas', area: 'cocina', sucursales: ['suc_principal', 'suc_dos'] }),
             ins('a_ron', { nombre: 'Ron Blanco', familia: 'Destilados', sucursales: ['suc_dos'] }),          // de otra sucursal
             ins('a_batch', { nombre: 'Batch Paloma', esSubReceta: true, sucursales: ['suc_principal'] })    // sub-receta
@@ -251,6 +251,18 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             assert.match(await resultado(), /Hay pedido: 4 cajas/);
         });
         await p.evaluate(() => { delete _reqPedEdit.a_coca; _pintarCardReq(); });
+        await caso('stock definido en PIEZAS (Topo Chico: caja de 12, mín 12 · máx 24): se lee en piezas y el pedido va en cajas', async () => {
+            const r = await p.evaluate(() => {
+                const ins = { id: 't', nombre: 'Topo Chico', tipoInsumo: 'refresco', presentaciones: [{ presentacionCompra: 'Caja', cantPresCompra: '12', umPresCompra: 'Piezas', precio: '199.13', incluyeImpuesto: '1', stockMin: '12', stockMax: '24' }] };
+                const pres = ins.presentaciones[0], ref = EtaaxCore.referenciaCompra(ins, pres);
+                const d = document.createElement('div'); d.innerHTML = _refCompraHTML(ins, pres, ref);
+                return { card: d.textContent.replace(/\s+/g, ' '), lista: _stockCorto(ins, pres, ref), calc: calcItem(ins, { existencia: 1.17 }), calc2: calcItem(ins, { existencia: 0.5 }) };
+            });
+            assert.match(r.card, /mín 12 · máx 24\s*en piezas\s*Para el pedido: 1 – 2 cajas/);
+            assert.equal(r.lista, 'mín 12 · máx 24 piezas');
+            assert.deepEqual([r.calc.estado, r.calc.pedidoSugerido], ['bajo', 0], '1.17 cajas > 1 caja: no se pide (antes pedía 23 cajas)');
+            assert.deepEqual([r.calc2.estado, r.calc2.pedidoSugerido], ['critico', 2]);
+        });
         await caso('con una de 1 sola botella: «Botella de 750 ml» y su precio una vez', async () => {
             const t = await p.evaluate(() => { const r = EtaaxCore.referenciaCompra({ tipoInsumo: 'destilado' }, { presentacionCompra: 'Botella', precio: '2065', incluyeImpuesto: '1', contNeto: '750', umContenido: 'ML' });
                 const d = document.createElement('div'); d.innerHTML = _refCompraHTML({}, { presentacionCompra: 'Botella' }, r); return d.textContent.replace(/\s+/g, ' '); });

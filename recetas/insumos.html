@@ -537,8 +537,8 @@ document.addEventListener('DOMContentLoaded', function(){
     </div>
 </div>
 
-<script src="/etaax-core.js?v=cbd0e7ae"></script>
-<script src="/recetas/insumos.js?v=12c6dede"></script>
+<script src="/etaax-core.js?v=def2b0d3"></script>
+<script src="/recetas/insumos.js?v=e2506855"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -701,6 +701,11 @@ async function migrarFotosNegocio() {
    exactamente el tipo de cosa que se olvida. */
 body.ins-sin-costos .ins-col-costo,
 body.ins-sin-costos .ins-col-prov { display: none; }
+/* Stock mínimo / máximo con su unidad (piezas o la presentación de compra). */
+.i-stock-fila { display: flex; gap: 6px; align-items: stretch; }
+.i-stock-fila input { flex: 1 1 auto; min-width: 0; }
+.meta-item .i-stock-fila select.i-stock-um { flex: 0 0 auto; width: auto; max-width: 55%; font-weight: 600; cursor: pointer; }
+.i-stock-fila span.i-stock-um { display: flex; align-items: center; padding: 0 8px; font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
 </style>
 
 <style>
