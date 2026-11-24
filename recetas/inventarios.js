@@ -6044,8 +6044,8 @@ function _herrSelectsCapt(conModo) {
 function _herrBuscarCapt() { return _herrBuscar('phBuscar', busquedaCapt, 'Buscar…', 'onBusqueda'); }
 function _herrVistaToggle() {
     return `<div class="vista-toggle" title="Ver en lista o en iconos">
-        <button class="${modoListaCapt==='lista'?'active':''}" onclick="setModoCaptura('lista')" title="Lista">≡</button>
-        <button class="${modoListaCapt==='galeria'?'active':''}" onclick="setModoCaptura('galeria')" title="Iconos">⊞</button>
+        <button class="${modoListaCapt==='lista'?'active':''}" onclick="setModoCaptura('lista')" title="Lista">${_icInv('ins-lista', 14)}Lista</button>
+        <button class="${modoListaCapt==='galeria'?'active':''}" onclick="setModoCaptura('galeria')" title="Galería">${_icInv('ins-galeria', 14)}Galería</button>
     </div>`;
 }
 // Buscador + familia/categoría/subcategoría (+ Lista/Galería) de las listas de captura.
@@ -6070,8 +6070,8 @@ function _herrFiltrosCapt(conModo) {
             ${subcats.map(x=>`<option value="${etx(x)}" ${filtroSubcatActiva===x?'selected':''}>${etx(x)}</option>`).join('')}
         </select>` : ''}
         ${conModo ? `<div class="vista-toggle" title="Ver en lista o en galería">
-            <button class="${modoListaCapt==='lista'?'active':''}" onclick="setModoCaptura('lista')" title="Lista">≡</button>
-            <button class="${modoListaCapt==='galeria'?'active':''}" onclick="setModoCaptura('galeria')" title="Galería">⊞</button>
+            <button class="${modoListaCapt==='lista'?'active':''}" onclick="setModoCaptura('lista')" title="Lista">${_icInv('ins-lista', 14)}Lista</button>
+            <button class="${modoListaCapt==='galeria'?'active':''}" onclick="setModoCaptura('galeria')" title="Galería">${_icInv('ins-galeria', 14)}Galería</button>
         </div>` : ''}`;
 }
 function _herrPasoHTML() {
@@ -6124,8 +6124,8 @@ function _herrPasoHTML() {
             </select>
             <button class="btn-vista" onclick="abrirImprimirS5()" title="Imprimir lo filtrado: exactamente lo que está en pantalla, eligiendo qué grupos van en la hoja">${_icInv('adm-imprimir')}Imprimir</button>
             <div class="vista-toggle">
-                <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">≡ Lista</button>
-                <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
+                <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">${_icInv('ins-lista', 14)}Lista</button>
+                <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">${_icInv('ins-galeria', 14)}Galería</button>
             </div>`);
     }
     return '';
@@ -6176,8 +6176,8 @@ function buildToolbar(conModo = true) {
             ${subcats.map(s=>`<option value="${s}" ${filtroSubcatActiva===s?'selected':''}>${s}</option>`).join('')}
         </select>` : ''}
         ${conModo ? `<div class="vista-toggle" style="margin-left:auto">
-            <button class="${modoListaCapt==='lista'?'active':''}" onclick="setModoCaptura('lista')">≡ Lista</button>
-            <button class="${modoListaCapt==='galeria'?'active':''}" onclick="setModoCaptura('galeria')">⊞ Galería</button>
+            <button class="${modoListaCapt==='lista'?'active':''}" onclick="setModoCaptura('lista')">${_icInv('ins-lista', 14)}Lista</button>
+            <button class="${modoListaCapt==='galeria'?'active':''}" onclick="setModoCaptura('galeria')">${_icInv('ins-galeria', 14)}Galería</button>
         </div>` : ''}
     </div>`;
 }
@@ -6244,7 +6244,7 @@ function buildVistaSwitcherExist() {
         <button class="exist-vista-btn ${vistaCapturaExist==='busqueda'?'active':''}"
             onclick="setVistaExist('busqueda')">🔍 Búsqueda rápida</button>
         <button class="exist-vista-btn ${vistaCapturaExist==='lista'?'active':''}"
-            onclick="setVistaExist('lista')">≡ Lista completa</button>
+            onclick="setVistaExist('lista')">${_icInv('ins-lista', 14)}Lista completa</button>
     </div>`;
 }
 
@@ -6267,7 +6267,7 @@ function _avisoCatalogoHTML() {
 function _avisoCatalogoTexto() {
     return '<div class="wrap" style="padding-top:0"><div style="padding:8px 14px;border:1px solid var(--border);' +
         'border-left:3px solid #7ab8f5;border-radius:8px;background:var(--surface);font-size:12.5px;color:var(--text-dim)">' +
-        '⏳ Actualizando el catálogo desde la nube: la lista puede crecer en unos segundos.</div></div>';
+        _icInv('sto-reloj', 14) + 'Actualizando el catálogo desde la nube: la lista puede crecer en unos segundos.</div></div>';
 }
 function _quitarAvisoCatalogo() { var el = document.getElementById('avisoCatInv'); if (el) el.innerHTML = ''; }
 function _avisoAreaHTML() {
@@ -6284,7 +6284,7 @@ function _avisoAreaHTML() {
     if (sinArea)  parts.push('<b style="color:var(--text)">'+sinArea+'</b> sin área');
     if (otraArea) parts.push('<b style="color:var(--text)">'+otraArea+'</b> de otra área');
     return '<div class="wrap" style="padding-top:0"><div style="padding:10px 14px;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;background:var(--surface);font-size:12.5px;color:var(--text-dim);line-height:1.5">'+
-        '📍 '+parts.join(' · ')+' no aparecen en este inventario de <b style="color:var(--text)">'+etx(invA||'—')+'</b>. Asígnales su área en el <b>Catálogo de insumos</b> (campo «📍 Área — dónde se guarda») para incluirlas aquí.</div></div>';
+        _icInv('ins-zona', 14)+parts.join(' · ')+' no aparecen en este inventario de <b style="color:var(--text)">'+etx(invA||'—')+'</b>. Asígnales su área en el <b>Catálogo de insumos</b> (campo «Área — dónde se guarda») para incluirlas aquí.</div></div>';
 }
 
 /* ══ EL PASO 1 EN DOS COLUMNAS (Edwin, 19-nov) ══════════════════════════
@@ -6331,7 +6331,7 @@ function _p1ListasPintar() {
     const cls = 'p12-lista' + (modoListaCapt === 'galeria' ? ' p12-iconos' : '');
     const vacio = (t) => `<div class="p12-vacio">${t}</div>`;
     pend.className = cls; reg.className = cls;
-    pend.innerHTML = p.length ? p.map(f => _p1ItemHTML(f, false)).join('') : vacio(q ? 'Sin pendientes con «' + etx(_existBusqueda) + '»' : '¡Ya se contó todo! 🎉');
+    pend.innerHTML = p.length ? p.map(f => _p1ItemHTML(f, false)).join('') : vacio(q ? 'Sin pendientes con «' + etx(_existBusqueda) + '»' : _icInv('adm-pagado', 16) + '¡Ya se contó todo!');
     reg.innerHTML = r.length ? r.map(f => _p1ItemHTML(f, true)).join('') : vacio(q ? 'Sin registrados con «' + etx(_existBusqueda) + '»' : 'Aún no hay existencias registradas');
     const np = document.getElementById('p1NPend'), nr = document.getElementById('p1NReg');
     if (np) np.textContent = p.length + (q ? ' de ' + filasCaptura.filter(f => !_esRegistrado(f)).length : '');
@@ -6969,7 +6969,7 @@ function buildVistaSwitcherEnt() {
         <button class="exist-vista-btn ${vistaEntradas2==='busqueda'?'active':''}"
             onclick="setVistaEntradas2('busqueda')">🔍 Búsqueda rápida</button>
         <button class="exist-vista-btn ${vistaEntradas2==='lista'?'active':''}"
-            onclick="setVistaEntradas2('lista')">≡ Lista completa</button>
+            onclick="setVistaEntradas2('lista')">${_icInv('ins-lista', 14)}Lista completa</button>
     </div>`;
 }
 
@@ -9646,8 +9646,8 @@ function renderStep5() {
         <button class="btn-vista" style="font-size:11px" onclick="abrirImprimirS5()"
                 title="Imprime exactamente lo que está en pantalla, eligiendo qué grupos van en la hoja">🖨️ Imprimir lo filtrado</button>
         <div class="vista-toggle" style="margin-left:auto">
-            <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">≡ Lista</button>
-            <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
+            <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">${_icInv('ins-lista', 14)}Lista</button>
+            <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">${_icInv('ins-galeria', 14)}Galería</button>
         </div>
     </div></div>`;
     void searchBar5;   // el buscador y los filtros van en la barra del paso (encabezado fijo)

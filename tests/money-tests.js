@@ -18636,6 +18636,16 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         eq(/\['presentacionCompra', 'cantPresCompra', 'umPresCompra'\]\.indexOf\(campo\) >= 0/.test(ins), true));
     test('…con el mismo campo de la existencia en requisiciones (cantidad + unidad en una caja)', () =>
         eq((ins.match(/<div class="i-stock-cant">/g) || []).length, 2));
+    /* (24-nov) Lista | Galería igual en todas las vistas, y flechas gruesas. */
+    test('los botones de vista dicen «Lista» y «Galería» con su ícono (sin ≡ ⊞ ☰)', () => {
+        const fuentes = ['recetas/inventarios.js', 'recetas/requisiciones.html', 'recetas/insumos.html', 'recetas/index.html', 'admin-catalogo-insumos.html']
+            .map(f => fs.readFileSync(path.join(RAIZ, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, ''));
+        return eq(fuentes.some(t => /[≡⊞☰]\s*(Lista|Galería)?\s*<\/button>|>\s*[≡⊞☰]/.test(t)), false);
+    });
+    test('flechas gruesas: «← Volver» y las flechas ← → se dibujan (etaax-iconos.js), en toda la app', () => {
+        const ic = fs.readFileSync(path.join(RAIZ, 'etaax-iconos.js'), 'utf8');
+        return eq(/stroke-width="2\.8"/.test(ic) && /_RE_INI = \/\^\\s\*\(←\|→\)\\s\*\//.test(ic) && /new MutationObserver/.test(ic), true);
+    });
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
         return eq(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(cuerpo) || !/_insMenuItem\('ins-editar'/.test(cuerpo), false);
@@ -36880,7 +36890,7 @@ console.log('\n══ BH79 · El catálogo completo y la barra del paso ══')
        y lista/iconos. */
     test('Paso 1: el buscador, los contadores de pendientes y registrados, y lista/iconos', () => {
         const h = barra(1);
-        return eq(txt(h) + ' · ' + /id="existBuscador"/.test(h) + ' · ' + /setModoCaptura\('galeria'\)/.test(h), 'Pendientes 1 Registrados 1 ≡ ⊞ · true · true');
+        return eq(txt(h) + ' · ' + /id="existBuscador"/.test(h) + ' · ' + /setModoCaptura\('galeria'\)/.test(h), 'Pendientes 1 Registrados 1 Lista Galería · true · true');   // (24-nov) con su ícono y su nombre, como en todas las vistas
     });
     test('…y ya sin «Rápida / Lista» ni filtros de familia', () => {
         const h = barra(1);

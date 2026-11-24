@@ -506,7 +506,9 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await caso('Paso 1: el buscador y los contadores en la barra, sin «Rápida / Lista»', async () => {
                 const b = await barra();
                 assert.match(b, /Pendientes \d+ Registrados \d+/);
-                assert.ok(!/Rápida|Lista/.test(b), b);
+                // Lo que no debe volver es el selector viejo «Búsqueda rápida / Lista completa»;
+                // el botón de vista «Lista | Galería» (con sus íconos, 24-nov) sí va.
+                assert.ok(!/Rápida|Lista completa/.test(b), b);
             });
             await escribir('#existBuscador', 'Destilado 1');
             await caso('…escribir filtra pendientes Y registrados, y el foco se queda en el buscador', async () => {
@@ -1031,7 +1033,7 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await page.evaluate(() => irAPaso(2)); await page.waitForTimeout(300);
             await caso('Paso 2: junto al buscador, lista o cuadrícula (sin «Rápida / Lista»)', async () => {
                 const b = await page.evaluate(() => ({ t: document.getElementById('pasoHerr').innerText, tg: !!document.querySelector('#pasoHerr .vista-toggle') }));
-                assert.ok(b.tg && !/Rápida|Lista/.test(b.t), JSON.stringify(b));
+                assert.ok(b.tg && !/Rápida|Lista completa/.test(b.t), JSON.stringify(b));
             });
             await page.evaluate(() => setModoCaptura('galeria')); await page.waitForTimeout(300);
             await caso('…y en cuadrícula los insumos van en mosaicos, con lo registrado a la derecha', async () => {

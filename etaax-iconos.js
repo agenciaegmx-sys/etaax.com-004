@@ -600,11 +600,68 @@
             'color:var(--etx-color, var(--text, #f0ece4));stroke:currentColor;' +
             'stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}' +
             '.etx-punto{fill:var(--green,#3DBE7A);stroke:none}' +
-            '.etx-trazo{stroke:var(--green,#3DBE7A)}';
+            '.etx-trazo{stroke:var(--green,#3DBE7A)}' +
+            /* La flecha gruesa: del color del texto del botón, alineada con él. */
+            '.etx-flecha-w{display:inline-flex;align-items:center;vertical-align:-3px;line-height:0}' +
+            '.etx-flecha-w.ini{margin-right:6px}.etx-flecha-w.fin{margin-left:6px}' +
+            '.etx-flecha-sola .etx-flecha-w.ini,.etx-flecha-sola .etx-flecha-w.fin{margin:0}' +
+            '.etx-flecha{width:18px;height:18px;flex-shrink:0}';
         (document.head || document.documentElement).appendChild(st);
     }
 
-    function listo() { pintarEstilo(); pintarSprite(); }
+    /* ══ FLECHAS GRUESAS (Edwin, 24-nov) ═════════════════════════════════════
+       «← Volver», las flechas ← → de la barra del negocio y los «Siguiente →»
+       eran el carácter de texto, delgado y casi invisible en la tablet. Aquí se
+       cambian por una flecha dibujada, gruesa, en TODA la app: botón o enlace
+       cuyo texto empieza con «←» o termina con «→». Se revisa solo lo que se
+       agrega a la página (no se recorre todo cada vez). */
+    var _RE_INI = /^\s*(←|→)\s*/, _RE_FIN = /\s*(→)\s*$/;
+    function _flechaSVG(dir) {
+        return '<svg class="etx-flecha" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" ' +
+            'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            (dir === '←' ? '<path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/>' : '<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>') + '</svg>';
+    }
+    function _flechaEn(el) {
+        if (!el || el.nodeType !== 1 || el.querySelector(':scope > .etx-flecha-w')) return;
+        var nodos = Array.prototype.filter.call(el.childNodes, function (n) { return !(n.nodeType === 3 && !n.textContent.trim()); });
+        if (!nodos.length) return;
+        var pon = function (ref, dir, antes) {
+            var w = document.createElement('span'); w.className = 'etx-flecha-w ' + (antes ? 'ini' : 'fin'); w.innerHTML = _flechaSVG(dir);
+            el.insertBefore(w, antes ? ref : ref.nextSibling);
+        };
+        var a = nodos[0], z = nodos[nodos.length - 1], m;
+        if (a.nodeType === 3 && (m = a.textContent.match(_RE_INI))) {
+            a.textContent = a.textContent.replace(_RE_INI, '');
+            pon(a, m[1], true);
+        } else if (z.nodeType === 3 && (m = z.textContent.match(_RE_FIN))) {
+            z.textContent = z.textContent.replace(_RE_FIN, '');
+            pon(z, m[1], false);
+        } else return;
+        if (!el.textContent.trim()) { el.classList.add('etx-flecha-sola'); if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', el.title || 'Ir'); }
+    }
+    function _flechasEn(raiz) {
+        if (!raiz || raiz.nodeType !== 1) return;
+        if (raiz.matches && raiz.matches('button, a')) _flechaEn(raiz);
+        var l = raiz.querySelectorAll ? raiz.querySelectorAll('button, a') : [];
+        for (var i = 0; i < l.length; i++) _flechaEn(l[i]);
+    }
+    window.etaaxFlechas = _flechasEn;
+    function _flechasVigilar() {
+        _flechasEn(document.body);
+        if (!window.MutationObserver) return;
+        new MutationObserver(function (ms) {
+            for (var i = 0; i < ms.length; i++) {
+                var m = ms[i];
+                if (m.target && m.target.nodeType === 1 && m.target.matches && m.target.matches('button, a')) _flechaEn(m.target);
+                for (var j = 0; j < m.addedNodes.length; j++) {
+                    var n = m.addedNodes[j];
+                    if (n.nodeType === 1 && n.id !== ID && !(n.classList && n.classList.contains('etx-flecha-w'))) _flechasEn(n);
+                }
+            }
+        }).observe(document.body, { childList: true, subtree: true });
+    }
+
+    function listo() { pintarEstilo(); pintarSprite(); try { _flechasVigilar(); } catch (e) {} }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', listo);
     else listo();
 

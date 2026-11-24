@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', function(){
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX - Requisiciones</title>
     <!-- Presentación inicial: descargar antes de llegar a los scripts del final. -->
-    <link rel="preload" as="script" href="/etaax-iconos.js?v=e6d5073b">
+    <link rel="preload" as="script" href="/etaax-iconos.js?v=ce96904d">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=fd2dac1b">
     <link rel="preload" as="script" href="/etaax-header.js?v=15a5a6ef">
     <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=d35b2279">
@@ -287,6 +287,7 @@ document.addEventListener('DOMContentLoaded', function(){
         .vista-toggle button { padding: 5px 10px; border-radius: 5px; border: none; background: transparent; color: var(--text-muted);
             font-size: 11px; cursor: pointer; transition: all .15s; font-family: 'DM Sans', sans-serif; }
         .vista-toggle button.active { background: var(--surface); color: var(--text); }
+        .vista-toggle button { display: inline-flex; align-items: center; gap: 5px; }
         .vista-toggle button .inv-ic { margin-right: 0; }
         /* Íconos de la app dentro de botones y etiquetas (en vez de emojis). */
         .inv-ic { display: inline-block; vertical-align: -3px; margin-right: 6px; flex-shrink: 0; color: var(--etx-ui-cyan, #2a9aa5); }
@@ -1054,8 +1055,8 @@ function _herrReqHTML(nPend, nReg) {
             '<span>' + _icReq('adm-pagado', 14) + 'Registrados <span class="ph-n" id="cntReg">' + nReg + '</span></span></div>' +
         '</div>' +
         '<div class="ph-der"><div class="vista-toggle" title="Ver en lista o en iconos">' +
-            '<button class="' + (_reqModoLista === 'lista' ? 'active' : '') + '" onclick="setModoListaReq(\'lista\')" title="Lista">' + (_icReq('ins-lista', 14) || '≡') + '</button>' +
-            '<button class="' + (_reqModoLista === 'galeria' ? 'active' : '') + '" onclick="setModoListaReq(\'galeria\')" title="Iconos">' + (_icReq('ins-galeria', 14) || '⊞') + '</button>' +
+            '<button class="' + (_reqModoLista === 'lista' ? 'active' : '') + '" onclick="setModoListaReq(\'lista\')" title="Lista">' + _icReq('ins-lista', 14) + 'Lista</button>' +
+            '<button class="' + (_reqModoLista === 'galeria' ? 'active' : '') + '" onclick="setModoListaReq(\'galeria\')" title="Galería">' + _icReq('ins-galeria', 14) + 'Galería</button>' +
         '</div></div>';
 }
 function _pintarHerrReq(nPend, nReg) {
@@ -2531,7 +2532,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
 <script src="/novedades.js?v=94a2317e"></script><!-- aviso de actualizaciones del sistema -->
-<script src="/etaax-iconos.js?v=e6d5073b"></script>
+<script src="/etaax-iconos.js?v=ce96904d"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=15a5a6ef"></script>
