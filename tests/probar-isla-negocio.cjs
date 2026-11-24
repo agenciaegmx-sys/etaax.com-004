@@ -329,7 +329,19 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             });
             assert.deepEqual(r, { titulo: 'administra tus sucursales', centro: true, islaFoto: false, cuentaFoto: true, tituloGrande: false });
         });
+        await caso('hub: el botón «Inicio» de arriba y el negocio de la isla, los dos al centro de la página', async () => {
+            const r = await p.evaluate(() => { const c = document.querySelector('#etaax-header .etx-hd-centro').getBoundingClientRect(); return Math.abs((c.left + c.right) / 2 - document.documentElement.clientWidth / 2) < 1.5; });
+            assert.equal(r, true);
+        });
         await ir(p, '/recetas/inventarios.html');
+        await caso('módulo: «Módulos» (con Atrás y Adelante) al centro de la página, justo arriba de la sucursal', async () => {
+            const r = await p.evaluate(() => {
+                const c = document.querySelector('#etaax-header .etx-hd-centro').getBoundingClientRect(), id = document.querySelector('.etx-ctx-ident');
+                const lg = id.querySelector('.ctx-neg-emoji-wrap').getBoundingClientRect(), nm = id.querySelector('.ctx-neg-name span').getBoundingClientRect();
+                return Math.abs((c.left + c.right) / 2 - (lg.left + nm.right) / 2) < 1.5;
+            });
+            assert.equal(r, true);
+        });
         await caso('módulo: la sucursal centrada del círculo a la última letra del nombre, y la foto del negocio solo en la cuenta', async () => {
             const r = await p.evaluate(() => {
                 const id = document.querySelector('.etx-ctx-ident'), lg = id.querySelector('.ctx-neg-emoji-wrap').getBoundingClientRect(), nm = id.querySelector('.ctx-neg-name span').getBoundingClientRect();

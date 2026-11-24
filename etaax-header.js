@@ -77,6 +77,12 @@
             '.etx-hd-que{font-size:11px;line-height:1.3;color:var(--ui-apagado,var(--text-muted,#9a948b));',
             '  border-left:1px solid var(--ui-borde,var(--border,#2e2c29));padding-left:12px;}',
             '.etx-hd-centro{flex:1;display:flex;justify-content:center;align-items:center;gap:8px;}',
+            /* CENTRADO CONTRA LA PÁGINA (Edwin, 24-nov). Con flex:1 quedaba al centro
+               del hueco entre la marca y la cuenta, que no miden lo mismo: «Módulos»
+               caía 9 px a la izquierda y «Inicio» del hub 43. La isla del negocio sí
+               se centra contra la página, así que no coincidían. En pantalla ancha
+               el grupo se centra contra la barra entera (desde 1100 px, el mismo corte en que la isla centra a la sucursal contra la página); más angosto sigue en fila. */
+            '@media (min-width:1100px){.etx-hd-centro{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);flex:none;}.etx-hd-der{margin-left:auto;}}',
             /* Atrás / Adelante, junto a «Módulos» (Edwin, 24-nov): antes iban en la
                tarjeta del negocio, chiquitos y con trazo delgado. */
             '.etx-hd-nav{padding:8px;min-width:40px;justify-content:center;}',

@@ -18686,6 +18686,8 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8'), hcss = fs.readFileSync(path.join(RAIZ, 'hub-modulos.css'), 'utf8');
         return eq(/\.etx-ctx-ident \.ctx-neg-tipo \{width:0;min-width:100%;overflow:visible;/.test(css) && /\.hub-isla-ident \.neg-activo-tipo\{width:0;min-width:100%;overflow:visible;/.test(hcss), true);
     });
+    test('el botón de arriba (Inicio / Módulos) se centra contra la página, igual que la isla (desde 1100 px)', () =>
+        eq(/@media \(min-width:1100px\)\{\.etx-hd-centro\{position:absolute;left:50%;top:50%;transform:translate\(-50%,-50%\);flex:none;\}\.etx-hd-der\{margin-left:auto;\}\}/.test(fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8')), true));
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
         return eq(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(cuerpo) || !/_insMenuItem\('ins-editar'/.test(cuerpo), false);
