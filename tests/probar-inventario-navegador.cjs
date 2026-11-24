@@ -557,70 +557,58 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
             await ctx.close();
         }
 
-        /* ── K · la barra lateral plegada es una caja, no un riel ────────────
-           Edwin (19-nov): plegada, una caja rectangular de esquinas redondeadas
-           junto a la tarjeta del negocio —un poco menos alta que ella— con su
-           icono y «Expandir barra»; expandida, crece y trae «Ocultar barra». Y
-           como la caja no baja de la tarjeta, el contenido usa todo el ancho. */
-        console.log('\n══ K · Barra lateral: caja al plegar, panel al expandir ══');
+        /* ── K · la barra lateral es el desplegable «Sub módulos» ────────────
+           Edwin (19-nov) la quiso plegada en una caja junto a la tarjeta del
+           negocio; (24-nov) ya no es columna: es el botón «Sub módulos», a la
+           izquierda de la isla del negocio y de su mismo alto. Se abre como el
+           menú de la cuenta —flotando, sin mover el contenido—, eliges y se
+           cierra. El contenido usa siempre todo el ancho. */
+        console.log('\n══ K · Barra lateral: el desplegable «Sub módulos» ══');
         {
             const { ctx, page } = await abrir(browser, RELOJ, Object.assign({}, INV,
                 { nube: { negocio_insumos: filasNube(destilados(10)) }, viewport: { width: 1280, height: 800 } }));
             const estado = () => page.evaluate(() => {
                 const nav = document.getElementById('nav'), b = nav.getBoundingClientRect(), t = document.querySelector('#ctxBar .ctx-bar-inner').getBoundingClientRect();
                 const m = document.getElementById('mainContent').getBoundingClientRect();
-                return { cerrada: nav.classList.contains('cerrado'), w: Math.round(b.width), h: Math.round(b.height), top: Math.round(b.top),
+                return { abierta: nav.classList.contains('etx-sub-abierto'), w: Math.round(b.width), h: Math.round(b.height), top: Math.round(b.top),
                          tarjetaTop: Math.round(t.top), tarjetaH: Math.round(t.height), tarjetaIzq: Math.round(t.left), mainIzq: Math.round(m.left),
-                         radio: getComputedStyle(nav).borderTopLeftRadius, texto: document.getElementById('navToggleBtn').innerText.trim(),
+                         radio: getComputedStyle(nav).borderTopLeftRadius, texto: document.querySelector('#navToggleBtn .etx-sub-txt').textContent.trim(),
                          enlaces: [...nav.querySelectorAll('a.nav-link')].filter(a => a.offsetParent).length };
             });
-            const plegar = async (quiere) => {
-                if ((await page.evaluate(() => document.getElementById('nav').classList.contains('cerrado'))) !== quiere) await page.click('#navToggleBtn');
-                await page.waitForTimeout(450);
-            };
-            await plegar(true);
             const p = await estado();
-            await caso('plegada: una caja junto a la tarjeta del negocio, un poco menos alta que ella', async () => {
-                assert.equal(p.top, p.tarjetaTop, 'no arranca a la altura de la tarjeta');
-                assert.ok(p.h < p.tarjetaH && p.h >= p.tarjetaH - 20, 'alto: ' + p.h + ' vs tarjeta ' + p.tarjetaH);
-                assert.ok(p.w > p.h, 'debe ser rectangular (más ancha que alta): ' + p.w + '×' + p.h);
+            await caso('cerrado: «Sub módulos» junto a la isla del negocio, a su altura y de su mismo alto', async () => {
+                assert.equal(p.abierta, false);
+                assert.equal(p.top, p.tarjetaTop, 'no arranca a la altura de la isla');
+                assert.ok(Math.abs(p.h - p.tarjetaH) <= 2, 'alto: ' + p.h + ' vs isla ' + p.tarjetaH);
+                assert.ok(p.w > p.h, 'debe ser más ancho que alto: ' + p.w + '×' + p.h);
                 assert.notEqual(p.radio, '0px');
             });
-            await caso('…con su icono y «Expandir barra», sin el riel de iconos de los módulos', async () => {
-                assert.equal(p.texto, 'Expandir barra');
-                assert.ok(await page.evaluate(() => !!document.querySelector('#navToggleBtn .etx-nav-tg-ic svg')));
+            await caso('…dice «Sub módulos» y no enseña los submódulos hasta tocarlo', async () => {
+                assert.equal(p.texto, 'Sub módulos');
                 assert.equal(p.enlaces, 0);
             });
-            await caso('…y el contenido usa TODO el ancho (ya no le deja carril a la barra)', async () => {
+            await caso('…y el contenido usa TODO el ancho (la isla le deja su lugar al botón)', async () => {
                 assert.equal(p.mainIzq, 0);
-                assert.ok(p.tarjetaIzq >= 24 + p.w, 'la tarjeta se encima con la caja');
+                assert.ok(p.tarjetaIzq >= 24 + p.w, 'la isla se encima con el botón');
             });
-            await plegar(false);
+            await page.click('#navToggleBtn'); await page.waitForTimeout(300);
             const e = await estado();
-            await caso('expandida: «Ocultar barra» se ve como botón (contorno grueso) y «MÓDULO» va en vertical', async () => {
-                const r = await page.evaluate(() => { const b = getComputedStyle(document.getElementById('navToggleBtn')), n = document.querySelector('#nav .etx-nav-numero');
-                    const hijos = [...document.querySelector('#nav .etx-nav-identidad').children].map(x => x.className || x.tagName);
-                    return { borde: parseFloat(b.borderTopWidth), modo: n ? getComputedStyle(n).writingMode : '', primero: hijos[0] }; });
-                assert.ok(r.borde >= 2, 'borde: ' + r.borde);
-                assert.equal(r.modo, 'vertical-rl');
-                assert.equal(r.primero, 'etx-nav-numero', 'la etiqueta debe ir a la izquierda del icono');
+            await caso('abierto: se despliega con los submódulos, flotando, sin mover el contenido', async () => {
+                assert.ok(e.abierta && e.w >= p.w && e.h > p.h * 3, JSON.stringify(e));
+                assert.ok(e.enlaces >= 4, 'enlaces: ' + e.enlaces);
+                assert.equal(e.mainIzq, 0, 'el contenido se movió');
             });
             await caso('…y la cabecera no se aplasta: el botón queda entero dentro de ella', async () => {
                 const r = await page.evaluate(() => { const top = document.querySelector('#nav .nav-top').getBoundingClientRect(), b = document.getElementById('navToggleBtn').getBoundingClientRect();
                     return { dentro: b.bottom <= top.bottom + 0.5, top: [top.top, top.bottom], btn: [b.top, b.bottom] }; });
                 assert.ok(r.dentro, JSON.stringify(r));
             });
-            await caso('expandida: crece a lo ancho y a lo largo, con los módulos y «Ocultar barra»', async () => {
-                assert.ok(e.w > p.w && e.h > p.h * 3, JSON.stringify(e));
-                assert.equal(e.texto, 'Ocultar barra');
-                assert.ok(e.enlaces >= 4, 'enlaces: ' + e.enlaces);
-                assert.ok(e.mainIzq >= e.w, 'el contenido se mete debajo de la barra');
-            });
-            await plegar(true);
-            await caso('«Ocultar barra» la regresa a la caja, y se recuerda', async () => {
+            await caso('…volver a tocarlo lo cierra, y al recargar arranca cerrado', async () => {
+                await page.click('#navToggleBtn'); await page.waitForTimeout(300);
                 const r = await estado();
-                assert.ok(r.cerrada && r.w === p.w && r.h === p.h, JSON.stringify(r));
-                assert.equal(await page.evaluate(() => localStorage.getItem('etaax_nav_abierta')), '0');
+                assert.ok(!r.abierta && r.w === p.w && r.h === p.h, JSON.stringify(r));
+                await page.reload(); await page.waitForTimeout(1500);
+                assert.equal(await page.evaluate(() => document.getElementById('nav').classList.contains('etx-sub-abierto')), false);
             });
             await ctx.close();
         }

@@ -20,6 +20,45 @@ body.hub-paleta .hub-trabajo-hero .hub-title{font-family:'DM Sans',sans-serif;fo
 body.hub-paleta .hub-trabajo-hero .hub-subtitle{max-width:660px;line-height:1.6;font-size:13px;}
 body.hub-paleta .hub-trabajo-hero .hub-eyebrow{margin-bottom:10px;}
 body.hub-paleta .hub-workspace{max-width:1000px;width:100%;margin:0 auto;}
+/* ══ LA FRANJA DE LA SUCURSAL, UNA ISLA LARGA Y FIJA (Edwin, 24-nov) ══════════
+   Igual que dentro de los módulos: logo, sucursal con su pin y su giro; el
+   título de la pantalla en medio, chico; «Cambiar sucursal» como botón chico
+   que se expande y despliega las sucursales debajo de él. El negocio, el plan
+   y la información de sucursal / negocio viven en el menú de la cuenta. */
+body.hub-paleta .hub-modulos-bar{
+  position:sticky;top:calc(var(--etx-header-h,70px) + 10px);z-index:50;flex-wrap:nowrap;gap:12px;
+  min-height:52px;padding:5px 7px 5px 6px;margin:0 auto 22px;border-radius:999px;box-sizing:border-box;
+  /* La segunda sombra es del color del fondo: tapa lo que pasa por detrás al
+     bajar entre la isla y la barra de arriba, sin corte seco. */
+  box-shadow:0 8px 22px rgba(0,0,0,.12),0 -14px 0 4px var(--bg);
+}
+body.hub-paleta .hub-modulos-bar .neg-activo-emoji-wrap{width:40px;height:40px;}
+body.hub-paleta .hub-modulos-bar .neg-activo-id{flex:0 1 auto;max-width:34%;}
+body.hub-paleta .hub-modulos-bar .neg-activo-nombre{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+body.hub-paleta .hub-modulos-bar .hub-sucursal-nombre{gap:5px;min-width:0;}
+body.hub-paleta .hub-modulos-bar #chipUbicacionHub .etx-ic{width:16px;height:16px;}
+body.hub-paleta .hub-modulos-bar .neg-activo-tipo{font-size:10.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+body.hub-paleta #chipMarcaHub,body.hub-paleta .hub-modulos-bar .user-badge,body.hub-paleta :is(#btnInfoSuc,#btnInfoNeg){display:none!important;}
+body.hub-paleta .hub-isla-titulo{flex:1 1 auto;min-width:0;margin:0;text-align:center;font:700 15px/1.2 'DM Sans',sans-serif;letter-spacing:.8px;text-transform:uppercase;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+body.hub-paleta .hub-isla-titulo .g{color:var(--hub-heading,var(--hub-action));}
+body.hub-paleta .hub-modulos-bar .neg-activo-btns{margin-left:0;flex-wrap:nowrap;gap:6px;flex-shrink:0;}
+body.hub-paleta .hub-modulos-bar .btn-cambiar-neg{min-height:40px;height:40px;padding:0 12px;border-radius:999px;}
+/* Cambiar sucursal: solo el icono; al tocarlo se expande con su nombre. */
+body.hub-paleta .hub-modulos-bar .btn-cambiar-neg.hub-acc{gap:0;padding:0 10px;overflow:hidden;}
+body.hub-paleta .hub-acc-txt{display:inline-block;max-width:0;opacity:0;margin-left:0;overflow:hidden;transition:max-width .26s ease,opacity .2s ease,margin .26s ease;}
+body.hub-paleta .hub-acc.abierto{border-color:var(--hub-brand);background:var(--hub-brand-tint);}
+body.hub-paleta .hub-acc.abierto .hub-acc-txt{max-width:12em;opacity:1;margin-left:8px;}
+/* …y las sucursales se despliegan debajo, como el menú de la cuenta. */
+body.hub-paleta #modalCambiarSucursal.hub-pop{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;padding:0;animation:none;}
+body.hub-paleta #modalCambiarSucursal.hub-pop .modal-box{position:fixed;top:var(--pop-top,140px);right:var(--pop-right,24px);margin:0;width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - var(--pop-top,140px) - 16px);border-radius:16px;box-shadow:0 18px 44px rgba(0,0,0,.30);animation:hubPopAbre .18s ease-out both;transform-origin:top right;}
+body.hub-paleta #modalCambiarSucursal.hub-pop .modal-head{padding:12px 14px 6px;}
+body.hub-paleta #modalCambiarSucursal.hub-pop .modal-title{font-size:15px;}
+body.hub-paleta #modalCambiarSucursal.hub-pop .modal-body{padding:0 14px 14px;}
+body.hub-paleta #modalCambiarSucursal.hub-pop .hub-panel-desc{font-size:11.5px;margin:0 0 10px;}
+body.hub-paleta #modalCambiarSucursal.hub-pop .hub-cambiar-opciones{gap:6px;}
+body.hub-paleta #modalCambiarSucursal.hub-pop .hub-cambiar-opcion{min-height:40px;padding:9px 12px;font-size:13px;}
+body.hub-paleta #modalCambiarSucursal.hub-pop .hub-cambiar-cancelar{display:none;}
+@keyframes hubPopAbre{from{opacity:0;transform:translateY(-6px) scale(.98);}to{opacity:1;transform:none;}}
 body.hub-paleta .hub-module-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:14px 0 10px;font-size:11px;color:var(--ui-apagado);}
 body.hub-paleta .hub-module-intro>span:first-child{font-size:9px;letter-spacing:2px;text-transform:uppercase;}
 body.hub-paleta .hub-module-selector{position:relative;padding:22px 18px;border:1px solid var(--hub-line);border-radius:18px;background:var(--s1);}
@@ -180,11 +219,10 @@ body.hub-paleta .hub-captura-pie .etx-ic{width:20px;height:20px;}
 @keyframes hubToolEntrada{from{opacity:0;translate:0 6px}to{opacity:1;translate:0 0}}
 @keyframes hubModuloAcceso{from{opacity:0;transform:translateY(-8px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-width:720px){
-  body.hub-paleta .hub-modulos-bar{padding:16px;gap:12px;}
-  body.hub-paleta .hub-modulos-bar .neg-activo-id{flex-basis:calc(100% - 60px);}
-  body.hub-paleta .hub-modulos-bar .neg-activo-btns{width:100%;margin-left:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
-  body.hub-paleta .hub-modulos-bar .user-badge{grid-column:1/-1;justify-self:start;}
-  body.hub-paleta .hub-modulos-bar .btn-cambiar-neg{white-space:normal;padding:10px 8px;text-align:center;}
+  body.hub-paleta .hub-modulos-bar{flex-wrap:wrap;row-gap:2px;border-radius:26px;padding:5px 6px;}
+  body.hub-paleta .hub-modulos-bar .neg-activo-id{flex:1 1 0;max-width:none;}
+  body.hub-paleta .hub-modulos-bar .neg-activo-btns{width:auto;display:flex;}
+  body.hub-paleta .hub-isla-titulo{order:5;flex:1 0 100%;font-size:13px;padding:2px 0 4px;}
   body.hub-paleta .hub-module-intro{align-items:flex-start;flex-direction:column;gap:8px;}
   body.hub-paleta .hub-module-selector{padding:20px 14px;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding-inline:14px;scrollbar-width:thin;scrollbar-color:var(--hub-line) transparent;}
   body.hub-paleta :is(.hub-module-dock,.hub-module-actions){grid-template-columns:repeat(var(--hub-mods,4),minmax(170px,68%));gap:14px;}

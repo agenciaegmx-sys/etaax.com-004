@@ -119,10 +119,10 @@
  .etx-op-page .res-det {border-color:var(--op-line);}
  /* Organigrama: geometría y colores de los nodos siguen definidos por sus datos. */
  .etx-op-page .org-top {background:var(--op-panel);border-bottom:1px solid var(--op-line);padding:14px 18px;gap:8px;}
- html:not(.embed) body.etx-op-page.etx-modulos-ui .org-top {top:var(--etx-shell-top);left:var(--etx-sidebar-space,268px);}
- html:not(.embed) body.etx-op-page.etx-modulos-ui #viewport {top:calc(var(--etx-shell-top) + var(--op-org-toolbar-h,120px));left:var(--etx-sidebar-space,268px);}
+ html:not(.embed) body.etx-op-page.etx-modulos-ui .org-top {top:var(--etx-shell-top);left:var(--etx-sidebar-space,0px);}
+ html:not(.embed) body.etx-op-page.etx-modulos-ui #viewport {top:calc(var(--etx-shell-top) + var(--op-org-toolbar-h,120px));left:var(--etx-sidebar-space,0px);}
  html.embed .etx-op-page #viewport {top:var(--op-org-toolbar-h,180px);}
- html:not(.embed) body.etx-op-page.etx-modulos-ui .save-ind {left:calc(var(--etx-sidebar-space,268px) + 14px);}
+ html:not(.embed) body.etx-op-page.etx-modulos-ui .save-ind {left:calc(var(--etx-sidebar-space,0px) + 14px);}
  .etx-op-page .org-eyebrow {display:inline-flex;align-items:center;gap:10px;font:600 18px/1.4 'DM Sans',sans-serif;letter-spacing:0;color:var(--text);}
  .etx-op-page .org-eyebrow .op-title-icon {width:36px;height:36px;border-radius:10px;}
  .etx-op-page .org-node {background:var(--op-panel);box-shadow:0 10px 24px rgba(0,0,0,.2);}

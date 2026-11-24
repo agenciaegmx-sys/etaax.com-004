@@ -146,35 +146,53 @@
         }).observe(document.body, { childList: true, subtree: true });
     }
 
-    /* LA BARRA PLEGADA ES UNA CAJA (19-nov). Tres medidas:
-       · --etx-sidebar-space: lo que el CONTENIDO le deja a la barra. Abierta,
-         268. Plegada en pantalla grande, NADA: la caja no baja de la tarjeta
-         del negocio, así que debajo de ella todo el ancho es del contenido.
-         En pantallas medianas y chicas la barra va debajo de la tarjeta y se
-         conserva el carril de siempre (112 / 88).
-       · --etx-ctx-space: lo que la tarjeta del negocio le deja: la caja y un
-         respiro.
-       · --etx-nav-caja-h: la caja mide un poco menos que la tarjeta del
-         negocio, que es la que tiene al lado. */
+    /* LA BARRA LATERAL ES UN DESPLEGABLE (Edwin, 24-nov). Ya no es una columna
+       que le roba ancho al contenido: es el botón «Sub módulos», a la izquierda
+       de la isla del negocio; se abre como el menú de la cuenta, eliges y se
+       cierra. Dos medidas:
+       · --etx-sidebar-space: lo que el CONTENIDO le deja a la barra → nada.
+       · --etx-ctx-space: lo que la isla del negocio le deja al botón.
+       (--etx-context-h es el alto real de la franja de la isla.) */
     function medirLayout() {
         if (embebido) return;
         var bar = document.getElementById('ctxBar'), nav = document.getElementById('nav'), raiz = document.documentElement.style;
         var visible = !!nav && getComputedStyle(nav).display !== 'none';
-        var cerrado = visible && nav.classList.contains('cerrado');
-        var w = innerWidth;
-        var cajaW = w <= 600 ? 64 : (w <= 900 ? 88 : 132);
-        var espacio = !visible ? 0 : (w <= 600 ? 88 : (cerrado ? (w <= 900 ? 112 : 0) : 268));
-        var ctxEsp = !visible ? 0 : (cerrado ? cajaW + 16 : 268);
-        raiz.setProperty('--etx-sidebar-space', espacio + 'px');
-        raiz.setProperty('--etx-ctx-space', ctxEsp + 'px');
-        raiz.setProperty('--etx-nav-caja-w', cajaW + 'px');
-        // Se mide DESPUÉS de ceder el carril: la tarjeta puede cambiar de alto.
+        /* El botón mide lo que mide su texto («Sub módulos» con la letra real);
+           abierto se ensancha, así que se usa lo medido cerrado. */
+        if (visible && !nav.classList.contains('etx-sub-abierto') && document.body.classList.contains('etx-sub-menu')) nav._etxCajaW = Math.ceil(nav.getBoundingClientRect().width);
+        var cajaW = (visible && nav._etxCajaW) || (innerWidth <= 600 ? 48 : 174);
+        raiz.setProperty('--etx-sidebar-space', '0px');
+        raiz.setProperty('--etx-ctx-space', (visible ? cajaW + 10 : 0) + 'px');
         var alto = bar && bar.getClientRects().length ? Math.ceil(bar.getBoundingClientRect().height) : 0;
-        var tarjeta = bar && bar.querySelector('.ctx-bar-inner');
-        var th = tarjeta && tarjeta.getClientRects().length ? tarjeta.getBoundingClientRect().height : 0;
-        var cajaH = (w > 900 && th) ? Math.max(64, Math.round(th - 12)) : (w <= 600 ? 64 : 76);
         raiz.setProperty('--etx-context-h', alto + 'px');
-        raiz.setProperty('--etx-nav-caja-h', cajaH + 'px');
+    }
+    /* El desplegable: el botón de la barra lo abre y lo cierra (en vez de
+       plegarla), tocar fuera, Escape o elegir un submódulo lo cierran. La
+       preferencia vieja de «barra plegada» ya no aplica: la barra va siempre
+       completa DENTRO del desplegable. */
+    function subModulos(nav) {
+        if (embebido || !nav || nav._etxSub) return;
+        nav._etxSub = true;
+        document.body.classList.add('etx-sub-menu');
+        try { localStorage.setItem('etaax_nav_abierta', '1'); } catch (e) {}
+        nav.classList.remove('cerrado');
+        var main = document.getElementById('mainContent'); if (main) main.classList.remove('expandido');
+        var abrir = function (si) {
+            nav.classList.toggle('etx-sub-abierto', si);
+            var b = nav.querySelector('#navToggleBtn'); if (b) b.setAttribute('aria-expanded', String(si));
+        };
+        window.toggleNav = function () { abrir(!nav.classList.contains('etx-sub-abierto')); };
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { nav._etxCajaW = 0; medirLayout(); });
+        document.addEventListener('click', function (e) {
+            var t = e.target, b = t && t.closest && t.closest('#navToggleBtn');
+            if (b && nav.contains(b)) { e.preventDefault(); e.stopPropagation(); abrir(!nav.classList.contains('etx-sub-abierto')); return; }
+            if (!nav.classList.contains('etx-sub-abierto')) return;
+            if (!nav.contains(t) || (t.closest && t.closest('a.nav-link'))) abrir(false);
+        }, true);
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape' || !nav.classList.contains('etx-sub-abierto')) return;
+            abrir(false); var b = nav.querySelector('#navToggleBtn'); if (b) b.focus();
+        });
     }
     /* El icono del botón: un panel con su flecha. Una flecha para «expandir» y
        otra para «ocultar»; el CSS enseña la que toca según esté la barra. */
@@ -207,7 +225,9 @@
             top.innerHTML = ''; top.appendChild(identidad);
             if (btn) {
                 btn.classList.add('etx-nav-contraer');
-                btn.innerHTML = ICONO_TOGGLE + '<span class="nav-toggle-text" id="navToggleTxt"></span>';
+                btn.innerHTML = ICONO_TOGGLE + '<span class="nav-toggle-text" id="navToggleTxt"></span>' +
+                    '<span class="etx-sub-ic" aria-hidden="true">' + ic(icono, 20) + '</span><span class="etx-sub-txt">Sub módulos</span>' +
+                    '<span class="etx-sub-flecha" aria-hidden="true">' + ic('hd-desplegar', 14) + '</span>';
                 top.appendChild(btn);
             }
         }
@@ -238,10 +258,12 @@
         salida.classList.add('etx-nav-back');nav.appendChild(salida);
         salida.setAttribute('aria-label',contextoGlobal ? 'Volver al negocio' : 'Volver a módulos');
         salida.title = salida.getAttribute('aria-label');
-        var abierto = !nav.classList.contains('cerrado'), boton = nav.querySelector('#navToggleBtn'), txt = nav.querySelector('#navToggleTxt');
-        if (boton && boton.childNodes[0] && !boton.querySelector('.etx-nav-tg-ic')) boton.childNodes[0].textContent = abierto ? '← ' : '→ ';
-        if (boton) { boton.setAttribute('aria-expanded',String(abierto)); boton.setAttribute('data-tooltip', abierto ? 'Ocultar barra' : 'Expandir barra'); }
-        if (txt) txt.textContent = abierto ? 'Ocultar barra' : 'Expandir barra';
+        subModulos(nav);
+        var boton = nav.querySelector('#navToggleBtn');
+        if (boton) {
+            boton.setAttribute('aria-expanded', String(nav.classList.contains('etx-sub-abierto')));
+            boton.setAttribute('aria-label', 'Sub módulos'); boton.removeAttribute('data-tooltip'); boton.removeAttribute('title');
+        }
         if (!nav._etxLayoutObserver) {
             nav._etxLayoutObserver = new MutationObserver(medirLayout);
             nav._etxLayoutObserver.observe(nav,{attributes:true,attributeFilter:['class','style']});
@@ -255,25 +277,35 @@
         var giro = window.EtaaxNegocio ? EtaaxNegocio.giro(cfg.giroK || EtaaxNegocio.adivinarGiro(cfg.giro || '')) : null;
         var titulo = contextoGlobal ? ctx.negNombre : (ctx.sucNombre || ctx.negNombre);
         var logo = opciones.logo ? '<img src="' + esc(opciones.logo) + '" alt="">' : ic(giro ? giro.ic : (contextoGlobal ? 'org-corporativo' : 'sucursal'),28);
-        bar.innerHTML = '<div class="ctx-bar-inner">' +
+        /* LA FRANJA DEL NEGOCIO ES UNA ISLA LARGA (Edwin, 24-nov): solo el logo,
+           la sucursal con su pin y su giro; en medio, el título de la pantalla
+           (subirTitulo); a la derecha, Cambiar sucursal y Cambiar módulo como
+           botones chicos que se expanden al tocarlos y despliegan sus opciones
+           ahí mismo. El nombre del negocio y el plan ya los dice el menú de la
+           cuenta, y «Información de sucursal» se mudó a ese menú. */
+        var acc = function (id, icono, texto, extra) {
+            return '<button type="button" class="ctx-btn etx-ctx-acc" id="' + id + '" aria-label="' + texto + '" aria-haspopup="dialog" aria-expanded="false"' + (extra || '') + '>' +
+                ic(icono, 20) + '<span class="etx-ctx-acc-txt">' + texto + '</span></button>';
+        };
+        bar.innerHTML = '<div class="ctx-bar-inner etx-ctx-isla">' +
             '<div class="ctx-neg-emoji-wrap">' + logo + '</div><div class="ctx-neg-id">' +
-            '<div class="etx-ctx-marca">' + esc(ctx.negNombre) + ' / ' + (contextoGlobal ? 'Vista global' : 'Sucursal activa') + '</div>' +
-            '<div class="ctx-neg-name">' + (contextoGlobal ? '' : ic('sh-matriz',18)) + '<span>' + esc(titulo) + '</span></div>' +
+            '<div class="ctx-neg-name">' + (contextoGlobal ? '' : ic('sh-matriz',16)) + '<span>' + esc(titulo) + '</span></div>' +
             '<div class="ctx-neg-tipo">' + esc(contextoGlobal ? 'Global · todas las sucursales' : (giro ? giro.nom : opciones.tipo)) + '</div></div>' +
+            '<div class="etx-ctx-titulo" id="etxCtxTitulo" aria-hidden="true"></div>' +
             '<div class="ctx-presencia" id="ctxPresencia"></div>' +
-            /* Atrás / Adelante ya no van aquí: subieron al encabezado, junto a «Módulos» (24-nov). */
-            '<div class="ctx-right"><span class="ctx-badge-plan">' + esc(ctx.userBadge || 'Mi negocio') + '</span>' +
+            '<div class="ctx-right">' +
             (contextoGlobal ? '<a class="ctx-btn" href="' + esc(volver) + '">Ir al negocio ' + ic('flecha',18) + '</a>' :
-            (ctx.ctxType !== 'staff' ? '<button type="button" class="ctx-btn" id="etxCambiarSucursal" aria-haspopup="dialog">' + ic('sh-matriz',20) + 'Cambiar sucursal</button>' : '') +
-            '<button type="button" class="ctx-btn" id="etxCambiarModulo">' + ic('sh-cambiar-negocio',20) + 'Cambiar módulo ' + ic('hd-desplegar',14) + '</button><button type="button" class="ctx-btn" id="etxInfoSucursal">' + ic('sh-info-sucursal',20) + 'Información de sucursal</button>') + '</div></div>';
+            (ctx.ctxType !== 'staff' ? acc('etxCambiarSucursal', 'sh-matriz', 'Cambiar sucursal') : '') +
+            acc('etxCambiarModulo', 'sh-cambiar-negocio', 'Cambiar módulo')) + '</div></div>';
         if (opciones.editorNav && opciones.editorNav.remove) opciones.editorNav.remove();   // las de Escandallos también van en el encabezado
-        if (typeof window.etaaxHeader === 'function') window.etaaxHeader({marcaBase:'/marca/hub',usuario:ctx.userName,negocio:ctx.negNombre,plan:ctx.userBadge,inicio:'/hub.html',inicioTexto:'Módulos',nav:true,cerrarSesion:window.ctxSalir});
-        var cambiar = bar.querySelector('#etxCambiarModulo'), info = bar.querySelector('#etxInfoSucursal');
+        if (typeof window.etaaxHeader === 'function') window.etaaxHeader({marcaBase:'/marca/hub',usuario:ctx.userName,negocio:ctx.negNombre,plan:ctx.userBadge,inicio:'/hub.html',inicioTexto:'Módulos',nav:true,cerrarSesion:window.ctxSalir,
+            extras: contextoGlobal ? [] : [{ id:'etxHdInfoSucOp', icono:'sh-info-sucursal', texto:'Información de sucursal', fn:abrirInfoSucursal }]});
+        var cambiar = bar.querySelector('#etxCambiarModulo');
         if (cambiar) cambiar.onclick = abrirModulos;
-        if (info) info.onclick = abrirInfoSucursal;
         var sucursal = bar.querySelector('#etxCambiarSucursal');
         if (sucursal) sucursal.onclick = abrirSucursales;
         if (window.ResizeObserver && !observadorBarra) { observadorBarra = new ResizeObserver(medirLayout);observadorBarra.observe(bar); }
+        tituloFirma = ''; pintarTitulo();
         medirLayout();
     };
     var dialogo;
@@ -289,12 +321,30 @@
             dialogo.addEventListener('keydown',function(e){if(e.key === 'Escape'){e.preventDefault();e.stopPropagation();cerrarDialogo();}});
             dialogo.addEventListener('click',function(e){if(e.target === dialogo){var r=dialogo.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)cerrarDialogo();}});
         }
-        if (dialogo.open) dialogo.close();
+        /* Mismo botón con el diálogo abierto (Cambiar sucursal pinta «Actualizando…»
+           y luego la lista): se cambia el contenido sin cerrarlo y reabrirlo. */
+        var seguir = dialogo.open && dialogo._etxTrigger === trigger;
+        if (dialogo.open && !seguir) dialogo.close();
         dialogo._etxTrigger = trigger;
+        /* Desde un botón de la isla, el diálogo se DESPLIEGA debajo de él (como
+           el menú de la cuenta) y el botón se queda expandido mientras tanto. */
+        var pop = !!(trigger && trigger.classList && trigger.classList.contains('etx-ctx-acc'));
+        dialogo.classList.toggle('etx-pop', pop);
         dialogo.innerHTML = '<div class="etx-dialog-head"><h2 id="etxDialogTitulo">' + esc(titulo) + '</h2><form method="dialog"><button aria-label="Cerrar">×</button></form></div>' + contenido;
-        dialogo.onclose = function () { if (trigger && trigger.isConnected) trigger.focus(); };
-        dialogo.showModal();
+        dialogo.onclose = function () {
+            if (dialogo.open) return;   // el «close» de un diálogo anterior llega tarde
+            if (trigger && trigger.classList) { trigger.classList.remove('abierto'); trigger.setAttribute('aria-expanded', 'false'); }
+            if (trigger && trigger.isConnected) trigger.focus();
+        };
+        if (pop) { trigger.classList.add('abierto'); trigger.setAttribute('aria-expanded', 'true'); colocarPop(trigger); }
+        if (!seguir) dialogo.showModal();
     }
+    function colocarPop(t) {
+        var r = t.getBoundingClientRect();
+        dialogo.style.setProperty('--pop-top', Math.round(r.bottom + 10) + 'px');
+        dialogo.style.setProperty('--pop-right', Math.max(12, Math.round(innerWidth - r.right)) + 'px');
+    }
+    window.addEventListener('resize', function () { if (dialogo && dialogo.open && dialogo.classList.contains('etx-pop') && dialogo._etxTrigger) colocarPop(dialogo._etxTrigger); });
     function abrirModulos() {
         var c = leer('etaax_ctx');
         if (!c || !c.negId || contextoGlobal) return;
@@ -366,7 +416,7 @@
         var cfg = leer('etaax_' + c.negId + '_suc_' + (c.sucId || '')) || {};
         var dias = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
         var filas = [['Teléfono',cfg.telefono],['Correo',cfg.correo],['Dirección',cfg.direccion],['Horario',cfg.horaOpen && cfg.horaClose ? cfg.horaOpen + ' – ' + cfg.horaClose : ''],['Días de operación',Array.isArray(cfg.dias) ? dias.filter(function(_,i){return cfg.dias[i];}).join(', ') : ''],['Sitio web',cfg.web]];
-        mostrarDialogo(c.sucNombre || 'Información de sucursal','<p>' + esc(c.negNombre) + '</p><dl class="etx-sucursal-datos">' + filas.map(function(f){return '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1] || '—') + '</dd></div>';}).join('') + '</dl>',document.getElementById('etxInfoSucursal'));
+        mostrarDialogo(c.sucNombre || 'Información de sucursal','<p>' + esc(c.negNombre) + '</p><dl class="etx-sucursal-datos">' + filas.map(function(f){return '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1] || '—') + '</dd></div>';}).join('') + '</dl>',document.getElementById('etxHdCuenta'));
     }
     function pintarTarjetas() {
         var recetas = {btnVerRecetas:'cat-recetas',btnCaratula:'fin-resumen-resultados',btnEscSimple:'mod-escandallos',btnEscAlimentos:'giro-restaurante-bar',btnEscBebidas:'giro-bar',btnEscSubAlimentos:'cat-sub-recetas',btnEscSubBebidas:'giro-bar',btnMenuSucursal:'cor-comedor'};
@@ -380,6 +430,65 @@
             if (!nombre && moduloActual()) nombre = moduloActual().icono;
             if (slot && nombre) {slot.innerHTML = ic(nombre,30);slot.setAttribute('aria-hidden','true');}
         });
+    }
+    /* EL TÍTULO DE LA PANTALLA, EN LA ISLA DEL NEGOCIO (Edwin, 24-nov). Cada
+       herramienta abría con su rótulo, un título enorme y un párrafo; ahora el
+       título va chico, en medio de la isla, y el rótulo y el párrafo se quitan.
+       El título original NO se borra: se queda solo para lectores de pantalla
+       (y para el código de cada página que lo cambia), y la isla lo copia.
+       Si la página cambia de vista —Inventarios, Requisiciones— la isla dice el
+       de la vista que está a la vista. Sin título propio, el submódulo activo. */
+    var SEL_TITULO = '.dx-hero-title, .cf-hero-title, .brand-title, .rs-title, .hr-title, .ck-title, .ev-title, .pp-title, .org-eyebrow';
+    var SEL_EXTRA = '.dx-hero-eyebrow, .dx-hero-sub, .cf-hero-eyebrow, .cf-hero-sub, .brand-label, .rs-sub, .hr-sub, .ck-sub, .ev-sub, .pp-eyebrow';
+    var SEL_CAB = '.dx-hero, .cf-hero, .header, .rs-head, .hr-head, .ck-head, .ev-head, .pp-head, .org-top';
+    var tituloFirma = '', tituloPendiente = false;
+    function marcarTitulos() {
+        document.querySelectorAll(SEL_TITULO).forEach(function (t) {
+            if (t.classList.contains('etx-titulo-subido')) return;
+            var cab = t.closest(SEL_CAB);
+            if (!cab || t.closest('#nav, #ctxBar, dialog, .modal-overlay, .modal, .etx-isla-wrap')) return;
+            t.classList.add('etx-titulo-subido'); cab.classList.add('etx-cab-con-titulo');
+            cab.querySelectorAll(SEL_EXTRA).forEach(function (x) { x.classList.add('etx-titulo-extra'); });
+            /* Si en la cabecera no queda nada más (ni botones ni texto), se pliega. */
+            var resto = cab.textContent;
+            cab.querySelectorAll('.etx-titulo-subido, .etx-titulo-extra').forEach(function (x) { resto = resto.replace(x.textContent, ''); });
+            if (!resto.trim() && !cab.querySelector('button, a, input, select, textarea')) cab.classList.add('etx-cab-vacia');
+        });
+    }
+    function pintarTitulo() {
+        var slot = document.getElementById('etxCtxTitulo'); if (!slot) return;
+        var t = null;
+        document.querySelectorAll('.etx-titulo-subido').forEach(function (x) { if (!t && x.getClientRects().length) t = x; });
+        var partes = [];
+        if (t) {
+            t.childNodes.forEach(function (n) {
+                var txt = (n.textContent || '').replace(/\s+/g, ' ');
+                if (txt) partes.push({ g: n.nodeType === 1 && n.classList.contains('g'), t: txt });
+            });
+        } else {
+            var act = document.querySelector('#nav .nav-link.active .nav-text, #nav .nav-link[aria-current="page"] .nav-text');
+            if (act && act.textContent.trim()) partes.push({ g: false, t: act.textContent.trim() });
+        }
+        var firma = JSON.stringify(partes);
+        if (firma === tituloFirma) return;
+        tituloFirma = firma;
+        slot.textContent = '';
+        partes.forEach(function (p) {
+            if (p.g) { var sp = document.createElement('span'); sp.className = 'g'; sp.textContent = p.t; slot.appendChild(sp); }
+            else slot.appendChild(document.createTextNode(p.t));
+        });
+        slot.hidden = !partes.length;
+    }
+    function subirTitulo() {
+        if (embebido) return;
+        document.body.classList.add('etx-titulo-en-isla');
+        marcarTitulos(); pintarTitulo();
+        if (typeof MutationObserver !== 'function') return;
+        new MutationObserver(function () {
+            if (tituloPendiente) return;
+            tituloPendiente = true;
+            requestAnimationFrame(function () { tituloPendiente = false; marcarTitulos(); pintarTitulo(); });
+        }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
     }
     /* La isla del nombre del módulo: al bajar se encoge a un círculo con la
        inicial (en el pasillo entre las tarjetas); arriba vuelve a decir todo. */
@@ -398,9 +507,10 @@
         if (embebido) return;
         document.querySelectorAll('.theme-toggle').forEach(function(b){b.remove();});
         var nav = document.getElementById('nav');
-        if (nav && innerWidth <= 600) { nav.classList.add('cerrado');document.body.classList.remove('nav-open'); }
+        subModulos(nav);
         if (typeof window.etaaxPintarIconosNav === 'function') window.etaaxPintarIconosNav();
         bicolorTitulo();
+        subirTitulo();
         iconosEnCromo();
         vigilarCromo();
         medirLayout();window.addEventListener('resize',medirLayout);

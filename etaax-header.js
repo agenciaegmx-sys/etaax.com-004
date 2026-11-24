@@ -193,6 +193,8 @@
            se había quitado de la barra vieja del hub. Un indicador que dice que
            sí cuando es que no es peor que no tener indicador. */
         var activa = (opc.activa === undefined) ? true : !!opc.activa;
+        var extras = (typeof opc.extras === 'function' ? opc.extras() : opc.extras) || [];
+        extras = extras.filter(function (x) { return x && x.id && x.texto && typeof x.fn === 'function'; });
 
         /* ¿Esta página sabe de novedades? Se pregunta, no se asume: el header
            es el mismo para todas y no todas cargan el anuncio. */
@@ -238,6 +240,10 @@
                     (negocio ? '<div class="etx-hd-menu-dato">Negocio: <b>' + esc(negocio) + '</b></div>' : '') +
                     (plan ? '<div class="etx-hd-menu-dato">Plan: <b>' + esc(plan) + '</b></div>' : '') +
                 '</div>' +
+                /* ENTRADAS DE LA PÁGINA (24-nov): «Información de sucursal» vivía en
+                   la franja del negocio; ahora va aquí, con lo demás de la cuenta.
+                   La página manda {id, icono, texto, fn}; el texto se escapa. */
+                extras.map(function (x) { return '<button type="button" class="etx-hd-op" id="' + esc(x.id) + '">' + ic(x.icono, 18) + esc(x.texto) + '</button>'; }).join('') +
                 (activa ? '<a class="etx-hd-op" id="etxHdCuentaOp" href="' + esc(_destinoCuenta('/mi-cuenta.html')) + '">' + ic('usuario', 18) + 'Mi cuenta</a>' +
                           '<a class="etx-hd-op" id="etxHdPlanOp" href="' + esc(_destinoCuenta('/plan-facturacion.html')) + '">' + ic('org-corporativo', 18) + 'Plan y facturación</a>' : '') +
                 /* NOVEDADES. Va aquí y no en un cartel permanente: el anuncio
@@ -316,6 +322,7 @@
             var p = document.querySelector('.etx-hd-aviso');
             if (p && p.parentNode) p.parentNode.removeChild(p);
         });
+        extras.forEach(function (x) { liga(x.id, x.fn); });
         liga('etxHdCuentaOp', opc.miCuenta, _destinoCuenta('/mi-cuenta.html'));
         liga('etxHdPlanOp',   opc.planYFacturacion, _destinoCuenta('/plan-facturacion.html'));
         liga('etxHdSalirOp',  opc.cerrarSesion || window.ctxSalir || window.logout);

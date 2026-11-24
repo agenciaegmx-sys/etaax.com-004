@@ -39,7 +39,7 @@
 }
 
 /* ── Modo claro ─────────────────────────────────────────────────────────────
-   Esta pantalla declara su propia paleta, así que el tema claro TAMBIÉN se
+   Esta pantalla declara su propia palasí que el tema claro TAMBIÉN se
    declara aquí. Sin esto, el interruptor guardaba la preferencia y no cambiaba
    nada: era justo "el modo claro no funciona en la pantalla principal".
    Los valores son los mismos de styles.css, para que al navegar no se sienta
@@ -631,7 +631,7 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
 </style>
 <link rel="stylesheet" href="/hub-paleta.css?v=0ae181b1">
 <link rel="stylesheet" href="/hub-globales.css?v=e52b7f71">
-<link rel="stylesheet" href="/hub-modulos.css?v=34925746">
+<link rel="stylesheet" href="/hub-modulos.css?v=df6f4424">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 </head>
 <body class="hub-paleta">
@@ -894,6 +894,9 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
         <div id="chipSucursalHub" class="hub-sucursal-nombre"><span id="chipUbicacionHub" aria-hidden="true"></span><span id="chipNombre" class="neg-activo-nombre">—</span></div>
         <div id="chipTipo" class="neg-activo-tipo">—</div>
       </div>
+      <!-- (24-nov) El título de la pantalla vive en la isla de la sucursal; el
+           rótulo «Explora» y el párrafo de abajo se quitaron. -->
+      <h1 class="hub-isla-titulo">Tu espacio de <span class="g">trabajo</span></h1>
       <!-- Quién más está trabajando en este negocio. El hub NO tenía este hueco
            ni cargaba presencia.js: entre tarea y tarea la gente se queda aquí,
            así que era justo donde más falta hacía y donde nadie se anunciaba. -->
@@ -904,7 +907,7 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
           <span class="user-badge-plan" id="userPlanChip">—</span>
         </div>
         <button class="btn-cambiar-neg ic-fila" id="btnInfoNeg" onclick="abrirInfoNegocio()" title="Ver información del negocio" style="display:none"><span id="icInfoNegocio" aria-hidden="true"></span>Información del Negocio</button>
-        <button class="btn-cambiar-neg ic-fila" id="btnCambiarSucursal" onclick="abrirCambiarSucursal()" aria-haspopup="dialog" aria-controls="modalCambiarSucursal" style="display:none"><span id="icCambiarSucursal" aria-hidden="true"></span>Cambiar sucursal</button>
+        <button class="btn-cambiar-neg ic-fila hub-acc" id="btnCambiarSucursal" onclick="abrirCambiarSucursal()" aria-label="Cambiar sucursal" aria-haspopup="dialog" aria-expanded="false" aria-controls="modalCambiarSucursal" style="display:none"><span id="icCambiarSucursal" aria-hidden="true"></span><span class="hub-acc-txt">Cambiar sucursal</span></button>
         <button class="btn-cambiar-neg ic-fila" id="btnInfoSuc" onclick="abrirInfoSucursal()" title="Ver información de la sucursal" style="display:none"><span id="icInfoSucursal" aria-hidden="true"></span>Información de sucursal</button>
         <button class="btn-cambiar-neg" id="btnCatGlobal" onclick="abrirCatalogosGlobales()" title="Catálogos globales de todas las sucursales" style="display:none">🌐 Catálogos Globales</button>
         <button class="btn-cambiar-neg" id="btnVolverAdmin" onclick="volverAlAdmin()" style="display:none;border-color:var(--gold);color:var(--gold)">← Panel Admin</button>
@@ -914,13 +917,6 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
              pantalla, y la de arriba está siempre a la vista porque la barra es
              fija. -->
       </div>
-    </div>
-
-    <!-- Hero -->
-    <div class="hub-hero hub-trabajo-hero">
-      <div class="hub-eyebrow">Explora</div>
-      <h1 class="hub-title">TU ESPACIO DE <span class="g">TRABAJO</span></h1>
-      <p class="hub-subtitle">Cambia de módulo y encuentra sus herramientas sin perder el contexto de tu sucursal.</p>
     </div>
 
     <div class="hub-workspace">
@@ -2029,7 +2025,18 @@ function _pintarHeader() {
         logo:    neg ? _getNegLogo(neg.id) : '',
         inicio:  !_sesion ? '/index.html' : ((_sesion.type !== 'staff' || _sesion.etx) && !_sesion.isAdmin ? '/hub.html?negocios=1' : '/hub.html'),
         marcaBase: '/marca/hub',
-        cerrarSesion: function () { logout(); }
+        cerrarSesion: function () { logout(); },
+        /* (24-nov) «Información de sucursal» y «del negocio» se mudaron de la
+           franja de la sucursal a este menú. Salen cuando esa franja los
+           ofrecería: sus botones (ocultos) siguen diciendo cuándo. */
+        extras: function () {
+            var vm = document.getElementById('viewModulos');
+            if (!vm || vm.style.display === 'none') return [];
+            var l = [], s = document.getElementById('btnInfoSuc'), n = document.getElementById('btnInfoNeg');
+            if (s && s.style.display !== 'none') l.push({ id: 'etxHdInfoSucOp', icono: 'sh-info-sucursal', texto: 'Información de sucursal', fn: abrirInfoSucursal });
+            if (n && n.style.display !== 'none') l.push({ id: 'etxHdInfoNegOp', icono: 'sh-info-negocio', texto: 'Información del negocio', fn: abrirInfoNegocio });
+            return l;
+        }
     });
     if (!_sesion) {
         var inicio = document.querySelector('#etaax-header .etx-hd-centro a');
@@ -3413,6 +3420,7 @@ async function abrirCambiarSucursal() {
     estado.textContent = cargar ? 'Actualizando sucursales…' : '';
     _pintarCambioSucursal(neg, cargar);
     _abrirPanelGlobal('sucursales');
+    _hubPopColocar();
     if (cargar) {
         var ok = false;
         try { ok = await sbSucPull(neg.id); } catch (e) {}
@@ -3422,6 +3430,17 @@ async function abrirCambiarSucursal() {
         estado.textContent = ok ? '' : 'No se pudo actualizar la lista. Se muestran las sucursales guardadas.';
     }
     if (!_getSucursales(neg.id).length) estado.textContent = 'Todavía no hay sucursales registradas.';
+}
+/* (24-nov) Las sucursales se despliegan DEBAJO del botón, como el menú de la
+   cuenta, y el botón se queda expandido mientras tanto. */
+function _hubPopColocar() {
+    var b = document.getElementById('btnCambiarSucursal'), m = document.getElementById('modalCambiarSucursal');
+    if (!b || !m) return;
+    var r = b.getBoundingClientRect();
+    m.classList.add('hub-pop');
+    m.style.setProperty('--pop-top', Math.round(r.bottom + 10) + 'px');
+    m.style.setProperty('--pop-right', Math.max(12, Math.round(window.innerWidth - r.right)) + 'px');
+    b.classList.add('abierto'); b.setAttribute('aria-expanded', 'true');
 }
 function cambiarSucursalDesdePanel(sucId) {
     var neg = _negocioCambioSucursal();
@@ -3759,6 +3778,7 @@ function _showModulos(neg) {
     var btnEtx = document.getElementById('btnEtxSucursales');
     if (btnEtx) btnEtx.style.display = (_sesion && _sesion.etx) ? '' : 'none';
     if (_sesion && _sesion.etx) { var _bi = document.getElementById('btnInfoNeg'); if (_bi) _bi.style.display = 'none'; }
+    _pintarHeader();   // el menú de la cuenta ofrece la información de esta sucursal
     if (typeof window.etaaxPintarModulos === 'function') {
         window.etaaxPintarModulos({ negId: neg.id, sucId: sucId, staff: !!(_sesion && _sesion.type === 'staff'), rol: (_sesion && _sesion.rol) || 'otro' });
     }
@@ -3875,6 +3895,8 @@ function _abrirPanelGlobal(tipo) {
     }
 }
 function _cerrarPanelGlobal() {
+    var _bs = document.getElementById('btnCambiarSucursal');
+    if (_bs) { _bs.classList.remove('abierto'); _bs.setAttribute('aria-expanded', 'false'); }
     if (!_panelGlobalAbierto) return;
     _panelGlobalAbierto.style.display = 'none';
     _panelGlobalAbierto = null;
@@ -4814,7 +4836,7 @@ async function guardarNuevaPassword(){
 <script src="admin-guard.js"></script>
 <script src="/etaax-iconos.js?v=c96ccca0"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
-<script src="/etaax-header.js?v=412dbfd1"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
+<script src="/etaax-header.js?v=2721a8a2"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="/hub-interacciones.js?v=43cd2b2b"></script>
 <script src="/hub-modulos.js?v=715c8fcb"></script>
 <script src="security.js?v=c188734e"></script>

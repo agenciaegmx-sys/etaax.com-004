@@ -18724,6 +18724,43 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
                   igual('.etx-isla.etx-isla--chica{height:26px;min-width:26px;padding:012px;box-shadow:03px9pxrgba(14,48,53,.22);') &&
                   igual('.etx-isla.etx-isla--mini.etx-isla-resto{max-width:0;opacity:0;}'), true);
     });
+    /* (24-nov) La franja del negocio es una isla larga; el título de la pantalla
+       sube a ella; la barra lateral es el desplegable «Sub módulos». La prueba
+       de navegador es tests/probar-isla-negocio.cjs; aquí, lo que no puede
+       regresar sin que se note. */
+    test('la isla del negocio no vuelve a traer el rótulo del negocio, el plan ni «Información de sucursal»', () => {
+        const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        const i = mu.indexOf('window.etaaxDisenoCtxBar = function'), f = mu.slice(i, mu.indexOf('\n    };', i));
+        return eq(/etx-ctx-isla/.test(f) && !/etx-ctx-marca|ctx-badge-plan|id="etxInfoSucursal"/.test(f) &&
+                  /acc\('etxCambiarSucursal'/.test(f) && /acc\('etxCambiarModulo'/.test(f) &&
+                  /texto:'Información de sucursal', fn:abrirInfoSucursal/.test(f), true);
+    });
+    test('…el menú de la cuenta acepta entradas de la página y escapa su texto', () => {
+        const hd = fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8');
+        return eq(/extras\.map\(function \(x\) \{ return '<button type="button" class="etx-hd-op" id="' \+ esc\(x\.id\) \+ '">' \+ ic\(x\.icono, 18\) \+ esc\(x\.texto\)/.test(hd) &&
+                  /typeof x\.fn === 'function'/.test(hd), true);
+    });
+    test('…el título sube a la isla copiando TEXTO (nunca marcado de la página)', () => {
+        const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        const i = mu.indexOf('function pintarTitulo()'), f = mu.slice(i, mu.indexOf('\n    function ', i + 10));
+        return eq(/sp\.textContent = p\.t/.test(f) && /document\.createTextNode\(p\.t\)/.test(f) && !/innerHTML/.test(f), true);
+    });
+    test('…la barra lateral ya no le quita ancho al contenido: es el desplegable «Sub módulos»', () => {
+        const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8'), css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8');
+        return eq(/raiz\.setProperty\('--etx-sidebar-space', '0px'\)/.test(mu) && /<span class="etx-sub-txt">Sub módulos<\/span>/.test(mu) &&
+                  /if \(!nav\.contains\(t\) \|\| \(t\.closest && t\.closest\('a\.nav-link'\)\)\) abrir\(false\)/.test(mu) &&
+                  /body\.etx-modulos-ui\.etx-sub-menu #nav:not\(\.etx-sub-abierto\)>:not\(\.nav-top\) \{display:none!important;\}/.test(css), true);
+    });
+    test('…y los botones de la isla despliegan sus opciones pegadas a ellos sin perder lo expandido', () => {
+        const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        return eq(/var seguir = dialogo\.open && dialogo\._etxTrigger === trigger;/.test(mu) && /if \(dialogo\.open\) return;   \/\/ el «close» de un diálogo anterior llega tarde/.test(mu) &&
+                  /dialogo\.classList\.toggle\('etx-pop', pop\)/.test(mu), true);
+    });
+    test('hub: la isla con «Tu espacio de trabajo», Cambiar sucursal que despliega y la información en el menú de la cuenta', () => {
+        const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        return eq(/id="btnCambiarSucursal"[^>]*hub-acc|hub-acc[^>]*id="btnCambiarSucursal"/.test(h) && /_abrirPanelGlobal\('sucursales'\);\n    _hubPopColocar\(\);/.test(h) &&
+                  /_bs\.classList\.remove\('abierto'\)/.test(h) && /texto: 'Información de sucursal', fn: abrirInfoSucursal/.test(h), true);
+    });
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));
         return eq(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(cuerpo) || !/_insMenuItem\('ins-editar'/.test(cuerpo), false);
@@ -29295,8 +29332,11 @@ console.log('\n══ BE19 · Cambiar de módulo entra al módulo ══');
         const h = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
         eq(/id="hubIrAlModulo"/.test(h), true, 'no hay botón para entrar al módulo');
         eq(/ir\.href = activo\.portada/.test(hub), true, 'el botón no apunta a la portada del módulo');
-        return eq(/<div class="hub-eyebrow">Explora<\/div>/.test(h), true,
-                  'el rótulo del espacio de trabajo volvió a repetir el título');
+        /* (24-nov) El título «Tu espacio de trabajo» subió a la isla de la
+           sucursal; el rótulo «Explora» y su párrafo se quitaron. */
+        return eq(/<h1 class="hub-isla-titulo">Tu espacio de <span class="g">trabajo<\/span><\/h1>/.test(h) &&
+                  !/<div class="hub-eyebrow">Explora<\/div>/.test(h) && !/hub-trabajo-hero/.test(h), true,
+                  'el título del espacio de trabajo no está en la isla, o volvió el rótulo de arriba');
     });
 
     /* ── El título: mayúsculas y dos colores, en los cuatro módulos ───────── */

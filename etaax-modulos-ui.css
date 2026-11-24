@@ -143,8 +143,8 @@ body.etx-modulos-ui #nav .etx-nav-back {
 }
 body.etx-modulos-ui #nav .etx-nav-back .etx-ic {--etx-color:var(--etx-ui-cyan);transform:rotate(180deg);}
 body.etx-modulos-ui .main-content {
-  margin-left:var(--etx-sidebar-space,268px);margin-top:var(--etx-context-h,128px);
-  width:calc(100% - var(--etx-sidebar-space,268px));padding:24px 24px 48px;
+  margin-left:var(--etx-sidebar-space,0px);margin-top:var(--etx-context-h,128px);
+  width:calc(100% - var(--etx-sidebar-space,0px));padding:24px 24px 48px;
 }
 body.etx-modulos-ui .main-content>.wrap {width:100%;min-width:0;max-width:100%;}
 /* Los módulos no llaman «wrap» a su envoltorio: Staff y Diario usan `.cf-wrap`
@@ -302,7 +302,7 @@ body.etx-modulos-ui :is(input,select,textarea):focus {
   outline:none;border-color:var(--etx-ui-cyan);box-shadow:0 0 0 2px var(--etx-ui-cyan-tint);
 }
 body.etx-modulos-ui ::placeholder {color:var(--etx-ui-muted);opacity:1;}
-body.etx-modulos-ui :is(#vistaMenuReceta,#vistaCaratula) {top:var(--etx-shell-top)!important;left:var(--etx-sidebar-space,268px)!important;}
+body.etx-modulos-ui :is(#vistaMenuReceta,#vistaCaratula) {top:var(--etx-shell-top)!important;left:var(--etx-sidebar-space,0px)!important;}
 body.etx-modulos-ui:has(#vistaMenuReceta[style*="display: flex"]) {overflow:hidden;}
 body.etx-modulos-ui #moduloLanding {top:var(--etx-shell-top);}
 /* LA PORTADA DE RECETAS, AL MISMO FONDO QUE EL RESTO. Era la última con la
@@ -463,7 +463,7 @@ body.etx-modulos-ui :is(#nav,#ctxBar,.etx-module-dialog) :is(a,button):focus-vis
 @media(min-width:901px) {
   /* La tarjeta del negocio le cede su carril a la barra: 268 abierta, y solo
      lo de la CAJA cuando está plegada (--etx-ctx-space, ver medirLayout). */
-  body.etx-modulos-ui #ctxBar {padding-left:calc(var(--etx-ctx-space,var(--etx-sidebar-space,268px)) + 24px);}
+  body.etx-modulos-ui #ctxBar {padding-left:calc(var(--etx-ctx-space,var(--etx-sidebar-space,0px)) + 24px);}
   body.etx-modulos-ui #nav {
     top:calc(var(--etx-header-h,70px) + 16px);
     max-height:calc(100dvh - var(--etx-header-h,70px) - 32px);
@@ -575,3 +575,117 @@ body.etx-modulos-ui #moduloLanding::before {
   content:''; position:sticky; top:0; display:block; height:18px; margin-bottom:-18px; z-index:55; pointer-events:none;
   background:linear-gradient(to bottom, var(--bg) 0, transparent 100%);
 }
+
+/* ══ LA FRANJA DEL NEGOCIO, UNA ISLA LARGA Y FIJA (Edwin, 24-nov) ═════════════
+   Era una tarjeta de casi 130 px: rótulo con el negocio, nombre, giro, el plan
+   y tres botones con texto. Ahora es una cápsula de una línea —logo, sucursal
+   con su pin y su giro—, el TÍTULO DE LA PANTALLA en medio (lo sube
+   subirTitulo) y dos botones chicos que se expanden al tocarlos y despliegan
+   sus opciones pegadas a ellos. El negocio y el plan los dice el menú de la
+   cuenta; «Información de sucursal» también vive ahí. */
+body.etx-modulos-ui #ctxBar {padding:10px 24px 18px calc(var(--etx-ctx-space,0px) + 24px);}
+/* Con «Sub módulos» en la página, la isla nace ya dejándole su lugar (antes de
+   medirlo) y el contenido ya no se anima de lado: la barra no lo empuja. */
+body.etx-modulos-ui:has(#nav) #ctxBar {padding-left:calc(var(--etx-ctx-space,180px) + 24px);}
+body.etx-modulos-ui .main-content {transition:none;}
+body.etx-modulos-ui .ctx-bar-inner.etx-ctx-isla {
+  display:flex;flex-wrap:nowrap;align-items:center;gap:12px;width:100%;max-width:none;min-height:52px;height:auto;
+  padding:5px 7px 5px 6px;border:1px solid var(--etx-ui-cyan-line);border-radius:999px;background:var(--etx-ui-panel);
+  box-shadow:0 8px 22px rgba(0,0,0,.12);overflow:visible;box-sizing:border-box;
+}
+body.etx-modulos-ui .etx-ctx-isla .ctx-neg-emoji-wrap {width:40px;height:40px;}
+body.etx-modulos-ui .etx-ctx-isla .ctx-neg-emoji-wrap .etx-ic {width:22px;height:22px;}
+body.etx-modulos-ui .etx-ctx-isla .ctx-neg-id {flex:0 1 auto;min-width:0;max-width:34%;overflow:hidden;}
+body.etx-modulos-ui .etx-ctx-isla .ctx-neg-name {font-size:14.5px;font-weight:600;line-height:1.2;gap:5px;white-space:nowrap;overflow:hidden;}
+body.etx-modulos-ui .etx-ctx-isla .ctx-neg-name span {overflow:hidden;text-overflow:ellipsis;}
+body.etx-modulos-ui .etx-ctx-isla .ctx-neg-name .etx-ic {width:16px;height:16px;flex-shrink:0;}
+body.etx-modulos-ui .etx-ctx-isla .ctx-neg-tipo {font-size:10.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.etx-ctx-titulo {flex:1 1 auto;min-width:0;text-align:center;font-size:15px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+  line-height:1.2;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.etx-ctx-titulo .g {color:var(--etx-ui-terra);}
+.etx-ctx-titulo[hidden] {display:block;visibility:hidden;}
+body.etx-modulos-ui .etx-ctx-isla .ctx-right {margin-left:0;gap:6px;flex-shrink:0;width:auto;flex-wrap:nowrap;}
+/* Los botones chicos: solo el icono; al tocarlos se expanden con su nombre. */
+body.etx-modulos-ui .ctx-btn.etx-ctx-acc {gap:0;height:40px;min-height:40px;padding:0 10px;border-radius:999px;white-space:nowrap;overflow:hidden;}
+.etx-ctx-acc-txt {display:inline-block;max-width:0;opacity:0;margin-left:0;overflow:hidden;transition:max-width .26s ease,opacity .2s ease,margin .26s ease;}
+body.etx-modulos-ui .ctx-btn.etx-ctx-acc.abierto {border-color:var(--etx-ui-cyan);background:var(--etx-ui-cyan-tint);}
+.etx-ctx-acc.abierto .etx-ctx-acc-txt {max-width:12em;opacity:1;margin-left:8px;}
+/* …y sus opciones se despliegan debajo de ellos, como el menú de la cuenta. */
+.etx-module-dialog.etx-pop {
+  inset:auto;top:var(--pop-top,120px);right:var(--pop-right,24px);left:auto;bottom:auto;margin:0;
+  width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - var(--pop-top,120px) - 16px);
+  padding:14px;border-radius:16px;box-shadow:0 18px 44px rgba(0,0,0,.30);
+  transform-origin:top right;animation:etxPopAbre .18s ease-out both;
+}
+.etx-module-dialog.etx-pop::backdrop {background:transparent;}
+.etx-pop .etx-dialog-head {margin-bottom:6px;}
+.etx-pop .etx-dialog-head h2 {font-size:15px;letter-spacing:0;}
+.etx-pop .etx-dialog-head button {width:28px;height:28px;font-size:17px;}
+.etx-module-dialog.etx-pop>p {font-size:11.5px;margin-bottom:10px;}
+.etx-pop .etx-module-options {grid-template-columns:1fr;gap:6px;}
+.etx-pop .etx-module-options button {min-height:0;padding:9px 12px;border-radius:11px;}
+.etx-pop .etx-module-options button>svg:first-child {width:24px;height:24px;}
+.etx-pop .etx-module-options .etx-mod-isla {margin:3px 0;}
+@keyframes etxPopAbre {from {opacity:0;transform:translateY(-6px) scale(.98);} to {opacity:1;transform:none;}}
+/* El título original se queda para lectores de pantalla; su rótulo y su
+   párrafo se quitan, y una cabecera que se queda vacía se pliega. */
+body.etx-titulo-en-isla .etx-titulo-subido {position:absolute!important;width:1px!important;height:1px!important;margin:0!important;padding:0!important;
+  overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important;}
+body.etx-titulo-en-isla .etx-titulo-extra {display:none!important;}
+/* Lo que se queda en la cabecera (sus botones) se va a la derecha, y el párrafo
+   de Escandallos —también acompañaba al título— se quita. */
+body.etx-titulo-en-isla .etx-cab-con-titulo:not(.dx-hero):not(.cf-hero) {justify-content:flex-end;}
+body.etx-titulo-en-isla .etx-recetas-descripcion {display:none!important;}
+body.etx-titulo-en-isla .etx-cab-vacia {height:0!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;}
+
+/* ══ «SUB MÓDULOS»: LA BARRA LATERAL, EN UN DESPLEGABLE (Edwin, 24-nov) ═══════
+   Ya no es una columna que le quita ancho al contenido: es un botón a la
+   izquierda de la isla del negocio, del mismo alto, que se abre como el menú
+   de la cuenta. Eliges y se cierra. Vale con la barra «plegada» o no: esa
+   preferencia ya no aplica. */
+body.etx-modulos-ui.etx-sub-menu #nav,
+body.etx-modulos-ui.etx-sub-menu #nav.cerrado {
+  display:flex;position:fixed;top:calc(var(--etx-header-h,70px) + 10px);left:24px;right:auto;bottom:auto;
+  width:max-content;max-width:220px;height:52px;min-height:0;max-height:none;padding:0;overflow:hidden;
+  border:1px solid var(--etx-ui-cyan-line);border-radius:26px;background:var(--etx-ui-panel);
+  box-shadow:0 8px 22px rgba(0,0,0,.12);z-index:300;transform:none;transition:none;box-sizing:border-box;
+}
+body.etx-modulos-ui.etx-sub-menu #nav:not(.etx-sub-abierto)>:not(.nav-top) {display:none!important;}
+body.etx-modulos-ui.etx-sub-menu #nav .nav-top {padding:0;margin:0;border:0;min-height:0;height:50px;width:100%;gap:0;flex-shrink:0;}
+body.etx-modulos-ui.etx-sub-menu #nav .etx-nav-identidad {display:none;}
+body.etx-modulos-ui.etx-sub-menu #nav .etx-nav-contraer {
+  flex-direction:row;justify-content:flex-start;gap:8px;width:100%;height:100%;min-height:0;margin:0;padding:0 14px;
+  border:0;border-radius:inherit;background:transparent;color:var(--text);font-size:13px;font-weight:600;text-align:left;white-space:nowrap;cursor:pointer;
+}
+body.etx-modulos-ui.etx-sub-menu #nav .etx-nav-contraer:hover {background:var(--surface2);}
+body.etx-modulos-ui.etx-sub-menu #nav :is(.etx-nav-tg-ic,.nav-toggle-text) {display:none!important;}
+.etx-sub-ic {display:inline-flex;color:var(--etx-ui-cyan);--etx-color:var(--etx-ui-cyan);flex-shrink:0;}
+.etx-sub-ic .etx-ic {width:20px;height:20px;}
+.etx-sub-txt {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+.etx-sub-flecha {display:inline-flex;flex-shrink:0;transition:transform .2s ease;}
+.etx-sub-flecha .etx-ic {width:14px;height:14px;}
+body.etx-modulos-ui.etx-sub-menu #nav.etx-sub-abierto {
+  width:250px;max-width:calc(100vw - 24px);height:auto;max-height:calc(100dvh - var(--etx-header-h,70px) - 26px);overflow-y:auto;padding:0 8px 8px;
+  border-color:var(--etx-ui-cyan);border-radius:18px;box-shadow:0 18px 44px rgba(0,0,0,.30);animation:etxPopAbre .18s ease-out both;transform-origin:top left;
+}
+body.etx-modulos-ui.etx-sub-menu #nav.etx-sub-abierto .nav-top {margin:0 -8px 8px;width:calc(100% + 16px);border-bottom:1px solid var(--etx-ui-line);}
+body.etx-modulos-ui.etx-sub-menu #nav.etx-sub-abierto .etx-nav-contraer {border-radius:18px 18px 0 0;}
+body.etx-modulos-ui.etx-sub-menu #nav.etx-sub-abierto .etx-sub-flecha {transform:rotate(180deg);}
+body.etx-modulos-ui.etx-sub-menu #nav .nav-link {min-height:48px;padding:9px 10px;margin:0 0 4px;}
+body.etx-modulos-ui.etx-sub-menu #nav .etx-nav-back {margin-top:8px;padding-top:12px;min-height:44px;}
+@media (max-width:600px) {
+  body.etx-modulos-ui #ctxBar {padding:8px 12px 14px calc(var(--etx-ctx-space,0px) + 12px);}
+  body.etx-modulos-ui:has(#nav) #ctxBar {padding-left:calc(var(--etx-ctx-space,58px) + 12px);}
+  body.etx-modulos-ui .ctx-bar-inner.etx-ctx-isla {flex-wrap:wrap;row-gap:2px;border-radius:26px;padding:5px 6px;}
+  body.etx-modulos-ui .etx-ctx-isla .ctx-neg-id {flex:1 1 0;max-width:none;}
+  body.etx-modulos-ui .etx-ctx-isla .ctx-neg-emoji-wrap {width:36px;height:36px;}
+  body.etx-modulos-ui .etx-ctx-isla .ctx-right {display:flex;gap:4px;}
+  body.etx-modulos-ui .ctx-btn.etx-ctx-acc {padding:0 9px;font-size:12px;}
+  .etx-ctx-titulo {order:5;flex:1 0 100%;font-size:13px;padding:2px 0 4px;}
+  body.etx-modulos-ui.etx-sub-menu #nav, body.etx-modulos-ui.etx-sub-menu #nav.cerrado {top:calc(var(--etx-header-h,70px) + 8px);left:12px;height:48px;width:48px;}
+  body.etx-modulos-ui.etx-sub-menu #nav .nav-top {height:46px;}
+  body.etx-modulos-ui.etx-sub-menu #nav:not(.etx-sub-abierto) .etx-nav-contraer {padding:0;justify-content:center;}
+  body.etx-modulos-ui.etx-sub-menu #nav:not(.etx-sub-abierto) :is(.etx-sub-txt,.etx-sub-flecha) {display:none;}
+  body.etx-modulos-ui.etx-sub-menu #nav.etx-sub-abierto {width:min(260px,calc(100vw - 24px));}
+}
+@media print { body.etx-titulo-en-isla .etx-titulo-subido {position:static!important;width:auto!important;height:auto!important;clip-path:none!important;} }
