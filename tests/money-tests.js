@@ -18108,8 +18108,21 @@ console.log('\n══ BH88 · Cost·ax y Fin·ax independientes; requisiciones c
         eq(/_cacheInsumosReq = r\[0\]\.filas\.filter\(Boolean\)/.test(req), true));
     test('requisiciones (Cost·ax) solo lee ventas (cortes) si la sucursal también tiene Fin·ax', () =>
         eq(/_reqConVentas\(\) \? leerTodo\('cortes'\)/.test(req) && /etaaxTieneApp\(_reqNeg\(\), localStorage\.getItem\('etaax_sucursal_activa'\) \|\| '', 'finax'\)/.test(req), true));
-    test('…y sin Fin·ax esconde «Compra vs venta»', () =>
-        eq(/kc\.style\.display = _reqConVentas\(\) \? '' : 'none'/.test(req), true));
+    /* (24-nov) Edwin: sin Fin·ax (o sin cortes en el periodo) «Compra vs venta» NO se
+       esconde: la venta del periodo se escribe a mano y se guarda en la requisición. */
+    test('…y sin Fin·ax (o sin cortes) la venta se escribe a mano: «Compra vs venta» siempre está', () =>
+        eq(/var manual = !conFin \|\| cortes <= 0 \|\| !!ra\.ventaManualActiva;/.test(req) && /kc\.style\.display = '';/.test(req) &&
+           /_reqActual\.ventaManual = isNaN\(n\) \? '' : n;/.test(req), true));
+    test('requisiciones: «Registrar y siguiente» con candado — sin existencia no se pasa (aunque sea 0, se anota)', () => {
+        const i = req.indexOf('function _reqSiguiente('), f = req.slice(i, req.indexOf('\n}', i));
+        return eq(/if \(!esRegistrado\(ri\)\) \{\s*alert\('Anota la existencia actual/.test(f) && !/registrarFila\(id\)/.test(f) &&
+                  /'Registrar y siguiente'/.test(req) && !/Registrar en cero/.test(req.replace(/\/\*[\s\S]*?\*\//g, '')), true);
+    });
+    test('…los campos de existencia nacen vacíos (sin un «0» de muestra) y el pedido va en azul verdoso, no en rojo', () =>
+        eq(/placeholder="" aria-label="Cantidad ' \+ k/.test(req) && /\.rq-res\.pedir b \{ color: var\(--etx-ui-cyan/.test(req) && !/\.rq-res\.pedir b \{ color: var\(--red\)/.test(req), true));
+    test('…y en el Paso 3 el pedido se ve todo, por proveedor o por área, y se exporta LO QUE SE VE', () =>
+        eq(/function _itemsP3\(items\)/.test(req) && /onclick="exportarPedido\(_p3Filtro\.tipo,_p3Filtro\.valor\)"/.test(req) &&
+           /var items = _itemsP3\(_itemsPedido\(\)\);/.test(req) && !/id="expProv"/.test(req), true));
     test('requisiciones usa el botón de pasos de inventarios (sin la barra vieja)', () =>
         eq(/id="btnPasoMenu"/.test(req) && !/id="stepBtn1"/.test(req) && /PASO_REQ = \['', 'Existencias', 'Proyección', 'Pedido y envío'\]/.test(req), true));
     test('Fin·ax (Estadísticas) ya no lee recetas ni insumos: sin rentabilidad de recetas', () =>

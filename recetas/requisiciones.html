@@ -17,7 +17,7 @@ function _exigeReq(sub, msg){
 function _reqOcultar(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
 function _aplicarPermisosReq(){
     if(!_puedeReq('exportar'))      _reqOcultar('btnPedidoReq');
-    if(!_puedeReq('exportar'))      ['btnExpCompleto','btnExpProv','btnExpArea','btnExpCSV','btnVistaAdminReq']
+    if(!_puedeReq('exportar'))      ['btnExpPedido','btnExpCSV','btnVistaAdminReq']
                                        .forEach(_reqOcultar);
     // Los pasos que el rol no puede ver salen del menú de pasos.
     if (typeof _pintarPasoMenuReq === 'function') _pintarPasoMenuReq();
@@ -441,7 +441,8 @@ document.addEventListener('DOMContentLoaded', function(){
         .rq-res { margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
         .rq-res b { font-size: 16px; display: inline-flex; align-items: center; gap: 6px; } .rq-res span { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
         .rq-res b .inv-ic, .rq-mini .inv-ic { color: inherit; margin-right: 0; }
-        .rq-res.pedir { border-color: rgba(224,90,58,.55); background: rgba(224,90,58,.08); } .rq-res.pedir b { color: var(--red); }
+        /* (24-nov) Hay pedido = azul verdoso de la marca, no rojo: el rojo se leía como un error. */
+        .rq-res.pedir { border-color: color-mix(in srgb, var(--etx-ui-cyan, #2a9aa5) 50%, transparent); background: color-mix(in srgb, var(--etx-ui-cyan, #2a9aa5) 9%, transparent); } .rq-res.pedir b { color: var(--etx-ui-cyan, #2a9aa5); }
         .rq-res.ok { border-color: rgba(61,190,122,.5); background: rgba(61,190,122,.08); } .rq-res.ok b { color: var(--green); }
         .rq-res.aviso { border-color: rgba(224,169,61,.55); background: rgba(224,169,61,.08); } .rq-res.aviso b { color: var(--accent); }
         .rq-res.neutro b { color: var(--text-muted, var(--text)); }
@@ -451,10 +452,10 @@ document.addEventListener('DOMContentLoaded', function(){
         .rc-sig { width: 100%; margin-top: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
             background: rgba(61,190,122,.15); border: 1px solid var(--green); color: var(--green);
             border-radius: 12px; padding: 14px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; }
-        .rc-sig.cero { background: rgba(245,200,66,.08); border-color: var(--accent); color: var(--accent); }
+        .rc-sig.cero { background: transparent; border-color: var(--border); color: var(--text-dim); }
         .rc-sig .inv-ic { color: inherit; margin-right: 0; }
         .rq-mini { font-size: 12px; font-weight: 700; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
-        .rq-mini.pedir { color: var(--red); } .rq-mini.ok { color: var(--green); } .rq-mini.aviso { color: var(--accent); } .rq-mini.neutro { color: var(--text-dim); }
+        .rq-mini.pedir { color: var(--etx-ui-cyan, #2a9aa5); } .rq-mini.ok { color: var(--green); } .rq-mini.aviso { color: var(--accent); } .rq-mini.neutro { color: var(--text-dim); }
         .req-aviso { margin: 12px 18px 0; padding: 10px 14px; border: 1px solid rgba(61,190,122,.5); background: rgba(61,190,122,.08); color: var(--text); border-radius: 10px; font-size: 13px; }
         .req-aviso[hidden] { display: none; }
         @media (max-width: 760px) { .rq-ref { grid-template-columns: 1fr; } .rc-ajuste { grid-template-columns: 1fr; } }
@@ -462,6 +463,14 @@ document.addEventListener('DOMContentLoaded', function(){
         .req-chip-mini{background:transparent;border:none;color:var(--text-muted);padding:5px 11px;border-radius:6px;
             font-family:'DM Sans',sans-serif;font-size:11.5px;cursor:pointer}
         .req-chip-mini.activo{background:var(--surface);color:var(--viol);font-weight:600;border:1px solid var(--border)}
+        /* (24-nov) Paso 3: el pedido por proveedor o por área, y exportar lo que se ve. */
+        .p3-barra { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+        .p3-ver { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:3px; }
+        .p3-sel { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:7px; font-family:inherit; font-size:12px; }
+        .p3-exp { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
+        .kvi-manual { width:100%; margin-top:6px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-family:inherit; font-size:18px; font-weight:700; }
+        .kvi-nota { font-size:10.5px; color:var(--text-dim); margin-top:5px; line-height:1.45; }
+        .kvi-link { background:none; border:0; padding:0; margin-top:6px; color:var(--etx-ui-cyan, #2a9aa5); font:inherit; font-size:11px; cursor:pointer; text-decoration:underline; }
         .nota-chip{cursor:help;display:inline-flex;vertical-align:middle}
         .nota-chip .inv-ic{margin-right:0}
         .p2-titulo{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--text);margin:18px 0 10px}
@@ -622,12 +631,13 @@ document.addEventListener('DOMContentLoaded', function(){
         <!-- ═══════════ PASO 3 · PEDIDO Y EXPORT ═══════════ -->
         <div id="vistaPaso3" style="display:none">
             <div class="wrap">
-                <!-- KPI compra vs venta (solo si la sucursal también tiene Fin·ax) -->
+                <!-- KPI compra vs venta. La venta sale de los cortes (Fin·ax); sin Fin·ax o sin cortes
+                     en el periodo, se escribe a mano (24-nov). -->
                 <div class="card" id="kviCard" style="max-width:none;margin-bottom:14px">
                     <div class="card-body" style="padding:16px 18px">
                         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
                             <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text)" class="req-tit-ic" data-ic="fin-estadisticas" data-ic-tam="18">Compra vs Venta</div>
-                            <div style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px">
+                            <div id="kviRangos" style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px">
                                 <button class="req-chip-mini activo" data-d="7" onclick="setRangoVenta(7,this)">7 días</button>
                                 <button class="req-chip-mini" data-d="14" onclick="setRangoVenta(14,this)">14 días</button>
                                 <button class="req-chip-mini" data-d="30" onclick="setRangoVenta(30,this)">30 días</button>
@@ -640,22 +650,24 @@ document.addEventListener('DOMContentLoaded', function(){
                     </div>
                 </div>
 
-                <!-- Export -->
-                <div class="card" style="max-width:none;margin-bottom:14px">
+                <!-- (24-nov) El pedido: verlo todo, por proveedor o por área, y exportar LO QUE SE VE. -->
+                <div class="card" id="p3Pedido" style="max-width:none;margin-bottom:14px">
                     <div class="card-body" style="padding:16px 18px">
-                        <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text);margin-bottom:10px" class="req-tit-ic" data-ic="adm-exportar-csv" data-ic-tam="18">Exportar pedido</div>
-                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-                            <button class="btn-vista" id="btnExpCompleto" onclick="exportarPedido('','')" style="color:var(--green);border-color:var(--green)" data-ic="adm-imprimir">Pedido completo</button>
-                            <select id="expProv" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:7px;font-family:inherit;font-size:12px"></select>
-                            <button class="btn-vista" id="btnExpProv" onclick="exportarPedido('prov',document.getElementById('expProv').value)" data-ic="adm-imprimir">Por proveedor</button>
-                            <select id="expArea" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:7px;font-family:inherit;font-size:12px">
-                                <option value="cocina">Cocina</option><option value="barra">Barra</option><option value="bodega">Bodega</option>
-                            </select>
-                            <button class="btn-vista" id="btnExpArea" onclick="exportarPedido('area',document.getElementById('expArea').value)" data-ic="adm-imprimir">Por área</button>
-                            <button class="btn-vista" id="btnExpCSV" onclick="exportarCSV()" data-ic="adm-exportar-csv">CSV</button>
-                            <button class="btn-vista" id="btnVistaAdminReq" onclick="verPedidoAdmin()" style="color:var(--accent);border-color:var(--accent)" data-ic="aut-candado">Vista admin (con costos)</button>
+                        <div class="p3-barra">
+                            <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text)" class="req-tit-ic" data-ic="adm-comprobante" data-ic-tam="18">Pedido</div>
+                            <div class="p3-ver" role="group" aria-label="Ver el pedido">
+                                <button class="req-chip-mini activo" data-tipo="" onclick="setFiltroP3('')">Todo</button>
+                                <button class="req-chip-mini" data-tipo="prov" onclick="setFiltroP3('prov')">Por proveedor</button>
+                                <button class="req-chip-mini" data-tipo="area" onclick="setFiltroP3('area')">Por área</button>
+                            </div>
+                            <select id="p3Valor" class="p3-sel" hidden onchange="setValorP3(this.value)" aria-label="Cuál"></select>
+                            <div class="p3-exp">
+                                <button class="btn-vista" id="btnExpPedido" onclick="exportarPedido(_p3Filtro.tipo,_p3Filtro.valor)" style="color:var(--green);border-color:var(--green)" data-ic="adm-imprimir">Exportar</button>
+                                <button class="btn-vista" id="btnExpCSV" onclick="exportarCSV()" data-ic="adm-exportar-csv">CSV</button>
+                                <button class="btn-vista" id="btnVistaAdminReq" onclick="verPedidoAdmin()" style="color:var(--accent);border-color:var(--accent)" data-ic="aut-candado">Vista admin (con costos)</button>
+                            </div>
                         </div>
-                        <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Los comentarios de "pedido modificado" y "no pedir" van incluidos en el export.</div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-top:8px" id="p3ExpNota">Se exporta lo que ves. Los comentarios de «pedido modificado» y «no pedir» van incluidos.</div>
                     </div>
                 </div>
 
@@ -1180,13 +1192,20 @@ function _cerrarCapturaReq() {
     var w = document.getElementById('reqCardWrap'); if (w) w.innerHTML = '';
     renderReq();
 }
-/* «Registrado — Siguiente»: sin existencia se registra EN CERO (como
-   inventarios) y pasa al siguiente PENDIENTE de la lista, con el mismo filtro
-   del buscador, para revisar de corrido. */
+/* «Registrar y siguiente»: registra y pasa al siguiente PENDIENTE de la lista,
+   con el mismo filtro del buscador, para revisar de corrido.
+   CANDADO (Edwin, 24-nov): sin existencia NO se pasa. A diferencia del
+   inventario, aquí la existencia decide el pedido —un cero inventado pide todo
+   el máximo—, así que se anota siempre, aunque sea 0. «No pedir» quita el
+   insumo del pedido, pero la existencia se anota igual. */
 function _reqSiguiente(id) {
     var ri = reqData[id] || {};
-    if (!esRegistrado(ri)) { registrarFila(id); if (!esRegistrado(reqData[id])) return; }
-    else setReqData(reqData);
+    if (!esRegistrado(ri)) {
+        alert('Anota la existencia actual antes de seguir, aunque sea 0.\n\nSi no vas a pedir este insumo, toca «No pedir» (la existencia se anota igual).');
+        var c = document.querySelector('#rcCard .rc-in'); if (c) c.focus();
+        return;
+    }
+    setReqData(reqData);
     var i = insumos.findIndex(function (x) { return x.id === id; });
     var pend = insumos.filter(function (x) { return !esRegistrado(reqData[x.id]) && _reqPasaBusq(x); });
     var sig = pend.find(function (x) { return insumos.indexOf(x) > i; }) || pend[0];
@@ -1334,7 +1353,7 @@ function _resultadoInfo(ins, ri) {
 }
 function _resultadoHTML(ins, ri) { var r = _resultadoInfo(ins, ri); return '<div class="rq-res ' + r.cls + '">' + r.html + '</div>'; }
 function _sigTxt(reg) {
-    return reg ? _icReq('adm-pagado', 16) + 'Registrado — Siguiente' : _icReq('adm-pendiente', 16) + 'Registrar en cero — Siguiente';
+    return (reg ? _icReq('adm-pagado', 16) : _icReq('adm-pendiente', 16)) + 'Registrar y siguiente';
 }
 /* El pedido: lo sugerido viene escrito; «Pedir otra cantidad» lo deja cambiar. */
 var _reqPedEdit = {};
@@ -1362,7 +1381,7 @@ function _cardCaptura(ins) {
     var campo = function (k) {
         var c = cap['c' + k], u = cap['u' + k];
         return '<div class="rc-cant">' +
-            '<input class="rc-in" type="text" inputmode="decimal" value="' + _val(c) + '" placeholder="0" aria-label="Cantidad ' + k + '" ' +
+            '<input class="rc-in" type="text" inputmode="decimal" value="' + _val(c) + '" placeholder="" aria-label="Cantidad ' + k + '" ' +
                 'oninput="setCantReq(\'' + id + '\',' + k + ',this.value)">' +
             '<select aria-label="Unidad ' + k + '" onchange="setUniReq(\'' + id + '\',' + k + ',this.value)">' +
                 unidades.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === u ? ' selected' : '') + '>' + _esc(x[1]) + '</option>'; }).join('') +
@@ -2130,7 +2149,7 @@ function renderPaso2() {
 var _rangoVentaDias = 7;
 function setRangoVenta(d, btn) {
     _rangoVentaDias = d;
-    document.querySelectorAll('.req-chip-mini').forEach(function(b){ b.classList.toggle('activo', b===btn); });
+    document.querySelectorAll('#kviCard .req-chip-mini').forEach(function(b){ b.classList.toggle('activo', b===btn); });
     var custom = d === 0;
     document.getElementById('kviDesde').style.display = custom?'':'none';
     document.getElementById('kviHasta').style.display = custom?'':'none';
@@ -2157,34 +2176,95 @@ function _ventaRango(r) {
         return true;
     }).reduce(function(s,c){ return s + (typeof EtaaxCore!=='undefined' ? EtaaxCore.ventasBruta(c) : ((parseFloat(c.efectivo)||0)+(parseFloat(c.tarjeta)||0)+(parseFloat(c.transferencia)||0))); }, 0);
 }
+/* La venta del periodo: de los cortes (Fin·ax) o escrita a mano. Sin Fin·ax, o
+   sin cortes en el periodo, no hay de dónde sacarla: se escribe (y se guarda en
+   la requisición). Con cortes, también se puede corregir a mano. */
+function _ventaP3() {
+    var r = _rangoVenta(), conFin = _reqConVentas(), cortes = conFin ? _ventaRango(r) : 0, ra = _reqActual || {};
+    var manual = !conFin || cortes <= 0 || !!ra.ventaManualActiva;
+    var vm = parseFloat(ra.ventaManual);
+    return { r: r, conFin: conFin, cortes: cortes, manual: manual, venta: manual ? (isNaN(vm) ? 0 : vm) : cortes };
+}
+function _pctP3(costo, venta) {
+    var pct = venta > 0 ? costo / venta * 100 : null;
+    return { pct: pct, col: pct === null ? 'var(--text-dim)' : pct <= 30 ? 'var(--green)' : pct <= 40 ? 'var(--accent)' : 'var(--red)',
+             txt: pct === null ? 'Falta la venta del periodo' : (pct <= 30 ? 'sano (≤30%)' : pct <= 40 ? 'vigilar (≤40%)' : 'alto (>40%)') };
+}
+function setVentaManualReq(v) {
+    if (!_reqActual) return;
+    var n = parseFloat(String(v).replace(/[^0-9.]/g, ''));
+    _reqActual.ventaManual = isNaN(n) ? '' : n;
+    setReqData(reqData);
+    /* Solo cambia el porcentaje: repintar quitaría el cursor del campo. */
+    var costo = _itemsPedido().reduce(function (s, it) { return s + it.costo; }, 0), k = _pctP3(costo, isNaN(n) ? 0 : n);
+    var e = document.getElementById('kviPct'); if (e) { e.textContent = k.pct === null ? '—' : k.pct.toFixed(1) + '%'; e.style.color = k.col; }
+    var t = document.getElementById('kviPctNota'); if (t) t.textContent = k.txt;
+}
+function usarVentaManualReq(si) {
+    if (!_reqActual) return;
+    _reqActual.ventaManualActiva = !!si;
+    setReqData(reqData); renderPaso3();
+    if (si) { var e = document.getElementById('kviVentaManual'); if (e) e.focus(); }
+}
+/* Ver el pedido: todo, por proveedor o por área. Lo que se ve es lo que se exporta. */
+var _p3Filtro = { tipo: '', valor: '' };
+/* El insumo sin proveedor viaja como «—»; en pantalla y en la hoja se nombra. */
+function _provLbl(p) { return (!p || p === '—') ? 'Sin proveedor' : p; }
+function setFiltroP3(tipo) { _p3Filtro = { tipo: tipo || '', valor: '' }; renderPaso3(); }
+function setValorP3(v) { _p3Filtro.valor = v; renderPaso3(); }
+function _itemsP3(items) {
+    if (_p3Filtro.tipo === 'prov') return items.filter(function (it) { return it.proveedor === _p3Filtro.valor; });
+    if (_p3Filtro.tipo === 'area') return items.filter(function (it) { return it.area === _p3Filtro.valor; });
+    return items;
+}
 function renderPaso3() {
     var items = _itemsPedido();
     var costo = items.reduce(function(s,it){return s+it.costo;},0);
     var kc = document.getElementById('kviCard');
-    if (kc) kc.style.display = _reqConVentas() ? '' : 'none';
-    var r = _rangoVenta();
-    var venta = _ventaRango(r);
-    var pct = venta > 0 ? costo/venta*100 : null;
-    var col = pct===null ? 'var(--text-dim)' : pct<=30 ? 'var(--green)' : pct<=40 ? 'var(--accent)' : 'var(--red)';
-    document.getElementById('kviCards').innerHTML =
-        '<div class="summary-card"><div class="s-label">Venta del rango</div><div class="s-val green">'+fmtMXN(venta)+'</div>'+
-            '<div style="font-size:10px;color:var(--text-dim)">'+r.from+' → '+r.to+'</div></div>'+
+    if (kc) kc.style.display = '';
+    var v = _ventaP3(), r = v.r, k = _pctP3(costo, v.venta), ra = _reqActual || {};
+    /* 7/14/30 días solo mueven la venta de los cortes: escrita a mano no aplican. */
+    var rg = document.getElementById('kviRangos'); if (rg) rg.style.display = v.manual ? 'none' : 'flex';
+    var notaManual = !v.conFin ? 'Tu sucursal no tiene Fin·ax: escribe la venta del periodo.'
+        : v.cortes <= 0 ? 'No hay cortes en este periodo: escribe la venta a mano.'
+        : 'Escrita a mano.';
+    var ventaCard = v.manual
+        ? '<div class="summary-card"><div class="s-label">Venta del periodo</div>' +
+            '<input id="kviVentaManual" class="kvi-manual" type="text" inputmode="decimal" placeholder="$ venta" value="' + _val(ra.ventaManual) + '" oninput="setVentaManualReq(this.value)" aria-label="Venta del periodo">' +
+            '<div class="kvi-nota">' + _esc(notaManual) + '</div>' +
+            (v.conFin && v.cortes > 0 ? '<button class="kvi-link" onclick="usarVentaManualReq(false)">Usar la de los cortes (' + fmtMXN(v.cortes) + ')</button>' : '') + '</div>'
+        : '<div class="summary-card"><div class="s-label">Venta del rango</div><div class="s-val green">'+fmtMXN(v.venta)+'</div>'+
+            '<div style="font-size:10px;color:var(--text-dim)">'+r.from+' → '+r.to+' · de los cortes</div>' +
+            '<button class="kvi-link" onclick="usarVentaManualReq(true)">Escribirla a mano</button></div>';
+    document.getElementById('kviCards').innerHTML = ventaCard +
         '<div class="summary-card"><div class="s-label">Costo del pedido</div><div class="s-val" style="color:var(--viol)">'+fmtMXN(costo)+'</div>'+
             '<div style="font-size:10px;color:var(--text-dim)">'+items.length+' ítems</div></div>'+
-        '<div class="summary-card"><div class="s-label">Compra vs venta</div><div class="s-val" style="color:'+col+'">'+(pct===null?'—':pct.toFixed(1)+'%')+'</div>'+
-            '<div style="font-size:10px;color:var(--text-dim)">'+(pct===null?'sin ventas en el rango':(pct<=30?'sano (≤30%)':pct<=40?'vigilar (≤40%)':'alto (>40%)'))+'</div></div>';
+        '<div class="summary-card"><div class="s-label">Compra vs venta</div><div class="s-val" id="kviPct" style="color:'+k.col+'">'+(k.pct===null?'—':k.pct.toFixed(1)+'%')+'</div>'+
+            '<div style="font-size:10px;color:var(--text-dim)" id="kviPctNota">'+k.txt+'</div></div>';
 
-    // poblar select proveedores
-    var provs = [...new Set(items.map(function(it){return it.proveedor;}))].sort();
-    document.getElementById('expProv').innerHTML = provs.map(function(p){ return '<option value="'+_esc(p)+'">'+_esc(p)+'</option>'; }).join('') || '<option value="">—</option>';
+    // Ver por proveedor o por área: el selector se llena con lo que trae el pedido
+    var opciones = [];
+    if (_p3Filtro.tipo === 'prov') opciones = [...new Set(items.map(function(it){return it.proveedor;}))].sort().map(function (p) { return [p, _provLbl(p)]; });
+    if (_p3Filtro.tipo === 'area') opciones = [...new Set(items.map(function(it){return it.area;}))].sort().map(function (a) { return [a, AREA_LBL[a] || a || 'Sin área']; });
+    if (_p3Filtro.tipo && !opciones.some(function (o) { return o[0] === _p3Filtro.valor; })) _p3Filtro.valor = opciones.length ? opciones[0][0] : '';
+    var sel = document.getElementById('p3Valor');
+    if (sel) {
+        sel.hidden = !_p3Filtro.tipo;
+        sel.innerHTML = opciones.map(function (o) { return '<option value="' + _esc(o[0]) + '"' + (o[0] === _p3Filtro.valor ? ' selected' : '') + '>' + _esc(o[1]) + '</option>'; }).join('') || '<option value="">—</option>';
+    }
+    document.querySelectorAll('#p3Pedido .p3-ver .req-chip-mini').forEach(function (b) { b.classList.toggle('activo', (b.dataset.tipo || '') === _p3Filtro.tipo); });
 
-    // resumen agrupado
+    // el pedido que se ve (y que se exporta)
+    var vis = _itemsP3(items);
+    var titulo = _p3Filtro.tipo === 'prov' ? 'Pedido · ' + _esc(_provLbl(_p3Filtro.valor))
+        : _p3Filtro.tipo === 'area' ? 'Pedido · ' + _esc(AREA_LBL[_p3Filtro.valor] || _p3Filtro.valor || 'Sin área') + ', por proveedor'
+        : 'Pedido final por proveedor';
     var porProv = {};
-    items.forEach(function(it){ porProv[it.proveedor]=porProv[it.proveedor]||[]; porProv[it.proveedor].push(it); });
-    var html = items.length ? '<div class="p2-titulo req-tit-ic">'+_icReq('adm-comprobante',18)+'Pedido final por proveedor</div>' : '<div class="empty-state" style="display:block"><div class="e-icon">'+_icReq('adm-sin-registros',30)+'</div><div>Sin ítems a pedir</div></div>';
+    vis.forEach(function(it){ porProv[it.proveedor]=porProv[it.proveedor]||[]; porProv[it.proveedor].push(it); });
+    var html = vis.length ? '<div class="p2-titulo req-tit-ic">'+_icReq('adm-comprobante',18)+titulo+'</div>' : '<div class="empty-state" style="display:block"><div class="e-icon">'+_icReq('adm-sin-registros',30)+'</div><div>Sin ítems a pedir' + (_p3Filtro.tipo ? ' con este filtro' : '') + '</div></div>';
     Object.keys(porProv).sort().forEach(function(p){
         var its=porProv[p], tot=its.reduce(function(s,it){return s+it.costo;},0);
-        html += _grupoTabla(_icReq('adm-proveedor',15)+_esc(p), its, tot);
+        html += _grupoTabla(_icReq('adm-proveedor',15)+_esc(_provLbl(p)), its, tot);
     });
     document.getElementById('p3Resumen').innerHTML = html;
 }
@@ -2194,8 +2274,8 @@ function exportarPedido(tipo, valor) {
     if (typeof _exigeReq === 'function' && !_exigeReq('exportar', 'No puedes exportar el pedido.')) return;
     var items = _itemsPedido();
     var titulo = 'Pedido completo';
-    if (tipo==='prov') { items = items.filter(function(it){return it.proveedor===valor;}); titulo = 'Pedido · ' + valor; }
-    if (tipo==='area') { items = items.filter(function(it){return it.area===valor;}); titulo = 'Pedido · ' + (AREA_LBL[valor]||valor); }
+    if (tipo==='prov') { items = items.filter(function(it){return it.proveedor===valor;}); titulo = 'Pedido · ' + _provLbl(valor); }
+    if (tipo==='area') { items = items.filter(function(it){return it.area===valor;}); titulo = 'Pedido · ' + (AREA_LBL[valor]||valor||'Sin área'); }
     if (!items.length) { alert('No hay ítems a pedir con ese filtro.'); return; }
     var m = (typeof etaaxMarca==='function') ? etaaxMarca() : {};
     var fecha = new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
@@ -2203,7 +2283,7 @@ function exportarPedido(tipo, valor) {
     items.forEach(function(it){ porProv[it.proveedor]=porProv[it.proveedor]||[]; porProv[it.proveedor].push(it); });
     var cuerpo = '';
     Object.keys(porProv).sort().forEach(function(p){
-        cuerpo += '<tr class="ped-prov-hdr"><td colspan="4">'+_esc(p)+'</td></tr>';
+        cuerpo += '<tr class="ped-prov-hdr"><td colspan="4">'+_esc(_provLbl(p))+'</td></tr>';
         porProv[p].sort(function(a,b){return a.ins.nombre.localeCompare(b.ins.nombre,'es');}).forEach(function(it){
             cuerpo += '<tr><td>'+_esc(it.ins.nombre)+(it.ins.variedad?' '+_esc(it.ins.variedad):'')+
                 (it.ri.nota?'<div style="font-size:9px;color:#996">Nota: '+_esc(it.ri.nota)+'</div>':'')+'</td>'+
@@ -2237,8 +2317,8 @@ function exportarPedido(tipo, valor) {
 }
 function exportarCSV() {
     if (typeof _exigeReq === 'function' && !_exigeReq('exportar', 'No puedes exportar el pedido.')) return;
-    var items = _itemsPedido();
-    if (!items.length) { alert('No hay ítems a pedir.'); return; }
+    var items = _itemsP3(_itemsPedido());   // lo que se ve (todo, un proveedor o un área)
+    if (!items.length) { alert('No hay ítems a pedir' + (_p3Filtro.tipo ? ' con este filtro.' : '.')); return; }
     var filas = [['Insumo','Cantidad','Presentación','Área','Proveedor','Costo estimado','Comentario']];
     items.forEach(function(it){
         filas.push([it.ins.nombre+(it.ins.variedad?' '+it.ins.variedad:''), it.pFin, it.compra,

@@ -8,8 +8,12 @@
        una consulta no deja fuera insumos).
      · Solo los insumos de ESTA sucursal, sin sub-recetas.
      · El botón de los pasos es el de inventarios («① Existencias ▾»).
-     · Cost·ax es independiente: con Cost·ax solo no se leen las ventas (cortes)
-       ni se enseña «Compra vs venta»; con el paquete, sí.
+     · Cost·ax es independiente: con Cost·ax solo no se leen las ventas (cortes);
+       «Compra vs venta» sigue, con la venta del periodo escrita a mano.
+     · (24-nov, 3) La captura: el «Hay pedido» en azul verdoso (no rojo de error),
+       los campos de existencia nacen VACÍOS y «Registrar y siguiente» tiene
+       candado: sin existencia (aunque sea 0) no avanza. Paso 3: el pedido se
+       ve todo, por proveedor o por área, y se exporta lo que se ve.
      · (24-nov) El encabezado y el Paso 1 son los de inventarios: «Paso 1 —
        Existencias», Info general · Historial · Salir · Finalizar requisición, el
        buscador con Pendientes/Registrados y UNA vista en dos columnas; la captura
@@ -33,7 +37,7 @@ const TIPOS = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
 const resultados = [];
 async function caso(nombre, fn) {
     try { await fn(); resultados.push([nombre, true]); console.log('  ✅ ' + nombre); }
-    catch (e) { resultados.push([nombre, false]); console.log('  💥 ' + nombre + '\n     ' + String(e.message).split('\n')[0]); }
+    catch (e) { resultados.push([nombre, false]); console.log('  💥 ' + nombre + '\n     ' + String(e.message).split('\n').filter(Boolean).slice(0, 6).join(' ')); }
 }
 const pres = (min, max) => [{ nombre: 'Botella 750 ml', contenido: 750, unidad: 'ml', stockMin: min, stockMax: max, costoPieza: 200 }];
 const ins = (id, d) => ({ negocio_id: 'n1', insumo_id: id, datos: Object.assign({ id, presentaciones: pres(2, 6), activo: '1' }, d) });
@@ -231,11 +235,15 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
         await caso('…y con 3 cajas + 12 piezas (3.5 > 2): «No hay pedido», al momento', async () =>
             assert.match(await resultado(), /No hay pedido.*Tienes 3\.5 cajas: más que el mínimo \(2\)/));
         await foto(p, 'r4-tarjeta');
-        await caso('con existencia, el botón dice «Registrado — Siguiente»', async () =>
-            assert.match(await p.evaluate(() => document.getElementById('rcSig').textContent), /^Registrado — Siguiente$/));
+        await caso('con existencia, el botón dice «Registrar y siguiente» (encendido)', async () =>
+            assert.deepEqual(await p.evaluate(() => [document.getElementById('rcSig').textContent, document.getElementById('rcSig').classList.contains('cero')]), ['Registrar y siguiente', false]));
         await campos[0].fill('2'); await campos[1].fill('0');
         await caso('existencia IGUAL al mínimo (2) también pide: 4 cajas · $1,920', async () =>
             assert.match(await resultado(), /Hay pedido: 4 cajas · \$1,920\.00/));
+        await caso('el «Hay pedido» se resalta en azul verdoso (el de la marca): ni rojo de error ni el verde de «No hay pedido»', async () =>
+            assert.equal(await p.evaluate(() => { const box = document.getElementById('rcRes'), [r, g, b] = getComputedStyle(box.querySelector('b')).color.match(/\d+/g).map(Number);
+                return box.classList.contains('pedir') && g - r > 40 && b - r > 40 && b >= g - 20 ? 'verde-azul' : 'otro: ' + box.className + ' ' + [r, g, b]; }), 'verde-azul'));
+        await foto(p, 'r4c-hay-pedido');
         await caso('el pedido viene escrito (lo sugerido: 4) y bloqueado; ya no hay «Usar sugerido»', async () => {
             assert.deepEqual(await p.evaluate(() => [document.getElementById('rcPed').value, document.getElementById('rcPed').readOnly, document.getElementById('rcPedCosto').textContent]), ['4', true, '$1,920.00']);
             assert.equal(/Usar sugerido/.test(await tarjeta()), false);
@@ -302,13 +310,14 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
         await caso('…y luego «Todos los cambios guardados»', async () =>
             assert.equal(await p.evaluate(() => document.getElementById('autoGuardarInd').textContent), 'Todos los cambios guardados'));
         await p.click('#rcSig'); await p.waitForTimeout(250);
-        await caso('«Registrado — Siguiente» pasa al siguiente PENDIENTE (Limón) y la Coca queda en Registrados con su pedido', async () => {
+        await caso('«Registrar y siguiente» pasa al siguiente PENDIENTE (Limón) y la Coca queda en Registrados con su pedido', async () => {
             assert.equal(await p.evaluate(() => document.getElementById('rcCard').dataset.id), 'a_limon');
             assert.match(await p.evaluate(() => document.querySelector('#p1Reg .p12-item[data-id="a_coca"]').textContent.replace(/\s+/g, ' ')), /Pedir 8 cajas · \$3,840\.00\s*Hay 2 cajas/);
             assert.equal(await p.evaluate(() => document.getElementById('cntReg').textContent), '1');
         });
-        await caso('sin existencia, el botón ofrece «Registrar en cero — Siguiente»', async () =>
-            assert.match(await p.evaluate(() => document.getElementById('rcSig').textContent), /^Registrar en cero — Siguiente$/));
+        await caso('sin existencia, los campos nacen VACÍOS y el botón «Registrar y siguiente» está apagado', async () =>
+            assert.deepEqual(await p.evaluate(() => [[...document.querySelectorAll('#rcCard .rc-in')].map(i => i.value + '|' + i.placeholder).join(','), document.getElementById('rcSig').textContent, document.getElementById('rcSig').classList.contains('cero')]),
+                ['|,|', 'Registrar y siguiente', true]));
         await p.click('#rcCard .rc-x'); await p.waitForTimeout(150);
         await caso('cerrar el modal NO registra (el Limón sigue pendiente)', async () => {
             assert.equal(await p.evaluate(() => document.getElementById('reqCaptModal').style.display), 'none');
@@ -330,6 +339,21 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
             assert.equal(f.length, 1);
             assert.deepEqual([f[0].sucursalId, f[0].cerrada, f[0].items.a_coca.existencia], ['suc_principal', false, 2]);
         });
+        await p.evaluate(() => irPaso(3)); await p.waitForTimeout(300);
+        await caso('Paso 3: el pedido se ve TODO, POR PROVEEDOR o POR ÁREA (el selector se llena con lo del pedido)', async () => {
+            const r = await p.evaluate(() => {
+                const todo = _itemsP3(_itemsPedido()).length;
+                setFiltroP3('prov'); const prov = [document.getElementById('p3Valor').hidden, [...document.getElementById('p3Valor').options].length], nomProv = document.getElementById('p3Valor').options[0].textContent;
+                setFiltroP3('area'); const areas = [...document.getElementById('p3Valor').options].length, conArea = _itemsP3(_itemsPedido()).length;
+                setFiltroP3(''); return [todo, prov[0], prov[1] >= 1, areas >= 1, conArea, document.getElementById('p3Valor').hidden, nomProv];
+            });
+            assert.deepEqual(r, [1, false, true, true, 1, true, 'Sin proveedor']);   // el «—» del dato se nombra
+        });
+        await foto(p, 'r9-paso3');
+        await p.evaluate(() => { setFiltroP3('prov'); }); await foto(p, 'r9b-paso3-prov');
+        await p.evaluate(() => setFiltroP3('')); 
+        await caso('…y se exporta LO QUE SE VE (un solo «Exportar», más CSV y la vista admin)', async () =>
+            assert.deepEqual(await p.evaluate(() => [!!document.getElementById('btnExpPedido'), !!document.getElementById('btnExpCSV'), !!document.getElementById('btnVistaAdminReq'), !!document.getElementById('expProv')]), [true, true, true, false]));
         await p.click('#btnFinalizarReq'); await p.waitForTimeout(600);
         await caso('«Finalizar» la guarda en el historial con su sucursal y su costo, y vuelve a la portada', async () => {
             const h = (await filasReq(p))[0];
@@ -346,8 +370,17 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
         });
         await p.click('#btnNuevaReq'); await p.waitForTimeout(250);
         await p.click('#p1Pend .p12-item[data-id="a_limon"]'); await p.waitForTimeout(150);
+        await foto(p, 'r4b-tarjeta-vacia');
+        await p.evaluate(() => { window.__alertas = []; window.alert = (m) => window.__alertas.push(String(m)); });
         await p.click('#rcSig'); await p.waitForTimeout(250);
-        await caso('«Registrar en cero — Siguiente» registra la existencia en 0 (en cero: se pide todo el máximo)', async () => {
+        await caso('CANDADO: sin existencia «Registrar y siguiente» NO pasa — avisa que se anote, aunque sea 0', async () => {
+            assert.equal(await p.evaluate(() => document.getElementById('rcCard').dataset.id), 'a_limon');
+            assert.equal(await p.evaluate(() => esRegistrado(reqData.a_limon)), false);
+            assert.match(await p.evaluate(() => window.__alertas.join(' | ')), /Anota la existencia actual antes de seguir, aunque sea 0/);
+        });
+        await p.fill('#rcCard .rc-in', '0'); await p.waitForTimeout(100);
+        await p.click('#rcSig'); await p.waitForTimeout(250);
+        await caso('…con 0 anotado sí registra (en cero: se pide todo el máximo) y pasa al siguiente', async () => {
             assert.equal(await p.evaluate(() => reqData.a_limon.existencia), 0);
             assert.match(await p.evaluate(() => document.querySelector('#p1Reg .p12-item[data-id="a_limon"]').textContent.replace(/\s+/g, ' ')), /Pedir 6/);
             assert.equal(await p.evaluate(() => document.getElementById('rcCard').dataset.id), 'a_mezcal');
@@ -458,10 +491,21 @@ const foto = (page, nombre) => (process.env.SHOTS && (!process.env.SHOTS_SOLO ||
 
         await caso('carga igual su catálogo', async () => assert.equal(await q.evaluate(() => document.getElementById('cntPend').textContent), '1203'));
         await caso('NO lee las ventas de Fin·ax (cortes)', async () => assert.equal(await q.evaluate(() => _cacheCortesReq.length), 0));
-        await q.evaluate(() => irPaso(3)); await q.waitForTimeout(300);
-        await caso('…ni enseña «Compra vs venta»: el pedido se arma y se manda igual', async () => {
-            assert.equal(await q.evaluate(() => document.getElementById('kviCard').style.display), 'none');
-            assert.notEqual(await q.evaluate(() => document.getElementById('vistaPaso3').style.display), 'none');
+        await q.evaluate(() => abrirReq(_reqTodas().filter(_reqEsAbierta)[0].id, 3)); await q.waitForTimeout(400);
+        await caso('…pero «Compra vs venta» SÍ está: sin Fin·ax la venta del periodo se escribe a mano', async () => {
+            assert.notEqual(await q.evaluate(() => document.getElementById('kviCard').style.display), 'none');
+            assert.match(await q.evaluate(() => document.getElementById('kviCards').textContent), /Tu sucursal no tiene Fin·ax: escribe la venta del periodo/);
+            assert.ok(await q.evaluate(() => !!document.getElementById('kviVentaManual')));
+            assert.equal(await q.evaluate(() => document.getElementById('kviRangos').style.display), 'none');   // 7/14/30 días no aplican a mano
+        });
+        await q.fill('#kviVentaManual', '10000'); await q.waitForTimeout(200);
+        await foto(q, 'r10-venta-manual');
+        await caso('…y al escribirla se calcula el porcentaje y se guarda en la requisición', async () => {
+            assert.equal(await q.evaluate(() => _reqActual.ventaManual), 10000);
+            const pct = await q.evaluate(() => document.getElementById('kviPct').textContent), costo = await q.evaluate(() => _itemsPedido().reduce((s, it) => s + it.costo, 0));
+            assert.equal(pct, (costo / 10000 * 100).toFixed(1) + '%');
+            await q.fill('#kviVentaManual', ''); await q.waitForTimeout(100);
+            assert.deepEqual(await q.evaluate(() => [_reqActual.ventaManual, document.getElementById('kviPct').textContent]), ['', '—']);
         });
         await b.ctx.close();
     } finally {
