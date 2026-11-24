@@ -13,7 +13,7 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=ce96904d">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=5844cd7a">
     <link rel="preload" as="script" href="/etaax-header.js?v=412dbfd1">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=edba343c">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=c7a3a619">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
     <link rel="preload" as="script" href="/administrativo/staff-ui.js?v=8409e757">
 
@@ -224,7 +224,7 @@
 .rm-aviso strong{color:var(--text)}
 </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1889a519">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=05c532e1">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 <link rel="stylesheet" href="/administrativo/staff-ui.css?v=45be5e2a">
 </head>
@@ -264,7 +264,7 @@
 <div class="app-shell">
     <nav class="nav cerrado" id="nav">
         <div class="nav-top">
-            <div class="nav-brand"><span class="nav-brand-sub">Control Administrativo</span></div>
+            <div class="nav-brand"><span class="nav-brand-sub">Admin·ax</span></div>
             <div class="nav-top-actions">
                 <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Admin" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
                 <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
@@ -392,12 +392,14 @@ var MODULES = [
 
 /* ── CATEGORÍAS (agrupación visual, igual que el nav) ── */
 var CATEGORIAS = [
-    { label:'Recetas e Insumos', modulos:['recetas','insumos','inventarios','requisiciones'] },
-    { label:'Control Administrativo', modulos:['ventas','gastos','menu','proveedores','clientes','staff','permisos'] },
+    /* (24-nov) Los grupos se llaman como los módulos: Admin·ax, Cost·ax, Fin·ax, Learn·ax.
+       El Menú se mudó a Cost·ax (Escandallos). */
+    { label:'Cost·ax', modulos:['recetas','insumos','inventarios','requisiciones','menu'] },
+    { label:'Admin·ax', modulos:['ventas','gastos','proveedores','clientes','staff','permisos'] },
     /* Ventas por Producto estaba listado en Control Administrativo y la pantalla
        vive en Aprende y Analiza: se buscaba donde no estaba. */
-    { label:'Aprende y Analiza',     modulos:['ventas_productos'] },
-    { label:'Finanzas',              modulos:['financiero'] },
+    { label:'Learn·ax',              modulos:['ventas_productos'] },
+    { label:'Fin·ax',                modulos:['financiero'] },
     { label:'Ajustes',               modulos:['config'] },
     /* "Acciones especiales · Cambiar registros de sucursal" se retiró: era UN
        interruptor para toda la app y por eso no servía — apagarlo para que la
@@ -1295,7 +1297,7 @@ function ctxSalir() {
 <script src="/etaax-sidebar.js?v=5844cd7a"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=412dbfd1"></script>
-<script src="/etaax-modulos-ui.js?v=edba343c"></script>
+<script src="/etaax-modulos-ui.js?v=c7a3a619"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 <script src="/administrativo/staff-ui.js?v=8409e757"></script>
 </body>

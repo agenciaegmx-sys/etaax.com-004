@@ -451,7 +451,7 @@ async function run(base) {
         assert.equal(await evalPage(p.sid,"document.getElementById('negActBar').textContent.match(/\\bCentro\\b/g).length"),1);
         assert.equal(await evalPage(p.sid,"document.querySelector('#chipSucursalHub #chipUbicacionHub use').getAttribute('href')"),'#etx-sh-matriz');
         assert.equal(await evalPage(p.sid,"document.querySelectorAll('#hubModuloDock [role=\"tab\"]').length"),4);
-        assert.equal(await evalPage(p.sid,"document.getElementById('hubModuloTitulo').textContent"),'Control administrativo');
+        assert.equal(await evalPage(p.sid,"document.getElementById('hubModuloTitulo').textContent"),'Admin·ax');
         await evalPage(p.sid,"document.getElementById('hub-tab-recetas').focus()");
         await send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight'},p.sid);
         assert.equal(await evalPage(p.sid,"document.activeElement.id"),'hub-tab-financiero');
@@ -539,7 +539,7 @@ async function run(base) {
     await check('El selector respeta permisos por herramienta y mantiene las guías disponibles',async()=>{
         assert.equal(await evalPage(p.sid,"document.getElementById('hub-tab-recetas').disabled"),true);
         assert.equal(await evalPage(p.sid,"document.getElementById('hub-tab-financiero').disabled"),true);
-        assert.equal(await evalPage(p.sid,"document.getElementById('hubModuloTitulo').textContent"),'Control administrativo');
+        assert.equal(await evalPage(p.sid,"document.getElementById('hubModuloTitulo').textContent"),'Admin·ax');
         /* Las filas ilustran, así que el permiso ya no se lee en un `href` sino
            en cuáles salen marcadas como bloqueadas. Lo que se exige es lo mismo:
            que a este rol solo le queden abiertas sus dos herramientas. */
@@ -563,7 +563,7 @@ async function run(base) {
         await evalPage(p.sid,"window.dispatchEvent(new CustomEvent('etaax:permisos',{detail:{negId:'n1'}}))");
         await pause(100);
         assert.equal(await evalPage(p.sid,'location.pathname'),'/hub.html');
-        assert.equal(await evalPage(p.sid,"document.getElementById('hubModuloTitulo').textContent"),'Aprende y analiza');
+        assert.equal(await evalPage(p.sid,"document.getElementById('hubModuloTitulo').textContent"),'Learn·ax');
         assert.equal(await evalPage(p.sid,"document.getElementById('hubIrAlModulo').getAttribute('href')"),'consultoria/index.html');
         assert.deepEqual(await evalPage(p.sid,"[...document.querySelectorAll('#hubHerramientasTarjetas [data-ruta]:not(.hub-tool-bloqueada)')].map(x=>x.getAttribute('data-ruta'))"),['consultoria/guias.html']);
     });

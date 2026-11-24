@@ -13,7 +13,7 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=ce96904d">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=5844cd7a">
     <link rel="preload" as="script" href="/etaax-header.js?v=412dbfd1">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=edba343c">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=c7a3a619">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -24,7 +24,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css?v=d87bdb06">
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1889a519">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=05c532e1">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -41,7 +41,7 @@
 <div class="app-shell">
     <nav class="nav cerrado" id="nav">
         <div class="nav-top">
-            <div class="nav-brand"><span class="nav-brand-sub">Recetas e Insumos</span></div>
+            <div class="nav-brand"><span class="nav-brand-sub">Cost·ax</span></div>
             <div class="nav-top-actions">
                 <a href="../recetas/index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Recetas" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
                 <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
@@ -142,7 +142,7 @@
             </div>
 
             <div style="margin-top:10px;font-size:11px;color:var(--text-dim);text-align:center">
-                Los platillos y bebidas se sincronizan desde <strong style="color:var(--text-muted)">Recetas e Insumos</strong>. El estado activo/inactivo se guarda y comparte entre módulos.
+                Los platillos y bebidas se sincronizan desde las recetas de <strong style="color:var(--text-muted)">Cost·ax</strong>. El estado activo/inactivo se guarda y comparte entre módulos.
             </div>
 
         </div>
@@ -337,11 +337,11 @@ function _vacioSinRecetas() {
             '<br><span style="font-size:12px;color:var(--text-dim);line-height:1.7">' +
             'Tienes <b>' + subs + '</b> sub-receta' + (subs !== 1 ? 's' : '') + ' (salsas, bases, prebatch): ' +
             'ésas son ingredientes de otras recetas y no van a la carta.<br>' +
-            'Crea recetas de tipo <b>Alimentos</b> o <b>Bebidas</b> en <a href="../recetas/index.html" style="color:var(--viol)">Recetas e Insumos</a> y aparecerán aquí solas.</span>';
+            'Crea recetas de tipo <b>Alimentos</b> o <b>Bebidas</b> en <a href="../recetas/index.html" style="color:var(--viol)">Cost·ax</a> y aparecerán aquí solas.</span>';
     }
     return 'Aún no hay recetas de alimentos o bebidas.' +
         '<br><span style="font-size:12px;color:var(--text-dim)">Crea tus recetas desde el módulo ' +
-        '<a href="../recetas/index.html" style="color:var(--viol)">Recetas e Insumos</a> y aparecerán aquí automáticamente.</span>';
+        '<a href="../recetas/index.html" style="color:var(--viol)">Cost·ax</a> y aparecerán aquí automáticamente.</span>';
 }
 
 /* == LA CARTA, COMO LA VE EL CLIENTE ====================================
@@ -1555,6 +1555,6 @@ document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInit
 <script src="/etaax-sidebar.js?v=5844cd7a"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=412dbfd1"></script>
-<script src="/etaax-modulos-ui.js?v=edba343c"></script>
+<script src="/etaax-modulos-ui.js?v=c7a3a619"></script>
 </body>
 </html>

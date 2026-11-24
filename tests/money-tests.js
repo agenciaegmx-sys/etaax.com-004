@@ -8991,8 +8991,9 @@ console.log('\n══ BD4 · Roles y Permisos: módulo de Recetas e Insumos ═�
     /* ── Los nombres ── */
     test('la pantalla se llama Roles y Permisos', () =>
         eq(per.indexOf('<span class="brand-title">Roles y Permisos</span>') > -1, true, 'renombrada'));
-    test('el grupo se llama como el módulo: Recetas e Insumos', () =>
-        eq(per.indexOf("label:'Recetas e Insumos'") > -1, true, 'grupo'));
+    // (24-nov) Los módulos se llaman Admin·ax, Cost·ax, Fin·ax y Learn·ax.
+    test('el grupo se llama como el módulo: Cost·ax', () =>
+        eq(per.indexOf("label:'Cost·ax'") > -1, true, 'grupo'));
     /* Los cards usan el vocabulario del módulo, no uno propio. */
     [['recetas','Escandallos'], ['insumos','Insumos'],
      ['inventarios','Inventarios'], ['requisiciones','Requisiciones']].forEach(function(p2){
@@ -11177,12 +11178,12 @@ console.log('\n══ BE7 · Control Administrativo: una tarjeta, un permiso ═
     });
 
     /* ── Ventas por Producto, donde de verdad vive ── */
-    test('Ventas por Producto sale de Control Administrativo', () => {
-        const i = per.indexOf("label:'Control Administrativo'");
+    test('Ventas por Producto sale de Admin·ax (antes Control Administrativo)', () => {
+        const i = per.indexOf("label:'Admin·ax'");
         return eq(per.slice(i, i + 200).indexOf('ventas_productos') === -1, true, 'fuera');
     });
-    test('…y aparece en Aprende y Analiza, que es donde está la pantalla', () => {
-        const i = per.indexOf("label:'Aprende y Analiza'");
+    test('…y aparece en Learn·ax (antes Aprende y Analiza), que es donde está la pantalla', () => {
+        const i = per.indexOf("label:'Learn·ax'");
         return eq(i > -1 && per.slice(i, i + 120).indexOf('ventas_productos') > -1, true, 'en su grupo');
     });
     test('el permiso sigue existiendo: la pantalla no queda sin llave', () =>
@@ -18678,6 +18679,20 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const hd = fs.readFileSync(path.join(RAIZ, 'etaax-header.js'), 'utf8'), mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
         return eq(/id="etxHdAtras"/.test(hd) && /id="etxHdAdelante"/.test(hd) && /window\.ctxNavBack\(\); else history\.back\(\)/.test(hd) &&
                   /inicioTexto:'Módulos',nav:true/.test(mu) && !/class="ctx-nav-btns"/.test(mu), true);
+    });
+    /* (24-nov) Los módulos se llaman Admin·ax, Cost·ax, Fin·ax y Learn·ax, y la
+       portada de cada uno lleva solo su nombre en la isla (sin «Módulo» ni párrafo). */
+    test('los cuatro módulos con sus nombres nuevos en el hub y en «Cambiar módulo»', () => {
+        const hubm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8'), mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
+        const n = (t, sep) => ['Admin·ax', 'Cost·ax', 'Fin·ax', 'Learn·ax'].every(x => t.indexOf('nombre' + sep + "'" + x + "'") > -1);
+        return eq(n(hubm, ': ') && n(mu, ':'), true);
+    });
+    test('…y cada portada trae solo su nombre en la isla', () => {
+        const pags = [['administrativo/index.html', 'Admin'], ['recetas/index.html', 'Cost'], ['financiero/index.html', 'Fin'], ['consultoria/index.html', 'Learn']];
+        return eq(pags.every(([f, nom]) => {
+            const t = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+            return t.indexOf('<span class="etx-isla-nombre">' + nom + '<span class="etx-isla-punto">·</span>ax</span>') > -1 && !/class="cf-hero-(eyebrow|sub)"/.test(t);
+        }), true);
     });
     test('insumos: el menú «⋯» con íconos de la app, sin emojis', () => {
         const i = ins.indexOf('function _insMenuAbrir('), cuerpo = ins.slice(i, ins.indexOf('\n   function ', i + 10));

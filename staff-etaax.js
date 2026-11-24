@@ -27,25 +27,26 @@
     /* Los módulos que se pueden dar, con los rótulos de Roles y Permisos (los
        mismos que usa cada módulo por dentro). Agrupados como el menú. */
     var MODULOS = [
-        { key:'recetas',          label:'Escandallos',        grupo:'Recetas e Insumos' },
-        { key:'insumos',          label:'Insumos',            grupo:'Recetas e Insumos' },
-        { key:'inventarios',      label:'Inventarios',        grupo:'Recetas e Insumos' },
-        { key:'requisiciones',    label:'Requisiciones',      grupo:'Recetas e Insumos' },
-        { key:'ventas',           label:'Ventas y Cortes',    grupo:'Control Administrativo' },
-        { key:'gastos',           label:'Gastos Diarios',     grupo:'Control Administrativo' },
-        { key:'menu',             label:'Menú',               grupo:'Control Administrativo' },
-        { key:'proveedores',      label:'Proveedores',        grupo:'Control Administrativo' },
-        { key:'clientes',         label:'Clientes',           grupo:'Control Administrativo' },
-        { key:'staff',            label:'Gestión de Staff',   grupo:'Control Administrativo' },
-        { key:'ventas_productos', label:'Ventas por Producto',grupo:'Financiero' },
-        { key:'financiero',       label:'Financiero',         grupo:'Financiero' },
+        { key:'recetas',          label:'Escandallos',        grupo:'Cost·ax' },
+        { key:'insumos',          label:'Insumos',            grupo:'Cost·ax' },
+        { key:'inventarios',      label:'Inventarios',        grupo:'Cost·ax' },
+        { key:'requisiciones',    label:'Requisiciones',      grupo:'Cost·ax' },
+        { key:'menu',             label:'Menú',               grupo:'Cost·ax' },
+        { key:'ventas',           label:'Ventas y Cortes',    grupo:'Admin·ax' },
+        { key:'gastos',           label:'Gastos Diarios',     grupo:'Admin·ax' },
+        { key:'proveedores',      label:'Proveedores',        grupo:'Admin·ax' },
+        { key:'clientes',         label:'Clientes',           grupo:'Admin·ax' },
+        { key:'staff',            label:'Gestión de Staff',   grupo:'Admin·ax' },
+        { key:'ventas_productos', label:'Ventas por Producto',grupo:'Learn·ax' },
+        { key:'financiero',       label:'Financiero',         grupo:'Fin·ax' },
         { key:'config',           label:'Configuración',      grupo:'Negocio' }
     ];
-    /* Con lo que nace un acceso nuevo: Recetas e Insumos completo, que es para
-       lo que se pensó (auditar escandallos, insumos e inventarios). */
+    /* Con lo que nace un acceso nuevo: escandallos, insumos, inventarios y
+       requisiciones (Cost·ax), que es para lo que se pensó: auditar. */
     function permisosIniciales() {
         var p = {};
-        MODULOS.forEach(function (m) { p[m.key] = m.grupo === 'Recetas e Insumos'; });
+        var INICIALES = ['recetas', 'insumos', 'inventarios', 'requisiciones'];
+        MODULOS.forEach(function (m) { p[m.key] = INICIALES.indexOf(m.key) > -1; });
         p.cambiarSucursal = false;
         return p;
     }

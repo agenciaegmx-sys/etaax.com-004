@@ -14,10 +14,10 @@
        entrar — dos pantallas para un movimiento lateral. Son las portadas que
        ya existen; no se inventa ninguna ruta. */
     var MODULOS = [
-        { id:'administrativo', nombre:'Control administrativo', icono:'mod-control-administrativo', portada:'/administrativo/index.html', permisos:['ventas','gastos','staff','proveedores','clientes'] },
-        { id:'recetas', nombre:'Recetas e Insumos', icono:'mod-recetas-insumos', portada:'/recetas/index.html', permisos:['recetas','insumos','inventarios','requisiciones','menu'] },
-        { id:'financiero', nombre:'Salud financiera', icono:'mod-salud-financiera', portada:'/financiero/index.html', permisos:['financiero'] },
-        { id:'consultoria', nombre:'Aprende y analiza', icono:'mod-aprende-analiza', portada:'/consultoria/index.html', permisos:[] }
+        { id:'administrativo', nombre:'Admin·ax', icono:'mod-control-administrativo', portada:'/administrativo/index.html', permisos:['ventas','gastos','staff','proveedores','clientes'] },
+        { id:'recetas', nombre:'Cost·ax', icono:'mod-recetas-insumos', portada:'/recetas/index.html', permisos:['recetas','insumos','inventarios','requisiciones','menu'] },
+        { id:'financiero', nombre:'Fin·ax', icono:'mod-salud-financiera', portada:'/financiero/index.html', permisos:['financiero'] },
+        { id:'consultoria', nombre:'Learn·ax', icono:'mod-aprende-analiza', portada:'/consultoria/index.html', permisos:[] }
     ];
     var DESCRIPCIONES = {
         'diario.html':'Operación diaria', 'staff-hub.html':'Personal y horarios', 'staff.html':'Colaboradores',

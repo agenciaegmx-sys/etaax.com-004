@@ -522,3 +522,20 @@ body.etx-modulos-ui :is(#nav,#ctxBar,.etx-module-dialog) :is(a,button):focus-vis
   body.etx-modulos-ui {padding:0!important;}
   body.etx-modulos-ui .main-content {margin:0!important;width:100%;padding:0;}
 }
+
+/* ══ EL NOMBRE DEL MÓDULO, EN UNA ISLA (Edwin, 24-nov) ═════════════════════════
+   La portada de cada módulo lleva solo su nombre —Admin·ax, Cost·ax, Fin·ax,
+   Learn·ax— sin «Módulo» arriba ni el párrafo de abajo, en una cápsula negra
+   como la isla dinámica de Apple: negra en los dos temas, el ícono en su
+   círculo y el punto del nombre en el color de la marca. Abre con un pequeño
+   estirón, como la de verdad. */
+.etx-isla-wrap { display:flex !important; justify-content:center; padding:4px 0 22px !important; margin:0 !important; border:0 !important; max-width:none !important; text-align:center; }
+.etx-isla { display:inline-flex; align-items:center; gap:12px; padding:9px 26px 9px 9px; border-radius:999px;
+  background:#0b0b0c; color:#f5f3ee; box-shadow:0 14px 34px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.07);
+  animation:etxIslaAbre .65s cubic-bezier(.2,.9,.25,1.12) both; transform-origin:center; }
+.etx-isla-ic { width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,.09); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.etx-isla-ic svg.etx-ic { width:22px; height:22px; --etx-color:#f5f3ee; color:#f5f3ee; }
+.etx-isla-nombre { font-size:clamp(22px,2.4vw,30px); font-weight:700; letter-spacing:-.4px; line-height:1; white-space:nowrap; }
+.etx-isla-punto { color:var(--etx-ui-cyan,#2a9aa5); margin:0 1px; }
+@keyframes etxIslaAbre { 0% { transform:scale(.5,.72); opacity:0; } 55% { opacity:1; } 100% { transform:none; opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .etx-isla { animation:none; } }

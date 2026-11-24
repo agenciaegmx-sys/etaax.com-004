@@ -13,7 +13,7 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=ce96904d">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=5844cd7a">
     <link rel="preload" as="script" href="/etaax-header.js?v=412dbfd1">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=edba343c">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=c7a3a619">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
     <link rel="preload" as="script" href="/recetas/recetas-ui.js?v=91eddf64">
 
@@ -32,7 +32,7 @@
         html.embed .header button[onclick*="eliminarRecetaActual"] { display:none !important; }
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1889a519">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=05c532e1">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
 <link rel="stylesheet" href="/recetas/recetas-ui.css?v=e483f18f">
 </head>
@@ -54,7 +54,7 @@
     <nav class="nav cerrado" id="nav">
         <div class="nav-top">
             <div class="nav-brand">
-                <span class="nav-brand-sub">Recetas e Insumos</span>
+                <span class="nav-brand-sub">Cost·ax</span>
             </div>
             <div class="nav-top-actions">
                 <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Recetas" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
@@ -455,10 +455,8 @@
     background-size:60px 60px;background-color:var(--bg)">
     <div style="position:absolute;top:-80px;left:50%;transform:translateX(-50%);width:600px;height:360px;pointer-events:none;background:radial-gradient(ellipse at center,rgba(30,80,220,.13) 0%,transparent 70%)"></div>
     <div class="cf-wrap">
-        <div class="cf-hero">
-            <div class="cf-hero-eyebrow">Módulo</div>
-            <div class="cf-hero-title">Recetas <span class="g">e Insumos</span></div>
-            <div class="cf-hero-sub">Escandallos con costeo automático, catálogo de insumos, control de inventarios y requisiciones.</div>
+        <div class="cf-hero etx-isla-wrap">
+            <div class="etx-isla" role="heading" aria-level="1" aria-label="Cost·ax"><span class="etx-isla-ic"><svg class="etx-ic" width="22" height="22" aria-hidden="true"><use href="#etx-mod-recetas-insumos"></use></svg></span><span class="etx-isla-nombre">Cost<span class="etx-isla-punto">·</span>ax</span></div>
         </div>
         <div class="cf-modules">
 
@@ -1029,8 +1027,7 @@ function _aplicarModoCatalogoGlobalRecetas(){
     ['insumos.html','inventarios.html','requisiciones.html'].forEach(function(h){
         var a=document.querySelector('#nav a[href="'+h+'"]'); if(a){ var s2=a.closest('.nav-section'); (s2||a).style.display='none'; }
     });
-    var t=document.querySelector('#moduloLanding .cf-hero-title'); if(t) t.innerHTML='Catálogo Global <span class="g">de Recetas</span>';
-    var sub=document.querySelector('#moduloLanding .cf-hero-sub'); if(sub) sub.textContent='Todas las recetas y sub-recetas del negocio. Búscalas, ve su carátula de costos y define en qué sucursales viven (cada sucursal usa solo las suyas).';
+    var t=document.querySelector('#moduloLanding .etx-isla-nombre'); if(t) t.textContent='Recetas globales';
     var card=document.querySelector('#moduloLanding .cf-section .cf-card.highlight .cf-card-title'); if(card) card.textContent='Catálogo de Recetas';
     // Abrir directo la vista con buscador (el grid se rellena cuando cargan las recetas).
     if(typeof entrarEscandallos==='function') entrarEscandallos();
@@ -5034,7 +5031,7 @@ window.addEventListener('load', function() {
 <script src="/etaax-sidebar.js?v=5844cd7a"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=412dbfd1"></script>
-<script src="/etaax-modulos-ui.js?v=edba343c"></script>
+<script src="/etaax-modulos-ui.js?v=c7a3a619"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 <script src="/recetas/recetas-ui.js?v=91eddf64"></script>
 </body>
