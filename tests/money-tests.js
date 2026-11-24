@@ -18304,6 +18304,31 @@ console.log('\n══ BH87 · ETAAX por apps ══');
     });
 }
 
+/* ═══════════ SUITE BH88 · COST·AX Y FIN·AX, INDEPENDIENTES; REQUISICIONES CARGA ═══
+   Edwin, 23-nov: las apps se venden por separado y no se conectan todavía (lo
+   hará el POS). Requisiciones «no cargaba insumos»: pedía el catálogo ordenado
+   por created_at y `negocio_insumos` no tiene esa columna (PostgREST 400). */
+console.log('\n══ BH88 · Cost·ax y Fin·ax independientes; requisiciones carga ══');
+{
+    const req = fs.readFileSync(path.join(RAIZ, 'recetas/requisiciones.html'), 'utf8');
+    const est = fs.readFileSync(path.join(RAIZ, 'financiero/estadisticas.html'), 'utf8');
+    const codigo = (t) => t.split('\n').filter(l => !/^\s*(\/\/|\/\*|\*)/.test(l)).join('\n');
+    test('requisiciones: el catálogo NO se pide por created_at (esa columna no existe)', () =>
+        eq(/from\('negocio_insumos'\)[^;]*created_at/.test(codigo(req)), false));
+    test('…se lee completo y paginado (etaaxLeerTodo por insumo_id), como inventarios', () =>
+        eq(/leerTodo\('negocio_insumos', \{ idCol: 'insumo_id' \}\)/.test(req), true));
+    test('…y etaaxLeerTodo ya entrega `datos`: no se le vuelve a pedir .datos', () =>
+        eq(/_cacheInsumosReq = r\[0\]\.filas\.filter\(Boolean\)/.test(req), true));
+    test('requisiciones (Cost·ax) solo lee ventas (cortes) si la sucursal también tiene Fin·ax', () =>
+        eq(/_reqConVentas\(\) \? leerTodo\('cortes'\)/.test(req) && /etaaxTieneApp\(_reqNeg\(\), localStorage\.getItem\('etaax_sucursal_activa'\) \|\| '', 'finax'\)/.test(req), true));
+    test('…y sin Fin·ax esconde «Compra vs venta»', () =>
+        eq(/kc\.style\.display = _reqConVentas\(\) \? '' : 'none'/.test(req), true));
+    test('requisiciones usa el botón de pasos de inventarios (sin la barra vieja)', () =>
+        eq(/id="btnPasoMenu"/.test(req) && !/id="stepBtn1"/.test(req) && /PASO_REQ = \['', 'Existencias', 'Proyección', 'Pedido y envío'\]/.test(req), true));
+    test('Fin·ax (Estadísticas) ya no lee recetas ni insumos: sin rentabilidad de recetas', () =>
+        eq(/from\('(recetas|negocio_insumos)'\)/.test(codigo(est)) || /function renderRecetas/.test(est) || /id="chRecetas"/.test(est), false));
+}
+
 /* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
    En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
    «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.

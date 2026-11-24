@@ -15,9 +15,16 @@ function sdkEtx() {
     function val(r, k) { return (k in r) ? r[k] : (r.datos || {})[k]; }
     function query(tabla) {
         var f = [], modo = 'select', valor = null, opc = {}, single = false, orden = null, desc = false, q = {};
-        ['range', 'gte', 'lt', 'lte', 'neq', 'or', 'not', 'ilike', 'like', 'filter', 'contains', 'gt', 'limit'].forEach(function (k) { q[k] = function () { return q; }; });
-        q.select = function () { return q; };
-        q.order = function (c, o) { orden = c; desc = !!(o && o.ascending === false); return q; };
+        var mayor = null, limite = null, cuenta = false, errCol = null;
+        ['range', 'gte', 'lt', 'lte', 'neq', 'or', 'not', 'ilike', 'like', 'filter', 'contains'].forEach(function (k) { q[k] = function () { return q; }; });
+        q.select = function (cols, o) { cuenta = !!(o && o.count === 'exact'); return q; };
+        /* Como producción: `negocio_insumos` NO tiene created_at (PostgREST da 400). */
+        q.order = function (c, o) {
+            if (tabla === 'negocio_insumos' && c === 'created_at') errCol = 'column negocio_insumos.created_at does not exist';
+            orden = c; desc = !!(o && o.ascending === false); return q;
+        };
+        q.gt = function (c, v) { mayor = [c, v]; return q; };
+        q.limit = function (n) { limite = n; return q; };
         q.eq = function (k, v) { f.push([k, v]); return q; };
         q.in = function (k, v) { f.push([k, v, 'in']); return q; };
         q.maybeSingle = function () { single = true; return q; };
@@ -27,7 +34,8 @@ function sdkEtx() {
         q.update = function (v) { modo = 'update'; valor = v; return q; };
         q.delete = function () { modo = 'delete'; return q; };
         q.then = function (res, rej) {
-            var db = nube(), filas = db[tabla] || [], data = null;
+            if (errCol) return Promise.resolve({ data: null, error: { message: errCol, code: '42703' } }).then(res, rej);
+            var db = nube(), filas = db[tabla] || [], data = null, total = null;
             var pasa = function (r) { return f.every(function (c) { return c[2] === 'in' ? c[1].indexOf(val(r, c[0])) > -1 : val(r, c[0]) === c[1]; }); };
             if (modo === 'upsert') {
                 (Array.isArray(valor) ? valor : [valor]).forEach(function (v) {
@@ -45,10 +53,14 @@ function sdkEtx() {
                 db[tabla] = filas.filter(function (r) { return !pasa(r); }); guarda(db);
             } else {
                 data = JSON.parse(JSON.stringify(filas.filter(pasa)));
+                total = data.length;
                 if (orden) data.sort(function (a, b) { var x = String(val(a, orden)), y = String(val(b, orden)); return (x < y ? -1 : x > y ? 1 : 0) * (desc ? -1 : 1); });
+                if (mayor) data = data.filter(function (r) { return String(val(r, mayor[0])) > String(mayor[1]); });
+                /* Como Supabase: nunca más de 1000 renglones por consulta, sin aviso. */
+                data = data.slice(0, Math.min(limite || 1000, 1000));
                 if (single) data = data[0] || null;
             }
-            return Promise.resolve({ data: data, error: null }).then(res, rej);
+            return Promise.resolve({ data: data, error: null, count: cuenta ? total : null }).then(res, rej);
         };
         return q;
     }

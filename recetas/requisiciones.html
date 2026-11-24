@@ -17,9 +17,10 @@ function _exigeReq(sub, msg){
 function _reqOcultar(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
 function _aplicarPermisosReq(){
     if(!_puedeReq('historial'))     _reqOcultar('btnHistorialReq');
-    if(!_puedeReq('verProyeccion')) _reqOcultar('stepBtn2');
-    if(!_puedeReq('exportar'))      ['stepBtn3','btnExpCompleto','btnExpProv','btnExpArea','btnExpCSV','btnVistaAdminReq']
+    if(!_puedeReq('exportar'))      ['btnExpCompleto','btnExpProv','btnExpArea','btnExpCSV','btnVistaAdminReq']
                                        .forEach(_reqOcultar);
+    // Los pasos que el rol no puede ver salen del menú de pasos.
+    if (typeof _pintarPasoMenuReq === 'function') _pintarPasoMenuReq();
 }
 document.addEventListener('DOMContentLoaded', function(){
     _aplicarPermisosReq();
@@ -185,6 +186,26 @@ document.addEventListener('DOMContentLoaded', function(){
 
         /* ══ Wizard requisiciones ══ */
         .req-steps{display:flex;align-items:center;gap:8px;padding:0 20px;margin:4px 0 14px}
+        /* El botón de los pasos: el MISMO de inventarios (recetas/inventarios.html). */
+        .inv-paso-menu { position: relative; display: inline-flex; }
+        #btnPasoMenu { display: inline-flex; align-items: center; gap: 7px; border-color: var(--accent); color: var(--text); font-weight: 600; }
+        .inv-paso-num { display: inline-flex; align-items: center; justify-content: center; width: 21px; height: 21px; border-radius: 50%;
+            border: 1.5px solid var(--accent); color: var(--accent); font-size: 11px; font-weight: 700; }
+        .inv-paso-flecha { font-size: 10px; color: var(--text-dim); }
+        .inv-paso-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 300; min-width: 250px; padding: 6px;
+            background: var(--surface); border: 1px solid var(--border2, var(--border)); border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,.28); }
+        .inv-paso-pop[hidden] { display: none; }
+        .inv-paso-pop button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px;
+            background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+        .inv-paso-pop button:hover { background: var(--surface2); }
+        .inv-paso-pop .n { display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; border-radius: 50%;
+            border: 1.5px solid var(--border2, var(--border)); color: var(--text-dim); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+        .inv-paso-pop .hecho .n { border-color: var(--green); color: var(--green); }
+        .inv-paso-pop .actual { background: color-mix(in srgb, var(--accent) 13%, transparent); font-weight: 600; }
+        .inv-paso-pop .actual .n { border-color: var(--accent); color: var(--accent); }
+        .inv-paso-pop small { margin-left: auto; font-size: 11px; color: var(--text-dim); font-weight: 400; }
+        .req-barra { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; }
+        .req-seg { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
         .req-step{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);
             color:var(--text-dim);border-radius:22px;padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:12.5px;cursor:pointer}
         .req-step .rs-n{width:20px;height:20px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);
@@ -303,6 +324,13 @@ document.addEventListener('DOMContentLoaded', function(){
                 <span class="brand-title">Requisición</span>
             </div>
             <div class="hdr-acts">
+                <!-- Los pasos: un botón que dice en cuál estás y despliega los tres (como inventarios). -->
+                <div class="inv-paso-menu" id="pasoMenuWrap">
+                    <button class="btn-vista" id="btnPasoMenu" onclick="_togglePasoMenuReq(event)" aria-haspopup="true" aria-expanded="false" title="Cambiar de paso">
+                        <span class="inv-paso-num" id="pasoMenuNum">1</span><span id="pasoMenuTxt">Existencias</span><span class="inv-paso-flecha">▾</span>
+                    </button>
+                    <div id="pasoMenuPop" class="inv-paso-pop" role="menu" hidden></div>
+                </div>
                 <span id="fechaReq" style="font-size:12px;color:var(--text-dim);padding:0 4px"></span>
                 <button class="btn-vista" id="btnHistorialReq" onclick="abrirHistorial()">📋 Historial</button>
                 <button class="btn-vista" onclick="cargarTodasAnteriores()" title="Cargar existencias vacías desde la última requisición archivada">↩ Cargar anteriores</button>
@@ -311,14 +339,6 @@ document.addEventListener('DOMContentLoaded', function(){
             </div>
         </div>
 
-        <!-- ── BARRA DE PASOS (estilo inventarios) ── -->
-        <div class="req-steps">
-            <button class="req-step activo" id="stepBtn1" onclick="irPaso(1)"><span class="rs-n">1</span> Existencias</button>
-            <span class="rs-sep"></span>
-            <button class="req-step" id="stepBtn2" onclick="irPaso(2)"><span class="rs-n">2</span> Proyección</button>
-            <span class="rs-sep"></span>
-            <button class="req-step" id="stepBtn3" onclick="irPaso(3)"><span class="rs-n">3</span> Pedido y export</button>
-        </div>
 
         <!-- ═══════════ PASO 1 · EXISTENCIAS ═══════════ -->
         <div id="vistaPaso1">
@@ -342,16 +362,17 @@ document.addEventListener('DOMContentLoaded', function(){
                 </div>
             </div>
 
-            <!-- Toggle de vista (como inventarios) -->
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-                <button class="vista-chip activo" id="vChipRapida" onclick="setVistaCapt('rapida')">🔍 Búsqueda rápida</button>
-                <button class="vista-chip" id="vChipLista" onclick="setVistaCapt('lista')">≡ Lista completa</button>
-            </div>
-            <!-- Chips registro + filtros -->
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-                <button class="req-chip" id="chipTodos" onclick="setRegFiltro('',this)">Todos</button>
-                <button class="req-chip activo" id="chipPend" onclick="setRegFiltro('pend',this)">🔍 Pendientes (<span id="cntPend">0</span>)</button>
-                <button class="req-chip" id="chipReg" onclick="setRegFiltro('reg',this)">✅ Registrados (<span id="cntReg">0</span>)</button>
+            <!-- UNA sola barra (antes eran dos renglones): cómo capturar | qué ver. -->
+            <div class="req-barra">
+                <div class="req-seg">
+                    <button class="vista-chip activo" id="vChipRapida" onclick="setVistaCapt('rapida')">🔍 Uno por uno</button>
+                    <button class="vista-chip" id="vChipLista" onclick="setVistaCapt('lista')">≡ Lista completa</button>
+                </div>
+                <div class="req-seg">
+                    <button class="req-chip activo" id="chipPend" onclick="setRegFiltro('pend',this)">Por contar (<span id="cntPend">0</span>)</button>
+                    <button class="req-chip" id="chipReg" onclick="setRegFiltro('reg',this)">Contados (<span id="cntReg">0</span>)</button>
+                    <button class="req-chip" id="chipTodos" onclick="setRegFiltro('',this)">Todos</button>
+                </div>
             </div>
             <div class="filter-bar" id="filtrosLista">
                 <input type="text" id="buscarReq" placeholder="🔍 Buscar en la lista…" oninput="renderReq()">
@@ -437,8 +458,8 @@ document.addEventListener('DOMContentLoaded', function(){
         <!-- ═══════════ PASO 3 · PEDIDO Y EXPORT ═══════════ -->
         <div id="vistaPaso3" style="display:none">
             <div class="wrap">
-                <!-- KPI compra vs venta -->
-                <div class="card" style="max-width:none;margin-bottom:14px">
+                <!-- KPI compra vs venta (solo si la sucursal también tiene Fin·ax) -->
+                <div class="card" id="kviCard" style="max-width:none;margin-bottom:14px">
                     <div class="card-body" style="padding:16px 18px">
                         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
                             <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text)">📐 Compra vs Venta</div>
@@ -589,20 +610,37 @@ function setHistorial(h) {
     });
 }
 
+/* ¿Esta sucursal tiene también Fin·ax? Requisiciones es de Cost·ax: la venta
+   (cortes) solo se cruza con el pedido cuando la sucursal tiene las dos apps
+   (paquete completo). Con Cost·ax solo, no se lee ni se enseña. */
+function _reqConVentas() {
+    if (typeof window.etaaxTieneApp !== 'function') return true;
+    return window.etaaxTieneApp(_reqNeg(), localStorage.getItem('etaax_sucursal_activa') || '', 'finax');
+}
 async function _sbInitReq() {
     var negId = _reqNeg();
     if (!negId || typeof _supabase === 'undefined') return;
+    /* EL CATÁLOGO NO CARGABA (Edwin, 23-nov): se pedía ordenado por created_at y
+       `negocio_insumos` NO tiene esa columna — PostgREST contestaba 400 y la página
+       se quedaba con una copia vieja del equipo, vacía. Además una sola consulta
+       topa en 1000 renglones. Ahora va igual que inventarios: etaaxLeerTodo,
+       paginado por insumo_id, completo. */
+    var leerTodo = function (t, opc) {
+        return (typeof window.etaaxLeerTodo === 'function') ? window.etaaxLeerTodo(t, negId, opc) : Promise.resolve(null);
+    };
     var r = await Promise.all([
-        _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
+        leerTodo('negocio_insumos', { idCol: 'insumo_id' }),
         _supabase.from('req_pedido').select('datos').eq('negocio_id', negId).maybeSingle(),
         _supabase.from('req_historial').select('datos').eq('negocio_id', negId).order('created_at', {ascending: false}),
-        _supabase.from('cortes').select('datos').eq('negocio_id', negId),
+        _reqConVentas() ? leerTodo('cortes') : Promise.resolve(null)
     ]);
-    if (!r[0].error) _cacheInsumosReq = (r[0].data || []).map(function(x){ return x.datos; });
+    // etaaxLeerTodo ya entrega el `datos` de cada fila.
+    if (r[0] && r[0].filas && (r[0].filas.length || r[0].completa))
+        _cacheInsumosReq = r[0].filas.filter(Boolean);
     if (!r[1].error && r[1].data) _cacheReqData = r[1].data.datos;
     else if (_cacheReqData === null) _cacheReqData = {};
     if (!r[2].error) _cacheReqHist = (r[2].data || []).map(function(x){ return x.datos; });
-    if (!r[3].error) _cacheCortesReq = (r[3].data || []).map(function(x){ return x.datos; });
+    _cacheCortesReq = (r[3] && r[3].filas) ? r[3].filas.filter(Boolean) : [];
     init();
 }
 
@@ -694,12 +732,60 @@ function irPaso(n) {
     document.getElementById('vistaPaso1').style.display = n===1?'':'none';
     document.getElementById('vistaPaso2').style.display = n===2?'':'none';
     document.getElementById('vistaPaso3').style.display = n===3?'':'none';
-    for (var i=1;i<=3;i++) document.getElementById('stepBtn'+i).classList.toggle('activo', i===n);
+    _pintarPasoMenuReq();
     if (n===1) renderReq();
     if (n===2) renderPaso2();
     if (n===3) renderPaso3();
     try { window.scrollTo({top:0,behavior:'smooth'}); } catch(e) {}
 }
+/* ══ LOS PASOS, EN UN BOTÓN DEL ENCABEZADO (igual que inventarios) ══════════
+   «① Existencias ▾» dice en qué paso estás y despliega los tres. Los que el rol
+   no puede ver (proyección, pedido) no se ofrecen. */
+var PASO_REQ = ['', 'Existencias', 'Proyección', 'Pedido y envío'];
+function _pasosReqVisibles() {
+    return [1, 2, 3].filter(function (k) {
+        if (k === 2) return _puedeReq('verProyeccion');
+        if (k === 3) return _puedeReq('exportar');
+        return true;
+    });
+}
+function _pintarPasoMenuReq() {
+    var n = document.getElementById('pasoMenuNum'), t = document.getElementById('pasoMenuTxt');
+    if (n) n.textContent = _pasoReq;
+    if (t) t.textContent = PASO_REQ[_pasoReq] || '';
+    var w = document.getElementById('pasoMenuWrap');
+    if (w) w.style.display = _pasosReqVisibles().length > 1 ? '' : 'none';
+    var pop = document.getElementById('pasoMenuPop');
+    if (pop && !pop.hidden) pop.innerHTML = _pasoMenuReqHTML();
+}
+function _pasoMenuReqHTML() {
+    return _pasosReqVisibles().map(function (k) {
+        var cls = k === _pasoReq ? 'actual' : (k < _pasoReq ? 'hecho' : '');
+        return '<button role="menuitem" class="' + cls + '" onclick="_irPasoMenuReq(' + k + ')">' +
+            '<span class="n">' + (k < _pasoReq ? '✓' : k) + '</span>' + PASO_REQ[k] +
+            (k === _pasoReq ? '<small>estás aquí</small>' : '') + '</button>';
+    }).join('');
+}
+function _cerrarPasoMenuReq() {
+    var pop = document.getElementById('pasoMenuPop'); if (pop) pop.hidden = true;
+    var b = document.getElementById('btnPasoMenu'); if (b) b.setAttribute('aria-expanded', 'false');
+}
+function _togglePasoMenuReq(ev) {
+    if (ev) ev.stopPropagation();
+    var pop = document.getElementById('pasoMenuPop'); if (!pop) return;
+    if (!pop.hidden) { _cerrarPasoMenuReq(); return; }
+    pop.innerHTML = _pasoMenuReqHTML();
+    pop.hidden = false;
+    var b = document.getElementById('btnPasoMenu'); if (b) b.setAttribute('aria-expanded', 'true');
+    setTimeout(function () {
+        document.addEventListener('click', function cerrar(e) {
+            if (pop.contains(e.target)) return;
+            document.removeEventListener('click', cerrar, true);
+            _cerrarPasoMenuReq();
+        }, true);
+    }, 0);
+}
+function _irPasoMenuReq(n) { _cerrarPasoMenuReq(); if (n !== _pasoReq) irPaso(n); }
 function setRegFiltro(v, btn) {
     _regFiltro = v;
     document.querySelectorAll('.req-chip').forEach(function(b){ b.classList.toggle('activo', b===btn); });
@@ -1381,6 +1467,8 @@ function _ventaRango(r) {
 function renderPaso3() {
     var items = _itemsPedido();
     var costo = items.reduce(function(s,it){return s+it.costo;},0);
+    var kc = document.getElementById('kviCard');
+    if (kc) kc.style.display = _reqConVentas() ? '' : 'none';
     var r = _rangoVenta();
     var venta = _ventaRango(r);
     var pct = venta > 0 ? costo/venta*100 : null;
@@ -1750,7 +1838,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="/nav-pref.js?v=5555aa4b"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
-<script src="/novedades.js?v=ebb02341"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=94a2317e"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=e6d5073b"></script>
 <script src="/etaax-sidebar.js?v=fd2dac1b"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
