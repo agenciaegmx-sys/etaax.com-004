@@ -159,20 +159,32 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
                 document.querySelectorAll('#teclado .tecla').length, document.getElementById('nipZona').classList.contains('apagada')]),
                 ['Inicia sesión', 'Ingresa tu clave de 5 dígitos', 12, false]));
         await p.waitForFunction(() => /Polanco/.test(document.getElementById('sucMarca').textContent), null, { timeout: 8000 }).catch(() => {});
-        await caso('arriba, donde iba el título, la SUCURSAL del QR, centrada: su inicial (sin logo), su nombre y giro · negocio', async () => {
+        await caso('arriba, la SUCURSAL del QR EN HORIZONTAL y centrada en la página: su inicial (sin logo), el pin, su nombre y giro · negocio', async () => {
             const r = await p.evaluate(() => {
-                const m = document.getElementById('sucMarca'), n = m.querySelector('.suc-nom').getBoundingClientRect(), c = document.querySelector('.clave-card').getBoundingClientRect();
-                return [m.hidden, m.querySelector('.suc-ini').textContent, m.querySelector('.suc-nom').textContent, m.querySelector('.suc-giro').textContent,
-                        Math.abs((n.left + n.right) / 2 - (c.left + c.right) / 2) < 2, m.getBoundingClientRect().bottom <= c.top];
+                const m = document.getElementById('sucMarca'), f = m.querySelector('.suc-fila').getBoundingClientRect(),
+                      l = m.querySelector('.suc-logo').getBoundingClientRect(), n = m.querySelector('.suc-nom').getBoundingClientRect(),
+                      c = document.querySelector('.clave-card').getBoundingClientRect();
+                return [m.hidden, m.querySelector('.suc-ini').textContent, !!m.querySelector('.suc-nom svg.etx-ic'), m.querySelector('.suc-nom').textContent,
+                        m.querySelector('.suc-giro').textContent, Math.abs((f.left + f.right) / 2 - innerWidth / 2) < 2,
+                        l.right <= n.left && Math.abs((l.top + l.bottom) / 2 - (f.top + f.bottom) / 2) < 3, m.getBoundingClientRect().bottom <= c.top];
             });
-            assert.deepEqual(r, [false, 'P', 'Polanco', 'Bar · Café de prueba', true, true]);
+            assert.deepEqual(r, [false, 'P', true, 'Polanco', 'Bar · Café de prueba', true, true, true]);
         });
         await caso('…el ✓ del teclado es la acción, en terracota (como «Iniciar sesión» del sistema)', async () =>
             assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#teclado [data-k="entrar"]')).backgroundColor), 'rgb(251, 155, 111)'));
-        await caso('…y «Iniciar sesión con usuario y contraseña» cerrado, que se despliega al tocarlo', async () => {
-            assert.equal(await p.evaluate(() => document.getElementById('cuentaForm').hidden), true);
+        const puertas = () => p.evaluate(() => [document.getElementById('tabClave').classList.contains('on'), document.getElementById('btnUsuario').classList.contains('on'),
+            document.getElementById('claveCard').hidden, document.getElementById('cuentaForm').hidden]);
+        await caso('bajo la sucursal, dos botones: «Entrar con clave» (elegido) e «Iniciar sesión»; arriba del recuadro de la clave', async () => {
+            const r = await p.evaluate(() => [[...document.querySelectorAll('.ini-puertas .ini-puerta')].map(b => b.textContent.trim()),
+                document.querySelector('.ini-puertas').getBoundingClientRect().bottom <= document.getElementById('claveCard').getBoundingClientRect().top,
+                document.getElementById('sucMarca').getBoundingClientRect().bottom <= document.querySelector('.ini-puertas').getBoundingClientRect().top]);
+            assert.deepEqual(r, [['Entrar con clave', 'Iniciar sesión'], true, true]);
+            assert.deepEqual(await puertas(), [true, false, false, true]);
+        });
+        await caso('…«Iniciar sesión» enseña usuario y contraseña y esconde la clave', async () => {
             await p.click('#btnUsuario');
-            assert.deepEqual(await p.evaluate(() => [document.getElementById('cuentaForm').hidden, document.getElementById('btnUsuario').getAttribute('aria-expanded')]), [false, 'true']);
+            assert.deepEqual(await puertas(), [false, true, true, false]);
+            assert.equal(await p.evaluate(() => document.getElementById('btnUsuario').getAttribute('aria-expanded')), 'true');
         });
         await foto(p, 'm0b-cuenta');
         await caso('…igual al acceso del sistema: campos con su ícono, el ojo que enseña la contraseña y «Iniciar sesión» en terracota', async () => {
@@ -200,7 +212,10 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
             assert.equal(claro.length, 5);
             assert.deepEqual([...new Set(claro)], ['rgb(26, 25, 22)']);
             assert.deepEqual([...new Set(oscuro)], ['rgb(240, 236, 228)']);
-            await p.click('#btnUsuario');
+        });
+        await caso('…y «Entrar con clave» regresa al teclado (y esconde la cuenta)', async () => {
+            await p.click('#tabClave');
+            assert.deepEqual(await puertas(), [true, false, false, true]);
         });
 
         console.log('\n══ App móvil · con la clave ══');
@@ -403,10 +418,12 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
 
         console.log('\n══ App móvil · sin negocio ligado ══');
         const e = await abrir(browser, { ligado: false });
-        await caso('la clave se apaga, se explica cómo ligar el teléfono y la cuenta se abre sola', async () => {
+        await caso('la clave se apaga, «Iniciar sesión» se abre solo y AHÍ se explica cómo ligar el teléfono', async () => {
             const r = await e.page.evaluate(() => [document.getElementById('nipZona').classList.contains('apagada'), document.getElementById('cuentaForm').hidden,
-                document.getElementById('inicioAviso').textContent]);
-            assert.deepEqual(r.slice(0, 2), [true, false]); assert.match(r[2], /entre una vez con su cuenta aquí abajo, o abre el QR de tu sucursal/);
+                document.getElementById('claveCard').hidden, document.getElementById('cuentaAviso').textContent, document.getElementById('inicioAviso').textContent]);
+            assert.deepEqual(r.slice(0, 3), [true, false, true]);
+            assert.match(r[3], /todavía no está ligado[\s\S]*una vez con tu cuenta[\s\S]*QR de tu sucursal/);
+            assert.match(r[4], /entre una vez con su cuenta en «Iniciar sesión», o abre el QR de tu sucursal/);
         });
         await e.ctx.close();
 

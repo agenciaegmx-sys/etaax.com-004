@@ -18569,18 +18569,18 @@ console.log('\n══ BH96 · La clave por sucursal con app; la app con la cara 
            /var NEG_NOM = NEG_NOM \|\| '';/.test(app), true));
     const marca = (MARCA, NEG_NOM) => {
         const el = { hidden: true, innerHTML: '', querySelector: () => null };
-        const c = { $: () => el, etx: (x) => String(x), MARCA, NEG_NOM, NEG: 'n1', TOKEN: 't' };
+        const c = { $: () => el, etx: (x) => String(x), _ic: () => '', MARCA, NEG_NOM, NEG: 'n1', TOKEN: 't' };
         vm.createContext(c); vm.runInContext(fn(app, 'pintarMarcaSuc'), c); c.pintarMarcaSuc();
         return el;
     };
     test('…con logo: la imagen, el nombre de la sucursal y el giro · negocio', () => {
         const el = marca({ sucursal: 'Mammut Pizza Madero', negocio: 'Mammut Pizza', giro: 'Pizzería', logo: 'https://x/l.png' }, '');
-        return eq(el.hidden + ' ' + /<img src="https:\/\/x\/l.png"[\s\S]*<b class="suc-nom">Mammut Pizza Madero<\/b><small class="suc-giro">Pizzería · Mammut Pizza<\/small>/.test(el.innerHTML), 'false true');
+        return eq(el.hidden + ' ' + /<img src="https:\/\/x\/l.png"[\s\S]*<span class="suc-txt"><b class="suc-nom"><span>Mammut Pizza Madero<\/span><\/b><small class="suc-giro">Pizzería · Mammut Pizza<\/small>/.test(el.innerHTML), 'false true');
     });
     test('…sin logo, su inicial; sin saber la sucursal (sin la v93), el nombre del negocio', () => {
         const a = marca({ sucursal: 'Polanco', negocio: '', giro: '', logo: '' }, '').innerHTML;
         const b = marca(null, 'Café de prueba').innerHTML;
-        return eq(/<span class="suc-ini">P<\/span>/.test(a) + ' ' + /<b class="suc-nom">Café de prueba<\/b>/.test(b), 'true true');
+        return eq(/<span class="suc-ini">P<\/span>/.test(a) + ' ' + /<b class="suc-nom"><span>Café de prueba<\/span><\/b>/.test(b), 'true true');
     });
 
     /* ── El inicio ── */
@@ -20182,9 +20182,12 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
     test('sin credenciales del QR la clave se apaga y la cuenta se abre sola', () =>
         eq(dA('verInicio').indexOf("$('nipZona').classList.toggle('apagada', !listo);") > -1 &&
            dA('verInicio').indexOf('_usuarioAbierto(!listo);') > -1, true, 'honesto'));
-    test('la portada: la clave por default y «Iniciar sesión con usuario y contraseña» desplegable', () =>
-        eq(ah2.indexOf('Ingresa tu clave de 5 dígitos') > -1 && /id="btnUsuario"[^>]*aria-expanded="false"/.test(ah2) &&
-           /id="cuentaForm" hidden/.test(ah2) && ah2.indexOf('Iniciar sesión con usuario y contraseña') > -1, true, 'por default'));
+    /* (25-nov, último) Las dos puertas en dos botones bajo la sucursal. */
+    test('la portada: dos botones, «Entrar con clave» (por default) e «Iniciar sesión», que cambian de recuadro', () =>
+        eq(ah2.indexOf('Ingresa tu clave de 5 dígitos') > -1 && /id="tabClave"[^>]*aria-pressed="true"/.test(ah2) &&
+           /id="btnUsuario"[^>]*aria-expanded="false"[^>]*onclick="verPuerta\('cuenta'\)"/.test(ah2) &&
+           /id="cuentaForm" hidden/.test(ah2) && ah2.indexOf('class="desplegar"') === -1 &&
+           dA('_usuarioAbierto').indexOf("var cc = $('claveCard'); if (cc) cc.hidden = !!si;") > -1, true, 'por default'));
     test('la cabecera es la del sistema: ☰, isotipo al centro, tema y quién está en sesión', () =>
         eq(['id="btnCajon"', 'class="hdr-marca"', 'onclick="toggleTema()"', 'id="hdrNombre"', 'id="cajon"'].every(x => ah2.indexOf(x) > -1), true, 'completa'));
     /* Un teléfono recién instalado SIEMPRE llega así: esconder media pantalla

@@ -672,3 +672,24 @@ body.con-barra { padding-bottom:calc(var(--safe-b) + 108px); }
 .clave-tit { font-family:'Bebas Neue',sans-serif; text-transform:uppercase; font-size:26px; letter-spacing:1.5px; line-height:1;
     text-align:center; color:var(--txt); margin-bottom:6px; }
 .clave-tit span { color:var(--terra); }
+
+/* (25-nov, último) La sucursal EN HORIZONTAL y centrada en la página, como la
+   isla del sistema; debajo, las dos puertas en dos botones. */
+.suc-marca.suc-top { margin:8px 0 14px; align-items:center; }
+.suc-fila { display:inline-flex; align-items:center; gap:14px; max-width:100%; text-align:left; }
+.suc-top .suc-logo { width:60px; height:60px; margin:0; }
+.suc-txt { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.suc-top .suc-nom { display:flex; align-items:center; gap:6px; font-size:19px; line-height:1.2; }
+.suc-top .suc-nom .etx-ic { width:20px; height:20px; flex-shrink:0; color:var(--txt); --green:var(--marca); }
+.suc-top .suc-giro { padding-left:26px; }
+.ini-puertas { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:5px; margin:0 0 12px;
+    background:var(--campo); border:1px solid var(--borde-ui); border-radius:14px; }
+.ini-puerta { display:flex; align-items:center; justify-content:center; gap:8px; min-height:46px; border-radius:10px;
+    font-size:14px; font-weight:600; color:var(--txt2); }
+.ini-puerta .etx-ic { width:18px; height:18px; color:var(--txt2); --green:var(--marca); }
+.ini-puerta.on { background:var(--sup); color:var(--txt); box-shadow:0 1px 3px rgba(0,0,0,.18); }
+.ini-puerta.on .etx-ic { color:var(--terra); --green:var(--terra); }
+#cuentaForm { margin-top:0; }
+.cuenta-aviso:empty { display:none; }
+.cuenta-aviso { font-size:12.5px; line-height:1.55; color:var(--txt2); background:color-mix(in srgb, var(--marca) 9%, transparent);
+    border-radius:10px; padding:10px 12px; margin:-8px 0 16px; }

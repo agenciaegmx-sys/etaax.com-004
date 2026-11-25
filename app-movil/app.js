@@ -233,8 +233,13 @@ function verInicio() {
           'O este QR ya no es el vigente. Pídele a tu encargado el <b>QR de tu sucursal</b> ' +
           '(en el sistema: menú de la cuenta → Versión móvil).'
         : '<b style="color:var(--txt)">¿Eres de barra o cocina?</b><br>' +
-          'Pídele a tu encargado que entre una vez con su cuenta aquí abajo, o abre el ' +
+          'Pídele a tu encargado que entre una vez con su cuenta en «Iniciar sesión», o abre el ' +
           '<b>QR de tu sucursal</b>. Después entras solo con tu clave.';
+    /* Sin ligar, la clave no puede entrar: se abre «Iniciar sesión», y como el
+       recuadro de la clave se esconde, la explicación va también aquí. */
+    var ca = $('cuentaAviso');
+    if (ca) ca.innerHTML = (NEG && TOKEN) ? '' : 'Este teléfono todavía no está ligado a una sucursal. Entra <b>una vez</b> con tu cuenta ' +
+        '(o abre el QR de tu sucursal) y después tu equipo entra solo con su clave.';
     _usuarioAbierto(!listo);
     mostrar('pInicio', 'Entrar', '', false, false);
 }
@@ -247,8 +252,11 @@ function pintarMarcaSuc() {
     if (!NEG || !TOKEN || !nom) { el.hidden = true; el.innerHTML = ''; return; }
     var sub = [m.giro, (m.sucursal && m.negocio && m.negocio !== m.sucursal) ? m.negocio : ''].filter(Boolean).join(' · ');
     var ini = '<span class="suc-ini">' + etx(nom.trim().charAt(0).toUpperCase()) + '</span>';
-    el.innerHTML = '<span class="suc-logo">' + (m.logo ? '<img src="' + etx(m.logo) + '" alt="">' : ini) + '</span>' +
-        '<b class="suc-nom">' + etx(nom) + '</b>' + (sub ? '<small class="suc-giro">' + etx(sub) + '</small>' : '');
+    /* En horizontal y centrada en la página, como la isla del sistema: el
+       logo, y a su lado el pin con el nombre y el giro debajo. */
+    el.innerHTML = '<span class="suc-fila"><span class="suc-logo">' + (m.logo ? '<img src="' + etx(m.logo) + '" alt="">' : ini) + '</span>' +
+        '<span class="suc-txt"><b class="suc-nom">' + _ic('sh-matriz', '') + '<span>' + etx(nom) + '</span></b>' +
+        (sub ? '<small class="suc-giro">' + etx(sub) + '</small>' : '') + '</span></span>';
     var img = el.querySelector('img');
     if (img) img.onerror = function () { var c = el.querySelector('.suc-logo'); if (c) c.innerHTML = ini; };
     el.hidden = false;
@@ -261,13 +269,25 @@ function toggleOjo() {
     b.innerHTML = _ic(ver ? 'ojo-oculto' : 'ojo', ver ? '🙈' : '👁');
     b.setAttribute('aria-label', ver ? 'Ocultar contraseña' : 'Mostrar contraseña');
 }
+/* (25-nov) Las dos puertas en dos botones bajo la sucursal: «Entrar con
+   clave» (la de siempre) e «Iniciar sesión». Uno enseña su recuadro y esconde
+   el otro, en vez de apilarlos. */
 function _usuarioAbierto(si) {
     $('cuentaForm').hidden = !si;
+    var cc = $('claveCard'); if (cc) cc.hidden = !!si;
     $('btnUsuario').setAttribute('aria-expanded', si ? 'true' : 'false');
+    $('btnUsuario').classList.toggle('on', !!si);
+    var tc = $('tabClave'); if (tc) { tc.classList.toggle('on', !si); tc.setAttribute('aria-pressed', si ? 'false' : 'true'); }
     if (si) {
         var c = window._cuenta ? window._cuenta.correo() : '';
         if (c && !$('ctaCorreo').value) $('ctaCorreo').value = c;
     }
+}
+function verPuerta(k) {
+    var abrir = k === 'cuenta';
+    if (abrir === !$('cuentaForm').hidden) return;
+    _usuarioAbierto(abrir);
+    if (abrir) $('ctaMsg').textContent = '';
 }
 function toggleUsuario() {
     var abrir = $('cuentaForm').hidden;
@@ -2429,6 +2449,7 @@ window.toggleDespl = toggleDespl;
 window.buscarRecetaRejilla = buscarRecetaRejilla;
 window.toggleUsuario = toggleUsuario;
 window.toggleOjo = toggleOjo;
+window.verPuerta = verPuerta;
 window.setVistaEnt = setVistaEnt; window.setTipoEnt = setTipoEnt; window.setTipoNota = setTipoNota;
 window.abrirNota = abrirNota; window.notaCampo = notaCampo; window.descartarNota = descartarNota; window.notaCant = notaCant;
 window.quitarDelLote = quitarDelLote; window.toggleGrupoReg = toggleGrupoReg; window.perReg = perReg;
