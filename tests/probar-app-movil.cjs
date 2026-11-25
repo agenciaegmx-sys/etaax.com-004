@@ -175,6 +175,20 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
             assert.equal(await p.evaluate(() => document.getElementById('ctaPwd').type), 'text');
             await p.click('#ctaOjo');
             assert.equal(await p.evaluate(() => document.getElementById('ctaPwd').type), 'password');
+        });
+        /* Edwin, 25-nov: «en el modo claro los íconos tienen contorno blanco y no
+           se ven». Los de la marca se pintan con --text; la app lo trae puente. */
+        await caso('en el tema CLARO los íconos se pintan oscuros (no crema sobre blanco), y en el oscuro claros', async () => {
+            const color = () => p.evaluate(() => [...document.querySelectorAll('#cuentaForm .auth-ic svg, #ctaOjo svg, #temaIco svg')]
+                .map(x => getComputedStyle(x).color));
+            const oscuro = await color();
+            await p.evaluate(() => toggleTema());
+            const claro = await color();
+            await foto(p, 'm0c-cuenta-claro');
+            await p.evaluate(() => toggleTema());
+            assert.equal(claro.length, 5);
+            assert.deepEqual([...new Set(claro)], ['rgb(26, 25, 22)']);
+            assert.deepEqual([...new Set(oscuro)], ['rgb(240, 236, 228)']);
             await p.click('#btnUsuario');
         });
 

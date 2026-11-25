@@ -17,6 +17,12 @@
 :root {
     --bg:#13120f; --bg2:#1c1a16; --sup:#232019; --borde:#35312a;
     --txt:#f0ece4; --txt2:#b8b2a6; --dim:#827c70;
+    /* LOS ÍCONOS DE LA MARCA (etaax-iconos.js) se pintan con `--text`, el
+       nombre del sistema; la app lo llama `--txt`. Sin este puente caían a su
+       crema de respaldo, que en el tema claro es blanco sobre blanco: solo se
+       veía el punto verde. Va en el mismo elemento que el tema, así que sigue
+       al claro y al oscuro solo. */
+    --text:var(--txt);
     --verde:#3dbe7a; --rojo:#e05a3a; --ambar:#f5c842; --viol:#9b7fe0; --azul:#7ab8f5;
     --marca:#8ce4ee;      /* el azul petróleo de ETAAX, versión para fondo oscuro */
     /* (25-nov) Los tonos del acceso del sistema (hub-paleta.css): la ACCIÓN en
