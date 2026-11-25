@@ -45,7 +45,18 @@ function rpcs(opc) {
         window.__rpcExtra = {
             entrada_validar_nip: (p) => ok(p) ? 'Ana López' : null,
             portal_perfil: (p) => ok(p) ? { nombre: 'Ana López', puesto: 'Bartender', rol: 'barra', areaReal: 'barra', area: 'barra', sucursalId: 'suc_dos', estado: 'Activo' } : null,
-            entrada_catalogo: (p) => ok(p) ? { ok: true, sucursal: 'suc_dos', insumos: [{ id: 'i1', nombre: 'Tequila Blanco', activo: '1', sucursales: ['suc_dos'] }] } : null,
+            entrada_catalogo: (p) => ok(p) ? { ok: true, sucursal: 'suc_dos', insumos: [{ id: 'i1', nombre: 'Tequila Blanco', activo: '1', sucursales: ['suc_dos'] },
+                                                                                       { id: 'i2', nombre: 'Refresco Cola', activo: '1', sucursales: ['suc_dos'], contNeto: 600, umContenido: 'ML' }] } : null,
+            /* Lo que la app manda queda en window.__regs (para revisar la nota). */
+            entrada_registrar: (p) => ok(p) ? ((window.__regs = (window.__regs || []).concat([p.p_datos])), 'id-' + window.__regs.length) : null,
+            entrada_historial: (p) => ok(p) ? { ok: true, desde: null, inventario: null, conteos: [], movimientos: [
+                { id: 'e1', concepto: 'entrada', nombre: 'Refresco Cola', insumoId: 'i2', cantidad: '12', unidad: 'PZA', tipoEntrada: 'compra', fecha: '2026-11-25', quien: 'Ana López', notaId: 'N1', notaFolio: 'F-1', notaProveedor: 'Coca-Cola FEMSA', fotos: 1, ver: 1, puedeEditar: true },
+                { id: 'e2', concepto: 'entrada', nombre: 'Agua mineral', insumoId: 'i3', cantidad: '6', unidad: 'PZA', tipoEntrada: 'compra', fecha: '2026-11-25', quien: 'Ana López', notaId: 'N1', notaFolio: 'F-1', notaProveedor: 'Coca-Cola FEMSA', fotos: 1, ver: 1, puedeEditar: true },
+                { id: 'e3', concepto: 'entrada', nombre: 'Tequila Blanco', insumoId: 'i1', cantidad: '2', unidad: 'BOT', tipoEntrada: 'prestamo_pagado', fecha: '2026-11-24', quien: 'Ana López', ver: 1, puedeEditar: true },
+                { id: 'e4', concepto: 'entrada', nombre: 'Tequila Blanco', insumoId: 'i1', cantidad: '3', unidad: 'BOT', tipoEntrada: 'compra', fecha: '2026-11-24', quien: 'Beto', ver: 1, puedeEditar: false, motivoBloqueo: 'La capturó alguien más' },
+                { id: 'm1', concepto: 'merma', nombre: 'Limón', cantidad: '1', fecha: '2026-11-25', quien: 'Ana López' }] } : null,
+            entrada_nota_agrupar: (p) => ok(p) ? ((window.__agrupar = p), { ok: true, notaId: 'N2', n: p.p_ids.length }) : null,
+            entrada_nota_desagrupar: (p) => ok(p) ? ((window.__desag = p), { ok: true, n: 2 }) : null,
             checklist_plantillas: (p) => [{ id: 'c1', nombre: 'Apertura de barra', tipo: 'apertura', tareas: [{ texto: 'Hielo' }, { texto: 'Limones' }] }],
             portal_apps: (p) => ok(p) ? { sucursalId: 'suc_dos', apps: ${JSON.stringify(opc.apps === undefined ? null : opc.apps)} } : null,
             portal_horarios: (p) => ok(p) ? { hoy: iso(hoy), semanas: [
@@ -143,16 +154,16 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
             });
             assert.deepEqual(r, [true, true, true, 'Sin sesión']);
         });
-        await caso('la portada es la del sistema: «Bienvenido · Inicia sesión» y la CLAVE por default, con su teclado a la vista', async () =>
-            assert.deepEqual(await p.evaluate(() => [document.querySelector('#pInicio .ini-titulo').textContent, document.getElementById('inicioSub').textContent,
+        await caso('la portada: «Inicia sesión» en chico dentro del recuadro de la CLAVE (por default), con su teclado a la vista', async () =>
+            assert.deepEqual(await p.evaluate(() => [document.querySelector('#pInicio .clave-card .clave-tit').textContent, document.getElementById('inicioSub').textContent,
                 document.querySelectorAll('#teclado .tecla').length, document.getElementById('nipZona').classList.contains('apagada')]),
                 ['Inicia sesión', 'Ingresa tu clave de 5 dígitos', 12, false]));
         await p.waitForFunction(() => /Polanco/.test(document.getElementById('sucMarca').textContent), null, { timeout: 8000 }).catch(() => {});
-        await caso('arriba del teclado, la SUCURSAL del QR, centrada: su inicial (sin logo), su nombre y giro · negocio', async () => {
+        await caso('arriba, donde iba el título, la SUCURSAL del QR, centrada: su inicial (sin logo), su nombre y giro · negocio', async () => {
             const r = await p.evaluate(() => {
                 const m = document.getElementById('sucMarca'), n = m.querySelector('.suc-nom').getBoundingClientRect(), c = document.querySelector('.clave-card').getBoundingClientRect();
                 return [m.hidden, m.querySelector('.suc-ini').textContent, m.querySelector('.suc-nom').textContent, m.querySelector('.suc-giro').textContent,
-                        Math.abs((n.left + n.right) / 2 - (c.left + c.right) / 2) < 2, m.getBoundingClientRect().bottom <= document.getElementById('teclado').getBoundingClientRect().top];
+                        Math.abs((n.left + n.right) / 2 - (c.left + c.right) / 2) < 2, m.getBoundingClientRect().bottom <= c.top];
             });
             assert.deepEqual(r, [false, 'P', 'Polanco', 'Bar · Café de prueba', true, true]);
         });
@@ -289,6 +300,83 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
             assert.equal((await cabecera(p))[0], 'Sin sesión');
         });
         await ctx.close();
+
+        console.log('\n══ App móvil · entradas, como en el sistema ══');
+        const E = await abrir(browser, {});
+        await nip(E.page, '12345');
+        const ep = E.page;
+        await ep.click('#menuPortal [data-mod="costax"] .btn-ver'); await ep.waitForTimeout(150);
+        await ep.click('[data-despl="inventarios"]'); await ep.waitForTimeout(100);
+        await ep.click('#rejInventarios .rect:has-text("Registrar entradas")'); await ep.waitForTimeout(300);
+        await foto(ep, 'm8-entradas');
+        await caso('entradas: dos vistas arriba (Catálogo y Entradas registradas) y el catálogo a la vista con «+ registrar»', async () => {
+            const r = await ep.evaluate(() => [!document.getElementById('entVistas').hidden,
+                [...document.querySelectorAll('#entVistas .ent-vista')].map(b => b.textContent.trim() + ':' + b.classList.contains('on')),
+                [...document.querySelectorAll('#sugs .cat-it')].map(b => b.querySelector('b').textContent + '|' + b.querySelector('.cat-reg').textContent)]);
+            assert.deepEqual(r, [true, ['Catálogo:true', 'Entradas registradas:false'], ['Refresco Cola|+ registrar', 'Tequila Blanco|+ registrar']], JSON.stringify(r));
+        });
+        await ep.click('#sugs .cat-it:has-text("Tequila Blanco")'); await ep.waitForTimeout(150);
+        await foto(ep, 'm8b-tarjeta');
+        await caso('…la tarjeta del producto: los cuatro tipos del sistema en botones (Compra elegido), fecha y «+ Agregar» en verde', async () => {
+            const r = await ep.evaluate(() => [[...document.querySelectorAll('#elegidoTipos .ent-tipo')].map(b => b.textContent + (b.classList.contains('on') ? '*' : '')),
+                !!document.getElementById('entFecha'), document.getElementById('btnAgregar').textContent,
+                getComputedStyle(document.getElementById('btnAgregar')).backgroundColor]);
+            assert.deepEqual(r, [['Compra*', 'Bonificación', 'Consignación', 'Préstamo pagado'], true, '+ Agregar', 'rgb(61, 190, 122)']);
+        });
+        await ep.click('#elegidoTipos .ent-tipo:has-text("Préstamo pagado")');
+        await ep.fill('#cant', '3'); await ep.click('#btnAgregar'); await ep.waitForTimeout(150);
+        await ep.click('#btnEnviar'); await ep.waitForTimeout(500);
+        await caso('…«Préstamo pagado» viaja como lo nombra el sistema (prestamo_pagado), sin nota', async () => {
+            const r = await ep.evaluate(() => window.__regs.map(x => [x.concepto, x.insumoId, x.cantidad, x.tipo, x.notaId || '']));
+            assert.deepEqual(r, [['entrada', 'i1', 3, 'prestamo_pagado', '']]);
+        });
+        await ep.click('.btn-nota'); await ep.waitForTimeout(150);
+        await ep.fill('#notaProv', 'Refrescos del Norte'); await ep.fill('#notaFolio', 'A-77');
+        for (const [prod, cant] of [['Refresco Cola', '6'], ['Refresco Cola', '4'], ['Tequila Blanco', '2']]) {
+            await ep.click('#sugs .cat-it:has-text("' + prod + '")'); await ep.waitForTimeout(100);
+            await ep.fill('#cant', cant); await ep.click('#btnAgregar'); await ep.waitForTimeout(150);
+        }
+        await foto(ep, 'm8c-nota');
+        await caso('NOTA / FACTURA: proveedor, folio y fecha una vez; el mismo producto se SUMA; el botón dice cuántos van', async () => {
+            const r = await ep.evaluate(() => [!!document.querySelector('.nota-card'),
+                [...document.querySelectorAll('.nota-it')].map(x => x.querySelector('.nota-it-nom').firstChild.textContent + ':' + x.querySelector('.nota-cant').value),
+                document.getElementById('btnEnviar').textContent, document.getElementById('fotosLbl').textContent.indexOf('Evidencia de la nota') === 0]);
+            assert.deepEqual(r, [true, ['Refresco Cola:10', 'Tequila Blanco:2'], 'Registrar nota · 2 productos', true]);
+        });
+        await ep.click('#btnEnviar'); await ep.waitForTimeout(600);
+        await caso('…al registrarla, cada entrada lleva el MISMO notaId, folio y proveedor (los campos del sistema), y la nota se cierra', async () => {
+            const r = await ep.evaluate(() => [window.__regs.slice(1).map(x => [x.insumoId, x.cantidad, x.tipo, x.notaFolio, x.notaProveedor]),
+                new Set(window.__regs.slice(1).map(x => x.notaId)).size, !!window.__regs[1].notaId, !!document.querySelector('.nota-card')]);
+            assert.deepEqual(r, [[['i2', 10, 'compra', 'A-77', 'Refrescos del Norte'], ['i1', 2, 'compra', 'A-77', 'Refrescos del Norte']], 1, true, false]);
+        });
+        await ep.click('#entVistas [data-vista="registradas"]'); await ep.waitForTimeout(400);
+        await foto(ep, 'm8d-registradas');
+        await caso('ENTRADAS REGISTRADAS: la barra de abajo se va; arriba las notas con sus productos, abajo por producto (sin mermas)', async () => {
+            const r = await ep.evaluate(() => [document.getElementById('barra').hidden,
+                [...document.querySelectorAll('#vistaRegistradas .reg-sec')].map(x => x.textContent),
+                [...document.querySelectorAll('#vistaRegistradas .reg-grupo summary .reg-g-txt b')].map(x => x.textContent),
+                document.getElementById('vistaRegistradas').textContent.indexOf('Limón')]);
+            assert.deepEqual(r, [true, ['Notas / facturas', 'Por producto'], ['Coca-Cola FEMSA · Folio F-1', 'Refresco Cola', 'Agua mineral', 'Tequila Blanco'], -1]);
+        });
+        await caso('…cada producto con su total (+5 BOT de Tequila: 2 + 3)', async () =>
+            assert.match(await ep.evaluate(() => [...document.querySelectorAll('.reg-grupo')].find(g => /Tequila/.test(g.textContent)).querySelector('.reg-g-tot').textContent), /\+5 BOT/));
+        await ep.click('.btn-agrupar'); await ep.waitForTimeout(150);
+        await caso('AGRUPAR EN NOTA: casillas en cada entrada; la que capturó alguien más no se puede marcar', async () => {
+            const r = await ep.evaluate(() => [...document.querySelectorAll('#vistaRegistradas .reg-fila.sel')].map(l => l.querySelector('b').textContent + ':' + !l.querySelector('input').disabled));
+            assert.deepEqual(r, ['Refresco Cola:true', 'Agua mineral:true', 'Tequila Blanco:true', 'Tequila Blanco:false']);
+        });
+        await ep.check('#vistaRegistradas .reg-fila.sel:has-text("Prestamo") input, #vistaRegistradas .reg-fila.sel:has-text("Préstamo pagado") input');
+        await ep.fill('#selProv', 'Licores del Centro'); await ep.click('#btnAgruparOk'); await ep.waitForTimeout(400);
+        await caso('…«Agrupar» manda las marcadas con proveedor y folio (entrada_nota_agrupar, v94)', async () => {
+            const a = await ep.evaluate(() => window.__agrupar);
+            assert.deepEqual([a.p_ids, a.p_proveedor, a.p_folio], [['e3'], 'Licores del Centro', '']);
+        });
+        await ep.click('.reg-grupo:has-text("Coca-Cola FEMSA") summary'); await ep.waitForTimeout(150);
+        await ep.click('.reg-grupo:has-text("Coca-Cola FEMSA") .btn-desag'); await ep.waitForTimeout(400);
+        await caso('…y una nota se puede desagrupar (entrada_nota_desagrupar)', async () =>
+            assert.equal(await ep.evaluate(() => window.__desag && window.__desag.p_nota), 'N1'));
+        await caso('…sin desbordarse a lo ancho', async () => assert.equal(await sinAncho(ep), true));
+        await E.ctx.close();
 
         console.log('\n══ App móvil · lo no contratado y lo que no hay ══');
         const b = await abrir(browser, { apps: ['costax'], evals: [] });

@@ -18552,13 +18552,16 @@ console.log('\n══ BH96 · La clave por sucursal con app; la app con la cara 
     });
 
     /* ── La portada ── */
-    test('el acceso es el del sistema: «Bienvenido · Inicia sesión», campos con su ícono, el ojo y el botón en terracota', () =>
-        eq(['<div class="ini-eyebrow">Bienvenido</div>', '<div class="ini-titulo">Inicia <span>sesión</span></div>', 'Ingresa tus datos de cuenta',
+    /* (25-nov, después) «Inicia sesión» pasó, en chico, al recuadro de la clave;
+       arriba va la sucursal. */
+    test('el acceso es el del sistema: «Inicia sesión» en la tarjeta, campos con su ícono, el ojo y el botón en terracota', () =>
+        eq(['<div class="clave-tit">Inicia <span>sesión</span></div>', 'Ingresa tus datos de cuenta',
             'data-ic="usuario"', 'data-ic="candado"', 'id="ctaOjo" data-ic="ojo"', 'class="btn-auth" id="ctaBtn"', 'placeholder="tu@correo.com o tu_usuario"']
             .every(x => html.indexOf(x) > -1) && /\.btn-auth \{[^}]*background:var\(--terra\)/.test(css) &&
            /--terra:#fb9b6f;/.test(css) && /--terra:#ad4b27;/.test(css), true));
-    test('arriba del teclado, la sucursal del QR (logo y nombre centrados) en vez del isotipo', () =>
-        eq(html.indexOf('id="sucMarca"') > -1 && html.indexOf('id="sucMarca"') < html.indexOf('id="teclado"') &&
+    test('arriba, la sucursal del QR (logo y nombre centrados) donde iba el título; el título en chico en la tarjeta', () =>
+        eq(html.indexOf('id="sucMarca"') > -1 && html.indexOf('id="sucMarca"') < html.indexOf('class="auth-card clave-card"') &&
+           html.indexOf('class="clave-tit"') > html.indexOf('class="auth-card clave-card"') && html.indexOf('ini-titulo') === -1 &&
            html.indexOf('login-cab') === -1 && fn(app, 'verInicio').indexOf('pintarMarcaSuc();') > -1 &&
            /\.suc-marca \{[^}]*align-items:center; text-align:center/.test(css), true));
     test('…la marca se guarda con el QR y la refresca movil_estado', () =>
@@ -18604,6 +18607,58 @@ console.log('\n══ BH96 · La clave por sucursal con app; la app con la cara 
                   fn(app, '_pintarRecetasRejilla').indexOf('if (x.tipo !== _recGrupo) return false;') > -1 &&
                   /\.rec-grupo\[disabled\] \{ opacity:\.38; \}/.test(css), true);
     });
+})();
+
+/* ═══════ BH97 · ENTRADAS EN LA APP, COMO EN EL SISTEMA: NOTAS Y AGRUPAR (v94, 25-nov) ═══════
+   Edwin: «en entradas debe tener 2 vistas, catálogo y entradas registradas; la
+   función de crear notas y agrupar entradas; los botones iguales al sistema».
+   Una nota es lo mismo en las dos casas: entradas en entradas_log con el mismo
+   notaId / notaFolio / notaProveedor. La prueba contra Postgres real es
+   tests/probar-sql-v94.mjs; la de pantalla, probar-app-movil.cjs.          */
+console.log('\n══ BH97 · Entradas en la app: catálogo, registradas, notas y agrupar ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    const app = leer('app-movil/app.js'), inv = leer('recetas/inventarios.js'), v94 = leer('supabase-migration-v94.sql');
+    const fn = (src, n) => { const i = src.indexOf('function ' + n + '('); return i < 0 ? '' : src.slice(i, src.indexOf('\n}', i) + 2); };
+    const sqlFn = (n) => { const i = v94.indexOf('CREATE OR REPLACE FUNCTION ' + n + '('); return i < 0 ? '' : v94.slice(i, v94.indexOf('\n$$;', i)); };
+
+    test('los tipos de entrada de la app son LOS MISMOS del sistema (ids): «prestamo» ya no se manda', () => {
+        const a = {}, b = {}; vm.createContext(a); vm.createContext(b);
+        vm.runInContext(app.slice(app.indexOf('var ENT_TIPOS = ['), app.indexOf('];', app.indexOf('var ENT_TIPOS = [')) + 2) + '; var ids = ENT_TIPOS.map(function(t){return t.id;}).join(",");', a);
+        vm.runInContext(fn(inv, 'entTipos') + '; var ids = entTipos().map(function(t){return t.id;}).join(",");', b);
+        return eq(a.ids + ' | ' + /'<option value="prestamo">|value="traspaso"/.test(app), b.ids + ' | false');
+    });
+    test('…y lo viejo que mandó la app como «prestamo» se lee como Préstamo pagado', () => {
+        const c = {}; vm.createContext(c);
+        vm.runInContext(app.slice(app.indexOf('var ENT_TIPOS = ['), app.indexOf('];', app.indexOf('var ENT_TIPOS = [')) + 2) + ';' + fn(app, 'tipoEntLbl'), c);
+        return eq(c.tipoEntLbl('prestamo') + ' / ' + c.tipoEntLbl('bonificacion'), 'Préstamo pagado / Bonificación');
+    });
+    test('una nota viaja con los campos del sistema: notaId, notaFolio, notaProveedor, y su tipo y fecha', () => {
+        const a = fn(app, 'armarRegistro');
+        return eq(a.indexOf("NOTA ? { notaId: NOTA.id, notaFolio: String(NOTA.folio || '').trim(), notaProveedor: String(NOTA.proveedor || '').trim() } : {}") > -1 &&
+                  a.indexOf('tipo: NOTA ? NOTA.tipo : it.tipo') > -1 && a.indexOf('(NOTA ? NOTA.fecha : it.fecha) || hoyStr()') > -1, true);
+    });
+    test('…en la nota el mismo producto se SUMA (como en el sistema)', () =>
+        eq(/if \(NOTA\) \{\s*var ya = LOTE\.filter\(function \(x\) \{ return x\.insumoId === it\.insumoId && x\.unidad === it\.unidad; \}\)\[0\];/.test(fn(app, 'agregarAlLote')), true));
+    test('entradas registradas: lo pide al servidor y solo enseña ENTRADAS (no mermas ni cortesías)', () =>
+        eq(fn(app, 'cargarRegistradas').indexOf("rpc('entrada_historial'") > -1 &&
+           fn(app, 'cargarRegistradas').indexOf("filter(function (m) { return m.concepto === 'entrada'; })") > -1, true));
+    test('agrupar y desagrupar van al servidor (v94), que decide quién puede', () =>
+        eq(fn(app, 'agruparSel').indexOf("rpc('entrada_nota_agrupar'") > -1 && fn(app, 'desagruparNota').indexOf("rpc('entrada_nota_desagrupar'") > -1 &&
+           fn(app, '_filaReg').indexOf("var puede = m.puedeEditar === true;") > -1, true));
+    test('v94: cada renglón pasa por los candados de entrada_editar ANTES de tocar nada', () => {
+        const a = sqlFn('entrada_nota_agrupar'), m = sqlFn('_entrada_nota_motivo');
+        return eq(a.indexOf('_nip_guardia') < a.indexOf('_entrada_token_ok') && a.indexOf('_entrada_token_ok') < a.indexOf('_entrada_quien') &&
+                  a.indexOf("v_mot := _entrada_nota_motivo(") < a.indexOf('UPDATE entradas_log') &&
+                  ["'borrada'", "'tipo'", "'ajeno'", "'autor'", "'cerrado'", '_entrada_edita_ajeno'].every(x => m.indexOf(x) > -1), true);
+    });
+    test('v94: el historial manda la nota de cada entrada (y cuántas fotos, no las fotos)', () => {
+        const h = sqlFn('entrada_historial');
+        return eq(["'notaId',        NULLIF(e.datos->>'notaId','')", "'tipoEntrada',   NULLIF(e.datos->>'tipo','')", "'fotos',"].every(x => h.indexOf(x) > -1) &&
+                  h.indexOf("'foto_urls',") === -1, true);
+    });
+    test('tras corregir se vuelve a pedir la vista donde estaba (antes llamaba a un irHistorial que no existía)', () =>
+        eq(!/(^|[^A-Za-z])irHistorial\(/.test(app) && /if \(_PANT === 'pFlujo' && ENT_VISTA === 'registradas'\) await cargarRegistradas\(\); else await abrirHistorial\(\);/.test(app), true));
 })();
 
 /* ═══════════ SUITE BH92 · INSUMOS SUBE SOLO LO QUE CAMBIÓ (CPU de Supabase) ═════
@@ -27389,10 +27444,12 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
        `entrada_catalogo` (v80) y `entrada_editar` (v82). */
     /* (25-nov) Entraron las tres de la app móvil por módulo (v91): portal_apps,
        portal_horarios y portal_evaluaciones, las tres con su guardia. */
-    test('la revisión mira de verdad las nueve que comprueban el NIP', () => {
+    /* (25-nov) Y las dos de la nota / factura desde la app (v94): agrupar y
+       desagrupar, cada una con su guardia. */
+    test('la revisión mira de verdad las once que comprueban el NIP', () => {
         const conGuardia = puertas.filter(n => ahora[n].texto.indexOf('_nip_guardia') > -1).sort();
         return eq(conGuardia.join(','),
-            'entrada_catalogo,entrada_editar,entrada_historial,entrada_sucursal_de_nip,entrada_validar_nip,portal_apps,portal_evaluaciones,portal_horarios,portal_perfil',
+            'entrada_catalogo,entrada_editar,entrada_historial,entrada_nota_agrupar,entrada_nota_desagrupar,entrada_sucursal_de_nip,entrada_validar_nip,portal_apps,portal_evaluaciones,portal_horarios,portal_perfil',
             conGuardia.join(','));
     });
 
@@ -31277,7 +31334,12 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
             NEG: 'n1', TOKEN: 'tok', NIPHASH: 'hA',
             etx: (v) => String(v == null ? '' : v).replace(/[<>&"]/g,
                 (x) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[x])),
-            irHistorial: async () => { c.hist = (c.hist || 0) + 1; },
+            /* (25-nov) Antes la app llamaba a un irHistorial que NO existía (la
+               lista no se refrescaba tras corregir). Ahora vuelve a pedir la vista
+               donde estaba: «Lo registrado» o las «Entradas registradas». */
+            _PANT: 'pHist', ENT_VISTA: 'catalogo',
+            abrirHistorial: async () => { c.hist = (c.hist || 0) + 1; },
+            cargarRegistradas: async () => { c.regs = (c.regs || 0) + 1; },
             _supabase: { rpc: async (n, a) => { llamadas.push({ nombre: n, args: a });
                 return respuestas.shift() || { data: { ok: true, ver: 2 } }; } },
             llamadas };

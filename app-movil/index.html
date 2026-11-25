@@ -72,17 +72,14 @@
      los módulos para usarlos (dueño, gerente y colaboradores con acceso al
      sistema). Mismo estilo que el inicio de sesión del sistema. -->
 <section class="pant" id="pInicio" hidden>
-    <!-- (25-nov) COMO EL ACCESO DEL SISTEMA (hub.html): «Bienvenido · Inicia
-         sesión», la tarjeta, los campos con su ícono, el ojo y el botón en
-         terracota. Arriba del teclado, la SUCURSAL del QR —su logo y su nombre,
-         centrados— en vez del isotipo (ya está en la cabecera). -->
-    <div class="ini-hero">
-        <div class="ini-eyebrow">Bienvenido</div>
-        <div class="ini-titulo">Inicia <span>sesión</span></div>
-        <div class="ini-sub">Accede a tu plataforma etaax</div>
-    </div>
+    <!-- (25-nov) COMO EL ACCESO DEL SISTEMA (hub.html): la tarjeta, los campos
+         con su ícono, el ojo y el botón en terracota. -->
+    <!-- (25-nov, después) Arriba, la SUCURSAL —su logo y su nombre— donde iba
+         el título grande; «Inicia sesión» pasa, en chico, al recuadro de la
+         clave: juntos se comían lo alto de la pantalla. -->
+    <div class="suc-marca suc-top" id="sucMarca" hidden></div>
     <div class="auth-card clave-card">
-        <div class="suc-marca" id="sucMarca" hidden></div>
+        <div class="clave-tit">Inicia <span>sesión</span></div>
         <div class="auth-sub centro" id="inicioSub">Ingresa tu clave de 5 dígitos</div>
         <div id="nipZona">
             <div class="nip-wrap">
@@ -176,6 +173,15 @@
      Son el mismo gesto —elegir producto, poner cuánto, agregar al lote— y
      mantenerlos en una sola pantalla es lo que evita que se vayan separando. -->
 <section class="pant" id="pFlujo" hidden>
+    <!-- (25-nov) ENTRADAS, COMO EN EL SISTEMA: dos vistas arriba —el catálogo
+         para registrar y lo ya registrado (con sus notas y «Agrupar en nota»)—,
+         la tarjeta del producto con los tipos de entrada en botones y la nota /
+         factura para una compra de varios productos. Solo en entradas. -->
+    <div class="ent-vistas" id="entVistas" hidden>
+        <button class="ent-vista" data-vista="catalogo" onclick="setVistaEnt('catalogo')"><span data-ic="mod-inventarios"></span>Catálogo</button>
+        <button class="ent-vista" data-vista="registradas" onclick="setVistaEnt('registradas')"><span data-ic="ins-historial"></span>Entradas registradas</button>
+    </div>
+    <div id="vistaCaptura">
     <div id="flujoArea" class="chips-area"></div>
     <div id="flujoExtra"></div>
 
@@ -195,6 +201,7 @@
             </div>
             <button class="elegido-x" onclick="limpiarElegido()" aria-label="Quitar">✕</button>
         </div>
+        <div id="elegidoTipos"></div>
         <div class="fila">
             <div style="flex:1.2">
                 <label class="lbl" for="cant">Cantidad</label>
@@ -206,7 +213,7 @@
             </div>
         </div>
         <div id="camposFlujo"></div>
-        <button class="btn btn-add" onclick="agregarAlLote()">+ Agregar a la lista</button>
+        <button class="btn btn-add" id="btnAgregar" onclick="agregarAlLote()">+ Agregar a la lista</button>
     </div>
 
     <div class="lote" id="lote"></div>
@@ -215,13 +222,15 @@
     <textarea class="campo" id="nota" rows="2" placeholder="Lo que haga falta explicar…"></textarea>
 
     <div class="fotos-wrap">
-        <label class="lbl">Fotos <span class="opt">opcional · hasta 10</span></label>
+        <label class="lbl" id="fotosLbl">Fotos <span class="opt">opcional · hasta 10</span></label>
         <div class="fotos" id="fotos"></div>
         <label class="btn btn-sec btn-foto">
             📷 Agregar foto
             <input type="file" accept="image/*" capture="environment" multiple hidden onchange="tomarFoto(this)">
         </label>
     </div>
+    </div>
+    <div id="vistaRegistradas" hidden></div>
 </section>
 
 <!-- ══ 5 · CHECKLISTS ════════════════════════════════════════════════════════ -->

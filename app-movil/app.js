@@ -648,6 +648,7 @@ function salir() {
        salir le enseñaría al siguiente lo que no le toca. */
     INSUMOS = []; RECETAS = null; PLANTILLAS = []; RECETARIO = null; RUN = null;
     APPS = null; HORARIOS = null; EVALS = null; ULT_MOD = ''; _recQ = ''; _recGrupo = '';
+    NOTA = null; _REG = { movs: null, per: 'todo', sel: null, abiertos: {}, desde: '', inv: '' };
     _abierto = { inventarios: false, recetas: false };
     pintarPuntos();
     $('nipMsg').textContent = '';
@@ -1138,6 +1139,7 @@ var FLUJOS = {
 
 function abrirFlujo(f) {
     FLUJO = f; SEL = null; LOTE = []; FOTOS = []; SUB = {};
+    ENT_VISTA = 'catalogo'; ENT_TIPO = 'compra'; NOTA = null; _REG.sel = null;
     if (f === 'merma')  SUB.que = 'insumo';
     if (f === 'salida') { SUB.que = 'insumo'; SUB.tipo = 'cortesia'; }
     var c = FLUJOS[f];
@@ -1145,7 +1147,8 @@ function abrirFlujo(f) {
     $('btnEnviar').textContent = c.btn;
     $('buscar').value = ''; $('nota').value = '';
     pintarAreas(); pintarExtra(); pintarSugs([]); pintarLote(); pintarFotos();
-    limpiarElegido();
+    limpiarElegido(); _rotularFotos(); pintarVistasEnt();
+    if (f === 'entrada') _buscar('');          // el catálogo a la vista, como en el sistema
     barraMsg('');
 }
 
@@ -1200,17 +1203,11 @@ function pintarExtra() {
         return;
     }
     if (FLUJO === 'entrada') {
-        c.innerHTML =
-            '<label class="lbl" for="entTipo">Tipo de entrada</label>' +
-            '<select class="campo" id="entTipo">' +
-                '<option value="compra">Compra</option>' +
-                '<option value="bonificacion">Bonificación</option>' +
-                '<option value="consignacion">Consignación</option>' +
-                '<option value="prestamo">Préstamo pagado</option>' +
-                '<option value="traspaso">Traspaso de otra sucursal</option>' +
-            '</select>' +
-            '<label class="lbl" for="entFecha">Fecha</label>' +
-            '<input class="campo" id="entFecha" type="date" value="' + hoyStr() + '">';
+        /* El tipo y la fecha van en la tarjeta del producto (como en el
+           sistema); aquí, la nota / factura. */
+        c.innerHTML = NOTA ? _notaHTML()
+            : '<div class="ent-herr"><button class="btn-nota" onclick="abrirNota()">' + _ic('nom-recibo', '🧾') + 'Nota / factura</button>' +
+              '<small>Una compra con varios productos: proveedor, folio y fotos una sola vez.</small></div>';
         c.onclick = null;
         return;
     }
@@ -1219,6 +1216,273 @@ function pintarExtra() {
 function btnSub(campo, val, lbl) {
     return '<button class="chip-b' + (SUB[campo] === val ? ' on' : '') + '" ' +
            'data-sub="' + campo + '" data-val="' + val + '">' + lbl + '</button>';
+}
+
+/* ══ ENTRADAS, COMO EN EL SISTEMA (Edwin, 25-nov) ══════════════════════════
+   Dos vistas arriba: el CATÁLOGO para registrar y las ENTRADAS REGISTRADAS.
+   La tarjeta del producto lleva los tipos de entrada en botones —los MISMOS
+   cuatro del sistema (entTipos de inventarios.js), con sus ids: antes la app
+   mandaba «prestamo» y el sistema solo conoce «prestamo_pagado», así que esos
+   préstamos no aparecían en el reporte— y su fecha.
+
+   NOTA / FACTURA: una compra con varios productos. Proveedor, folio, fecha,
+   tipo y las fotos van UNA vez; cada producto que se agrega se suma a la nota
+   (el mismo dos veces se acumula). Al registrarla, cada entrada viaja con el
+   mismo notaId / notaFolio / notaProveedor que escribe el sistema, a la misma
+   tabla: el sistema la ve como una nota más. */
+var ENT_TIPOS = [
+    { id: 'compra',          lbl: 'Compra',          ic: 'fin-gastos' },
+    { id: 'bonificacion',    lbl: 'Bonificación',    ic: 'nom-bono' },
+    { id: 'consignacion',    lbl: 'Consignación',    ic: 'mod-inventarios' },
+    { id: 'prestamo_pagado', lbl: 'Préstamo pagado', ic: 'ev-devolver' }
+];
+function tipoEntLbl(t) {
+    if (t === 'prestamo') t = 'prestamo_pagado';      // lo que mandaba la app antes
+    for (var i = 0; i < ENT_TIPOS.length; i++) if (ENT_TIPOS[i].id === t) return ENT_TIPOS[i].lbl;
+    return t ? String(t) : 'Compra';
+}
+var ENT_VISTA = 'catalogo', ENT_TIPO = 'compra', NOTA = null;
+var _REG = { movs: null, per: 'todo', sel: null, abiertos: {}, desde: '', inv: '' };
+function _tiposHTML(actual, fn) {
+    return '<div class="ent-tipos">' + ENT_TIPOS.map(function (t) {
+        return '<button type="button" class="ent-tipo' + (actual === t.id ? ' on' : '') + '" data-tipo="' + t.id + '" onclick="' + fn + '(\'' + t.id + '\')">' +
+            _ic(t.ic, '') + '<span>' + etx(t.lbl) + '</span></button>';
+    }).join('') + '</div>';
+}
+function setTipoEnt(t) { ENT_TIPO = t; var c = $('elegidoTipos'); if (c) c.innerHTML = _tiposHTML(ENT_TIPO, 'setTipoEnt'); }
+
+/* ── Las dos vistas ── */
+function pintarVistasEnt() {
+    var v = $('entVistas'); if (!v) return;
+    v.hidden = FLUJO !== 'entrada';
+    Array.prototype.forEach.call(v.querySelectorAll('[data-vista]'), function (b) {
+        b.classList.toggle('on', b.getAttribute('data-vista') === ENT_VISTA);
+        b.setAttribute('aria-pressed', b.getAttribute('data-vista') === ENT_VISTA ? 'true' : 'false');
+    });
+    var reg = FLUJO === 'entrada' && ENT_VISTA === 'registradas';
+    $('vistaCaptura').hidden = reg;
+    $('vistaRegistradas').hidden = !reg;
+    /* La barra de abajo es de la captura: en lo registrado no hay nada que mandar. */
+    $('barra').hidden = reg;
+    document.body.classList.toggle('con-barra', !reg);
+}
+function setVistaEnt(v) {
+    ENT_VISTA = v === 'registradas' ? 'registradas' : 'catalogo';
+    pintarVistasEnt();
+    if (ENT_VISTA === 'registradas') cargarRegistradas();
+    else { pintarSugs([]); _buscar($('buscar').value || ''); }
+}
+
+/* ── La nota / factura ── */
+function abrirNota() {
+    if (NOTA) return;
+    NOTA = { id: genId() + genId(), proveedor: '', folio: '', fecha: hoyStr(), tipo: 'compra' };
+    /* Lo que ya estaba en la lista entra a la nota: es la misma compra. */
+    pintarExtra(); pintarLote(); pintarCamposFlujo(); _rotularFotos();
+}
+function notaCampo(k, v) { if (NOTA) NOTA[k] = v; }
+function setTipoNota(t) { if (!NOTA) return; NOTA.tipo = t; pintarExtra(); }
+function descartarNota() {
+    if (!NOTA) return;
+    if (LOTE.length && !confirm('¿Descartar la nota? Los ' + LOTE.length + ' productos se quedan en la lista, sin nota.')) return;
+    NOTA = null; pintarExtra(); pintarLote(); pintarCamposFlujo(); _rotularFotos();
+}
+function notaCant(id, v) {
+    var x = n(v);
+    LOTE = LOTE.map(function (it) { return it.id === id ? Object.assign(it, { cantidad: x }) : it; })
+               .filter(function (it) { return it.cantidad > 0; });
+    pintarLote();
+}
+function _rotularFotos() {
+    var l = $('fotosLbl'); if (!l) return;
+    l.innerHTML = (FLUJO === 'entrada' && NOTA)
+        ? 'Evidencia de la nota <span class="opt">foto del ticket o la factura · vale para todos sus productos</span>'
+        : 'Fotos <span class="opt">opcional · hasta 10</span>';
+}
+function _notaHTML() {
+    var k = LOTE.length;
+    var items = k ? LOTE.map(function (it) {
+        return '<div class="nota-it"><span class="nota-it-nom">' + etx(it.nombre) + (it.meta ? '<small>' + etx(it.meta) + '</small>' : '') + '</span>' +
+            '<input class="nota-cant" type="text" inputmode="decimal" value="' + etx(String(it.cantidad)) + '" aria-label="Cantidad" ' +
+                'onchange="notaCant(\'' + it.id + '\', this.value)">' +
+            '<span class="nota-u">' + etx(it.unidad || '') + '</span>' +
+            '<button class="nota-it-x" aria-label="Quitar de la nota" onclick="quitarDelLote(\'' + it.id + '\')">✕</button></div>';
+    }).join('') : '<div class="nota-vacia">Busca abajo los productos y escribe cuánto llegó de cada uno. Si repites uno, se suma.</div>';
+    return '<div class="nota-card">' +
+        '<div class="nota-cab"><div><div class="nota-tit">' + _ic('nom-recibo', '🧾') + 'Nota / factura</div>' +
+            '<div class="nota-sub">' + (k ? k + ' producto' + (k !== 1 ? 's' : '') + ' en la nota' : 'Una sola compra con varios productos') + '</div></div>' +
+            '<button class="nota-x" aria-label="Descartar la nota" onclick="descartarNota()">✕</button></div>' +
+        '<div class="nota-datos">' +
+            '<label><span>Proveedor</span><input class="campo" id="notaProv" autocomplete="off" placeholder="Ej. Coca-Cola" value="' + etx(NOTA.proveedor) + '" oninput="notaCampo(\'proveedor\', this.value)"></label>' +
+            '<label><span>Folio</span><input class="campo" id="notaFolio" autocomplete="off" placeholder="Opcional" value="' + etx(NOTA.folio) + '" oninput="notaCampo(\'folio\', this.value)"></label>' +
+            '<label class="nota-fecha"><span>Fecha</span><input class="campo" id="notaFecha" type="date" value="' + etx(NOTA.fecha) + '" onchange="notaCampo(\'fecha\', this.value)"></label>' +
+        '</div>' +
+        _tiposHTML(NOTA.tipo, 'setTipoNota') +
+        '<div class="nota-items">' + items + '</div>' +
+    '</div>';
+}
+
+/* ── El catálogo: con el buscador vacío se ve la lista, como en el sistema ── */
+function _catalogoEnt() {
+    var vis = (INSUMOS || []).filter(visible);
+    return { lista: vis.slice(0, 40), total: vis.length };
+}
+
+/* ══ ENTRADAS REGISTRADAS ══════════════════════════════════════════════════
+   Lo que ya entró desde el último inventario cerrado (entrada_historial):
+   arriba las NOTAS —cada una con sus productos—, abajo por producto con su
+   total. «Agrupar en nota» marca entradas ya registradas y las junta en una
+   nota (entrada_nota_agrupar, v94); cada nota se puede desagrupar. Quién puede
+   tocar qué lo decide el servidor, igual que al corregir. */
+async function cargarRegistradas() {
+    var c = $('vistaRegistradas');
+    c.innerHTML = '<div class="hvacio">Cargando…</div>';
+    if (!navigator.onLine) { c.innerHTML = '<div class="sinred">Sin internet. Lo registrado se lee del servidor.</div>'; return; }
+    try {
+        var r = await _supabase.rpc('entrada_historial', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH, p_suc: (SUC || ''), p_area: AREA });
+        if (r.error || !r.data || !r.data.ok) { c.innerHTML = '<div class="hvacio">No se pudo cargar.</div>'; return; }
+        _REG.movs = (r.data.movimientos || []).filter(function (m) { return m.concepto === 'entrada'; });
+        _REG.desde = r.data.desde || ''; _REG.inv = r.data.inventario || '';
+        pintarRegistradas();
+    } catch (e) { c.innerHTML = '<div class="hvacio">Error: ' + etx((e && e.message) || e) + '</div>'; }
+}
+function _lunesStr() {
+    var d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function _regVisibles() {
+    var hoy = hoyStr(), lun = _lunesStr();
+    return (_REG.movs || []).filter(function (m) {
+        if (_REG.per === 'hoy') return m.fecha === hoy;
+        if (_REG.per === 'semana') return String(m.fecha || '') >= lun;
+        return true;
+    });
+}
+function _cantTxt(m) { var c = m.cantidad; return (c != null && c !== '' ? c : '—') + (m.unidad ? ' ' + m.unidad : ''); }
+function _filaReg(m) {
+    var sel = !!_REG.sel, on = sel && !!_REG.sel.ids[m.id];
+    var det = [tipoEntLbl(m.tipoEntrada), (m.fecha || '') + horaDe(m), m.quien].filter(Boolean).join(' · ');
+    var badge = m.notaId ? '<span class="reg-badge">' + _ic('nom-recibo', '') + 'Nota' +
+        (m.notaProveedor || m.notaFolio ? ' · ' + etx([m.notaProveedor, m.notaFolio ? 'folio ' + m.notaFolio : ''].filter(Boolean).join(' · ')) : '') + '</span>' : '';
+    var cuerpo = '<span class="reg-fila-txt"><b>' + etx(m.nombre || '—') + '</b><small>' + etx(det) +
+        (m.fotos ? ' · ' + m.fotos + ' foto' + (m.fotos !== 1 ? 's' : '') : '') + (m.editadoPor ? ' · corregido por ' + etx(m.editadoPor) : '') + '</small>' +
+        badge + (m.nota ? '<small class="reg-com">' + etx(m.nota) + '</small>' : '') + '</span>' +
+        '<b class="reg-cant">+' + etx(_cantTxt(m)) + '</b>';
+    if (sel) {
+        var puede = m.puedeEditar === true;
+        return '<label class="reg-fila sel' + (on ? ' on' : '') + (puede ? '' : ' no') + '">' +
+            '<input type="checkbox"' + (on ? ' checked' : '') + (puede ? '' : ' disabled') + ' onchange="marcarReg(\'' + etx(m.id) + '\', this.checked)">' +
+            cuerpo + '</label>';
+    }
+    return '<div class="reg-fila">' + cuerpo + '</div>' +
+        btnCorregir(m, 'entrada', { cantidad: String(m.cantidad == null ? '' : m.cantidad), nota: String(m.nota || '') });
+}
+function _grupoReg(key, titulo, sub, tot, filas, pie) {
+    var abierto = !!_REG.sel || !!_REG.abiertos[key];
+    return '<details class="reg-grupo"' + (abierto ? ' open' : '') + ' data-k="' + etx(key) + '" ontoggle="toggleGrupoReg(this)">' +
+        '<summary><span class="reg-g-txt"><b>' + titulo + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span>' +
+        '<span class="reg-g-tot">' + tot + '</span></summary>' +
+        '<div class="reg-g-cuerpo">' + filas + (pie || '') + '</div></details>';
+}
+function toggleGrupoReg(el) { if (!_REG.sel) _REG.abiertos[el.getAttribute('data-k')] = el.open; }
+function pintarRegistradas() {
+    var c = $('vistaRegistradas'); if (!c) return;
+    var ms = _regVisibles(), notas = {}, ordenN = [], prods = {}, ordenP = [];
+    ms.forEach(function (m) {
+        if (m.notaId) { if (!notas[m.notaId]) { notas[m.notaId] = []; ordenN.push(m.notaId); } notas[m.notaId].push(m); }
+        var k = m.insumoId || m.nombre || '—';
+        if (!prods[k]) { prods[k] = []; ordenP.push(k); }
+        prods[k].push(m);
+    });
+    var chip = function (k, lbl) {
+        return '<button class="reg-per' + (_REG.per === k ? ' on' : '') + '" onclick="perReg(\'' + k + '\')">' + lbl + '</button>';
+    };
+    var nSel = _REG.sel ? Object.keys(_REG.sel.ids).filter(function (k) { return _REG.sel.ids[k]; }).length : 0;
+    var h = '<div class="reg-cab"><div class="reg-sub">' + etx(_REG.desde ? 'Desde el cierre de ' + (_REG.inv || 'el último inventario') : 'Todo lo registrado (aún no hay un inventario cerrado)') + '</div>' +
+        '<div class="reg-pers">' + chip('hoy', 'Hoy') + chip('semana', 'Semana') + chip('todo', 'Todo') + '</div>' +
+        '<div class="reg-resumen"><span><b>' + ms.length + ' entrada' + (ms.length !== 1 ? 's' : '') + '</b>' +
+            (ordenN.length ? ' · ' + ordenN.length + ' nota' + (ordenN.length !== 1 ? 's' : '') : '') + '</span>' +
+            '<button class="btn-agrupar' + (_REG.sel ? ' on' : '') + '" onclick="modoAgrupar()">' + _ic('nom-recibo', '🧾') + (_REG.sel ? 'Cancelar' : 'Agrupar en nota') + '</button></div></div>';
+    if (_REG.sel) {
+        h += '<div class="reg-selbar"><div class="reg-sel-tit">' + _ic('nom-recibo', '🧾') + '<b>Agrupar en una nota</b><span>' +
+                (nSel ? nSel + ' entrada' + (nSel !== 1 ? 's' : '') + ' marcada' + (nSel !== 1 ? 's' : '') : 'Marca abajo las entradas que llegaron en la misma nota o factura') + '</span></div>' +
+            '<input class="campo" id="selProv" autocomplete="off" placeholder="Proveedor" value="' + etx(_REG.sel.proveedor) + '" oninput="selCampo(\'proveedor\', this.value)">' +
+            '<input class="campo" id="selFolio" autocomplete="off" placeholder="Folio (opcional)" value="' + etx(_REG.sel.folio) + '" oninput="selCampo(\'folio\', this.value)">' +
+            '<button class="btn-auth" id="btnAgruparOk" onclick="agruparSel()"' + (nSel ? '' : ' disabled') + '>Agrupar' + (nSel ? ' ' + nSel : '') + '</button>' +
+            '<div class="reg-sel-msg" id="selMsg"></div></div>';
+    }
+    if (!ms.length) {
+        c.innerHTML = h + '<div class="hvacio">No hay entradas ' + (_REG.per === 'hoy' ? 'de hoy' : _REG.per === 'semana' ? 'de esta semana' : 'todavía') + '.</div>';
+        return;
+    }
+    if (ordenN.length && !_REG.sel) {
+        h += '<div class="reg-sec">Notas / facturas</div>' + ordenN.map(function (k) {
+            var es = notas[k], e0 = es[0];
+            var tit = [e0.notaProveedor, e0.notaFolio ? 'Folio ' + e0.notaFolio : ''].filter(Boolean).join(' · ') || 'Nota sin proveedor';
+            return _grupoReg('nota|' + k, _ic('nom-recibo', '🧾') + etx(tit), etx((e0.fecha || '—') + ' · ' + tipoEntLbl(e0.tipoEntrada)),
+                es.length + ' producto' + (es.length !== 1 ? 's' : ''), es.map(_filaReg).join(''),
+                '<div class="reg-g-pie"><button class="btn-desag" onclick="desagruparNota(\'' + etx(k) + '\')">Desagrupar</button></div>');
+        }).join('');
+    }
+    h += '<div class="reg-sec">Por producto</div>' + ordenP.map(function (k) {
+        var es = prods[k], tot = 0, u = es[0].unidad || '';
+        es.forEach(function (m) { tot += n(m.cantidad); });
+        return _grupoReg('p|' + k, etx(es[0].nombre || '—'), es.length + ' entrada' + (es.length !== 1 ? 's' : ''),
+            '<b class="reg-tot">+' + (Math.round(tot * 100) / 100) + (u ? ' ' + etx(u) : '') + '</b>', es.map(_filaReg).join(''));
+    }).join('');
+    c.innerHTML = h;
+}
+function perReg(p) { _REG.per = p; pintarRegistradas(); }
+function modoAgrupar() { _REG.sel = _REG.sel ? null : { ids: {}, proveedor: '', folio: '' }; pintarRegistradas(); }
+function selCampo(k, v) { if (_REG.sel) _REG.sel[k] = v; }
+function marcarReg(id, on) {
+    if (!_REG.sel) return;
+    _REG.sel.ids[id] = !!on;
+    /* Si la marcada ya trae nota, sus datos se proponen (no se pisa lo escrito). */
+    var m = (_REG.movs || []).filter(function (x) { return x.id === id; })[0];
+    if (on && m && m.notaId) {
+        if (!_REG.sel.proveedor && m.notaProveedor) _REG.sel.proveedor = m.notaProveedor;
+        if (!_REG.sel.folio && m.notaFolio) _REG.sel.folio = m.notaFolio;
+    }
+    pintarRegistradas();
+}
+var MOTIVO_NOTA = {
+    autor: 'Una de las entradas la capturó alguien más: solo tu encargado puede juntarla.',
+    ajeno: 'Una de las entradas es de otra sucursal.',
+    cerrado: 'Una de las entradas ya entró en un inventario cerrado.',
+    tipo: 'Solo se juntan entradas (no mermas ni cortesías).',
+    borrada: 'Una de las entradas ya se borró.',
+    'no-existe': 'Una de las entradas ya no existe. Vuelve a cargar la lista.',
+    nip: 'Tu clave ya no es válida. Vuelve a entrar.',
+    token: 'El acceso de este teléfono ya no está activo.',
+    datos: 'Marca al menos una entrada.'
+};
+function _msgNota(r) {
+    if (r && r.error && /Could not find|PGRST202|does not exist/i.test(r.error.message || '')) return 'Esta función todavía no está activada en el servidor (falta la v94).';
+    if (r && r.error) return 'No se pudo: ' + r.error.message;
+    var d = (r && r.data) || {};
+    return MOTIVO_NOTA[d.motivo] || 'No se pudo.';
+}
+async function agruparSel() {
+    if (!_REG.sel) return;
+    var ids = Object.keys(_REG.sel.ids).filter(function (k) { return _REG.sel.ids[k]; });
+    if (!ids.length) return;
+    if (!navigator.onLine) { $('selMsg').textContent = 'Sin internet.'; return; }
+    $('btnAgruparOk').disabled = true;
+    var r = await _supabase.rpc('entrada_nota_agrupar', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH,
+        p_ids: ids, p_proveedor: _REG.sel.proveedor || '', p_folio: _REG.sel.folio || '' });
+    if (!r || r.error || !r.data || !r.data.ok) { $('selMsg').textContent = _msgNota(r); $('btnAgruparOk').disabled = false; return; }
+    var prov = _REG.sel.proveedor;
+    _REG.sel = null; _REG.abiertos['nota|' + r.data.notaId] = true;
+    toast('✓ Nota armada: ' + ids.length + ' entrada' + (ids.length !== 1 ? 's' : '') + (prov ? ' · ' + prov : '') + '.', 'ok');
+    cargarRegistradas();
+}
+async function desagruparNota(notaId) {
+    if (!confirm('¿Desagrupar esta nota? Las entradas se quedan igual, solo sin nota.')) return;
+    var r = await _supabase.rpc('entrada_nota_desagrupar', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH, p_nota: notaId });
+    if (!r || r.error || !r.data || !r.data.ok) { toast(_msgNota(r), 'err'); return; }
+    toast('Nota desagrupada.', 'ok');
+    cargarRegistradas();
 }
 
 /* ── El buscador ── */
@@ -1254,7 +1518,10 @@ async function _buscar(q) {
     if ((FLUJO === 'merma' || FLUJO === 'salida') && SUB.que === 'producto' && RECETAS === null) {
         await cargarRecetas();
     }
-    if (!q) { pintarSugs([]); return; }
+    if (!q) {
+        if (FLUJO === 'entrada') { var cat = _catalogoEnt(); pintarSugs(cat.lista, '', cat.total); return; }
+        pintarSugs([]); return;
+    }
     var pal = q.split(/\s+/);
     var res = fuente().filter(function (x) {
         if (!visible(x)) return false;
@@ -1284,8 +1551,22 @@ async function cargarRecetas() {
         RECETAS = unoPorProducto((rr.data || []).filter(function (x) { return x && x.id && enSucReceta(x); }));
     } catch (e) { RECETAS = []; }
 }
-function pintarSugs(lista, q) {
+function pintarSugs(lista, q, total) {
     var c = $('sugs');
+    if (FLUJO === 'entrada' && lista.length) {
+        /* Como la lista del sistema: el producto, lo que lo distingue y «+ registrar». */
+        c.innerHTML = '<div class="cat-lista">' + lista.map(function (x, i) {
+            var meta = metaIns(x);
+            return '<button class="cat-it" data-i="' + i + '"><span class="cat-txt"><b>' + etx(x.nombre || '—') + '</b>' +
+                (meta ? '<small>' + etx(meta) + '</small>' : '') + '</span><span class="cat-reg">+ registrar</span></button>';
+        }).join('') + '</div>' +
+            (total && total > lista.length ? '<div class="cat-mas">Se ven ' + lista.length + ' de ' + total + '. Escribe arriba para encontrar los demás.</div>' : '');
+        c.onclick = function (e) {
+            var b = e.target.closest('[data-i]'); if (!b) return;
+            elegir(lista[parseInt(b.getAttribute('data-i'), 10)]);
+        };
+        return;
+    }
     if (!lista.length) {
         c.innerHTML = q ? '<div class="sug-vacio">Nada con «' + etx(q) + '».<br>' +
             'Si es de otra área, no te aparece: cada quien ve lo suyo.</div>' : '';
@@ -1316,6 +1597,7 @@ function elegir(x) {
 function limpiarElegido() {
     SEL = null; $('elegido').hidden = true;
     var c = $('cant'); if (c) c.value = '';
+    if (FLUJO === 'entrada' && ENT_VISTA === 'catalogo') _buscar((($('buscar') || {}).value) || '');   // el catálogo vuelve a la vista
 }
 
 /* Las unidades que tienen sentido para ESTE producto. Ofrecer «litros» para una
@@ -1338,7 +1620,20 @@ function pintarUnidades() {
 }
 
 function pintarCamposFlujo() {
-    var c = $('camposFlujo');
+    var c = $('camposFlujo'), t = $('elegidoTipos');
+    if (t) t.innerHTML = '';
+    var ba = $('btnAgregar');
+    if (ba) ba.textContent = FLUJO === 'entrada' ? (NOTA ? '+ Agregar a la nota' : '+ Agregar') : '+ Agregar a la lista';
+    if (ba) ba.classList.toggle('btn-agregar', FLUJO === 'entrada');
+    if (FLUJO === 'entrada') {
+        /* Con la nota abierta, el tipo y la fecha son los de la nota. */
+        if (NOTA) { c.innerHTML = '<div class="ent-en-nota">' + _ic('nom-recibo', '🧾') + 'Se suma a la nota' + (NOTA.proveedor ? ' · ' + etx(NOTA.proveedor) : '') + '</div>'; return; }
+        if (t) t.innerHTML = '<label class="lbl">Tipo de entrada</label>' + _tiposHTML(ENT_TIPO, 'setTipoEnt');
+        var f = $('entFecha') ? $('entFecha').value : '';
+        c.innerHTML = '<label class="lbl" for="entFecha">Fecha</label>' +
+            '<input class="campo" id="entFecha" type="date" value="' + etx(f || hoyStr()) + '">';
+        return;
+    }
     if (FLUJO === 'merma') {
         c.innerHTML = '<label class="lbl" for="motivo">Motivo</label>' +
             '<select class="campo" id="motivo">' +
@@ -1369,11 +1664,25 @@ function agregarAlLote() {
         meta: metaIns(SEL),
         unidad: $('unidad') ? $('unidad').value : 'PZA'
     };
-    if (FLUJO === 'entrada') it.tipo = ($('entTipo') || {}).value || 'compra';
+    if (FLUJO === 'entrada') {
+        it.tipo = NOTA ? NOTA.tipo : ENT_TIPO;
+        it.fecha = NOTA ? '' : (($('entFecha') || {}).value || hoyStr());
+        /* En una nota, el mismo producto dos veces se SUMA (como en el sistema). */
+        if (NOTA) {
+            var ya = LOTE.filter(function (x) { return x.insumoId === it.insumoId && x.unidad === it.unidad; })[0];
+            if (ya) {
+                ya.cantidad = Math.round((n(ya.cantidad) + cant) * 10000) / 10000;
+                toast('+' + cant + ' a la nota · van ' + ya.cantidad + ' ' + ya.unidad, 'ok');
+                limpiarElegido(); pintarLote(); barraMsg(''); _buscar('');
+                return;
+            }
+        }
+    }
     if (FLUJO === 'merma')   { it.motivo = ($('motivo') || {}).value || 'otro'; it.mermaTipo = SUB.que; }
     if (FLUJO === 'salida')  { it.salidaTipo = SUB.tipo; it.salidaQue = SUB.que; }
     LOTE.push(it);
     limpiarElegido(); pintarLote(); barraMsg('');
+    if (FLUJO === 'entrada') _buscar($('buscar').value || '');
     $('buscar').focus();
 }
 function quitarDelLote(id) {
@@ -1382,13 +1691,19 @@ function quitarDelLote(id) {
 }
 function pintarLote() {
     var c = $('lote');
+    if (FLUJO === 'entrada') {
+        var k = LOTE.length;
+        $('btnEnviar').textContent = NOTA ? ('Registrar nota' + (k ? ' · ' + k + ' producto' + (k !== 1 ? 's' : '') : '')) : FLUJOS.entrada.btn;
+        /* Con la nota abierta, sus productos viven DENTRO de la nota. */
+        if (NOTA) { c.innerHTML = ''; $('btnEnviar').disabled = !k; pintarExtra(); return; }
+    }
     if (!LOTE.length) { c.innerHTML = ''; $('btnEnviar').disabled = true; return; }
     $('btnEnviar').disabled = false;
     c.innerHTML = '<div class="lote-tit">En la lista (' + LOTE.length + '/' + MAX_ITEMS + ')</div>' +
         LOTE.map(function (it) {
             /* El meta primero: en una lista de ocho renglones es lo que
                distingue las tres Bohemias que se acaban de agregar. */
-            var det = [it.meta, it.tipo, it.motivo, it.salidaTipo].filter(Boolean).join(' · ');
+            var det = [it.meta, it.tipo ? tipoEntLbl(it.tipo) : '', it.fecha && it.fecha !== hoyStr() ? it.fecha : '', it.motivo, it.salidaTipo].filter(Boolean).join(' · ');
             return '<div class="lote-it"><span>' + etx(it.nombre) +
                 (det ? '<small>' + etx(det) + '</small>' : '') + '</span>' +
                 '<b>' + it.cantidad + ' ' + etx(it.unidad) + '</b>' +
@@ -1486,15 +1801,15 @@ function armarRegistro(it) {
     var refs = FOTOS.filter(function (f) { return f.ref; }).map(function (f) { return f.ref; });
     var base = {
         id: it.id, sucursalId: SUC || '', area: AREA,
-        fecha: (FLUJO === 'entrada' && $('entFecha')) ? ($('entFecha').value || hoyStr()) : hoyStr(),
+        fecha: FLUJO === 'entrada' ? ((NOTA ? NOTA.fecha : it.fecha) || hoyStr()) : hoyStr(),
         hora: horaStr(), registrado: new Date().toISOString(),
         foto_url: refs[0] || '', foto_urls: refs,
         notas: ($('nota').value || '').trim()
     };
     if (FLUJO === 'entrada') return Object.assign(base, {
         concepto: 'entrada', insumoId: it.insumoId, nombre: it.nombre, familia: it.familia,
-        cantidad: it.cantidad, costo: 0, tipo: it.tipo
-    });
+        cantidad: it.cantidad, unidad: it.unidad, costo: 0, tipo: NOTA ? NOTA.tipo : it.tipo
+    }, NOTA ? { notaId: NOTA.id, notaFolio: String(NOTA.folio || '').trim(), notaProveedor: String(NOTA.proveedor || '').trim() } : {});
     if (FLUJO === 'merma') return Object.assign(base, {
         concepto: 'merma', mermaTipo: it.mermaTipo,
         insumoId: it.mermaTipo === 'insumo' ? it.insumoId : '',
@@ -1552,6 +1867,12 @@ async function enviarLote() {
     if (!fallidos.length) {
         FOTOS = []; pintarFotos(); $('nota').value = '';
         barraMsg('');
+        if (FLUJO === 'entrada' && NOTA) {
+            var _prov = String(NOTA.proveedor || '').trim();
+            NOTA = null; pintarExtra(); pintarLote(); pintarCamposFlujo(); _rotularFotos();
+            toast('✓ Nota registrada: ' + ok + ' producto' + (ok === 1 ? '' : 's') + (_prov ? ' · ' + _prov : '') + '.', 'ok');
+            return;
+        }
         toast('✓ ' + ok + ' registro' + (ok === 1 ? '' : 's') + ' guardado' + (ok === 1 ? '' : 's') + '.', 'ok');
     } else {
         /* Y se dice POR QUÉ. Sin el motivo, quien está frenado vuelve a tocar
@@ -1913,7 +2234,9 @@ async function guardarCorreccion() {
         return;
     }
     cerrarCorregir();
-    try { await irHistorial(); } catch (e) {}      // la vista viene del servidor: se vuelve a pedir
+    /* La vista viene del servidor: se vuelve a pedir la que estaba abierta.
+       (Antes llamaba a un irHistorial que no existía y la lista no se refrescaba.) */
+    try { if (_PANT === 'pFlujo' && ENT_VISTA === 'registradas') await cargarRegistradas(); else await abrirHistorial(); } catch (e) {}
 }
 
 /* ══ INSTALAR ══════════════════════════════════════════════════════════════
@@ -2106,6 +2429,11 @@ window.toggleDespl = toggleDespl;
 window.buscarRecetaRejilla = buscarRecetaRejilla;
 window.toggleUsuario = toggleUsuario;
 window.toggleOjo = toggleOjo;
+window.setVistaEnt = setVistaEnt; window.setTipoEnt = setTipoEnt; window.setTipoNota = setTipoNota;
+window.abrirNota = abrirNota; window.notaCampo = notaCampo; window.descartarNota = descartarNota; window.notaCant = notaCant;
+window.quitarDelLote = quitarDelLote; window.toggleGrupoReg = toggleGrupoReg; window.perReg = perReg;
+window.modoAgrupar = modoAgrupar; window.selCampo = selCampo; window.marcarReg = marcarReg;
+window.agruparSel = agruparSel; window.desagruparNota = desagruparNota;
 window.elegirGrupoRec = elegirGrupoRec;
 window.abrirCajon = abrirCajon;
 window.cerrarCajon = cerrarCajon;
@@ -2142,7 +2470,8 @@ window._appMovil = {
         if (k === 'SUC') SUC = v; if (k === 'LOTE') LOTE = v; if (k === 'FOTOS') FOTOS = v;
         if (k === 'APPS') APPS = v; if (k === 'PLANTILLAS') PLANTILLAS = v; if (k === 'EVALS') EVALS = v;
     },
-    _get: function (k) { return { AREA: AREA, AREA_COLAB: AREA_COLAB, FLUJO: FLUJO, LOTE: LOTE }[k]; }
+    _get: function (k) { return { AREA: AREA, AREA_COLAB: AREA_COLAB, FLUJO: FLUJO, LOTE: LOTE, NOTA: NOTA }[k]; },
+    armarRegistroActual: function () { return LOTE.map(armarRegistro); }, tipoEntLbl: tipoEntLbl
 };
 
 })();

@@ -29,6 +29,8 @@
        terracota, el campo y el gris apagado que sí se lee. */
     --terra:#fb9b6f; --terra-hover:#ffb18c; --terra-ink:#0a0908;
     --campo:#1a1916; --apagado:#b1aaa0; --borde-ui:#403d37;
+    /* El dorado del sistema (--accent de styles.css): el tipo de entrada elegido. */
+    --acento:#f5c842; --acento-ink:#13120f; --verde-btn:#3dbe7a; --verde-ink:#0c1a12;
     --r:14px;
     /* El teléfono tiene muescas y rayitas. Sin esto, la barra de abajo queda
        debajo del gesto de inicio y el botón no se puede apretar. */
@@ -41,6 +43,7 @@
     --marca:#247681;
     --terra:#ad4b27; --terra-hover:#913b1e; --terra-ink:#fff;
     --campo:#f0eeea; --apagado:#6f685e; --borde-ui:#dddad5;
+    --acento:#c99a10; --acento-ink:#fff; --verde-btn:#28a060; --verde-ink:#fff;
 }
 
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -559,3 +562,113 @@ body.con-barra { padding-bottom:calc(var(--safe-b) + 108px); }
 .rec-lista-tit { font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:var(--apagado); margin:0 2px 2px; }
 .clave-card .nip-wrap { margin-bottom:12px; }
 .clave-card .nip-msg { margin-top:8px; }
+
+
+/* ══ (25-nov) ENTRADAS, COMO EN EL SISTEMA ═══════════════════════════════════ */
+.ent-vistas { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:5px; margin-bottom:14px;
+    background:var(--campo); border:1px solid var(--borde-ui); border-radius:14px; }
+.ent-vista { display:flex; align-items:center; justify-content:center; gap:8px; min-height:44px; border-radius:10px;
+    font-size:13.5px; font-weight:600; color:var(--txt2); }
+.ent-vista .etx-ic { width:18px; height:18px; color:var(--txt2); --green:var(--marca); }
+.ent-vista.on { background:var(--sup); color:var(--txt); box-shadow:0 1px 3px rgba(0,0,0,.18); }
+.ent-vista.on .etx-ic { color:var(--marca); }
+
+.ent-herr { display:flex; align-items:center; gap:10px; margin:2px 0 6px; flex-wrap:wrap; }
+.ent-herr small { flex:1; min-width:160px; font-size:12px; color:var(--apagado); line-height:1.4; }
+.btn-nota { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 14px; border:1px solid var(--borde-ui);
+    border-radius:10px; background:var(--sup); color:var(--txt); font-size:13.5px; font-weight:600; }
+.btn-nota .etx-ic, .nota-tit .etx-ic, .ent-en-nota .etx-ic, .btn-agrupar .etx-ic, .reg-sel-tit .etx-ic, .reg-badge .etx-ic, .reg-g-txt .etx-ic {
+    width:17px; height:17px; color:var(--marca); --green:var(--marca); flex-shrink:0; }
+
+/* Los tipos de entrada: botones, el elegido en el dorado del sistema */
+.ent-tipos { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:4px; }
+.ent-tipo { display:flex; align-items:center; gap:8px; min-height:44px; padding:0 11px; border:1px solid var(--borde-ui);
+    border-radius:9px; background:transparent; color:var(--txt2); font-size:13px; text-align:left; }
+.ent-tipo .etx-ic { width:17px; height:17px; color:var(--txt2); --green:var(--marca); flex-shrink:0; }
+.ent-tipo.on { background:var(--acento); border-color:var(--acento); color:var(--acento-ink); font-weight:700; }
+.ent-tipo.on .etx-ic { color:var(--acento-ink); --green:var(--acento-ink); }
+.ent-en-nota { display:flex; align-items:center; gap:8px; margin:12px 0 2px; font-size:12.5px; color:var(--apagado); }
+.btn.btn-add.btn-agregar { background:var(--verde-btn); border:none; color:var(--verde-ink); font-weight:700; }
+
+/* El catálogo, como la lista del sistema */
+.cat-lista { border:1px solid var(--borde-ui); border-radius:14px; overflow:hidden; background:var(--sup); margin-top:8px; }
+.cat-it { display:flex; align-items:center; gap:10px; width:100%; min-height:58px; padding:10px 14px; text-align:left;
+    border-bottom:1px solid var(--borde-ui); color:var(--txt); }
+.cat-it:last-child { border-bottom:none; }
+.cat-it:active { background:var(--campo); }
+.cat-txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.cat-txt b { font-size:14.5px; font-weight:600; line-height:1.3; }
+.cat-txt small { font-size:11.5px; color:var(--apagado); }
+.cat-reg { flex-shrink:0; font-size:12.5px; color:var(--apagado); }
+.cat-mas { font-size:12px; color:var(--apagado); text-align:center; margin:10px 0 4px; }
+
+/* La nota / factura */
+.nota-card { background:var(--sup); border:1px solid var(--acento); border-radius:16px; padding:16px; margin:2px 0 8px;
+    box-shadow:0 0 0 3px color-mix(in srgb, var(--acento) 14%, transparent); }
+.nota-cab { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.nota-tit { display:flex; align-items:center; gap:8px; font-size:15.5px; font-weight:700; }
+.nota-sub { font-size:12px; color:var(--apagado); margin-top:3px; }
+.nota-x { width:36px; height:36px; border:1px solid var(--borde-ui); border-radius:9px; color:var(--txt2); flex-shrink:0; }
+.nota-datos { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+.nota-datos label { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.nota-datos label > span { font-size:10.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--apagado); }
+.nota-datos .nota-fecha { grid-column:1 / -1; }
+.nota-items { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+.nota-it { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--borde-ui); border-radius:10px; background:var(--campo); }
+.nota-it-nom { flex:1; min-width:0; font-size:13.5px; font-weight:600; line-height:1.3; }
+.nota-it-nom small { display:block; font-weight:400; font-size:11px; color:var(--apagado); }
+.nota-cant { width:64px; height:40px; text-align:center; border:1px solid var(--borde-ui); border-radius:8px; background:var(--sup); color:var(--txt); }
+.nota-u { font-size:11.5px; color:var(--apagado); min-width:28px; }
+.nota-it-x { width:32px; height:32px; color:var(--txt2); }
+.nota-vacia { font-size:12.5px; color:var(--apagado); line-height:1.5; padding:6px 2px; }
+
+/* Entradas registradas */
+.reg-cab { display:flex; flex-direction:column; gap:10px; margin-bottom:12px; }
+.reg-sub { font-size:12px; color:var(--apagado); }
+.reg-pers { display:flex; gap:6px; }
+.reg-per { min-height:38px; padding:0 16px; border:1px solid var(--borde-ui); border-radius:999px; font-size:13px; color:var(--txt2); background:var(--sup); }
+.reg-per.on { border-color:var(--acento); color:var(--txt); background:color-mix(in srgb, var(--acento) 16%, var(--sup)); font-weight:600; }
+.reg-resumen { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; color:var(--txt2); }
+.reg-resumen b { color:var(--txt); }
+.btn-agrupar { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:0 12px; border:1px solid var(--borde-ui);
+    border-radius:10px; background:var(--sup); color:var(--txt); font-size:13px; font-weight:600; flex-shrink:0; }
+.btn-agrupar.on { border-color:var(--acento); }
+.reg-selbar { display:flex; flex-direction:column; gap:8px; padding:14px; margin-bottom:12px; border:1px solid var(--acento);
+    border-radius:14px; background:var(--sup); }
+.reg-sel-tit { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; }
+.reg-sel-tit span { flex-basis:100%; font-size:12px; color:var(--apagado); }
+.reg-sel-msg { font-size:12.5px; color:var(--rojo); min-height:0; }
+.reg-sec { font-size:10.5px; letter-spacing:1.6px; text-transform:uppercase; color:var(--apagado); margin:16px 2px 8px; }
+.reg-grupo { border:1px solid var(--borde-ui); border-radius:14px; background:var(--sup); margin-bottom:8px; overflow:hidden; }
+.reg-grupo > summary { display:flex; align-items:center; gap:10px; min-height:58px; padding:10px 14px; cursor:pointer; list-style:none; }
+.reg-grupo > summary::-webkit-details-marker { display:none; }
+.reg-grupo[open] > summary { border-bottom:1px solid var(--borde-ui); }
+.reg-g-txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.reg-g-txt b { display:flex; align-items:center; gap:7px; font-size:14px; font-weight:600; line-height:1.3; }
+.reg-g-txt small { font-size:11.5px; color:var(--apagado); }
+.reg-g-tot { flex-shrink:0; font-size:12.5px; color:var(--apagado); text-align:right; }
+.reg-tot { color:var(--verde); font-size:15px; }
+.reg-g-cuerpo { padding:4px 14px 10px; }
+.reg-g-pie { display:flex; justify-content:flex-end; padding-top:8px; }
+.btn-desag { min-height:36px; padding:0 12px; border:1px solid var(--borde-ui); border-radius:9px; font-size:12.5px; color:var(--txt2); }
+.reg-fila { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px dashed var(--borde-ui); }
+.reg-g-cuerpo > .reg-fila:last-of-type { border-bottom:none; }
+.reg-fila.sel { cursor:pointer; }
+.reg-fila.sel input { width:20px; height:20px; margin-top:2px; accent-color:var(--acento); flex-shrink:0; }
+.reg-fila.sel.on { background:color-mix(in srgb, var(--acento) 10%, transparent); border-radius:8px; }
+.reg-fila.sel.no { opacity:.5; }
+.reg-fila-txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.reg-fila-txt b { font-size:13.5px; font-weight:600; }
+.reg-fila-txt small { font-size:11.5px; color:var(--apagado); line-height:1.4; }
+.reg-com { font-style:italic; }
+.reg-badge { display:inline-flex; align-items:center; gap:5px; align-self:flex-start; padding:2px 8px; border-radius:999px;
+    font-size:11px; color:var(--txt2); background:color-mix(in srgb, var(--marca) 12%, transparent); }
+.reg-cant { flex-shrink:0; font-size:14px; color:var(--verde); }
+
+/* (25-nov, después) La sucursal arriba, donde iba el título; el título, en chico, en la tarjeta. */
+.suc-marca.suc-top { margin:10px 0 18px; }
+.suc-top .suc-logo { width:76px; height:76px; }
+.suc-top .suc-nom { font-size:19px; }
+.clave-tit { font-family:'Bebas Neue',sans-serif; text-transform:uppercase; font-size:26px; letter-spacing:1.5px; line-height:1;
+    text-align:center; color:var(--txt); margin-bottom:6px; }
+.clave-tit span { color:var(--terra); }
