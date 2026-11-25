@@ -3,9 +3,11 @@
    Edwin: «vamos a hacerla más profesional… quiero que los porcentajes de gasto
    operativo sean ajustables dependiendo del caso, y el food cost también».
    Lo que se vigila:
-     · Las metas salen del TIPO de platillo de cada receta (entradas, fuertes,
-       postres, bebidas, general): tarjetas de meta de food cost, gasto
-       operativo y utilidad objetivo, con el real promedio.
+     · Las metas salen del TIPO de platillo de cada receta: cocina (entradas,
+       comida rápida, fuertes, postres) con FOOD cost y barra (coctelería,
+       destilados, cerveza y refrescos) con BAR cost, más «General». Tarjetas
+       de meta de costo, gasto operativo y utilidad objetivo, con el real
+       promedio; el semáforo es el RANGO SANO de cada tipo.
      · Cada receta en dos renglones: lo real y la proyección sugerida, con su
        diagnóstico. Los números de la referencia de Edwin (Taco de Pork Belly a
        $69: operativo $23.79, IVA $9.52, utilidad $17.84) salen idénticos.
@@ -119,28 +121,33 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
         await p.evaluate(() => verCaratulaGrupo('alimentos')); await p.waitForTimeout(400);
         await foto(p, 'c1-alimentos');
 
-        await caso('las tres tarjetas de meta: food cost 30%, gasto 33–44% (según el tipo), utilidad 26–37%', async () => {
-            const k = await p.evaluate(() => [...document.querySelectorAll('#caratulaDetalleBody .car-kpi b')].map(b => b.textContent));
-            assert.deepEqual(k, ['30%', '33–44%', '26–37%']);
+        await caso('las tres tarjetas de meta según los tipos de la vista: food cost 18–32%, gasto 33–44%, utilidad 24–45%', async () => {
+            const k = await p.evaluate(() => [document.querySelector('.k-food span').textContent, ...[...document.querySelectorAll('#caratulaDetalleBody .car-kpi b')].map(b => b.textContent)]);
+            assert.deepEqual(k, ['Meta de food cost', '18–32%', '33–44%', '24–45%']);
         });
         await caso('…con el real promedio de las que tienen precio y cuántas van en la meta', async () => {
             const t = await p.evaluate(() => document.querySelector('#caratulaDetalleBody .car-kpis').innerText.replace(/\s+/g, ' '));
             assert.match(t, /Real promedio \d+\.\d%/);
-            assert.match(t, /de 5 en la meta 1 sin precio/);
+            assert.match(t, /2 de 5 en la meta 1 sin precio/);
         });
         await caso('las diez columnas de la referencia, con «Costo operativo» y «Diagnóstico»', async () => {
             const th = await p.evaluate(() => [...document.querySelectorAll('#caratulaDetalleBody thead th')].map(x => x.textContent.trim()));
             assert.deepEqual(th, ['Nombre de receta', 'Rendimiento neto', 'Costo bruto', 'Food cost %', 'Precio carta c/IVA', 'Costo operativo', 'IVA 16%', 'Utilidad neta $', 'Utilidad neta %', 'Diagnóstico']);
         });
-        await caso('Taco de Pork Belly a $69, igual que la referencia: 30.0% · $23.79 · $9.52 · $17.84 · 30.0% · Óptimo', async () => {
+        await caso('los tacos son comida rápida: Pork Belly a $69 → 30.0% (sano 25–32) · $22.60 de operativo (38%) · $19.03 · 32.0% · Óptimo', async () => {
             const c = await celdas(p, 'Taco de Pork Belly');
-            assert.deepEqual(c.real.slice(2), ['$17.85', '30.0%', '$69.00', '$23.79 40%', '$9.52', '$17.84', '30.0%', 'Óptimo']);
+            assert.match(c.real[0], /Automático · Comida rápida/);
+            assert.deepEqual(c.real.slice(2), ['$17.85', '30.0%', '$69.00', '$22.60 38%', '$9.52', '$19.03', '32.0%', 'Óptimo']);
         });
-        await caso('…y debajo su proyección sugerida: regla 30-40-30, $69.02 con IVA y su delivery', async () => {
+        await caso('…y debajo su proyección sugerida con la regla de su tipo: 28-38-34, $73.95 con IVA y su delivery', async () => {
             const c = await celdas(p, 'Taco de Pork Belly');
-            assert.match(c.proy[0], /Proyección sugerida regla 30-40-30/);
-            assert.match(c.proy[4], /^\$69\.02 delivery \$92\.82$/);
-            assert.equal(c.proy[9], 'En la meta');
+            assert.match(c.proy[0], /Proyección sugerida regla 28-38-34/);
+            assert.match(c.proy[4], /^\$73\.95 delivery \$99\.45$/);
+            assert.match(c.proy[9], /^Faltan \$4\.95$/);
+        });
+        await caso('el semáforo es el rango sano: el Guacamole al 30.4% (entradas 18–25) y el Flan al 25.6% (postres 15–22) → Ajustar', async () => {
+            const g = await celdas(p, 'Guacamole'), f = await celdas(p, 'Flan napolitano');
+            assert.deepEqual([g.real[3], g.real[9], f.real[3], f.real[9]], ['30.4%', 'Ajustar merma o precio', '25.6%', 'Ajustar merma o precio']);
         });
         await caso('el tipo se adivina por el grupo: Guacamole es Entrada (33%) y la Arrachera Plato fuerte (44%)', async () => {
             const g = await celdas(p, 'Guacamole'), a = await celdas(p, 'Arrachera');
@@ -158,22 +165,26 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
         });
         await caso('el filtro de tipo trae solo los tipos del grupo, con cuántas', async () => {
             const o = await p.evaluate(() => [...document.getElementById('caratulaFiltroTipo').options].map(x => x.textContent));
-            assert.deepEqual(o, ['Todos los tipos', 'Entradas (2)', 'Platos fuertes (1)', 'Postres (1)', 'General (2)']);   // «Sopas» cuenta como entrada
+            assert.deepEqual(o, ['Todos los tipos', 'Entradas (2)', 'Comida rápida (2)', 'Platos fuertes (1)', 'Postres (1)']);   // «Sopas» cuenta como entrada
         });
         await p.selectOption('#caratulaFiltroTipo', 'fuerte'); await p.waitForTimeout(200);
-        await caso('…y filtra: «Platos fuertes» deja solo la Arrachera, con sus tarjetas', async () => {
-            const r = await p.evaluate(() => [[...document.querySelectorAll('#caratulaDetalleBody .car-real b')].map(b => b.textContent), [...document.querySelectorAll('#caratulaDetalleBody .car-kpi b')].map(b => b.textContent), document.querySelector('.k-op small').textContent]);
-            assert.deepEqual(r, [['Arrachera'], ['30%', '44%', '26%'], 'Platos fuertes']);
+        await caso('…y filtra: «Platos fuertes» deja solo la Arrachera, con sus tarjetas y su rango sano', async () => {
+            const r = await p.evaluate(() => [[...document.querySelectorAll('#caratulaDetalleBody .car-real b')].map(b => b.textContent), [...document.querySelectorAll('#caratulaDetalleBody .car-kpi b')].map(b => b.textContent), document.querySelector('.k-op small').textContent, document.querySelector('.k-food small').textContent]);
+            assert.deepEqual(r, [['Arrachera'], ['32%', '44%', '24%'], 'Platos fuertes', 'Sano 28–35% · real 42.8%']);
         });
         await p.selectOption('#caratulaFiltroTipo', ''); await p.waitForTimeout(200);
 
         /* Cambiar el tipo desde la carátula: es editar la receta. */
-        await p.selectOption('#caratulaDetalleBody tbody.car-par:first-of-type .car-tipo select', 'fuerte'); await p.waitForTimeout(400);
-        await caso('cambiar el tipo en la carátula lo guarda en la receta (y en la nube) y recalcula: Pork Belly como fuerte → 44%', async () => {
+        await caso('el selector de tipo de una receta de cocina solo ofrece tipos de cocina', async () =>
+            assert.deepEqual(await p.evaluate(() => [...document.querySelector('#caratulaDetalleBody tbody.car-par .car-tipo select').options].map(o => o.textContent)),
+                ['Automático · Comida rápida', 'Entradas', 'Comida rápida', 'Platos fuertes', 'Postres', 'General']));
+        await p.selectOption('#caratulaDetalleBody tbody.car-par:first-of-type .car-tipo select', 'general'); await p.waitForTimeout(400);
+        await caso('cambiar el tipo en la carátula lo guarda en la receta (y en la nube) y recalcula: Pork Belly en General = la referencia de Edwin', async () => {
             const c = await celdas(p, 'Taco de Pork Belly');
-            assert.match(c.real[5], /^\$26\.17 44%$/);
-            assert.equal(await p.evaluate(() => getRecetas().find(r => r.id === 'r1').perfilCosteo), 'fuerte');
-            await p.waitForFunction(() => ((JSON.parse(localStorage.getItem('__nube')).recetas || []).find(r => r.id === 'r1') || {}).datos.perfilCosteo === 'fuerte', null, { timeout: 25000 });
+            assert.deepEqual(c.real.slice(2), ['$17.85', '30.0%', '$69.00', '$23.79 40%', '$9.52', '$17.84', '30.0%', 'Óptimo']);
+            assert.match(c.proy[0], /regla 30-40-30/); assert.match(c.proy[4], /^\$69\.02 delivery \$92\.82$/);
+            assert.equal(await p.evaluate(() => getRecetas().find(r => r.id === 'r1').perfilCosteo), 'general');
+            await p.waitForFunction(() => ((JSON.parse(localStorage.getItem('__nube')).recetas || []).find(r => r.id === 'r1') || {}).datos.perfilCosteo === 'general', null, { timeout: 25000 });
         });
 
         await p.click('#carVerProy'); await p.waitForTimeout(200);
@@ -186,18 +197,27 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
         /* Ajustar los porcentajes del negocio */
         await p.click('#btnPerfilesCosteo'); await p.waitForTimeout(300);
         await foto(p, 'c3-perfiles');
-        await caso('«Ajustar porcentajes» abre los cinco tipos con su rango recomendado', async () => {
-            const r = await p.evaluate(() => [document.getElementById('dlgPerfilesCosteo').open, [...document.querySelectorAll('#dlgPerfCuerpo .pf-nom b')].map(b => b.textContent), document.querySelector('#dlgPerfCuerpo .pf-fila[data-id="fuerte"] small').textContent]);
-            assert.deepEqual(r.slice(0, 2), [true, ['Entradas', 'Platos fuertes', 'Postres', 'Bebidas y coctelería', 'General']]);
-            assert.match(r[2], /Recomendado 42–45% de gasto operativo/);
+        await caso('«Ajustar porcentajes» abre en la pestaña Cocina, con su rango sano de food cost y de operativo', async () => {
+            const vis = () => [...document.querySelectorAll('#dlgPerfCuerpo .pf-panel:not([hidden]) .pf-nom b')].map(b => b.textContent);
+            const r = await p.evaluate((v) => [document.getElementById('dlgPerfilesCosteo').open, eval(v)(), document.querySelector('#dlgPerfCuerpo .pf-fila[data-id="fuerte"] small').textContent], vis.toString());
+            assert.deepEqual(r.slice(0, 2), [true, ['Entradas', 'Comida rápida', 'Platos fuertes', 'Postres', 'General']]);
+            assert.match(r[2], /^Food cost sano 28–35% · operativo 42–45%/);
         });
+        await p.click('#dlgPerfCuerpo .pf-tabs button[data-area="barra"]'); await p.waitForTimeout(150);
+        await foto(p, 'c3b-perfiles-barra');
+        await caso('…y la pestaña Barra trae coctelería, destilados y cerveza con su BAR cost', async () => {
+            const r = await p.evaluate(() => [[...document.querySelectorAll('#dlgPerfCuerpo .pf-panel:not([hidden]) .pf-nom b')].map(b => b.textContent), document.querySelector('#dlgPerfCuerpo .pf-fila[data-id="coctel"] small').textContent, document.querySelector('#dlgPerfCuerpo .pf-fila[data-id="coctel"] .pf-in span').textContent]);
+            assert.deepEqual([r[0], r[2]], [['Coctelería de autor', 'Destilados y tragos largos', 'Cerveza, refrescos y aguas'], 'Bar cost meta']);
+            assert.match(r[1], /^Bar cost sano 12–18% · operativo 25–30%/);
+        });
+        await p.click('#dlgPerfCuerpo .pf-tabs button[data-area="cocina"]'); await p.waitForTimeout(150);
         await p.fill('#dlgPerfCuerpo .pf-fila[data-id="general"] [data-k="op"]', '38');
         await caso('…la utilidad objetivo se recalcula al teclear', async () =>
             assert.equal(await p.evaluate(() => document.querySelector('#dlgPerfCuerpo .pf-fila[data-id="general"] .pf-ut b').textContent), '32%'));
         await p.click('#dlgPerfGuardar'); await p.waitForTimeout(500);
         await caso('…al guardar va a costeo_config (solo lo que se aparta de la referencia) y la carátula se repinta', async () => {
             assert.equal(await p.evaluate(() => document.getElementById('dlgPerfilesCosteo').open), false);
-            const c = await celdas(p, 'Taco de Suadero');
+            const c = await celdas(p, 'Taco de Pork Belly');
             assert.match(c.real[5], / 38%$/);
             await p.waitForFunction(() => ((JSON.parse(localStorage.getItem('__nube')).costeo_config || [])[0] || {}).datos, null, { timeout: 25000 });
             const d = (await nube$(p)).costeo_config[0].datos;
@@ -220,8 +240,13 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
         await p.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
         await p.evaluate(() => verCaratulaGrupo('bebidas')); await p.waitForTimeout(300);
         await foto(p, 'c2-bebidas');
-        await caso('en bebidas: gasto 28% y utilidad objetivo 42% (Bebidas y coctelería)', async () =>
-            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#caratulaDetalleBody .car-kpi b')].map(b => b.textContent)), ['30%', '28%', '42%']));
+        await caso('en bebidas es BAR cost: Negroni (clásico) en Destilados 22%, Mezcalita en Coctelería 15%; operativo 28%; utilidad 50–57%', async () => {
+            const r = await p.evaluate(() => [document.querySelector('.k-food span').textContent, ...[...document.querySelectorAll('#caratulaDetalleBody .car-kpi b')].map(b => b.textContent), document.querySelector('#caratulaDetalleBody thead th:nth-child(4)').textContent]);
+            assert.deepEqual(r, ['Meta de bar cost', '15–22%', '28%', '50–57%', 'Bar cost %']);
+        });
+        await caso('…y el selector de tipo de una bebida solo ofrece tipos de barra', async () =>
+            assert.deepEqual(await p.evaluate(() => [...document.querySelector('#caratulaDetalleBody tbody.car-par .car-tipo select').options].map(o => o.textContent)),
+                ['Automático · Destilados y tragos largos', 'Coctelería de autor', 'Destilados y tragos largos', 'Cerveza, refrescos y aguas', 'General']));
 
         /* El escandallo: el tipo y sus % en la sección de Costeo */
         await p.evaluate(() => { cerrarCaratulaBtnX(); if (typeof entrarEscandallos === 'function') entrarEscandallos(); if (typeof _showEscForm === 'function') _showEscForm(); cargarReceta('r4'); });
@@ -230,7 +255,7 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
         await foto(p, 'c5-escandallo');
         await caso('el escandallo enseña el tipo (automático: Platos fuertes) y sus % en los campos vacíos', async () => {
             const r = await p.evaluate(() => [document.getElementById('s-perfil').selectedOptions[0].textContent, document.getElementById('s-food').placeholder, document.getElementById('s-op').placeholder, document.getElementById('s-util-obj').textContent, document.getElementById('s-pct-gasto').textContent, document.getElementById('a-pct-gasto').textContent]);
-            assert.deepEqual(r, ['Automático · Platos fuertes', '30', '44', '26%', '44%', '44%']);
+            assert.deepEqual(r, ['Automático · Platos fuertes', '32', '44', '24%', '44%', '44%']);
         });
         await p.selectOption('#s-perfil', 'entrada'); await p.fill('#s-food', '28'); await p.waitForTimeout(200);
         await caso('elegir otro tipo y una meta propia recalcula al momento', async () =>
@@ -239,6 +264,11 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
         await caso('…y al guardar la receta se quedan su tipo y su meta', async () => {
             const r = await p.evaluate(() => { const x = getRecetas().find(r => r.id === 'r4'); return [x.perfilCosteo, Math.round(100 / x.multiploCosteo * 100) / 100, x.gastoOpPct]; });
             assert.deepEqual(r, ['entrada', 28, '']);
+        });
+        await p.evaluate(() => cargarReceta('r7')); await p.waitForTimeout(500);
+        await caso('una bebida en el escandallo: «Bar cost meta» y solo tipos de barra', async () => {
+            const r = await p.evaluate(() => [document.getElementById('s-food-lbl').textContent, [...document.getElementById('s-perfil').options].map(o => o.textContent), document.getElementById('s-food').placeholder]);
+            assert.deepEqual(r, ['Bar cost meta', ['Automático · Destilados y tragos largos', 'Coctelería de autor', 'Destilados y tragos largos', 'Cerveza, refrescos y aguas', 'General'], '22']);   // el Negroni es «Clásicos»
         });
         await ctx.close();
 
@@ -253,7 +283,7 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
         await q.click('#dlgPerfGuardar'); await q.waitForTimeout(600);
         await caso('se guarda en el dispositivo y AVISA que falta la v90', async () => {
             assert.match(await q.evaluate(() => window.__alertas.join(' | ')), /falta correr la migración v90/);
-            assert.deepEqual(await q.evaluate(() => JSON.parse(localStorage.getItem('etaax_n1_costeo_cfg')).perfiles), { entrada: { food: 30, op: 31 } });
+            assert.deepEqual(await q.evaluate(() => JSON.parse(localStorage.getItem('etaax_n1_costeo_cfg')).perfiles), { entrada: { food: 22, op: 31 } });
             assert.match((await celdas(q, 'Guacamole')).real[5], / 31%$/);
         });
         await caso('…y no manda a la cola de salida algo que va a fallar ocho veces', async () => {

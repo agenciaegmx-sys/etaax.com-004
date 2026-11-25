@@ -34,7 +34,7 @@
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=8adeb658">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/recetas/recetas-ui.css?v=09ae3fd5">
+<link rel="stylesheet" href="/recetas/recetas-ui.css?v=868760cf">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -333,7 +333,7 @@
                         <div class="costeo-perfil" id="costeoPerfil">
                             <label class="cp-campo cp-tipo"><span>Tipo de platillo</span>
                                 <select id="s-perfil" onchange="calcularCosteos()"></select></label>
-                            <label class="cp-campo"><span>Food cost meta</span>
+                            <label class="cp-campo"><span id="s-food-lbl">Food cost meta</span>
                                 <span class="cp-in"><input type="number" id="s-food" step="0.5" min="1" max="99" placeholder="30"
                                     title="Lo que debe costar el insumo sobre el precio sin IVA. Vacío = el del tipo de platillo."
                                     oninput="calcularCosteos()"><i>%</i></span></label>
@@ -1031,7 +1031,7 @@
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="/etaax-store.js?v=3bbcc75c"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
-<script src="/etaax-core.js?v=9caf2536"></script><!-- fórmulas de dinero: antes de app.js -->
+<script src="/etaax-core.js?v=63c1dea0"></script><!-- fórmulas de dinero: antes de app.js -->
 <script src="/insumo-label.js?v=789551ec"></script>
 <script src="/multi-select.js"></script><!-- filtros de grupo/categoría con palomitas -->
 <script src="/reordenar.js?v=977fee61"></script><!-- orden manual del catálogo (arrastrar filas) -->
@@ -1039,7 +1039,7 @@
 <script src="/etaax-nav.js"></script>
 <script src="/qr-pairing.js"></script>
 <script src="../security.js?v=c188734e"></script>
-<script src="../app.js?v=21a85432"></script>
+<script src="../app.js?v=c7112bc0"></script>
 <script src="/recetas/subreceta-rendimientos.js?v=201d53b1"></script>
 <script>
 function toggleNav() {
@@ -4744,19 +4744,21 @@ function _carTipoCelda(r, pf, puedeEd) {
     var q = String(r.id).replace(/'/g, "\\'");
     return '<div class="car-tipo"><select aria-label="Tipo de platillo de ' + etx(r.nombre) + '" onchange="carCambiarTipo(\'' + q + '\',this.value)">' +
         '<option value=""' + (pf.auto ? ' selected' : '') + '>Automático · ' + etx(EtaaxCore.perfilTipo(EtaaxCore.perfilAdivinado(r), _costeoCfg()).nombre) + '</option>' +
-        EtaaxCore.COSTEO_PERFILES.map(function (p) { return '<option value="' + p.id + '"' + (!pf.auto && pf.id === p.id ? ' selected' : '') + '>' + etx(p.nombre) + '</option>'; }).join('') +
+        EtaaxCore.perfilesDeArea(EtaaxCore.areaReceta(r)).map(function (p) { return '<option value="' + p.id + '"' + (!pf.auto && pf.id === p.id ? ' selected' : '') + '>' + etx(p.nombre) + '</option>'; }).join('') +
         '</select></div>';
 }
-function _carEstado(real, meta) { return real - meta <= 0.5 ? 'ok' : real - meta <= 5 ? 'vig' : 'mal'; }
+/* El semáforo del costo lo decide el núcleo con el RANGO SANO del tipo. */
+function _carTope(pf) { return Math.max(pf.foodMax != null ? pf.foodMax : pf.food, pf.food); }
 function renderCaratulaTablaRecetas(recetas, g) {
     var cfg = _costeoCfg(), puedeEd = (typeof _puedeRec !== 'function') || _puedeRec('editar');
-    var foods = [], ops = [], utils = [], tipos = {}, sF = 0, sU = 0, nP = 0, nOk = 0;
+    var foods = [], ops = [], utils = [], topes = [], tipos = {}, sF = 0, sU = 0, nP = 0, nOk = 0, ultimo = null;
+    var barra = g.key === 'bebidas', cN = barra ? 'Bar cost' : 'Food cost';
     var cuerpo = recetas.map(function (r) {
         var c = _carCosto(r), k = EtaaxCore.costeoConPerfil(c, r, cfg), pf = k.perfil, a = k.aplicado, sg = k.sugerido, d = k.diagnostico;
         var tP = a.precio > 0, in2 = r.status === 'inactiva', gr = _grupoSubcat(r), rend = getRendimientoNeto(r, g);
-        foods.push(pf.food); ops.push(pf.op); utils.push(pf.util); tipos[pf.id] = pf.nombre;
+        foods.push(pf.food); ops.push(pf.op); utils.push(pf.util); topes.push(_carTope(pf)); tipos[pf.id] = pf.nombre; ultimo = pf;
         if (tP) { sF += a.brutoPct; sU += a.utilidadPct; nP++; if (d.clave === 'optimo') nOk++; }
-        var est = tP ? _carEstado(a.brutoPct, pf.food) : 'na';
+        var est = tP ? EtaaxCore.semaforoCosto(a.brutoPct, pf) : 'na';
         var q = String(r.id).replace(/'/g, "\\'");
         var real = '<tr class="car-real">' +
             '<td class="car-nom"><div class="car-nom-l"><button class="btn-ver-ficha" onclick="abrirFichaDesdeCaratula(\'' + q + '\')">📋 Ver</button><b>' + etx(r.nombre) + '</b>' +
@@ -4792,18 +4794,21 @@ function renderCaratulaTablaRecetas(recetas, g) {
     }).join('');
     var solo = Object.keys(tipos).length === 1 ? tipos[Object.keys(tipos)[0]] : '';
     var pF = nP ? sF / nP : null, pU = nP ? sU / nP : null;
-    var metaF = foods.length ? foods.reduce(function (a, b) { return a + b; }, 0) / foods.length : 30;
+    /* El promedio real se pinta contra el tope promedio de lo que está en vista. */
+    var topeP = topes.length ? topes.reduce(function (a, b) { return a + b; }, 0) / topes.length : 30;
+    var estP = pF !== null ? EtaaxCore.semaforoCosto(pF, { food: topeP, foodMax: topeP }) : 'na';
+    var rango = (solo && ultimo && ultimo.foodMin != null) ? 'Sano ' + ultimo.foodMin + '–' + ultimo.foodMax + '% · ' : '';
     var kpi = '<div class="car-kpis">' +
-        '<div class="car-kpi k-food"><span>Meta de food cost</span><b>' + _carRango(foods) + '</b><small>' +
-            (pF !== null ? 'Real promedio <em class="e-' + _carEstado(pF, metaF) + '">' + _carPct(pF) + '</em>' : 'Sin precios en carta') + '</small></div>' +
+        '<div class="car-kpi k-food"><span>Meta de ' + cN.toLowerCase() + '</span><b>' + _carRango(foods) + '</b><small>' + rango +
+            (pF !== null ? (rango ? 'real ' : 'Real promedio ') + '<em class="e-' + estP + '">' + _carPct(pF) + '</em>' : 'Sin precios en carta') + '</small></div>' +
         '<div class="car-kpi k-op"><span>Gasto operativo</span><b>' + _carRango(ops) + '</b><small>' + (solo ? etx(solo) : 'Según el tipo de platillo') + '</small></div>' +
         '<div class="car-kpi k-ut"><span>Utilidad neta objetivo</span><b>' + _carRango(utils) + '</b><small>' +
-            (pU !== null ? 'Real promedio <em class="e-' + _carEstado(pF, metaF) + '">' + _carPct(pU) + '</em>' : '—') + '</small></div>' +
+            (pU !== null ? 'Real promedio <em class="e-' + estP + '">' + _carPct(pU) + '</em>' : '—') + '</small></div>' +
         '<div class="car-kpi-acc"><div class="car-kpi-cuenta"><b>' + nOk + '</b> de ' + nP + ' en la meta' + (recetas.length > nP ? '<br><span>' + (recetas.length - nP) + ' sin precio</span>' : '') + '</div>' +
             '<button type="button" class="btn-vista" id="btnPerfilesCosteo" onclick="abrirPerfilesCosteo()">Ajustar porcentajes</button></div>' +
         '</div>';
     return kpi + '<div class="tabla-wrap car-wrap"><table class="car-tabla"><thead><tr>' +
-        '<th class="l">Nombre de receta</th><th class="c">Rendimiento neto</th><th class="n">Costo bruto</th><th class="n car-fc">Food cost %</th>' +
+        '<th class="l">Nombre de receta</th><th class="c">Rendimiento neto</th><th class="n">Costo bruto</th><th class="n car-fc">' + cN + ' %</th>' +
         '<th class="n">Precio carta c/IVA</th><th class="n car-op">Costo operativo</th><th class="n">IVA ' + EtaaxCore.COSTEO_IVA_PCT + '%</th>' +
         '<th class="n">Utilidad neta $</th><th class="n car-ut">Utilidad neta %</th><th class="c">Diagnóstico</th></tr></thead>' + cuerpo +
         '<tfoot><tr><td colspan="3" class="l">Promedio de ' + nP + ' receta' + (nP === 1 ? '' : 's') + ' con precio</td>' +
@@ -4827,10 +4832,11 @@ function carCambiarTipo(id, v) {
 /* ── El cuadro de los porcentajes por tipo ── */
 function _perfilesFila(p, cfg, puede) {
     var t = EtaaxCore.perfilTipo(p.id, cfg);
-    var dis = puede ? '' : ' disabled';
+    var dis = puede ? '' : ' disabled', cN = p.area === 'barra' ? 'Bar cost' : 'Food cost';
     return '<div class="pf-fila" data-id="' + p.id + '">' +
-        '<div class="pf-nom"><b>' + etx(p.nombre) + '</b><small>' + (p.min != null ? 'Recomendado ' + p.min + '–' + p.max + '% de gasto operativo. ' : '') + etx(p.por) + '</small></div>' +
-        '<label class="pf-in"><span>Food cost meta</span><span class="cp-in"><input type="number" step="0.5" min="1" max="99" data-k="food" value="' + t.food + '"' + dis + ' oninput="_perfilesUtil(this)"><i>%</i></span></label>' +
+        '<div class="pf-nom"><b>' + etx(p.nombre) + '</b><small>' +
+            (p.foodMin != null ? '<span class="pf-rango">' + cN + ' sano ' + p.foodMin + '–' + p.foodMax + '% · operativo ' + p.opMin + '–' + p.opMax + '%</span>' : '') + etx(p.por) + '</small></div>' +
+        '<label class="pf-in"><span>' + cN + ' meta</span><span class="cp-in"><input type="number" step="0.5" min="1" max="99" data-k="food" value="' + t.food + '"' + dis + ' oninput="_perfilesUtil(this)"><i>%</i></span></label>' +
         '<label class="pf-in"><span>Gasto operativo</span><span class="cp-in"><input type="number" step="0.5" min="0" max="99" data-k="op" value="' + t.op + '"' + dis + ' oninput="_perfilesUtil(this)"><i>%</i></span></label>' +
         '<div class="pf-in pf-ut"><span>Utilidad objetivo</span><b>' + _carPctC(t.util) + '</b></div></div>';
 }
@@ -4838,19 +4844,34 @@ function abrirPerfilesCosteo(cfg) {
     var d = document.getElementById('dlgPerfilesCosteo'); if (!d) return;
     var puede = (typeof _puedeRec !== 'function') || _puedeRec('editar');
     cfg = cfg || _costeoCfg();
-    document.getElementById('dlgPerfCuerpo').innerHTML = EtaaxCore.COSTEO_PERFILES.map(function (p) { return _perfilesFila(p, cfg, puede); }).join('');
+    /* Dos pestañas para que no sea una lista larga: Cocina (con «General») y Barra. */
+    var cocina = EtaaxCore.COSTEO_PERFILES.filter(function (p) { return p.area !== 'barra'; }),
+        barra  = EtaaxCore.COSTEO_PERFILES.filter(function (p) { return p.area === 'barra'; });
+    var ab = (d.dataset.area) || (caratulaTipoActual === 'bebidas' ? 'barra' : 'cocina');
+    document.getElementById('dlgPerfCuerpo').innerHTML =
+        '<div class="pf-tabs" role="tablist">' +
+            '<button type="button" role="tab" data-area="cocina" onclick="_perfilesTab(\'cocina\')">Cocina · food cost</button>' +
+            '<button type="button" role="tab" data-area="barra" onclick="_perfilesTab(\'barra\')">Barra · bar cost</button></div>' +
+        '<div class="pf-panel" data-area="cocina">' + cocina.map(function (p) { return _perfilesFila(p, cfg, puede); }).join('') + '</div>' +
+        '<div class="pf-panel" data-area="barra">' + barra.map(function (p) { return _perfilesFila(p, cfg, puede); }).join('') + '</div>';
+    _perfilesTab(ab);
     document.getElementById('dlgPerfGuardar').style.display = puede ? '' : 'none';
     document.getElementById('dlgPerfRef').style.display = puede ? '' : 'none';
     document.getElementById('dlgPerfAviso').textContent = puede ? '' : 'Solo quien edita escandallos puede cambiarlos.';
     if (!d.open) { try { d.showModal(); } catch (e) { d.setAttribute('open', ''); } }
 }
-function cerrarPerfilesCosteo() { var d = document.getElementById('dlgPerfilesCosteo'); if (d && d.open) { try { d.close(); } catch (e) { d.removeAttribute('open'); } } }
+function _perfilesTab(area) {
+    var d = document.getElementById('dlgPerfilesCosteo'); if (d) d.dataset.area = area;
+    document.querySelectorAll('#dlgPerfCuerpo .pf-tabs button').forEach(function (b) { var on = b.dataset.area === area; b.classList.toggle('activo', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+    document.querySelectorAll('#dlgPerfCuerpo .pf-panel').forEach(function (x) { x.hidden = x.dataset.area !== area; });
+}
+function cerrarPerfilesCosteo() { var d = document.getElementById('dlgPerfilesCosteo'); if (d) delete d.dataset.area; if (d && d.open) { try { d.close(); } catch (e) { d.removeAttribute('open'); } } }
 function _perfilesUtil(inp) {
     var f = inp.closest('.pf-fila'), food = parseFloat(f.querySelector('[data-k="food"]').value) || 0, op = parseFloat(f.querySelector('[data-k="op"]').value) || 0;
     var b = f.querySelector('.pf-ut b'), u = 100 - food - op;
     b.textContent = _carPctC(u); b.style.color = u < 0 ? 'var(--red)' : '';
 }
-function restablecerPerfilesCosteo() { abrirPerfilesCosteo({}); document.getElementById('dlgPerfAviso').textContent = 'Valores de referencia: toca Guardar para usarlos.'; }
+function restablecerPerfilesCosteo() { var d = document.getElementById('dlgPerfilesCosteo'), ab = d && d.dataset.area; abrirPerfilesCosteo({}); if (ab) _perfilesTab(ab); document.getElementById('dlgPerfAviso').textContent = 'Valores de referencia: toca Guardar para usarlos.'; }
 async function guardarPerfilesCosteo() {
     if (!_exigeRec('editar', 'No puedes cambiar los porcentajes del costeo.')) return;
     var perfiles = {}, malo = '';

@@ -1425,6 +1425,54 @@
        };
    }
 
+   /* ══ EL FACTOR DE LA VENTA DIRECTA SALE DE LA META DE SU TIPO DE BARRA ═══
+      Copa (destilados, licores, vinos) → «Destilados y tragos largos»; pieza
+      (cervezas, refrescos) → «Cerveza, refrescos y aguas». La meta de bar cost
+      se ajusta en la carátula de costos (costeo_config, v90) y el núcleo la
+      vuelve factor (EtaaxCore.factorVentaDirecta: 100 ÷ meta × 1.16, la misma
+      vara que la carátula). El factor ESCRITO en el insumo manda; los viejos
+      3.3 y 2.0 eran el valor que se escribía solo al crear el insumo, así que
+      cuentan como «sin factor propio». La botella sigue en ×2.5: la
+      referencia de Edwin (25-nov) no cubre el servicio de botella.        */
+   var _cfgCosteoInsCache = null;
+   function _cfgCosteoIns() {
+       if (_cfgCosteoInsCache) return _cfgCosteoInsCache;
+       try { _cfgCosteoInsCache = JSON.parse(localStorage.getItem('etaax_' + getNegocioActivo() + '_costeo_cfg') || 'null'); } catch (e) {}
+       return _cfgCosteoInsCache || {};
+   }
+   /* Trae los % del negocio de la nube (los guarda la carátula). Sin la v90
+      corrida contesta error y se queda con lo local o la referencia. */
+   async function _costeoCfgInsPull() {
+       var neg = getNegocioActivo();
+       if (!neg || typeof _supabase === 'undefined') return;
+       try {
+           var r = await _supabase.from('costeo_config').select('datos').eq('negocio_id', neg).maybeSingle();
+           if (r.error || !r.data || !r.data.datos) return;
+           _cfgCosteoInsCache = r.data.datos;
+           try { localStorage.setItem('etaax_' + neg + '_costeo_cfg', JSON.stringify(r.data.datos)); } catch (e) {}
+           if (typeof vistaInsumos !== 'undefined' && vistaInsumos === 'costeo' && typeof renderCosteoBebidas === 'function') renderCosteoBebidas();
+       } catch (e) {}
+   }
+   function _factorPropio(v, viejo) {
+       var f = parseFloat(v);
+       return (f > 0 && Math.abs(f - viejo) > 1e-9) ? f : 0;
+   }
+   function _factorCopaIns(p)  { return _factorPropio(p && p.factorCopa, 3.3) || EtaaxCore.factorVentaDirecta('destilado', _cfgCosteoIns()); }
+   function _factorPiezaIns(p) { return _factorPropio(p && p.factorPieza, 2)  || EtaaxCore.factorVentaDirecta('cerveza', _cfgCosteoIns()); }
+   function _factorTxt(f) { return String(Math.round((parseFloat(f) || 0) * 100) / 100); }
+   /* El bar cost de lo que se vende directo y su semáforo: la misma vara que
+      la carátula (sobre el precio sin IVA, contra el rango sano del tipo). */
+   function _barCostIns(carta, costo, tipo) {
+       if (!(carta > 0) || !(costo > 0) || typeof EtaaxCore === 'undefined') return null;
+       var pct = EtaaxCore.costeoAplicado(carta, costo).brutoPct;
+       return { pct: pct, sem: EtaaxCore.semaforoCosto(pct, EtaaxCore.perfilTipo(tipo, _cfgCosteoIns())) };
+   }
+   function _barCostHTML(bc, papel) {
+       if (!bc) return '';
+       var col = papel ? ({ ok:'#14603a', vig:'#8a6400', mal:'#7a1105' })[bc.sem]
+                       : ({ ok:'var(--green)', vig:'var(--accent-text)', mal:'var(--red)' })[bc.sem];
+       return '<div class="bar-cost" style="font-size:10.5px;font-weight:700;color:' + col + '">' + bc.pct.toFixed(1) + '% bar cost</div>';
+   }
    function _costeoCopaDatos(ins, todos){
        var p = (ins.presentaciones||[])[0] || {};
        var cml = _costoPorMLp(p);
@@ -1433,7 +1481,7 @@
        var refIns = p.mezcladorId ? (todos||[]).find(function(x){return x.id===p.mezcladorId;}) : null;
        var mezPiezas = parseFloat(p.mezcladores)||0;
        var mezCost = (refIns&&mezPiezas>0) ? mezPiezas*_refrescoCostoPorPieza(refIns) : 0;
-       var fCopa = parseFloat(p.factorCopa)||3.3;
+       var fCopa = _factorCopaIns(p);
        var costoBot = cml*toML(p.contNeto, p.umContenido||'ML');
        var fBot = parseFloat(p.factorBotella)||2.5;
        var mezBot = _mezBotDatos(p, todos);
@@ -1474,7 +1522,7 @@
    function _costeoPiezaDatos(ins){
        var p = (ins.presentaciones||[])[0] || {};
        var costoPieza = parseFloat(p.costoPieza) || (parseFloat(p.precio)||0);
-       var fP = parseFloat(p.factorPieza)||2.0;
+       var fP = _factorPiezaIns(p);
        return {
            p: p,
            costoOz:    _costoPorMLp(p)*OZ_ML,
@@ -1575,11 +1623,12 @@
                mezUnit:  (D.mezCopaPz > 0 && D.mezCopaCost > 0) ? n(D.mezCopaCost / D.mezCopaPz) + ' c/u' : '',
                mezMult:  (D.mezCopaPz > 0 && D.mezCopaCost > 0) ? '×' + D.mezCopaPz + ' = ' + n(D.mezCopaCost) : '',
                sugerido: n(D.sugTrago > 0 ? D.sugTrago : D.sugCopa),
-               cuenta:   n(D.costoCopa) + ' × ' + D.fCopa,
+               cuenta:   n(D.costoCopa) + ' × ' + _factorTxt(D.fCopa),
                cuentaIgual: '= ' + n(baseCopa),
                cuentaMas: D.mezCopaCost > 0 ? '+ ' + n(D.mezCopaCost) + ' de refrescos' : '',
                carta:    n(D.cartaCopa),
-               util:     _costeoUtil(D.cartaCopa, D.costoTrago)
+               util:     _costeoUtil(D.cartaCopa, D.costoTrago),
+               bc:       _barCostIns(D.cartaCopa, D.costoTrago, 'destilado')
            },
            bot: {
                titulo:   'Por botella',
@@ -1589,7 +1638,7 @@
                mezUnit:  '',
                mezMult:  (D.mezBotPz > 0 && D.mezBotCost > 0) ? '×' + D.mezBotPz + ' = ' + n(D.mezBotCost) : '',
                sugerido: n(D.sugBotServ > 0 ? D.sugBotServ : D.sugBot),
-               cuenta:   n(D.costoBot) + ' × ' + D.fBot,
+               cuenta:   n(D.costoBot) + ' × ' + _factorTxt(D.fBot),
                cuentaIgual: '= ' + n(baseBot),
                cuentaMas: D.mezBotCost > 0 ? '+ ' + n(D.mezBotCost) + ' de servicio' : '',
                carta:    n(D.cartaBot),
@@ -1629,7 +1678,7 @@
                    '<td style="' + _CTDL + ';color:var(--text-muted);font-size:11.5px;white-space:nowrap">' +
                        etx(m.cuenta) + sub(m.cuentaIgual) + sub(m.cuentaMas) + '</td>' +
                    '<td style="' + _CTD + '"><span style="color:var(--accent);font-weight:700">' + etx(m.carta) + '</span>' +
-                       (m.util ? '<div style="margin-top:2px">' + util(m.util) + '</div>' : '') + '</td>' +
+                       (m.util ? '<div style="margin-top:2px">' + util(m.util) + '</div>' : '') + _barCostHTML(m.bc) + '</td>' +
                    '</tr>';
            };
            return linea(C.copa, true) + linea(C.bot, false);
@@ -1652,9 +1701,9 @@
                '<td style="'+_CTD+'">'+_unitTxt(p)+'</td>'+
                '<td style="'+_CTD+'">'+_cMoney(costoOz)+'</td>'+
                '<td style="'+_CTD+'">'+_cMoney(costoPieza)+'</td>'+
-               '<td style="'+_CTD+'">'+_cMoney(sugPza)+'<span style="color:var(--text-dim);font-size:10px"> ×'+fP+'</span></td>'+
+               '<td style="'+_CTD+'">'+_cMoney(sugPza)+'<span style="color:var(--text-dim);font-size:10px"> ×'+_factorTxt(fP)+'</span></td>'+
                '<td style="'+_CTD+';color:var(--accent)">'+_cMoney(carta)+'</td>'+
-               '<td style="'+_CTD+'">'+_cUtil(carta, costoPieza)+'</td>'+
+               '<td style="'+_CTD+'">'+_cUtil(carta, costoPieza)+_barCostHTML(_barCostIns(carta, costoPieza, 'cerveza'))+'</td>'+
                '</tr>';
        }).join('');
        return _costeoSecTitle('🍺 Cervezas · Refrescos y Sodas', lista.length)+
@@ -1871,7 +1920,7 @@
                                '<td>' + (m.mezMult ? (m.mezUnit ? etx(m.mezUnit) + _sub(m.mezMult) : etx(m.mezMult)) : '—') + '</td>' +
                                '<td><b>' + etx(m.sugerido) + '</b></td>' +
                                '<td class="w costeo-cuenta">' + etx(m.cuenta) + _sub(m.cuentaIgual) + _sub(m.cuentaMas) + '</td>' +
-                               '<td><b>' + etx(m.carta) + '</b>' + (m.util ? '<small>' + _utl(m.util) + '</small>' : '') + '</td>' +
+                               '<td><b>' + etx(m.carta) + '</b>' + (m.util ? '<small>' + _utl(m.util) + '</small>' : '') + _barCostHTML(m.bc, true) + '</td>' +
                                '</tr>';
                        };
                        return '<tbody class="costeo-par" data-insumo="' + etx(ins.id) + '">' +
@@ -1892,8 +1941,8 @@
                        return '<tbody class="costeo-par" data-insumo="' + etx(ins.id) + '"><tr>' +
                            '<td rowspan="2" class="w ind">' + identidad(ins) + '</td>' +
                            '<td>' + _u(D.costoPieza) + '</td><td>' + _u(D.costoOz) + '</td>' +
-                           '<td>' + factor(D.sugPza, '×' + D.fP) + '</td>' +
-                           '<td><b>' + _u(D.carta) + '</b></td><td>' + _ut(D.carta, D.costoPieza) + '</td>' +
+                           '<td>' + factor(D.sugPza, '×' + _factorTxt(D.fP)) + '</td>' +
+                           '<td><b>' + _u(D.carta) + '</b></td><td>' + _ut(D.carta, D.costoPieza) + _barCostHTML(_barCostIns(D.carta, D.costoPieza, 'cerveza'), true) + '</td>' +
                        '</tr><tr><td colspan="5" class="w" style="text-align:left">' +
                            '<b>Compra:</b> ' + etx(_presTxtPDF(ins, p)) + ' · <b>Costo de referencia:</b> ' + cu + '</td></tr></tbody>';
                    }).join('');
@@ -3851,7 +3900,7 @@
            pesoUnidad: '', umPeso: 'G', pesoCristal: '',
            masaDrenada: '', umMasaDrenada: 'G', rendimiento: '', umRendimiento: 'OZ',
            tamanoCopa: '', umTamanoCopa: 'ML', umLectura: '',
-           factorCopa: '3.3', factorBotella: '2.5', factorPieza: '2.0', costoPieza: '',
+           factorCopa: '', factorBotella: '2.5', factorPieza: '', costoPieza: '',   // copa y pieza vacías = la meta de su tipo de barra
            /* 5 es el servicio de siempre. Va como valor de arranque solo en
               presentaciones NUEVAS: las ya guardadas se quedan sin él, así que
               a nadie le cambia un precio de la noche a la mañana. */
@@ -4699,7 +4748,7 @@
 
    function _updateDisplaysRefrescoCerv(p, i) {
        const _cp  = parseFloat(p.costoPieza)||0;
-       const _fp  = parseFloat(p.factorPieza)||2.0;
+       const _fp  = _factorPiezaIns(p);
        const { oz: _ozV, lt: _ltV } = calcOzLt(p.costoPieza, p.contNeto, p.umContenido);
        var _elP     = document.getElementById('ref-pieza-'+i);
        var _elO     = document.getElementById('ref-onza-'+i);
@@ -5092,7 +5141,7 @@
        const show = true;
        const _cp  = parseFloat(p.costoPieza)||0;
        const { oz: _ozV, lt: _ltV } = calcOzLt(p.costoPieza, p.contNeto, p.umContenido);
-       const _fp  = parseFloat(p.factorPieza)||2.0;
+       const _fp  = _factorPiezaIns(p);
        const _csV = _ltV !== '\u2014' ? fmtMXN(parseFloat(_ltV.replace('$ ','').replace(/,/g,'')) * _fp) : '\u2014';
 
        let innerHtml = '';
@@ -5239,7 +5288,8 @@
                <div style="display:flex;align-items:center;gap:6px;flex:1">
                    <label style="font-size:11px;color:var(--text-dim);opacity:.6;white-space:nowrap;margin:0">copa</label>
                    <span style="color:var(--text-dim);font-size:11px;opacity:.4">\xd7</span>
-                   <input type="number" value="${p.factorCopa||'3.3'}" placeholder="3.3" min="0.1" step="0.1"
+                   <input type="number" value="${_factorPropio(p.factorCopa, 3.3) || ''}" placeholder="${_factorTxt(_factorCopaIns({}))}" min="0.1" step="0.1"
+                       title="Vacío = la meta de bar cost de «Destilados y tragos largos» (carátula → Ajustar porcentajes)"
                        style="color:var(--accent);flex:1;min-width:0;font-size:13px;padding:4px 8px;background:rgba(245,200,66,.06);border-color:rgba(245,200,66,.2)"
                        oninput="updPres(${i},'factorCopa',this.value)">
                </div>
@@ -5676,7 +5726,7 @@
                                padding:8px 12px;font-size:15px;color:var(--accent);font-weight:700">
                                ${(()=>{
                                    const cp = parseFloat(p.costoPieza)||0;
-                                   const fp = parseFloat(p.factorPieza)||2.0;
+                                   const fp = _factorPiezaIns(p);
                                    return fmtMXN(cp * fp);
                                })()}
                            </div>
@@ -5688,7 +5738,7 @@
                                padding:8px 12px;font-size:15px;color:var(--accent);font-weight:700">
                                ${(()=>{
                                    const cp = parseFloat(p.costoPieza)||0;
-                                   const fp = parseFloat(p.factorPieza)||2.0;
+                                   const fp = _factorPiezaIns(p);
                                    return fmtMXN(cp * fp);
                                })()}
                            </div>
@@ -5721,8 +5771,9 @@
                            <label>Factor × pieza</label>
                            <div style="display:flex;align-items:center;gap:6px">
                                <span style="color:var(--text-dim);font-size:11px;opacity:.5">×</span>
-                               <input type="number" value="${p.factorPieza||'2.0'}"
-                                   placeholder="2.0" min="0.1" step="0.1"
+                               <input type="number" value="${_factorPropio(p.factorPieza, 2) || ''}"
+                                   placeholder="${_factorTxt(_factorPiezaIns({}))}" min="0.1" step="0.1"
+                                   title="Vacío = la meta de bar cost de «Cerveza, refrescos y aguas» (carátula → Ajustar porcentajes)"
                                    style="color:var(--accent);font-size:13px;padding:4px 8px;
                                        background:rgba(245,200,66,.06);border-color:rgba(245,200,66,.2)"
                                    oninput="updPres(${i},'factorPieza',this.value)">
@@ -5876,7 +5927,7 @@
        var filas = lista.map(function (c, j) {
            var calc = calcCostoCopa(p.costoUnitario, p.umCosto || 'LT', c.tamano, c.um || 'ML');
            var costo = calc ? (parseFloat(calc.costoCopa) || 0) : 0;
-           var f     = parseFloat(c.factor) || parseFloat(p.factorCopa) || 3.3;
+           var f     = parseFloat(c.factor) || _factorCopaIns(p);
            var sug   = costo * f;
            var pc    = parseFloat(c.precioCarta) || 0;
            var util  = (pc > 0 && costo > 0) ? ((pc - costo) / costo) * 100 : null;
@@ -5889,7 +5940,7 @@
                '<div class="meta-item"><label>Unidad</label><select onchange="updCosteo(' + i + ',' + j + ',\'um\',this.value)">' +
                    '<option value="ML"' + ((c.um || 'ML') === 'ML' ? ' selected' : '') + '>ML</option>' +
                    '<option value="OZ"' + ((c.um || 'ML') === 'OZ' ? ' selected' : '') + '>OZ</option></select></div>' +
-               '<div class="meta-item"><label>Factor \xd7</label><input type="number" value="' + etx(c.factor || '') + '" placeholder="' + (p.factorCopa || '3.3') + '" min="0.1" step="0.1" ' +
+               '<div class="meta-item"><label>Factor \xd7</label><input type="number" value="' + etx(c.factor || '') + '" placeholder="' + _factorTxt(_factorCopaIns(p)) + '" min="0.1" step="0.1" ' +
                    'style="color:var(--accent)" oninput="updCosteo(' + i + ',' + j + ',\'factor\',this.value)"></div>' +
                '<div class="meta-item"><label>Precio carta</label><input type="number" value="' + etx(c.precioCarta || '') + '" placeholder="0.00" min="0" step="0.5" ' +
                    'style="color:var(--green)" oninput="updCosteo(' + i + ',' + j + ',\'precioCarta\',this.value)"></div>' +
@@ -5945,7 +5996,7 @@
        var cu       = parseFloat(p.costoUnitario) || 0;
        var contML   = toML(p.contNeto, p.umContenido||'ML');
        var costoBot = cu > 0 && contML > 0 ? cu*(contML/1000) : 0;
-       var fCopa    = parseFloat(p.factorCopa)    || 3.3;
+       var fCopa    = _factorCopaIns(p);
        var fBot     = parseFloat(p.factorBotella) || 2.5;
        // Mezclador (refresco del catálogo, por pieza)
        var refIns    = p.mezcladorId ? getInsumos().find(function(x){ return x.id === p.mezcladorId; }) : null;
@@ -6822,5 +6873,6 @@
    // aborta init() antes de pintar la vista. Esperar a DOMContentLoaded garantiza
    // que todos los <script> síncronos (security/ctx-bar/etaax-db/supabase) ya
    // cargaron. En el admin (carga dinámica) readyState ya es 'complete' → corre ya.
+   setTimeout(_costeoCfgInsPull, 0);   // los % por tipo de barra (carátula → Ajustar porcentajes)
    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ _conStore(init); });
    else _conStore(init);

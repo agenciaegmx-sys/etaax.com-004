@@ -1693,51 +1693,78 @@
     }
 
     /* ══ EL TIPO DE PLATILLO MANDA EN EL COSTEO ══════════════════════════════
-       No todo lo de la carta gasta lo mismo para salir a la mesa. Un plato
-       fuerte ocupa cocineros, estufa, horno, almacén y una mesa por más
-       tiempo; una bebida se arma al instante en la barra. Cargarles a todos
-       el mismo 40% de gasto operativo esconde pérdidas en los fuertes y
-       castiga a las bebidas. Los rangos son los de la referencia de Edwin
-       (25-nov-2026); el valor de cada tipo es el centro del rango, y el
-       negocio lo ajusta en la carátula (costeo_config, v90).
+       No todo lo de la carta cuesta ni gasta lo mismo para salir a la mesa. Un
+       plato fuerte lleva la proteína (el insumo más caro) y ocupa cocineros,
+       estufa, horno y una mesa por más tiempo; un postre se hace con harina,
+       azúcar y huevo; un cóctel de autor diluye el destilado con jugos y
+       jarabes; una cerveza se compra ya hecha y su precio es rígido. Cargarles
+       a todos el mismo 30% de costo y el mismo 40% de gasto operativo esconde
+       pérdidas en unos y castiga a otros.
 
-       Cada receta puede además traer lo SUYO: `multiploCosteo` (su food cost
-       meta, el múltiplo es 100 ÷ meta) y `gastoOpPct`. Vacío = lo del tipo.
+       Dos ÁREAS, cada una con sus tipos (referencias de Edwin, 25-nov-2026):
+         · cocina → FOOD cost   · barra → BAR cost
+       Cada tipo trae su RANGO SANO de costo (foodMin–foodMax: es el semáforo)
+       y su rango de gasto operativo (opMin–opMax). La META con la que se pone
+       el precio sugerido es el centro del rango; el negocio la ajusta en la
+       carátula (costeo_config, v90). «Comida rápida» no venía en la referencia:
+       la propuse yo y Edwin la aceptó.
+
+       Cada receta puede además traer lo SUYO: `multiploCosteo` (su meta de
+       costo; el múltiplo es 100 ÷ meta) y `gastoOpPct`. Vacío = lo del tipo.
        Sin tipo elegido se adivina por el grupo/categoría (`auto`); lo que no
-       se reconoce queda en «General», la regla 30-40-30 de siempre, para que
-       ninguna receta vieja cambie de número por una suposición.             */
+       se reconoce queda en «General», la regla 30-40-30 de siempre.          */
     var COSTEO_PERFILES = [
-        { id:'entrada', nombre:'Entradas',             food:30, op:33, min:30, max:35,
-          por:'Preparación rápida, alta rotación y menos tiempo de servicio: generan flujo.' },
-        { id:'fuerte',  nombre:'Platos fuertes',       food:30, op:44, min:42, max:45,
-          por:'El motor del restaurante: más cocina, equipo, almacén y servicio de salón.' },
-        { id:'postre',  nombre:'Postres',              food:30, op:38, min:35, max:40,
-          por:'Se adelantan en mise en place y se montan al momento; su insumo suele ser barato.' },
-        { id:'bebida',  nombre:'Bebidas y coctelería', food:30, op:28, min:25, max:30,
-          por:'Se preparan al instante en barra, con poca merma y menos personal.' },
-        { id:'general', nombre:'General',              food:30, op:40, min:null, max:null,
+        { id:'entrada', area:'cocina', nombre:'Entradas',       food:22, foodMin:18, foodMax:25, op:33, opMin:30, opMax:35,
+          por:'Papas, masas, quesos, vegetales y porciones controladas: bajan el costo promedio de la mesa.' },
+        { id:'rapida',  area:'cocina', nombre:'Comida rápida',  food:28, foodMin:25, foodMax:32, op:38, opMin:35, opMax:40,
+          por:'Tacos, hamburguesas, tortas, pizzas y alitas: se preparan rápido y rotan mucho.' },
+        { id:'fuerte',  area:'cocina', nombre:'Platos fuertes', food:32, foodMin:28, foodMax:35, op:44, opMin:42, opMax:45,
+          por:'Llevan la proteína, el insumo más caro (hasta 38% en alta proteína), y la mayor parte de la cocina y el salón.' },
+        { id:'postre',  area:'cocina', nombre:'Postres',        food:18, foodMin:15, foodMax:22, op:38, opMin:35, opMax:40,
+          por:'Harina, azúcar, huevo y leche cuestan poco por porción: casi todo lo que se vende es utilidad.' },
+        { id:'coctel',  area:'barra',  nombre:'Coctelería de autor', food:15, foodMin:12, foodMax:18, op:28, opMin:25, opMax:30,
+          por:'Mezclas de la casa: el destilado se diluye con jugos, jarabes y hielo, y la experiencia permite cobrar más.' },
+        { id:'destilado', area:'barra', nombre:'Destilados y tragos largos', food:22, foodMin:18, foodMax:25, op:28, opMin:25, opMax:30,
+          por:'Shots, copeo y mezclado básico (ron con cola, tequila derecho): el costo por onza es muy predecible.' },
+        { id:'cerveza', area:'barra',  nombre:'Cerveza, refrescos y aguas', food:32, foodMin:28, foodMax:35, op:28, opMin:25, opMax:30,
+          por:'Se compran ya hechos y su precio es rígido (hasta 38% en cervezas industriales): son volumen y acompañamiento.' },
+        { id:'general', area:'',       nombre:'General',        food:30, foodMin:null, foodMax:null, op:40, opMin:null, opMax:null,
           por:'La regla 30-40-30 de siempre, para lo que no tiene tipo.' }
     ];
+    var _PERFIL_ALIAS = { bebida:'coctel' };   // nombre que tuvo el 25-nov antes de partir la barra en tres
     function _perfilBase(id) {
+        id = _PERFIL_ALIAS[id] || id;
         for (var i = 0; i < COSTEO_PERFILES.length; i++) if (COSTEO_PERFILES[i].id === id) return COSTEO_PERFILES[i];
         return null;
     }
+    function areaReceta(r) { return /bebidas/.test(String((r && r.tipo) || '')) ? 'barra' : 'cocina'; }
+    /* Los tipos que se ofrecen para una receta: los de su área y «General». */
+    function perfilesDeArea(area) {
+        return COSTEO_PERFILES.filter(function (p) { return !p.area || p.area === area; });
+    }
     function _sinAcentos(s) {
         s = String(s || '').toLowerCase();
-        try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+        try { s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) {}
         return s;
     }
     /* Adivinar el tipo con lo que ya dice la receta. Solo palabras que no
-       dejan duda: lo demás se queda en «General» hasta que alguien lo elija. */
+       dejan duda: lo demás se queda en «General» (cocina) o «Coctelería»
+       (barra: lo que se prepara en la barra casi siempre es un cóctel; lo
+       embotellado se costea en Insumos). */
     function perfilAdivinado(r) {
         r = r || {};
         var t = String(r.tipo || '');
-        if (t === 'bebidas') return 'bebida';
-        if (t !== 'alimentos') return 'general';
         var s = _sinAcentos((r.grupo || '') + ' ' + (r.categoria || ''));
+        if (t === 'bebidas') {
+            if (/cerveza|michelada|chela|refresco|agua mineral|soda/.test(s)) return 'cerveza';
+            if (/shot|caballito|derecho|las rocas|trago largo|tragos largos|cuba|jaibol|highball|copeo|destilado|clasic/.test(s)) return 'destilado';   // la referencia los llama «clásicos»
+            return 'coctel';
+        }
+        if (t !== 'alimentos') return 'general';
         if (/postre|dulce|reposter|helad|pastel|nieve/.test(s)) return 'postre';
         if (/entrada|botana|aperitiv|tapa|snack|ensalada|sopa|antojit|compartir|ceviche|crudo|tostada/.test(s)) return 'entrada';
-        if (/fuerte|principal|plato|corte|pasta|hamburgues|pizza/.test(s)) return 'fuerte';
+        if (/taco|hamburgues|burger|torta|pizza|alita|boneless|hot ?dog|burrito|quesadilla|sandwich|baguette|comida rapida/.test(s)) return 'rapida';
+        if (/fuerte|principal|plato|corte|pasta|especialidad/.test(s)) return 'fuerte';
         return 'general';
     }
     function _pctCfg(v, minimo) {
@@ -1746,30 +1773,43 @@
         return (isFinite(x) && x >= minimo && x < 100) ? x : null;
     }
     /* Los porcentajes de un tipo para ESTE negocio: los suyos (cfg) o los de
-       la referencia. */
+       la referencia. Los rangos sanos son de la referencia y no se ajustan. */
     function perfilTipo(id, cfg) {
         var b = _perfilBase(id) || _perfilBase('general');
         var c = (cfg && cfg.perfiles && cfg.perfiles[b.id]) || {};
         var food = _pctCfg(c.food, 0.5), op = _pctCfg(c.op, 0);
         food = food === null ? b.food : food;
         op   = op   === null ? b.op   : op;
-        return { id: b.id, nombre: b.nombre, food: food, op: op, util: 100 - food - op,
-                 min: b.min, max: b.max, por: b.por,
-                 ajustado: food !== b.food || op !== b.op };
+        return { id: b.id, area: b.area, nombre: b.nombre, food: food, op: op, util: 100 - food - op,
+                 foodMin: b.foodMin, foodMax: b.foodMax, opMin: b.opMin, opMax: b.opMax, por: b.por,
+                 refFood: b.food, refOp: b.op, ajustado: food !== b.food || op !== b.op };
     }
     /* Lo que manda en UNA receta: su tipo (elegido o adivinado) y, encima, lo
        suyo si lo trae. */
     function perfilCosteo(r, cfg) {
         r = r || {};
-        var elegido = _perfilBase(r.perfilCosteo) ? r.perfilCosteo : '';
+        var area = areaReceta(r);
+        var base = _perfilBase(r.perfilCosteo);
+        var elegido = (base && (!base.area || base.area === area)) ? base.id : '';   // un tipo de la otra área no aplica
         var t = perfilTipo(elegido || perfilAdivinado(r), cfg);
         var m = n(r.multiploCosteo), opR = _pctCfg(r.gastoOpPct, 0);
         var food = m > 0 ? 100 / m : t.food;
         var op   = opR !== null ? opR : t.op;
-        return { id: t.id, nombre: t.nombre, auto: !elegido,
+        return { id: t.id, nombre: t.nombre, area: area, auto: !elegido,
+                 costoNombre: area === 'barra' ? 'Bar cost' : 'Food cost',
                  food: food, op: op, util: 100 - food - op, multiplo: 100 / food,
                  foodTipo: t.food, opTipo: t.op, foodPropio: m > 0, opPropio: opR !== null,
-                 min: t.min, max: t.max, por: t.por };
+                 foodMin: t.foodMin, foodMax: t.foodMax, opMin: t.opMin, opMax: t.opMax, por: t.por };
+    }
+    /* El SEMÁFORO del costo real (food o bar cost %): verde dentro del rango
+       sano (o hasta la meta, si el negocio la subió por encima), ámbar hasta 3
+       puntos arriba, rojo más arriba. Medio punto de holgura para que un
+       25.04% no salga ámbar por redondeo. «General» no tiene rango: su tope
+       es la meta. */
+    function semaforoCosto(pct, pf) {
+        var tope = Math.max(pf.foodMax != null ? pf.foodMax : pf.food, pf.food);
+        var dif = n(pct) - tope;
+        return dif <= 0.5 ? 'ok' : dif <= 3 ? 'vig' : 'mal';
     }
     /* El costeo completo de una receta con su tipo: lo sugerido (la meta) y lo
        aplicado (lo que de verdad deja el precio de la carta). */
@@ -1779,16 +1819,24 @@
         var apl = costeoAplicado(r && r.precioEnCarta, costo, pf.op);
         return { perfil: pf, sugerido: sug, aplicado: apl, diagnostico: diagnosticoCosteo(apl, pf) };
     }
-    /* El veredicto del renglón. Con el gasto fijo, la utilidad solo baja de
-       la meta si el food cost la pasa: por eso se mide contra el food cost.
-       Medio punto de holgura para que un 30.04% no salga como «ajustar».   */
+    /* El veredicto del renglón, con el semáforo del rango. */
     function diagnosticoCosteo(apl, pf) {
         if (!apl || !(apl.precio > 0)) return { clave: 'sinprecio', texto: 'Sin precio' };
         if (apl.utilidadPct < 0)       return { clave: 'perdida',   texto: 'Pérdida' };
-        var dif = apl.brutoPct - pf.food;
-        if (dif <= 0.5) return { clave: 'optimo',  texto: 'Óptimo' };
-        if (dif <= 5)   return { clave: 'vigilar', texto: 'Vigilar' };
+        var s = semaforoCosto(apl.brutoPct, pf);
+        if (s === 'ok')  return { clave: 'optimo',  texto: 'Óptimo' };
+        if (s === 'vig') return { clave: 'vigilar', texto: 'Vigilar' };
         return { clave: 'ajustar', texto: 'Ajustar merma o precio' };
+    }
+    /* VENTA DIRECTA DE BARRA (Insumos → Costeo): la copa de un destilado y la
+       pieza de una cerveza o un refresco. Ahí el «factor» se aplica al costo
+       para dar el precio de CARTA (con IVA), así que el factor de la meta es
+       100 ÷ meta × (1 + IVA): con la meta de 22%, una copa a su precio
+       sugerido tiene exactamente 22% de bar cost sobre el precio sin IVA —la
+       misma vara que la carátula—. */
+    function factorVentaDirecta(id, cfg) {
+        var t = perfilTipo(id, cfg);
+        return (100 / t.food) * (1 + COSTEO_IVA_PCT / 100);
     }
 
     /* ¿QUÉ TANTO DE UN PERIODO ESTÁ CUBIERTO POR OTROS?
@@ -2468,6 +2516,7 @@
         multiploReceta: multiploReceta, costeoReceta: costeoReceta, costeoAplicado: costeoAplicado,
         COSTEO_PERFILES: COSTEO_PERFILES, perfilAdivinado: perfilAdivinado, perfilTipo: perfilTipo,
         perfilCosteo: perfilCosteo, costeoConPerfil: costeoConPerfil, diagnosticoCosteo: diagnosticoCosteo,
+        areaReceta: areaReceta, perfilesDeArea: perfilesDeArea, semaforoCosto: semaforoCosto, factorVentaDirecta: factorVentaDirecta,
         coberturaPeriodo: coberturaPeriodo,
         propinasReparto: propinasReparto, propinasAjuste: propinasAjuste,
         COSTEO_MULT_DEFAULT: COSTEO_MULT_DEFAULT, COSTEO_GASTO_OP_PCT: COSTEO_GASTO_OP_PCT,

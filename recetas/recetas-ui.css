@@ -369,3 +369,8 @@ body.etx-recetas-page {
 .car-dlg-pie span {margin-right:auto;font-size:12px;color:var(--text-muted);}
 .car-dlg .car-primario {background:var(--green)!important;color:#fff!important;border-color:var(--green)!important;font-weight:700;}
 @media (max-width:640px) { .car-dlg .pf-fila {grid-template-columns:1fr 1fr;} .car-dlg .pf-nom {grid-column:1/-1;} }
+/* Pestañas Cocina / Barra del cuadro de porcentajes */
+.car-dlg .pf-tabs {display:flex;gap:4px;padding:3px;margin:2px 0 6px;background:var(--r-input,var(--surface2));border:1px solid var(--r-line,var(--border));border-radius:10px;width:fit-content;}
+.car-dlg .pf-tabs button {border:0;background:transparent;color:var(--text-muted);font:600 12.5px 'DM Sans',sans-serif;padding:7px 14px;border-radius:8px;cursor:pointer;}
+.car-dlg .pf-tabs button.activo {background:var(--r-panel,var(--surface));color:var(--text);box-shadow:0 1px 0 var(--r-line,var(--border));}
+.car-dlg .pf-rango {display:block;font-weight:700;color:var(--text-muted);margin-bottom:1px;}

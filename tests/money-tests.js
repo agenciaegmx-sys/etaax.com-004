@@ -21923,7 +21923,7 @@ console.log('\n══ BH29 · Que se vea en papel ══');
     /* (25-nov) La carátula pasó a diez columnas —food cost, costo operativo e
        IVA a la vista y el diagnóstico—: lo de siempre sigue ahí. */
     test('…y la carátula sigue trayendo sus columnas', () =>
-        eq(['NOMBRE DE RECETA','RENDIMIENTO NETO','COSTO BRUTO','FOOD COST %','PRECIO CARTA C/IVA',
+        eq(['NOMBRE DE RECETA','RENDIMIENTO NETO','COSTO BRUTO','BAR COST %','PRECIO CARTA C/IVA',
             'COSTO OPERATIVO','UTILIDAD NETA $','UTILIDAD NETA %','DIAGNÓSTICO'].every(t => car.indexOf(t) > -1), true, 'sin perder nada'));
 }
 
@@ -32898,59 +32898,75 @@ console.log('\n══ BH60 · El delivery, en las tres hojas ══');
 })();
 
 
-/* ═══════ BH90 · EL TIPO DE PLATILLO MANDA EN EL COSTEO (25-nov) ═══════
+/* ═══════ BH91 · EL TIPO DE PLATILLO MANDA EN EL COSTEO (25-nov) ═══════
    Edwin: «quiero que los porcentajes de gasto operativo sean ajustables
-   dependiendo del caso, y el food cost también». Un plato fuerte ocupa
-   cocina, equipo y salón; una bebida se arma al instante en la barra. El
-   mismo 40% para todo escondía pérdidas en los fuertes y castigaba a las
-   bebidas. Referencia de Edwin: entradas 30–35%, fuertes 42–45%, postres
-   35–40%, bebidas 25–30% de gasto operativo.                            */
-console.log('\n══ BH90 · El tipo de platillo manda en el costeo ══');
+   dependiendo del caso, y el food cost también», y luego: «mostrar la
+   sugerencia de food cost y bar cost dependiendo del tipo de receta…
+   tacos, hamburguesas como comida rápida». Dos áreas —cocina (food cost) y
+   barra (bar cost)— con sus tipos, su RANGO SANO (el semáforo) y su gasto
+   operativo. Referencias de Edwin: entradas 18–25 / 30–35, fuertes 28–35 /
+   42–45, postres 15–22 / 35–40, coctelería 12–18, destilados 18–25, cerveza
+   y refrescos 28–35, barra 25–30 de operativo. Comida rápida (25–32 / 35–40)
+   la propuse yo y Edwin la aceptó.                                        */
+console.log('\n══ BH91 · El tipo de platillo manda en el costeo ══');
 (function () {
     const P = Core.COSTEO_PERFILES, pc = Core.perfilCosteo, cp = Core.costeoConPerfil;
-    test('hay cinco tipos: entradas, fuertes, postres, bebidas y general', () =>
-        eq(P.map(p => p.id).join(','), 'entrada,fuerte,postre,bebida,general', 'tipos'));
-    test('los rangos son los de la referencia de Edwin', () =>
-        eq(P.filter(p => p.min != null).map(p => p.id + ':' + p.min + '-' + p.max).join(' '),
-           'entrada:30-35 fuerte:42-45 postre:35-40 bebida:25-30', 'rangos'));
-    test('el gasto operativo de cada tipo cae DENTRO de su rango', () =>
-        eq(P.filter(p => p.min != null).every(p => p.op >= p.min && p.op <= p.max), true, 'dentro'));
+    test('cocina: entradas, comida rápida, fuertes y postres; barra: coctelería, destilados y cerveza; y General', () =>
+        eq(P.map(p => (p.area || '-') + ':' + p.id).join(' '),
+           'cocina:entrada cocina:rapida cocina:fuerte cocina:postre barra:coctel barra:destilado barra:cerveza -:general', 'tipos'));
+    test('los rangos sanos de costo son los de la referencia de Edwin', () =>
+        eq(P.filter(p => p.foodMin != null).map(p => p.id + ':' + p.foodMin + '-' + p.foodMax).join(' '),
+           'entrada:18-25 rapida:25-32 fuerte:28-35 postre:15-22 coctel:12-18 destilado:18-25 cerveza:28-35', 'costo'));
+    test('…y los de gasto operativo (toda la barra 25–30)', () =>
+        eq(P.filter(p => p.opMin != null).map(p => p.id + ':' + p.opMin + '-' + p.opMax).join(' '),
+           'entrada:30-35 rapida:35-40 fuerte:42-45 postre:35-40 coctel:25-30 destilado:25-30 cerveza:25-30', 'operativo'));
+    test('la meta y el operativo de cada tipo caen DENTRO de su rango', () =>
+        eq(P.filter(p => p.foodMin != null).every(p => p.food >= p.foodMin && p.food <= p.foodMax && p.op >= p.opMin && p.op <= p.opMax), true, 'dentro'));
     test('«General» es la regla 30-40-30 de siempre', () => {
         const g = P.find(p => p.id === 'general'); return eq(g.food + '-' + g.op, '30-40', 'general');
     });
+    test('una bebida solo puede elegir tipos de barra (y General)', () =>
+        eq(Core.perfilesDeArea('barra').map(p => p.id).join(','), 'coctel,destilado,cerveza,general'));
 
     /* ── Adivinar el tipo con lo que ya dice la receta ── */
     const adv = (r) => Core.perfilAdivinado(r);
-    test('una bebida es «Bebidas y coctelería» sin preguntar', () => eq(adv({ tipo:'bebidas', grupo:'Lo que sea' }), 'bebida'));
+    test('una bebida preparada es coctelería si no dice otra cosa', () => eq(adv({ tipo:'bebidas', grupo:'Mixología' }), 'coctel'));
+    test('michelada / cerveza → cerveza; shots, cubas, clásicos → destilados', () =>
+        eq([adv({ tipo:'bebidas', grupo:'Micheladas' }), adv({ tipo:'bebidas', grupo:'Shots' }), adv({ tipo:'bebidas', categoria:'Cubas' }), adv({ tipo:'bebidas', categoria:'Clásicos' })].join(','), 'cerveza,destilado,destilado,destilado'));
     test('el grupo «Entradas» → entradas', () => eq(adv({ tipo:'alimentos', grupo:'Entradas' }), 'entrada'));
+    test('tacos, hamburguesas, tortas, pizzas, alitas → comida rápida', () =>
+        eq(['Tacos', 'Hamburguesas', 'Tortas', 'Pizzas', 'Alitas'].map(g => adv({ tipo:'alimentos', grupo:g })).join(','), 'rapida,rapida,rapida,rapida,rapida'));
     test('«Platos fuertes» y «Plato Fuerte» → fuertes', () => eq(adv({ tipo:'alimentos', grupo:'Platos fuertes' }) + adv({ tipo:'alimentos', grupo:'Plato Fuerte' }), 'fuertefuerte'));
     test('«Postres» → postres (también por la categoría)', () => eq(adv({ tipo:'alimentos', grupo:'Cocina', categoria:'Postres de la casa' }), 'postre'));
     test('sin palabra que no deje duda → «General» (ninguna receta vieja cambia por una suposición)', () =>
-        eq(adv({ tipo:'alimentos', grupo:'Tacos', categoria:'Cerdo' }), 'general'));
+        eq(adv({ tipo:'alimentos', grupo:'Cocina', categoria:'Especial del chef' }), 'general'));
     test('las sub-recetas no se venden: «General»', () => eq(adv({ tipo:'sub-alimentos', grupo:'Postres' }), 'general'));
 
     /* ── Lo que manda en una receta ── */
     test('el tipo ELEGIDO gana al adivinado', () => {
-        const r = pc({ tipo:'alimentos', grupo:'Entradas', perfilCosteo:'fuerte' });
-        return eq(r.id + ' ' + r.op + ' ' + r.auto, 'fuerte 44 false', 'elegido');
+        const r = pc({ tipo:'alimentos', grupo:'Tacos', perfilCosteo:'fuerte' });
+        return eq(r.id + ' ' + r.food + ' ' + r.op + ' ' + r.auto, 'fuerte 32 44 false', 'elegido');
     });
     test('sin elegir, se marca como automático', () => eq(pc({ tipo:'alimentos', grupo:'Entradas' }).auto, true, 'auto'));
-    test('un tipo que no existe cae al adivinado', () => eq(pc({ tipo:'bebidas', perfilCosteo:'xyz' }).id, 'bebida', 'adivinado'));
+    test('un tipo de la OTRA área no aplica: una bebida «Postre» cae a lo adivinado', () => eq(pc({ tipo:'bebidas', perfilCosteo:'postre' }).id, 'coctel', 'área'));
+    test('un tipo que no existe cae al adivinado', () => eq(pc({ tipo:'bebidas', perfilCosteo:'xyz' }).id, 'coctel', 'adivinado'));
+    test('en barra se llama «Bar cost»; en cocina, «Food cost»', () =>
+        eq(pc({ tipo:'bebidas' }).costoNombre + ' / ' + pc({ tipo:'alimentos' }).costoNombre, 'Bar cost / Food cost'));
     test('lo del negocio (cfg) ajusta al tipo', () => {
-        const r = pc({ tipo:'alimentos', perfilCosteo:'fuerte' }, { perfiles:{ fuerte:{ food:28, op:45 } } });
-        return eq(r.food + '-' + r.op + '-' + r.util, '28-45-27', 'cfg');
+        const r = pc({ tipo:'alimentos', perfilCosteo:'fuerte' }, { perfiles:{ fuerte:{ food:30, op:45 } } });
+        return eq(r.food + '-' + r.op + '-' + r.util, '30-45-25', 'cfg');
     });
-    test('lo propio de la receta gana al tipo: food cost por su múltiplo, gasto por gastoOpPct', () => {
+    test('lo propio de la receta gana al tipo: costo por su múltiplo, gasto por gastoOpPct', () => {
         const r = pc({ tipo:'alimentos', perfilCosteo:'fuerte', multiploCosteo:4, gastoOpPct:42 });
         return eq([r.food, r.op, r.util, r.foodPropio, r.opPropio].join(' '), '25 42 33 true true', 'propio');
     });
     test('gastoOpPct vacío = el del tipo; 0 sí es un valor', () =>
         eq(pc({ tipo:'bebidas', gastoOpPct:'' }).op + '/' + pc({ tipo:'bebidas', gastoOpPct:0 }).op, '28/0', 'vacío vs cero'));
     test('basura en la cfg no rompe: se usa la referencia', () => {
-        const r = pc({ tipo:'bebidas' }, { perfiles:{ bebida:{ food:0, op:150 } } });
-        return eq(r.food + '-' + r.op, '30-28', 'referencia');
+        const r = pc({ tipo:'bebidas' }, { perfiles:{ coctel:{ food:0, op:150 } } });
+        return eq(r.food + '-' + r.op, '15-28', 'referencia');
     });
-    test('el múltiplo sale de la meta: 100 ÷ food cost', () => eq(pc({ tipo:'bebidas' }, { perfiles:{ bebida:{ food:25, op:28 } } }).multiplo, 4));
+    test('el múltiplo sale de la meta: 100 ÷ costo meta (coctelería 15% → ×6.67)', () => eq(pc({ tipo:'bebidas' }).multiplo, 100 / 15));
 
     /* ── Las fórmulas con el gasto del tipo ── */
     test('costeoReceta con 44% de gasto: utilidad 26%', () => {
@@ -32962,27 +32978,43 @@ console.log('\n══ BH90 · El tipo de platillo manda en el costeo ══');
     });
     test('sin tercer dato, el 40 de siempre (nada viejo cambia)', () => eq(Core.costeoAplicado(180, 52.92).gastoOpPct, 40));
 
-    /* ── Los números de la referencia de Edwin (Taco de Pork Belly) ── */
-    const taco = cp(17.85, { tipo:'alimentos', grupo:'Tacos', precioEnCarta:69 }, {});
+    /* ── Los números de la referencia de Edwin (Taco de Pork Belly, con la regla 30-40-30) ── */
+    const taco = cp(17.85, { tipo:'alimentos', grupo:'Cocina', perfilCosteo:'general', precioEnCarta:69 }, {});
     test('Taco de Pork Belly a $69: food cost 30.0%', () => eq(taco.aplicado.brutoPct.toFixed(1), '30.0'));
     test('…costo operativo 40% = $23.79', () => eq(taco.aplicado.gastoOp.toFixed(2), '23.79'));
     test('…IVA 16% = $9.52', () => eq(taco.aplicado.iva.toFixed(2), '9.52'));
     test('…utilidad neta $17.84 (30.0%)', () => eq(taco.aplicado.utilidad.toFixed(2) + ' ' + taco.aplicado.utilidadPct.toFixed(1), '17.84 30.0'));
     test('…y su proyección sugerida: $69.02 con IVA', () => eq(taco.sugerido.comedor.toFixed(2), '69.02'));
-    test('el mismo taco como plato fuerte deja menos: 44% de gasto → 26% de utilidad', () => {
-        const f = cp(17.85, { tipo:'alimentos', perfilCosteo:'fuerte', precioEnCarta:69 }, {});
-        return eq(f.aplicado.gastoOp.toFixed(2) + ' ' + f.aplicado.utilidadPct.toFixed(1), '26.17 26.0', 'fuerte');
+    test('el mismo taco como comida rápida: 38% de gasto → utilidad 32%', () => {
+        const f = cp(17.85, { tipo:'alimentos', grupo:'Tacos', precioEnCarta:69 }, {});
+        return eq(f.perfil.id + ' ' + f.aplicado.gastoOp.toFixed(2) + ' ' + f.aplicado.utilidadPct.toFixed(1), 'rapida 22.60 32.0', 'rápida');
+    });
+    test('la referencia del cóctel de autor: $20 de insumo a $160 → 14.5% de bar cost (sin IVA): Óptimo', () => {
+        const k = cp(20, { tipo:'bebidas', precioEnCarta:160 }, {});
+        return eq(k.aplicado.brutoPct.toFixed(1) + ' ' + k.diagnostico.clave, '14.5 optimo', 'cóctel');
     });
 
-    /* ── El diagnóstico ── */
+    /* ── El semáforo es el RANGO SANO ── */
     const dg = (precio, costo, r) => cp(costo, Object.assign({ tipo:'alimentos', precioEnCarta:precio }, r || {}), {}).diagnostico.clave;
-    test('food cost en la meta (con medio punto de holgura) → Óptimo', () => eq(dg(69, 17.85) + ' ' + dg(69, 18.1), 'optimo optimo'));
-    test('hasta 5 puntos arriba → Vigilar', () => eq(dg(69, 20), 'vigilar'));
-    test('más de 5 puntos arriba → Ajustar merma o precio', () => eq(dg(69, 25), 'ajustar'));
-    test('utilidad negativa → Pérdida', () => eq(dg(69, 45), 'perdida'));
+    const ent = { grupo:'Entradas' };   // sano 18–25%, sin IVA: $116 → $100
+    test('entrada al 24% (dentro de 18–25) → Óptimo aunque pase la meta de 22', () => eq(dg(116, 24, ent), 'optimo'));
+    test('entrada al 27% (hasta 3 puntos arriba del rango) → Vigilar', () => eq(dg(116, 27, ent), 'vigilar'));
+    test('entrada al 29% → Ajustar merma o precio', () => eq(dg(116, 29, ent), 'ajustar'));
+    test('utilidad negativa → Pérdida', () => eq(dg(116, 70, ent), 'perdida'));
     test('sin precio en carta → Sin precio (no se inventa)', () => eq(dg('', 17.85), 'sinprecio'));
-    test('la meta es la DEL TIPO: un postre con meta 35% al 33% está en la meta', () =>
-        eq(dg(100, 28.45, { perfilCosteo:'postre', multiploCosteo:100 / 35 }), 'optimo'));
+    test('«General» no tiene rango: su tope es la meta (30%, con medio punto de holgura)', () =>
+        eq(dg(69, 17.85, { perfilCosteo:'general' }) + ' ' + dg(69, 19, { perfilCosteo:'general' }) + ' ' + dg(69, 20, { perfilCosteo:'general' }), 'optimo vigilar ajustar'));
+    test('si el negocio sube la meta por encima del rango, el tope es la meta', () =>
+        eq(Core.semaforoCosto(27, Core.perfilTipo('entrada', { perfiles:{ entrada:{ food:27, op:33 } } })), 'ok'));
+
+    /* ── Venta directa de barra (Insumos → Costeo) ── */
+    test('el factor de la copa sale de la meta de Destilados: 100 ÷ 22 × 1.16 = ×5.27', () =>
+        eq(Core.factorVentaDirecta('destilado').toFixed(2), '5.27'));
+    test('…y una copa a su precio sugerido queda justo en 22% de bar cost (la vara de la carátula)', () => {
+        const costo = 24, precio = costo * Core.factorVentaDirecta('destilado');
+        return eq(Core.costeoAplicado(precio, costo).brutoPct.toFixed(2), '22.00');
+    });
+    test('el de la pieza sale de Cerveza, refrescos y aguas: ×3.625', () => eq(Core.factorVentaDirecta('cerveza'), 3.625));
 
     /* ── La pantalla del escandallo y las hojas usan el tipo ── */
     const E = crearContexto();
@@ -32997,7 +33029,7 @@ console.log('\n══ BH90 · El tipo de platillo manda en el costeo ══');
         eq(E.document.getElementById('s-pct-gasto').textContent + ' ' + E.document.getElementById('a-pct-gasto').textContent, '44% 44%'));
     test('…y el gasto aplicado es el 44% del precio sin IVA', () =>
         eq(E.document.getElementById('a-gasto').textContent, '$' + (320 / 1.16 * 0.44).toFixed(2)));
-    test('…y la utilidad objetivo del tipo (26%)', () => eq(E.document.getElementById('s-util-obj').textContent, '26%'));
+    test('…y la utilidad objetivo del tipo (100 − 32 − 44 = 24%)', () => eq(E.document.getElementById('s-util-obj').textContent, '24%'));
     test('escribir un gasto propio en la receta lo cambia solo para ella', () => {
         E.document.getElementById('s-op').value = '42'; E.calcularCosteos();
         const r = E.document.getElementById('s-pct-gasto').textContent;
@@ -33014,13 +33046,13 @@ console.log('\n══ BH90 · El tipo de platillo manda en el costeo ══');
         return eq(/perfilCosteo:\s*_perfilDelEditor\(\)/.test(src) && /gastoOpPct:\s*_opDelEditor\(\)/.test(src), true, 'en guardarReceta');
     });
     test('los % del negocio (costeo_config) llegan a la hoja impresa de la carátula', () => {
-        E._storage['etaax_n1_costeo_cfg'] = JSON.stringify({ perfiles:{ bebida:{ food:30, op:25 } } });
+        E._storage['etaax_n1_costeo_cfg'] = JSON.stringify({ perfiles:{ coctel:{ food:15, op:25 } } });
         setVar(E, '_costeoCfgCache', null);
         const h = E.buildPlantillaCaratula([{ id:'r1', nombre:'Negroni', tipo:'bebidas', precioEnCarta:180,
             ingredientes:[{ nombre:'Campari', cantidad:100, unidad:'ML', costoPorKgLt:529.2 }] }],
             { key:'bebidas', label:'Bebidas', tipo:'normal', rendDefault:'BEBIDA', emoji:'', subtitulo:'Carátula de Costos' });
         setVar(E, '_costeoCfgCache', null); delete E._storage['etaax_n1_costeo_cfg'];
-        return eq(h.indexOf('$' + (180 / 1.16 * 0.25).toFixed(2)) > -1 && /operativo 25%/.test(h), true, 'gasto 25%');
+        return eq(h.indexOf('$' + (180 / 1.16 * 0.25).toFixed(2)) > -1 && /operativo 25%/.test(h) && /BAR COST %/.test(h), true, 'gasto 25%, bar cost');
     });
     test('la ficha técnica y la ventanita de costeo ya no traen el 1.16 ni el 40 a mano', () => {
         const src = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');

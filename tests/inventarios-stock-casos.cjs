@@ -84,10 +84,11 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         const r=c._fusionarRows([row('a'),row('b')]);eq(r.length,1);eq(r[0].stockMiembros.length,2);eq((c._stockReporteHTML(r[0],true).match(/Stock bajo/g)||[]).length,2);
     });
     // Impreso real: comprobar valores, variedad y dos renglones sin duplicar fórmulas.
-    cargar('recetas/insumos.js',['_costoPorMLp','_mezBotDatos','_costeoCopaDatos','_costeoPiezaDatos','_refrescoCostoPorPieza','calcCostoCopa','toML','_grupoIns','_agruparPDF','_filaGrupoPDF','_presTxtPDF','_partesIns','_costeoUtil','_costeoCeldas','_costeoGrupos','_imprimirCosteoPDF']);
+    cargar('recetas/insumos.js',['_costoPorMLp','_mezBotDatos','_costeoCopaDatos','_costeoPiezaDatos','_refrescoCostoPorPieza','calcCostoCopa','toML','_grupoIns','_agruparPDF','_filaGrupoPDF','_presTxtPDF','_partesIns','_costeoUtil','_costeoCeldas','_costeoGrupos','_imprimirCosteoPDF','_cfgCosteoIns','_factorPropio','_factorCopaIns','_factorPiezaIns','_factorTxt','_barCostIns','_barCostHTML']);
+    c._cfgCosteoInsCache=null;c.getNegocioActivo=()=>'n1';
     c.OZ_ML=29.5735;c.COPA_ML=60;c._CSS_TABLA_PDF='';c._notaAlcance=()=>'';c._optsReporteIns=()=>({});c._abrirHorizontal=html=>{c.impreso=html;};c.etaaxReporteDoc=o=>o.cuerpo;c.fmtMXN=v=>'$'+Number(v).toFixed(2);c._subUnidadNombre=()=>'';
     const soda={id:'soda',nombre:'Soda',variedad:'Natural',tipoInsumo:'refresco',presentaciones:[{contNeto:600,umContenido:'ML',precio:10,costoPieza:10,costoUnitario:10/0.6,factorPieza:2,precioCarta:25}]};
-    const ron={id:'ron',nombre:'Ron',variedad:'Añejo <script>',tipoInsumo:'destilado',subcategoria:'Ron',presentaciones:[{contNeto:750,umContenido:'ML',costoUnitario:400,umCosto:'LT',tamanoCopa:60,umTamanoCopa:'ML',factorCopa:3.3,precioCarta:150,factorBotella:2.5,precioCartaBot:1000,mezcladorId:'soda',mezcladores:2,mezcladoresBot:5}]};
+    const ron={id:'ron',nombre:'Ron',variedad:'Añejo <script>',tipoInsumo:'destilado',subcategoria:'Ron',presentaciones:[{contNeto:750,umContenido:'ML',costoUnitario:400,umCosto:'LT',tamanoCopa:60,umTamanoCopa:'ML',factorCopa:3.5,precioCarta:150,factorBotella:2.5,precioCartaBot:1000,mezcladorId:'soda',mezcladores:2,mezcladoresBot:5}]};
     c.getInsumos=()=>[ron,soda];c._imprimirCosteoPDF([ron,soda]);
     test('costeo impreso incluye variedad escapada de bebidas y de cervezas/refrescos',()=>{
         eq(c.impreso.includes('Añejo &lt;script&gt;'),true);eq(c.impreso.includes('Natural'),true);eq(c.impreso.includes('<script>'),false);
@@ -96,8 +97,25 @@ module.exports=function({test,eq,crearContexto,cargarJS}){
         eq((c.impreso.match(/class="costeo-par"/g)||[]).length,2);eq((c.impreso.match(/rowspan="2" class="w ind"/g)||[]).length,2);
         /* Seis columnas y dos renglones: la copa con su medida, la botella con
            la suya, el servicio sumado aparte y la cuenta escrita. */
-        ['copa de 60 ML','botella de 750 ML','$24.00','$300.00','$99.20','$800.00',
-         '+ $50.00 de servicio','×5 = $50.00','$24.00 × 3.3'].forEach(t=>eq(c.impreso.includes(t),true,t));
+        ['copa de 60 ML','botella de 750 ML','$24.00','$300.00','$104.00','$800.00',
+         '+ $50.00 de servicio','×5 = $50.00','$24.00 × 3.5'].forEach(t=>eq(c.impreso.includes(t),true,t));
+    });
+    /* (25-nov) El factor de la copa y la pieza sale de la META de su tipo de
+       barra: 100 ÷ 22 × 1.16 = ×5.27 (Destilados) y 100 ÷ 32 × 1.16 = ×3.62
+       (Cerveza, refrescos y aguas). Los viejos 3.3 y 2.0 se escribían solos al
+       crear el insumo: cuentan como «sin factor propio». */
+    test('la copa con el viejo 3.3 sigue la meta de Destilados (×5.27); un factor propio manda', ()=>{
+        eq(c._factorTxt(c._factorCopaIns({factorCopa:'3.3'})),'5.27');eq(c._factorCopaIns({factorCopa:'3.5'}),3.5);eq(c._factorTxt(c._factorCopaIns({})),'5.27');
+    });
+    test('la pieza con el viejo 2.0 sigue la meta de Cerveza, refrescos y aguas (×3.62)', ()=>{
+        eq(c._factorTxt(c._factorPiezaIns({factorPieza:2})),'3.62');eq(c._factorPiezaIns({factorPieza:'2.5'}),2.5);
+    });
+    test('la meta del negocio (costeo_config) mueve el factor', ()=>{
+        c._cfgCosteoInsCache={perfiles:{destilado:{food:20,op:28}}};const f=c._factorCopaIns({});c._cfgCosteoInsCache=null;eq(f.toFixed(2),'5.80');
+    });
+    test('el costeo impreso trae el bar cost con su semáforo (copa del ron: $44 de trago a $150)', ()=>{
+        const bc=(44/(150/1.16)*100).toFixed(1)+'% bar cost';
+        eq(c.impreso.includes(bc),true,bc);eq(c.impreso.includes('#7a1105'),true,'34% contra 18–25% → rojo');
     });
 
 
