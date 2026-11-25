@@ -139,10 +139,18 @@ que registrara el equipo quedaría sellado con la de él.
 
 ## Cómo se agrega a la pantalla
 
-En **Inventarios → 📱 QR de entradas** hay un enlace a `instalar.html`. Ese es el
-que se le manda al equipo por WhatsApp: la página detecta si el teléfono es
-iPhone o Android y enseña los pasos de ese, con las credenciales del negocio ya
-dentro para que al terminar la app abra lista.
+**El QR y el enlace viven en el hub** (25-nov): menú de la cuenta (arriba a la
+derecha) → **«Versión móvil · QR y enlace»** (`/etaax-acceso-movil.js`, permiso
+«Generar el QR de entradas»). Ahí se imprime o se descarga el QR para pegarlo en
+la barra y se copia el enlace para mandarlo por WhatsApp. Es el mismo QR de
+entradas de antes —negocio + token + sucursal—, que ya no vive en Inventarios.
+**Los QR ya impresos siguen sirviendo:** `entrada.html` los manda a
+`/app-movil/` con las mismas credenciales (`&web=1` deja la página vieja). La
+landing (`index.html`) trae «Abrir versión móvil».
+
+**En iPhone, el ícono de inicio no ve lo de Safari**: si al abrirlo dice que el
+teléfono no está ligado, se toca **«Escanear el QR de mi sucursal»** y la app
+lee el QR con la cámara (jsQR). Se hace una sola vez.
 
 - **Android:** Chrome ofrece **«Instalar»** —un aviso abajo o en el menú ⋮—. Es
   una instalación de verdad: la app queda en el cajón de aplicaciones.

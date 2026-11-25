@@ -346,3 +346,10 @@ body.con-barra { padding-bottom:calc(var(--safe-b) + 108px); }
     border-radius:var(--r); padding:12px 14px; font-size:13px; line-height:1.5; margin-bottom:14px; }
 
 @media (min-width:600px) { .teclado { max-width:360px; } }
+
+/* ── Ligar el teléfono con el QR (la cámara, dentro de la app) ── */
+.esc-marco { position:relative; width:100%; max-width:420px; margin:6px auto 14px; aspect-ratio:1/1;
+    border-radius:18px; overflow:hidden; background:#000; border:1px solid var(--borde); }
+.esc-marco video { width:100%; height:100%; object-fit:cover; display:block; }
+.esc-mira { position:absolute; inset:16%; border:3px solid var(--marca); border-radius:16px;
+    box-shadow:0 0 0 999px rgba(0,0,0,.35); pointer-events:none; }

@@ -10645,7 +10645,7 @@ console.log('\n══ BE6 · Inventarios, Requisiciones y la regla compartida �
     [['nuevoInventario','capturar'], ['nuevoPrimerLev','capturar'], ['iniciarInventario','capturar'],
      ['abrirRegistroEntradas','entradas'], ['_entGuardarNuevas','entradas'],
      ['abrirNotaEntrada','entradas'], ['registrarNotaEntrada','entradas'],
-     ['abrirQrEntradas','qr'], ['abrirReporteExistencias','reporte'],
+     ['abrirReporteExistencias','reporte'],
      ['cerrarInventario','cerrar'], ['finalizarInventarioActual','cerrar'], ['finalizarPrimerLev','cerrar']]
     .forEach(function (par) {
         test('inventarios: ' + par[0] + ' pide «' + par[1] + '»', () =>
@@ -10674,7 +10674,7 @@ console.log('\n══ BE6 · Inventarios, Requisiciones y la regla compartida �
         eq(inv.indexOf("classList.toggle('inv-sin-costos', !_puedeInv('verCostos'))") > -1, true, 'marcado'));
     test('…y el CSS quita los importes en cada repintado', () =>
         eq(inv.indexOf('body.inv-sin-costos .inv-col-dinero') > -1, true, 'por CSS'));
-    ['btnNuevoInv','btnPrimerLev','btnQrEntradas',
+    ['btnNuevoInv','btnPrimerLev',
      'btnReporteExistencias','btnFinalizarInv'].forEach(function (id) {
         test('inventarios: el botón ' + id + ' se puede esconder', () =>
             eq(inv.indexOf('id="' + id + '"') > -1, true, 'con id'));
@@ -18303,9 +18303,85 @@ console.log('\n══ BH91 · Portada de requisiciones; inventarios sin emojis �
         return eq(m ? m[0] : '', '');
     });
     test('inventarios: los botones de la portada llevan su ícono al cargar', () =>
-        eq(['btnReporteExistencias', 'btnCompuestos', 'btnQrEntradas', 'btnRevisarEntradas', 'btnPrimerLev', 'statFiltroTodos', 'statFiltroMes']
+        eq(['btnReporteExistencias', 'btnCompuestos', 'btnRevisarEntradas', 'btnPrimerLev', 'statFiltroTodos', 'statFiltroMes']
             .every(id => inv.indexOf('id="' + id + '"') > -1 && ijs.indexOf("['" + id + "'") > -1), true));
 }
+
+/* ═══════ BH93 · LA VERSIÓN MÓVIL: SU QR Y SU ENLACE (25-nov) ═══════
+   Edwin: «el link que usaremos será el del QR de entradas… ya no estará en
+   inventarios sino en el hub, en el botón desplegable de sesión activa del
+   header, y ahí desplegamos el QR o el enlace para entrar a la vista móvil».
+   Y un botón de acceso directo en la landing. Los QR ya impresos siguen
+   sirviendo: /entrada.html los manda a la versión móvil.                   */
+console.log('\n══ BH93 · La versión móvil: su QR y su enlace ══');
+(function () {
+    const am = fs.readFileSync(path.join(RAIZ, 'etaax-acceso-movil.js'), 'utf8');
+    const hub = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const land = fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8');
+    const modulo = (ctxObj, permOk) => {
+        const store = { etaax_ctx: JSON.stringify(ctxObj), etaax_negocio_activo: 'n1' };
+        const w = { localStorage: { getItem: (k) => store[k] == null ? null : store[k] }, location: { origin: 'https://etaax.com' },
+                    etaaxPerm: (neg, rol, permiso) => permiso === 'inventarios.qr' && permOk };
+        w.window = w; vm.createContext(w); vm.runInContext(am, w, { filename: 'etaax-acceso-movil.js' });
+        return w.EtaaxAccesoMovil;
+    };
+    test('el enlace es el de la versión móvil con negocio, token y sucursal', () =>
+        eq(modulo({ ctxType: 'owner' }).enlace('n1', 't 1', 'suc_dos'), 'https://etaax.com/app-movil/?n=n1&t=t%201&s=suc_dos'));
+    test('…y sin sucursal activa, sin «s» (la sucursal la pone la clave de cada quien)', () =>
+        eq(modulo({ ctxType: 'owner' }).enlace('n1', 'tk', ''), 'https://etaax.com/app-movil/?n=n1&t=tk'));
+    test('el dueño y el administrador lo ven siempre', () =>
+        eq(modulo({ ctxType: 'owner' }).puede() && modulo({ ctxType: 'staff', rol: 'admin' }, false).puede(), true));
+    test('un colaborador, solo con el permiso de antes («Generar el QR de entradas»)', () =>
+        eq(modulo({ ctxType: 'staff', rol: 'gerente' }, true).puede() + ' / ' + modulo({ ctxType: 'staff', rol: 'mesero' }, false).puede(), 'true / false'));
+    test('el token sale del servidor (entrada_token_asegurar), no se inventa', () =>
+        eq(/rpc\('entrada_token_asegurar', \{ p_neg: negId \}\)/.test(am), true));
+    test('el hub lo ofrece en el menú de la cuenta, con su permiso', () =>
+        eq(/EtaaxAccesoMovil\.puede\(\)\)\s*l\.push\(\{ id: 'etxHdMovilOp'/.test(hub) && hub.indexOf('/etaax-acceso-movil.js?v=') > -1, true));
+    test('Inventarios ya no tiene su «QR de entradas»', () =>
+        eq(inv.indexOf('QR de entradas</button>') === -1 && inv.indexOf('modalQrEntradas') === -1 &&
+           ijs.indexOf('function abrirQrEntradas') === -1, true));
+    /* Los QR impresos: la página de siempre los manda a la app, con las mismas
+       credenciales, ANTES de pintar nada. Con &web=1 se queda la página. */
+    test('los QR ya impresos (entrada.html) abren la versión móvil, antes de pintar nada', () => {
+        const i = ent.indexOf("location.replace('/app-movil/' + q)");
+        return eq(i > -1 && i < ent.indexOf('negocio-tab.js') && /!\/\[\?&\]web=1/.test(ent), true);
+    });
+    test('…y la redirección conserva negocio, token y sucursal', () => {
+        let a = null;
+        const w = { location: { search: '?n=n1&t=tk&s=suc', replace: (u) => { a = u; } } };
+        vm.createContext(w);
+        vm.runInContext(ent.slice(ent.indexOf('<script>') + 8, ent.indexOf('</script>')), w);
+        let b = 'sin ir';
+        const w2 = { location: { search: '?n=n1&t=tk&web=1', replace: (u) => { b = u; } } };
+        vm.createContext(w2);
+        vm.runInContext(ent.slice(ent.indexOf('<script>') + 8, ent.indexOf('</script>')), w2);
+        return eq(a + ' | ' + b, '/app-movil/?n=n1&t=tk&s=suc | sin ir');
+    });
+    test('la landing tiene su acceso directo a la versión móvil', () =>
+        eq((land.match(/href="\/app-movil\/"/g) || []).length >= 2, true));
+
+    /* La app escanea el QR ella misma (en iPhone el ícono de inicio no ve lo de Safari). */
+    const amv = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
+    const creds = (() => {
+        const i = amv.indexOf('function _credsDeQR(');
+        const a = amv.indexOf('{', i); let d = 0, j = a;
+        for (; j < amv.length; j++) { if (amv[j] === '{') d++; else if (amv[j] === '}' && !--d) break; }
+        const c = { URL, location: { origin: 'https://etaax.com' } }; vm.createContext(c);
+        vm.runInContext(amv.slice(i, j + 1), c);
+        return c._credsDeQR;
+    })();
+    test('el escáner de la app acepta el QR impreso de siempre (entrada.html)', () =>
+        eq(JSON.stringify(creds('https://etaax.com/entrada.html?n=n1&t=tk&s=suc')), '{"n":"n1","t":"tk","s":"suc"}'));
+    test('…y el nuevo de la versión móvil', () =>
+        eq(JSON.stringify(creds('https://etaax.com/app-movil/?n=n1&t=tk')), '{"n":"n1","t":"tk","s":""}'));
+    test('…pero no un QR de otro sitio, de otra página, ni uno sin token', () =>
+        eq([creds('https://otro.com/entrada.html?n=n1&t=tk'), creds('https://etaax.com/hub.html?n=n1&t=tk'),
+            creds('https://etaax.com/app-movil/?n=n1'), creds('hola')].every(x => x === null), true));
+})();
+
 
 /* ═══════════ SUITE BH92 · INSUMOS SUBE SOLO LO QUE CAMBIÓ (CPU de Supabase) ═════
    24-nov: Supabase avisó que el proyecto pasaba del 80 % de CPU. setInsumos()

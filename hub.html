@@ -2041,6 +2041,10 @@ function _pintarHeader() {
             var l = [], s = document.getElementById('btnInfoSuc'), n = document.getElementById('btnInfoNeg');
             if (s && s.style.display !== 'none') l.push({ id: 'etxHdInfoSucOp', icono: 'sh-info-sucursal', texto: 'Información de sucursal', fn: abrirInfoSucursal });
             if (n && n.style.display !== 'none') l.push({ id: 'etxHdInfoNegOp', icono: 'sh-info-negocio', texto: 'Información del negocio', fn: abrirInfoNegocio });
+            /* (25-nov) El QR de entradas se mudó aquí desde Inventarios: es el
+               acceso a la versión móvil (QR o enlace). Mismo permiso de antes. */
+            if (window.EtaaxAccesoMovil && EtaaxAccesoMovil.puede())
+                l.push({ id: 'etxHdMovilOp', icono: 'adm-celular', texto: 'Versión móvil · QR y enlace', fn: function () { EtaaxAccesoMovil.abrir(); } });
             return l;
         }
     });
@@ -4854,6 +4858,7 @@ async function guardarNuevaPassword(){
 <script src="admin-guard.js"></script>
 <script src="/etaax-iconos.js?v=7a651810"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
+<script src="/etaax-acceso-movil.js?v=b8fdd003"></script><!-- el QR y el enlace de la versión móvil (menú de la cuenta) -->
 <script src="/etaax-header.js?v=a0ec334a"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="/hub-interacciones.js?v=43cd2b2b"></script>
 <script src="/hub-modulos.js?v=215e805a"></script>

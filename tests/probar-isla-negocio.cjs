@@ -256,6 +256,20 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             assert.equal(await p.evaluate(() => !!document.getElementById('etxHdInfoSucOp')), true);
             await p.keyboard.press('Escape');
         });
+        /* (25-nov) El QR de entradas se mudó de Inventarios al menú de la cuenta:
+           es el acceso a la versión móvil, con su QR y su enlace. */
+        await caso('…y «Versión móvil · QR y enlace» también: abre su QR y el enlace de la app con el token del negocio', async () => {
+            await p.evaluate(() => { window.QRCode = function (el, o) { el.innerHTML = '<canvas width="210" height="210"></canvas>'; el.dataset.texto = o.text; }; });
+            await p.click('#etxHdCuenta');
+            await p.click('#etxHdMovilOp');
+            await p.waitForFunction(() => (document.getElementById('etxMovilUrl') || {}).value, null, { timeout: 8000 });
+            const r = await p.evaluate(() => [document.getElementById('etxMovilDlg').open, document.getElementById('etxMovilUrl').value,
+                document.querySelector('#etxMovilQr [data-texto]') && document.querySelector('#etxMovilQr [data-texto]').dataset.texto]);
+            assert.equal(r[0], true);
+            assert.match(r[1], /\/app-movil\/\?n=n1&t=tok-n1/);
+            assert.equal(r[2], r[1]);
+            await p.click('#etxMovilDlg [data-em="cerrar"]');
+        });
         await caso('…y las sucursales se despliegan bajo su botón, que se expande', async () => {
             await p.click('#btnCambiarSucursal');
             const r = await p.evaluate(() => {

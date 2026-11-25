@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
+<!-- (25-nov) EL QR DE ENTRADAS AHORA ABRE LA VERSIÓN MÓVIL. Los QR que ya están
+     impresos en las barras llevan esta dirección: en vez de reimprimirlos, esta
+     página los manda a /app-movil/ con las mismas credenciales (la app las
+     guarda en el teléfono y pide la clave). `&web=1` deja la página de siempre,
+     por si hiciera falta. Va antes que todo para que no se pinte nada. -->
+<script>
+(function () {
+    try {
+        var q = location.search || '';
+        if (/[?&]n=/.test(q) && /[?&]t=/.test(q) && !/[?&]web=1(&|$)/.test(q)) location.replace('/app-movil/' + q);
+    } catch (e) {}
+})();
+</script>
 <script src="/negocio-tab.js?v=39197e12"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <meta charset="UTF-8">
 <script src="/theme.js?v=64b86f6e"></script>

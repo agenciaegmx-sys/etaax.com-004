@@ -82,6 +82,8 @@ function sdkEtx() {
         negocio_plan: function (p) { var s = (nube().suscripciones || []).find(function (x) { return x.negocio_id === p.p_neg; }); return (s && s.plan) || null; },
         negocio_cobro_estado: function () { return { activo: true, estado: 'activa', proximoCobro: '2026-12-31', diasTolerancia: 3, diasRestantes: 30 }; },
         negocio_esta_activo: function () { return true; },
+        /* El token del QR del negocio (v27): uno por negocio. */
+        entrada_token_asegurar: function (p) { return 'tok-' + p.p_neg; },
         admin_etx_uid: function (p) { var x = (nube().__auth || []).find(function (u) { return u.email === String(p.p_email).toLowerCase(); }); return x ? x.id : null; },
         admin_etx_clave: function (p) {
             var db = nube(), x = (db.__auth || []).find(function (u) { return u.id === p.p_uid; });

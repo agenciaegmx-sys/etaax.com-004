@@ -3841,150 +3841,10 @@ function abrirParametros() {
     document.getElementById('modalParametros').style.display = 'flex';
 }
 
-// QR de entradas por negocio: abre entrada.html en el cel SIN login (token + NIP).
-async function abrirQrEntradas() {
-    if (typeof _exigeInv === 'function' && !_exigeInv('qr', 'No puedes generar el QR de entradas.')) return;
-    var negId = getNegocioActivo();
-    if (!negId) { alert('No hay negocio activo.'); return; }
-    document.getElementById('modalQrEntradas').style.display = 'flex';
-    var box = document.getElementById('qrEntradasBox');
-    var urlEl = document.getElementById('qrEntradasUrl');
-    box.innerHTML = '<div style="color:var(--text-dim);font-size:12px">Generando…</div>';
-    urlEl.textContent = '';
-    // Obtener (o crear) el token secreto del negocio que va en el QR.
-    var token = '';
-    try {
-        var r = await _supabase.rpc('entrada_token_asegurar', { p_neg: negId });
-        if (r.error) throw r.error;
-        token = r.data || '';
-    } catch (e) {
-        box.innerHTML = '<div style="color:var(--red);font-size:12px;line-height:1.5">No se pudo generar el token del QR.<br>¿Corriste la migración v27 en Supabase?<br><span style="color:var(--text-dim)">' + etx((e && e.message) || e) + '</span></div>';
-        return;
-    }
-    // QR ÚNICO POR SUCURSAL: lleva la sucursal activa — los registros quedan sellados
-    // con ella y el colaborador solo ve insumos/menú de ESA sucursal.
-    var sucQR = localStorage.getItem('etaax_sucursal_activa') || '';
-    var url = location.origin + '/entrada.html?n=' + encodeURIComponent(negId) + '&t=' + encodeURIComponent(token)
-        + (sucQR ? '&s=' + encodeURIComponent(sucQR) : '');
-    // Blindaje multi-sucursal: sin sucursal activa, las entradas quedan SIN sello y no
-    // aparecen en el historial de ninguna sucursal (se acabó el "historial global").
-    /* AQUÍ NO VA LA APP MÓVIL. Estuvo un rato y se quitó a propósito: la app
-       es una BETA que nadie debe conocer todavía, y este modal lo abre cualquier
-       encargado. Su único enlace vive en el panel maestro, que es donde está
-       quien puede decidir con quién probarla. Cuando esté lista, vuelve aquí —
-       este es el lugar natural, porque es donde alguien está pensando en «cómo
-       registra la barra». */
-    urlEl.innerHTML = etx(url)
-        + (sucQR ? '' : '<div style="color:var(--accent);margin-top:8px;font-size:11px;line-height:1.5;text-align:left">⚠️ Estás en <b>vista global (sin sucursal)</b>. Las entradas de este QR quedarían <b>sin sucursal</b> y NO se verían en el historial de una sucursal específica. Entra a una <b>sucursal</b> antes de generar el QR para que queden selladas.</div>');
-    function gen() {
-        box.innerHTML = '';
-        var d = document.createElement('div');
-        d.style.cssText = 'background:#fff;padding:14px;border-radius:12px;display:inline-block';
-        box.appendChild(d);
-        try {
-            new QRCode(d, { text: url, width: 210, height: 210, colorDark: '#0a0908', colorLight: '#ffffff' });
-            if (window.etaaxQrLogo) window.etaaxQrLogo(d);
-        }
-        catch(e) { box.innerHTML = '<div style="color:var(--red);font-size:12px">No se pudo generar el QR.</div>'; }
-    }
-    if (window.QRCode) gen();
-    else {
-        var s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js';
-        s.onload = gen;
-        s.onerror = function(){ box.innerHTML = '<div style="color:var(--red);font-size:12px">No se pudo cargar el generador de QR.</div>'; };
-        document.head.appendChild(s);
-    }
-}
-// ── Icono ETAAX al centro del QR (placa blanca + favicon; el corrector H lo tolera) ──
-if (!window.etaaxQrLogo) window.etaaxQrLogo = function (cont) {
-    try {
-        var canvas = cont && cont.querySelector('canvas');
-        if (!canvas) return;
-        var img = cont.querySelector('img');
-        var ctx = canvas.getContext('2d');
-        var s = canvas.width;
-        var logo = new Image();
-        logo.onload = function () {
-            var box = Math.round(s * 0.24), ico = Math.round(s * 0.19);
-            var x = (s - box) / 2, y = (s - box) / 2, r = Math.round(box * 0.2);
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            if (ctx.roundRect) ctx.roundRect(x, y, box, box, r); else ctx.rect(x, y, box, box);
-            ctx.fill();
-            ctx.drawImage(logo, (s - ico) / 2, (s - ico) / 2, ico, ico);
-            if (img) img.src = canvas.toDataURL('image/png'); // la lib muestra el <img>: sincronizarlo
-        };
-        logo.src = '/favicon.svg';
-    } catch (e) {}
-};
-
-// ── QR de entradas: exportar/imprimir ──────────────────────────
-// El QR generado (canvas del lib qrcodejs, con fallback a su <img>) como data URL.
-function _qrEntradasDataURL() {
-    var box = document.getElementById('qrEntradasBox');
-    if (!box) return '';
-    var canvas = box.querySelector('canvas');
-    if (canvas) { try { return canvas.toDataURL('image/png'); } catch(e) {} }
-    var img = box.querySelector('img');
-    return img ? img.src : '';
-}
-function descargarQrEntradas() {
-    var data = _qrEntradasDataURL();
-    if (!data) { alert('Primero espera a que se genere el QR.'); return; }
-    var m = (typeof etaaxMarca === 'function') ? etaaxMarca() : {};
-    var a = document.createElement('a');
-    a.href = data;
-    a.download = ('qr-entradas-' + (m.negocio || 'negocio') + (m.sucursal ? '-' + m.sucursal : ''))
-        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') + '.png';
-    a.click();
-}
-// Hoja imprimible: marca del negocio + QR grande + instrucciones. Mismo patrón que el
-// reporte directivo: los estilos de impresión viven DENTRO del overlay y se destruyen
-// con él (no contaminan otros flujos de window.print de la página).
-function imprimirQrEntradas() {
-    var data = _qrEntradasDataURL();
-    if (!data) { alert('Primero espera a que se genere el QR.'); return; }
-    var url = (document.getElementById('qrEntradasUrl') || {}).textContent || '';
-    var m = (typeof etaaxMarca === 'function') ? etaaxMarca() : {};
-    var viejo = document.getElementById('qrPrintOverlay'); if (viejo) viejo.remove();
-    var ov = document.createElement('div');
-    ov.id = 'qrPrintOverlay';
-    ov.innerHTML =
-        '<style>' +
-        '#qrPrintOverlay{display:none}' +
-        '@media print{' +
-            '@page{size:letter;margin:14mm}' +
-            'body>*:not(#qrPrintOverlay){display:none!important}' +
-            '#qrPrintOverlay{display:block!important;background:#fff;color:#1a1916;font-family:Arial,Helvetica,sans-serif;text-align:center}' +
-        '}' +
-        '</style>' +
-        '<div style="display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:3px solid #3dbe7a;padding-bottom:14px;margin-bottom:22px">' +
-            (m.logo ? '<img src="' + m.logo + '" style="width:52px;height:52px;object-fit:cover;border-radius:10px">' : '') +
-            '<div style="text-align:left">' +
-                '<div style="font-weight:800;font-size:22px;letter-spacing:1px">' + etx(m.negocio || '') + '</div>' +
-                (m.sucursal ? '<div style="font-size:13px;color:#555">' +
-                    (m.sucursalColor ? '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + m.sucursalColor + ';margin-right:5px"></span>' : '') +
-                    etx(m.sucursal) + '</div>' : '') +
-            '</div>' +
-        '</div>' +
-        '<div style="font-weight:800;font-size:26px;letter-spacing:2px;margin-bottom:4px">📱 QR DE ENTRADAS</div>' +
-        '<div style="font-size:13px;color:#555;margin-bottom:20px">Registro de entradas de insumos — cocina / barra / bodega</div>' +
-        '<img src="' + data + '" style="width:290px;height:290px;border:1px solid #ddd;border-radius:14px;padding:14px;background:#fff">' +
-        '<div style="max-width:430px;margin:22px auto 0;text-align:left;font-size:13px;color:#333;line-height:1.7">' +
-            '<b>Instrucciones:</b><br>' +
-            '1. Escanea el QR con la cámara del celular.<br>' +
-            '2. Escribe tu <b>NIP de 5 dígitos</b> (el de Gestión de Staff).<br>' +
-            '3. Registra el insumo, la cantidad y la foto de la entrada.' +
-        '</div>' +
-        '<div style="font-size:9px;color:#999;word-break:break-all;margin-top:18px">' + etx(url) + '</div>' +
-        '<div style="border-top:1px solid #eee;margin-top:14px;padding-top:8px;font-size:9px;color:#bbb">etaax.com · EGMx Consultoría Estratégica a&b</div>';
-    document.body.appendChild(ov);
-    var limpiar = function(){ var o = document.getElementById('qrPrintOverlay'); if (o) o.remove(); };
-    window.addEventListener('afterprint', limpiar, { once: true });
-    window.print();
-    setTimeout(limpiar, 2000); // respaldo por si afterprint no dispara (Safari viejo)
-}
+/* (25-nov) EL QR DE ENTRADAS YA NO VIVE AQUÍ. Es el acceso a la versión
+   móvil y se mudó al menú de la cuenta del hub («Versión móvil · QR y enlace»,
+   /etaax-acceso-movil.js), con el mismo permiso (inventarios.qr). Los QR ya
+   impresos siguen sirviendo: /entrada.html los manda a la versión móvil. */
 
 function _renderParamLista() {
     var comps = getCompuestos();
@@ -6007,7 +5867,7 @@ var _ICONOS_HDR = [['btnInfoGeneral', 'sto-detalle', 'Info general'], ['btnPrevi
     ['btnGuardarInv', 'cerrar-sesion', 'Salir'],
     // La portada (antes con 📊 🧩 📱 📋 📋 📅 ≡ ⊞):
     ['btnReporteExistencias', 'fin-estadisticas', 'Reporte de existencias'], ['btnCompuestos', 'rec-sub-bebidas', 'Compuestos'],
-    ['btnQrEntradas', 'sto-qr', 'QR de entradas'], ['btnRevisarEntradas', 'adm-comprobante', 'Revisar entradas'],
+    ['btnRevisarEntradas', 'adm-comprobante', 'Revisar entradas'],
     ['btnPrimerLev', 'ins-catalogo', 'Primer levantamiento'],
     ['statFiltroTodos', 'ins-lista', 'Todos', 26], ['statFiltroMes', 'adm-calendario', 'Mes / Año', 26],
     ['btnHistLista', 'ins-lista', 'Lista', 14], ['btnHistGal', 'ins-galeria', 'Galería', 14]];

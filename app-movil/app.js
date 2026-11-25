@@ -141,8 +141,9 @@ try {
 /* ── Navegación entre pantallas ── */
 var PANTS = ['pInicio', 'pCuenta', 'pCandado', 'pPin', 'pHome',
              'pLogin', 'pMenu', 'pFlujo', 'pHist', 'pChecks', 'pRun', 'pRecetas', 'pReceta', 'pGuias',
-             'pHorarios', 'pEvals'];
+             'pHorarios', 'pEvals', 'pEscanear'];
 function mostrar(id, titulo, sub, conVolver, conBarra) {
+    if (id !== 'pEscanear') _pararCam();      // la cámara no se queda prendida al salir
     PANTS.forEach(function (p) { $(p).hidden = (p !== id); });
     $('hdrTit').textContent = titulo;
     $('hdrSub').textContent = sub || '';
@@ -183,13 +184,15 @@ function verInicio() {
     var listo = !!(NEG && TOKEN);
     var b = $('btnPuertaClave');
     if (b) { b.disabled = !listo; b.classList.toggle('apagada', !listo); }
+    var esc = $('btnEscanearQR');
+    if (esc) esc.hidden = listo;
     $('inicioSub').textContent = listo && NEG_NOM ? NEG_NOM : 'Tu operación, en el bolsillo';
     $('inicioAviso').innerHTML = listo
         ? 'Tu clave dice quién registró qué. Si no la tienes, pídesela a tu encargado.'
         : '<b style="color:var(--txt)">¿Eres de barra o cocina?</b><br>' +
-          'Este teléfono todavía no está ligado a un negocio. Pídele a tu encargado que ' +
-          'entre una vez con su cuenta aquí, o escanea el <b>QR de tu sucursal</b> con la ' +
-          'cámara. Después entras solo con tu clave.';
+          'Este teléfono todavía no está ligado a un negocio. Escanea el <b>QR de tu sucursal</b> ' +
+          'con el botón de arriba (es el que está pegado en la barra), o pídele a tu encargado que ' +
+          'entre una vez con su cuenta aquí. Después entras solo con tu clave.';
     mostrar('pInicio', 'ETAAX', listo ? 'elige cómo entrar' : 'empieza por aquí', false, false);
 }
 function irNip(destino) {
@@ -203,6 +206,80 @@ function verCuenta() {
     if (c && !$('ctaCorreo').value) $('ctaCorreo').value = c;
     mostrarCuenta('pCuenta', 'Entrar', 'con tu cuenta de ETAAX');
 }
+/* ══ LIGAR EL TELÉFONO CON EL QR, DESDE LA APP ═════════════════════════════
+   En iPhone la app de la pantalla de inicio guarda sus datos aparte de Safari:
+   el QR que se escanea con la cámara del teléfono se abre en Safari y no llega
+   hasta el ícono. Por eso la app lo escanea ella misma (jsQR, desde jsDelivr,
+   que la CSP ya permite). En Android no hace falta, pero sirve igual.
+
+   Se acepta SOLO un QR de ETAAX: el de entradas (/entrada.html) o el de la
+   versión móvil (/app-movil/), con negocio y token. Cualquier otro se ignora. */
+var JSQR = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+var _cam = null, _camPaso = null;
+function _pararCam() {
+    if (_camPaso) { cancelAnimationFrame(_camPaso); _camPaso = null; }
+    if (_cam) { try { _cam.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} _cam = null; }
+    var v = $('escVideo'); if (v) { try { v.srcObject = null; } catch (e) {} }
+}
+function _cargarJsQR() {
+    return new Promise(function (ok, mal) {
+        if (window.jsQR) { ok(); return; }
+        var s = document.createElement('script');
+        s.src = JSQR; s.onload = ok; s.onerror = mal;
+        document.head.appendChild(s);
+    });
+}
+/* ¿Es un QR de ETAAX? Devuelve {n, t, s} o null. */
+function _credsDeQR(txt) {
+    var u;
+    try { u = new URL(String(txt || '').trim(), location.origin); } catch (e) { return null; }
+    var deEtaax = u.origin === location.origin || /(^|\.)etaax\.com$/i.test(u.hostname);
+    if (!deEtaax || !/\/(entrada\.html|app-movil\/?(index\.html)?)$/.test(u.pathname)) return null;
+    var n2 = u.searchParams.get('n'), t2 = u.searchParams.get('t');
+    if (!n2 || !t2) return null;
+    return { n: n2, t: t2, s: u.searchParams.get('s') || '' };
+}
+function _ligar(c) {
+    _pararCam();
+    NEG = c.n; TOKEN = c.t; SUC = c.s || '';
+    try { localStorage.setItem(LS, JSON.stringify({ n: NEG, t: TOKEN, s: SUC })); } catch (e) {}
+    toast('Teléfono ligado. Ya puedes entrar con tu clave.', 'ok');
+    irNip('menu');
+}
+async function escanearQR() {
+    mostrar('pEscanear', 'Escanear el QR', 'el de tu sucursal', true, false);
+    var msg = $('escMsg'), v = $('escVideo');
+    msg.textContent = 'Abriendo la cámara…';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        msg.textContent = 'Este teléfono no deja usar la cámara aquí. Pídele a tu encargado que entre una vez con su cuenta.';
+        return;
+    }
+    try { await _cargarJsQR(); }
+    catch (e) { msg.textContent = 'Sin internet: para ligar el teléfono hace falta señal.'; return; }
+    try { _cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); }
+    catch (e) { msg.textContent = 'No se pudo abrir la cámara. Revisa que la app tenga permiso de usarla.'; return; }
+    v.srcObject = _cam;
+    try { await v.play(); } catch (e) {}
+    msg.textContent = 'Apunta al QR de tu sucursal';
+    var cv = document.createElement('canvas'), g = cv.getContext('2d', { willReadFrequently: true });
+    var paso = function () {
+        if (!_cam) return;
+        if (v.readyState >= 2 && v.videoWidth) {
+            var k = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
+            cv.width = Math.round(v.videoWidth * k); cv.height = Math.round(v.videoHeight * k);
+            g.drawImage(v, 0, 0, cv.width, cv.height);
+            var r = window.jsQR(g.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height, { inversionAttempts: 'dontInvert' });
+            if (r && r.data) {
+                var c = _credsDeQR(r.data);
+                if (c) { _ligar(c); return; }
+                msg.textContent = 'Ese QR no es de ETAAX. Busca el de tu sucursal.';
+            }
+        }
+        _camPaso = requestAnimationFrame(paso);
+    };
+    paso();
+}
+
 /* cuenta.js no conoce las pantallas: se las pide a la cáscara por aquí. */
 function mostrarCuenta(id, tit, sub) { mostrar(id, tit, sub, true, false); }
 function toastC(m, c) { toast(m, c); }
@@ -458,6 +535,9 @@ function unoPorProducto(lista) {
 
 /* ══ 2 · MENÚ ══════════════════════════════════════════════════════════════ */
 function irMenu() {
+    /* «Atrás» desde la clave o la cuenta, sin haber entrado: a la portada, no a
+       un menú vacío de alguien que no se identificó. */
+    if (!COLAB) { verInicio(); return; }
     FLUJO = ''; SEL = null; LOTE = []; FOTOS = []; SUB = {}; RUN = null;
     var det = [PUESTO, (window.StaffArea && AREA_COLAB) ? StaffArea.nom(AREA_COLAB) : '']
                 .filter(Boolean).join(' · ');
@@ -1824,6 +1904,7 @@ window.filtrarRecetario = filtrarRecetario;
 window.abrirGuias = abrirGuias;
 window.tomarFotoRun = tomarFotoRun;
 window.abrirHorarios = abrirHorarios;
+window.escanearQR = escanearQR;
 window.abrirEvaluaciones = abrirEvaluaciones;
 
 /* Para poder probarlo desde la consola y desde el candado. */
@@ -1834,6 +1915,7 @@ window._appMovil = {
     pintarInstalar: pintarInstalar, yaInstalada: yaInstalada, detectarInstalada: detectarInstalada,
     yaLaTengo: yaLaTengo, pintarPortal: pintarPortal, cuentaRun: cuentaRun,
     pintarHorarios: pintarHorarios, pintarEvaluaciones: pintarEvaluaciones, appsDelPlan: _appsDelPlan,
+    credsDeQR: _credsDeQR, ligar: _ligar,
     _setRun: function (r) { RUN = r; },
     _set: function (k, v) {
         if (k === 'AREA_COLAB') AREA_COLAB = v; if (k === 'AREA') AREA = v;

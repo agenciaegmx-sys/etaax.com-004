@@ -53,6 +53,15 @@
             <span class="mcard-txt"><b>Entrar con mi clave</b>
                 <small>Tu NIP de 5 dígitos · para ver y registrar en tu turno: entradas, recetario, horarios y check lists</small></span>
         </button>
+        <!-- Solo cuando el teléfono no está ligado a un negocio. En iPhone la app
+             de inicio guarda sus datos aparte de Safari: el QR escaneado con la
+             cámara del teléfono no llega hasta ella, así que se escanea DESDE la
+             app. Se hace una vez. -->
+        <button class="mcard puerta" id="btnEscanearQR" onclick="escanearQR()" hidden>
+            <span class="mcard-ico" data-ic="sto-qr">📷</span>
+            <span class="mcard-txt"><b>Escanear el QR de mi sucursal</b>
+                <small>Liga este teléfono a tu negocio para entrar con tu clave. Se hace una sola vez.</small></span>
+        </button>
         <button class="mcard puerta" onclick="verCuenta()">
             <span class="mcard-ico" data-ic="usuario">🔐</span>
             <span class="mcard-txt"><b>Entrar con usuario y contraseña</b>
@@ -61,6 +70,14 @@
     </div>
 
     <div class="avisos" id="inicioAviso"></div>
+</section>
+
+<!-- ══ 0a · LIGAR EL TELÉFONO CON EL QR ═══════════════════════════════════════ -->
+<section class="pant" id="pEscanear" hidden>
+    <div class="esc-marco"><video id="escVideo" playsinline muted autoplay></video><i class="esc-mira"></i></div>
+    <div class="nip-msg" id="escMsg" aria-live="polite"></div>
+    <div class="avisos">Es el QR que está pegado en la barra, la cocina o la bodega. Si no lo encuentras,
+        pídele a tu encargado que entre una vez con su cuenta en este teléfono.</div>
 </section>
 
 <!-- ══ 0b · ENTRAR CON LA CUENTA ═════════════════════════════════════════════ -->

@@ -117,16 +117,16 @@ const sinAncho = (p) => p.evaluate(() => document.documentElement.scrollWidth <=
         const { ctx, page: p } = await abrir(browser, {});
         await foto(p, 'm0-portada');
         await caso('la portada son dos puertas: «Entrar con mi clave» y «Entrar con usuario y contraseña»', async () => {
-            const r = await p.evaluate(() => [...document.querySelectorAll('#pInicio .puerta b')].map(b => b.textContent));
+            const r = await p.evaluate(() => [...document.querySelectorAll('#pInicio .puerta:not([hidden]) b')].map(b => b.textContent));
             assert.deepEqual(r, ['Entrar con mi clave', 'Entrar con usuario y contraseña']);
         });
         await caso('…la de la clave es para vistas y la de la cuenta para usar los módulos (lo dicen)', async () => {
-            const r = await p.evaluate(() => [...document.querySelectorAll('#pInicio .puerta small')].map(b => b.textContent));
+            const r = await p.evaluate(() => [...document.querySelectorAll('#pInicio .puerta:not([hidden]) small')].map(b => b.textContent));
             assert.match(r[0], /NIP de 5 dígitos · para ver y registrar en tu turno/);
             assert.match(r[1], /para usar los módulos/);
         });
         await caso('…con íconos de la marca, no emojis', async () =>
-            assert.equal(await p.evaluate(() => document.querySelectorAll('#pInicio .puerta .mcard-ico svg.etx-ic').length), 2));
+            assert.equal(await p.evaluate(() => document.querySelectorAll('#pInicio .puerta:not([hidden]) .mcard-ico svg.etx-ic').length), 2));
 
         await p.click('#btnPuertaClave'); await p.waitForTimeout(150);
         await nip(p, '12345');
@@ -189,10 +189,27 @@ const sinAncho = (p) => p.evaluate(() => document.documentElement.scrollWidth <=
 
         console.log('\n══ App móvil · sin negocio ligado ══');
         const e = await abrir(browser, { ligado: false });
+        await caso('sin ligar, se ofrece «Escanear el QR de mi sucursal» (en iPhone el ícono de inicio no ve lo de Safari)', async () =>
+            assert.equal(await e.page.evaluate(() => !document.getElementById('btnEscanearQR').hidden), true));
         await caso('la puerta de la clave se apaga y se explica cómo ligar el teléfono', async () => {
             const r = await e.page.evaluate(() => [document.getElementById('btnPuertaClave').disabled, document.getElementById('inicioAviso').textContent]);
-            assert.equal(r[0], true); assert.match(r[1], /entre una vez con su cuenta aquí, o escanea el QR de tu sucursal/);
+            assert.equal(r[0], true); assert.match(r[1], /Escanea el QR de tu sucursal con el botón de arriba[\s\S]*entre una vez con su cuenta aquí/);
         });
+        await e.page.evaluate(() => window._appMovil.ligar(window._appMovil.credsDeQR(location.origin + '/entrada.html?n=n1&t=tokA&s=suc_dos')));
+        await e.page.waitForTimeout(200);
+        await caso('al leer el QR impreso de siempre, el teléfono queda ligado y pasa directo a la clave', async () => {
+            assert.equal(await e.page.evaluate(() => !document.getElementById('pLogin').hidden), true);
+            assert.match(await e.page.evaluate(() => localStorage.getItem('etaax_appmovil_qr')), /"n":"n1","t":"tokA"/);
+        });
+        await nip(e.page, '12345');
+        await caso('…y con la clave entra a su menú por módulo', async () => assert.deepEqual(await modulos(e.page), ['Cost·ax', 'Equip·ax', 'Learn·ax']));
+        await e.page.click('#pMenu .salir'); await e.page.waitForTimeout(150);
+        await caso('ya ligado, el botón de escanear desaparece', async () =>
+            assert.equal(await e.page.evaluate(() => document.getElementById('btnEscanearQR').hidden), true));
+        await e.page.click('#btnPuertaClave'); await e.page.waitForTimeout(100);
+        await e.page.click('#btnVolver'); await e.page.waitForTimeout(150);
+        await caso('«atrás» desde la clave, sin haber entrado, regresa a la portada (no a un menú vacío)', async () =>
+            assert.equal(await e.page.evaluate(() => !document.getElementById('pInicio').hidden && document.getElementById('pMenu').hidden), true));
         await e.ctx.close();
 
         console.log('\n══ App móvil · la cuenta ══');
