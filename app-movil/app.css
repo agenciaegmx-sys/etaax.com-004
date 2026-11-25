@@ -18,6 +18,7 @@
     --bg:#13120f; --bg2:#1c1a16; --sup:#232019; --borde:#35312a;
     --txt:#f0ece4; --txt2:#b8b2a6; --dim:#827c70;
     --verde:#3dbe7a; --rojo:#e05a3a; --ambar:#f5c842; --viol:#9b7fe0; --azul:#7ab8f5;
+    --marca:#8ce4ee;      /* el azul petróleo de ETAAX, versión para fondo oscuro */
     --r:14px;
     /* El teléfono tiene muescas y rayitas. Sin esto, la barra de abajo queda
        debajo del gesto de inicio y el botón no se puede apretar. */
@@ -27,6 +28,7 @@
 [data-tema="claro"] {
     --bg:#f3f1ec; --bg2:#fff; --sup:#fff; --borde:#ddd8cf;
     --txt:#1a1916; --txt2:#55504a; --dim:#8a8378;
+    --marca:#247681;
 }
 
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -161,6 +163,38 @@ select.campo { appearance:none; background-image:linear-gradient(45deg,transpare
 /* ── El portal del colaborador ── */
 .menu-grupo { font-size:10.5px; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
     margin:24px 0 10px 2px; }
+
+/* ── Por módulo (25-nov): la cabecera lleva el nombre ·ax, como en la computadora ── */
+.mod-cab { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin:22px 2px 10px; }
+.mod-nom { font-size:19px; font-weight:700; letter-spacing:-.2px; color:var(--txt); }
+.mod-nom i { font-style:normal; color:var(--marca); padding:0 1px; }
+.mod-lema { font-size:11px; letter-spacing:1.2px; text-transform:uppercase; color:var(--dim); text-align:right; }
+.mcard-c { min-height:66px; padding:13px 14px; gap:13px; }
+.mcard-c .mcard-txt b { font-size:15px; margin-bottom:2px; }
+/* Los íconos de la marca dentro de las tarjetas: del color de la marca, no del texto. */
+.mcard-ico { width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:11px; }
+.mcard-ico .etx-ic { width:24px; height:24px; color:var(--marca); --etx-color:var(--marca); }
+.mcard-ico:has(.etx-ic) { background:color-mix(in srgb, var(--marca) 13%, transparent); }
+.rec-it-ico .etx-ic { width:22px; height:22px; color:var(--marca); }
+/* Las dos puertas de la portada */
+.puerta { min-height:84px; }
+.puerta .mcard-ico { width:46px; height:46px; }
+.puerta.apagada { opacity:.5; }
+
+/* ── Equip·ax · mis horarios ── */
+.hor-sem { margin-bottom:6px; }
+.hor-sem .menu-grupo { display:flex; justify-content:space-between; gap:10px; }
+.hor-total { letter-spacing:.5px; text-transform:none; font-size:12px; color:var(--txt2); }
+.hor-dia { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px;
+    background:var(--sup); border:1px solid var(--borde); border-radius:12px; margin-bottom:7px; min-height:54px; }
+.hor-nom { font-size:14.5px; font-weight:600; display:flex; flex-direction:column; }
+.hor-nom small { font-size:11.5px; font-weight:400; color:var(--dim); }
+.hor-t { font-size:15px; font-weight:700; text-align:right; font-variant-numeric:tabular-nums; display:flex; flex-direction:column; }
+.hor-t small { font-size:11px; font-weight:500; color:var(--marca); }
+.hor-dia.desc .hor-t { color:var(--azul); font-weight:600; }
+.hor-dia.sin { background:transparent; }
+.hor-dia.sin .hor-t { color:var(--dim); font-weight:500; }
+.hor-dia.hoy { border-color:var(--marca); box-shadow:inset 3px 0 0 var(--marca); }
 
 /* Ejecutar un checklist. Las tareas son renglones GRANDES porque se tocan de
    pie, caminando por el local y con una mano. */

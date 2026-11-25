@@ -370,6 +370,9 @@ window._cuenta = {
     sesion: function () { return SESION; },
     resolverNegocio: resolverNegocio,
     correo: function () { return _ls(LLAVE_CORREO); },
+    /* El cliente con la sesión de la cuenta: la portada de la cuenta lo usa para
+       leer el plan del negocio (negocio_plan, v89) y esconder lo no contratado. */
+    cliente: function () { return SB; },
     /* Para probarlo desde la consola y desde el candado del repo. */
     _hashPin: hashPin, _llaves: { sesion: LLAVE_SESION, pin: LLAVE_PIN, bio: LLAVE_BIO }
 };

@@ -157,6 +157,12 @@ function sdkEtx() {
             from: query,
             rpc: async function (fn, p) {
                 window.__rpcs.push(fn);
+                /* Cada arnés puede traer sus RPC (window.__rpcExtra, por initScript) y
+                   simular una migración sin correr (window.__rpcSinCorrer). */
+                if ((window.__rpcSinCorrer || []).indexOf(fn) > -1)
+                    return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.' + fn } };
+                var X = window.__rpcExtra || {};
+                if (X[fn]) { try { return { data: X[fn](p || {}), error: null }; } catch (e) { return { data: null, error: { message: e.message } }; } }
                 if (RPC[fn]) { try { return { data: RPC[fn](p || {}), error: null }; } catch (e) { return { data: null, error: { message: e.message } }; } }
                 return { data: null, error: null };
             },

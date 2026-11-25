@@ -140,7 +140,8 @@ try {
 
 /* ── Navegación entre pantallas ── */
 var PANTS = ['pInicio', 'pCuenta', 'pCandado', 'pPin', 'pHome',
-             'pLogin', 'pMenu', 'pFlujo', 'pHist', 'pChecks', 'pRun', 'pRecetas', 'pReceta', 'pGuias'];
+             'pLogin', 'pMenu', 'pFlujo', 'pHist', 'pChecks', 'pRun', 'pRecetas', 'pReceta', 'pGuias',
+             'pHorarios', 'pEvals'];
 function mostrar(id, titulo, sub, conVolver, conBarra) {
     PANTS.forEach(function (p) { $(p).hidden = (p !== id); });
     $('hdrTit').textContent = titulo;
@@ -168,33 +169,33 @@ window._appFijarQR = _fijarQR;
    `_destinoNip` recuerda a cuál de las dos cosas iba quien tecleó su NIP: sin
    eso, el botón del portal y el de registrar llevarían al mismo sitio y uno de
    los dos sobraría. */
-var _destinoNip = 'registrar';
+var _destinoNip = 'menu';
 function verInicio() {
-    /* Los botones de NIP solo tienen sentido si la app sabe de qué negocio es.
-       Sin eso NO se esconden a secas: se dice cómo conseguirlo, porque un
-       teléfono recién instalado SIEMPRE llega así y dejar media pantalla en
-       blanco se lee como que la app está incompleta.
+    /* La puerta de la clave solo sirve si la app sabe de qué negocio es. Sin
+       eso NO se esconde: se APAGA y se dice cómo conseguirlo, porque un
+       teléfono recién instalado SIEMPRE llega así y una puerta que desaparece
+       se lee como que la app está incompleta.
 
        Se consigue de dos maneras, y las dos están a la mano:
          · que alguien entre UNA vez con su cuenta (el encargado configura el
-           teléfono y su equipo ya solo usa el NIP);
+           teléfono y su equipo ya solo usa su clave);
          · o escanear el QR de la sucursal, que trae las credenciales. */
     var listo = !!(NEG && TOKEN);
-    $('inicioRapido').hidden = !listo;
+    var b = $('btnPuertaClave');
+    if (b) { b.disabled = !listo; b.classList.toggle('apagada', !listo); }
     $('inicioSub').textContent = listo && NEG_NOM ? NEG_NOM : 'Tu operación, en el bolsillo';
     $('inicioAviso').innerHTML = listo
-        ? 'Los dos de arriba funcionan igual que escanear el QR: solo piden tu NIP.'
+        ? 'Tu clave dice quién registró qué. Si no la tienes, pídesela a tu encargado.'
         : '<b style="color:var(--txt)">¿Eres de barra o cocina?</b><br>' +
           'Este teléfono todavía no está ligado a un negocio. Pídele a tu encargado que ' +
           'entre una vez con su cuenta aquí, o escanea el <b>QR de tu sucursal</b> con la ' +
-          'cámara. Después entras solo con tu NIP.';
+          'cámara. Después entras solo con tu clave.';
     mostrar('pInicio', 'ETAAX', listo ? 'elige cómo entrar' : 'empieza por aquí', false, false);
 }
 function irNip(destino) {
-    _destinoNip = destino;
+    _destinoNip = destino || 'menu';
     NIP = ''; pintarPuntos(); $('nipMsg').textContent = '';
-    mostrar('pLogin', destino === 'portal' ? 'Portal del colaborador' : 'Registrar',
-            'identifícate con tu NIP', true, false);
+    mostrar('pLogin', 'Entrar con tu clave', 'tu NIP de 5 dígitos', true, false);
 }
 function verCuenta() {
     $('ctaMsg').textContent = '';
@@ -211,27 +212,60 @@ function toastC(m, c) { toast(m, c); }
    diciendo dónde sí se hace: esconderlo haría pensar que la app está rota o
    incompleta, y eso es lo que hace que nadie la vuelva a abrir. */
 var MODULOS_CUENTA = [
-    { ico:'💸', tit:'Agregar un gasto',   sub:'Con su foto, desde donde estés',            fn:'' },
-    { ico:'🧾', tit:'Ver los cortes',     sub:'Lo capturado desde la computadora',          fn:'' },
-    { ico:'🥃', tit:'Insumos',            sub:'Consultar, corregir precios, agregar uno',   fn:'' },
-    { ico:'📖', tit:'Recetas',            sub:'Consultar y crear una sencilla',             fn:'' },
-    { ico:'📊', tit:'Resultados',         sub:'El resumen del mes y las estadísticas',      fn:'' }
+    { app:'finax',  mod:'Admin\u00b7ax', lema:'Ingresos y egresos', items:[
+        { ic:'fin-gastos',     resp:'💸', tit:'Agregar un gasto', sub:'Con su foto, desde donde estés', fn:'' },
+        { ic:'cor-corte-caja', resp:'🧾', tit:'Ver los cortes',   sub:'Lo capturado desde la computadora', fn:'' } ] },
+    { app:'costax', mod:'Cost\u00b7ax',  lema:'Insumos y recetas', items:[
+        { ic:'cat-insumos', resp:'🥃', tit:'Insumos', sub:'Consultar, corregir precios, agregar uno', fn:'' },
+        { ic:'cat-recetas', resp:'📖', tit:'Recetas', sub:'Consultar y crear una sencilla', fn:'' } ] },
+    { app:'finax',  mod:'Fin\u00b7ax',   lema:'Salud financiera', items:[
+        { ic:'fin-resumen-resultados', resp:'📊', tit:'Resultados', sub:'El resumen del mes y las estadísticas', fn:'' } ] }
 ];
+/* Las apps del NEGOCIO para la cuenta: la base y las de cada sucursal juntas
+   (la cuenta no está atada a una sucursal). null = no se sabe → se ve todo. */
+var APPS_CTA = null;
+function _appsDelPlan(plan) {
+    if (!plan) return 'suite';
+    var junta = [], suite = false;
+    var suma = function (x) {
+        if (x == null || x === 'suite') { suite = true; return; }
+        (Array.isArray(x) ? x : [x]).forEach(function (a) { if (junta.indexOf(a) < 0) junta.push(a); });
+    };
+    suma(plan.base);
+    Object.keys(plan.sucursales || {}).forEach(function (k) { suma(plan.sucursales[k]); });
+    return suite ? 'suite' : junta;
+}
+function _ctaTiene(app) { return APPS_CTA === null || APPS_CTA === 'suite' || APPS_CTA.indexOf(app) > -1; }
 function verHome() {
     var correo = (window._cuenta && window._cuenta.correo()) || '';
     $('homeQuien').innerHTML = '<b>' + etx(NEG_NOM || 'Tu cuenta') + '</b>' +
         (correo ? '<small>' + etx(correo) + '</small>' : '') +
-        (NEG && TOKEN ? '<small style="color:var(--verde);margin-top:4px">✓ Tu equipo ya puede entrar con su NIP en este teléfono</small>' : '');
-    $('homeMenu').innerHTML = MODULOS_CUENTA.map(function (m) {
-        var listo = !!m.fn;
-        return '<button class="mcard"' + (listo ? ' onclick="' + m.fn + '"' : ' disabled style="opacity:.42"') + '>' +
-            '<span class="mcard-ico">' + m.ico + '</span>' +
-            '<span class="mcard-txt"><b>' + etx(m.tit) + '</b><small>' + etx(m.sub) +
-            (listo ? '' : ' <span style="color:var(--dim)">· pronto</span>') + '</small></span></button>';
+        (NEG && TOKEN ? '<small style="color:var(--verde);margin-top:4px">✓ Tu equipo ya puede entrar con su clave en este teléfono</small>' : '');
+    pintarHome();
+    mostrar('pHome', 'Tu cuenta', correo, false, false);
+    /* El plan se pide con la sesión de la cuenta. Si no se puede (sin red, sin
+       la v89), se queda viendo todo: esconder por un error dejaría a un dueño
+       sin sus módulos. */
+    var cli = window._cuenta && typeof window._cuenta.cliente === 'function' ? window._cuenta.cliente() : null;
+    if (cli && NEG) {
+        cli.rpc('negocio_plan', { p_neg: NEG }).then(function (r) {
+            if (r && !r.error) { APPS_CTA = _appsDelPlan(r.data); pintarHome(); }
+        }).catch(function () {});
+    }
+}
+function pintarHome() {
+    var visibles = MODULOS_CUENTA.filter(function (g) { return _ctaTiene(g.app); });
+    $('homeMenu').innerHTML = visibles.map(function (g) {
+        return _grupoMod(g.mod, g.lema) + '<div class="menu">' + g.items.map(function (m) {
+            var listo = !!m.fn;
+            return '<button class="mcard mcard-c"' + (listo ? ' onclick="' + m.fn + '"' : ' disabled style="opacity:.45"') + '>' +
+                '<span class="mcard-ico">' + _ic(m.ic, m.resp) + '</span>' +
+                '<span class="mcard-txt"><b>' + etx(m.tit) + '</b><small>' + etx(m.sub) +
+                (listo ? '' : ' <span style="color:var(--dim)">· pronto</span>') + '</small></span></button>';
+        }).join('') + '</div>';
     }).join('') +
-    '<div class="avisos" style="margin-top:4px;text-align:left">Esta app es una <b>beta</b>: lo que ' +
+    '<div class="avisos" style="margin-top:14px;text-align:left">Esta app es una <b>beta</b>: lo que ' +
     'todavía no está aquí se sigue haciendo desde la computadora, igual que siempre.</div>';
-    mostrar('pHome', 'Tu cuenta', (window._cuenta && window._cuenta.correo()) || '', false, false);
 }
 window._appCuentaLista = verHome;
 window._appCuentaFuera = verInicio;
@@ -292,7 +326,7 @@ async function entrar() {
         /* El catálogo y los checklists se piden EN PARALELO: en serie son dos
            viajes a Supabase con la señal de una cocina, y el colaborador los
            espera mirando la pantalla de entrar. */
-        await Promise.all([cargarInsumos(), cargarPlantillas()]);
+        await Promise.all([cargarInsumos(), cargarPlantillas(), cargarApps()]);
         irMenu();
         /* Quien tocó «Portal del colaborador» quería el portal, no el menú de
            registrar: llevarlo al menú le haría buscar otra vez lo que ya pidió. */
@@ -432,7 +466,7 @@ function irMenu() {
     pintarPortal();
     pintarInstalar();
     detectarInstalada();
-    mostrar('pMenu', 'Registro', '¿Qué vas a registrar?', false, false);
+    mostrar('pMenu', 'Tu turno', NEG_NOM || 'elige qué hacer', false, false);
 }
 
 function salir() {
@@ -441,35 +475,211 @@ function salir() {
        varias personas: dejar el recetario o los checklists de quien acaba de
        salir le enseñaría al siguiente lo que no le toca. */
     INSUMOS = []; RECETAS = null; PLANTILLAS = []; RECETARIO = null; GUIAS = null; RUN = null;
+    APPS = null; HORARIOS = null; EVALS = null;
     pintarPuntos();
     $('nipMsg').textContent = '';
     verInicio();
 }
 
-/* Las opciones del portal se arman según el perfil. El recetario solo tiene
-   sentido para quien cocina o prepara: a piso y administración no se les
-   enseña. No es un permiso —el servidor igual no les devolvería recetas— es no
-   llenarles la pantalla con algo que no van a abrir nunca. */
+/* ══ LO QUE SE VE CON LA CLAVE, POR MÓDULO ═══════════════════════════════
+   Cada vista con su módulo de ETAAX —el mismo nombre que ve el dueño en la
+   computadora—: Cost·ax (inventario y recetas), Equip·ax (el turno y el
+   equipo), Learn·ax (las guías).
+
+   LO NO CONTRATADO NO SE VE: es la regla de la v89, y la sucursal la pone el
+   NIP (portal_apps, v91). Sin saber el plan (la v91 sin correr, sin red) se ve
+   todo, como antes: esconder por un error dejaría al equipo sin trabajar.
+
+   El recetario solo sale a quien cocina o prepara. No es un permiso —el
+   servidor igual no les devolvería recetas— es no llenarles la pantalla con
+   algo que no van a abrir nunca. */
+var APPS = null;                 // null = no se sabe · 'suite' · ['costax', …]
+var HORARIOS = null, EVALS = null;
+function _tieneApp(app) {
+    if (APPS === null || APPS === undefined || APPS === 'suite') return true;
+    return Array.isArray(APPS) && APPS.indexOf(app) > -1;
+}
+async function cargarApps() {
+    APPS = null;
+    try {
+        var r = await _supabase.rpc('portal_apps', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+        if (r && !r.error && r.data) APPS = (r.data.apps == null) ? 'suite' : r.data.apps;
+    } catch (e) { /* v91 sin correr: se ve todo */ }
+}
+/* Los íconos de la marca (etaax-iconos.js). Si el archivo no llegó —o es una
+   copia vieja sin ese nombre—, se queda el respaldo: un menú sin dibujo es peor
+   que uno con emoji. */
+function _ic(nombre, respaldo) {
+    var svg = (typeof window !== 'undefined' && typeof window.etaaxIcono === 'function') ? window.etaaxIcono(nombre, { tam: 26 }) : '';
+    return svg || respaldo || '';
+}
+function _iconosEstaticos() {
+    var els = document.querySelectorAll('[data-ic]');
+    for (var i = 0; i < els.length; i++) { var s = _ic(els[i].getAttribute('data-ic'), ''); if (s) els[i].innerHTML = s; }
+}
+/* La cabecera de cada módulo: su nombre ·ax, como en la computadora. */
+function _grupoMod(nombre, lema) {
+    var k = String(nombre).indexOf('·');
+    var nom = k > 0 ? etx(nombre.slice(0, k)) + '<i>·</i>' + etx(nombre.slice(k + 1)) : etx(nombre);
+    return '<div class="mod-cab"><span class="mod-nom">' + nom + '</span><span class="mod-lema">' + etx(lema) + '</span></div>';
+}
 function pintarPortal() {
-    var g = $('grupoPortal'), m = $('menuPortal');
-    if (!g || !m) return;
+    var m = $('menuPortal');
+    if (!m) return;
     var a = window.StaffArea ? StaffArea.norm(AREA_COLAB) : '';
     var cocina = !a || a === 'barra' || a === 'cocina';
-    var ops = [];
-    ops.push(_opcion('📋', 'Mis check lists',
-        PLANTILLAS.length ? (PLANTILLAS.length + (PLANTILLAS.length === 1 ? ' disponible' : ' disponibles'))
-                          : 'Ninguno para tu área',
-        PLANTILLAS.length ? 'abrirChecklists()' : ''));
-    if (cocina) ops.push(_opcion('📖', 'Recetario', 'Cómo se prepara, paso a paso', 'abrirRecetario()'));
-    ops.push(_opcion('📚', 'Guías de uso', 'Manuales de ETAAX', 'abrirGuias()'));
-    m.innerHTML = ops.join('');
-    g.hidden = false; m.hidden = false;
+    var cost = _tieneApp('costax'), equip = _tieneApp('equipax');
+    var h = '';
+    if (cost) {
+        h += _grupoMod('Cost·ax', 'Inventario y recetas') + '<div class="menu">' +
+            _opcion(_ic('ins-agregar', '📦'), 'Entrada de insumos',
+                'Llegó mercancía: compra, bonificación, consignación o préstamo pagado', "abrirFlujo('entrada')") +
+            _opcion(_ic('ins-drenado', '🍷'), 'Merma',
+                'Se rompió, se derramó o se desperdició un insumo o un producto del menú', "abrirFlujo('merma')") +
+            _opcion(_ic('cor-salida-efectivo', '🎁'), 'Cortesía o préstamo',
+                'Salió algo sin ser venta: cortesía a un cliente o préstamo a otra área', "abrirFlujo('salida')") +
+            _opcion(_ic('ins-stock', '📋'), 'Contar existencias', 'Cuenta botellas o pésalas antes del inventario', "abrirFlujo('conteo')") +
+            (cocina ? _opcion(_ic('cat-recetas', '📖'), 'Recetario', 'Cómo se prepara, paso a paso', 'abrirRecetario()') : '') +
+            _opcion(_ic('ins-historial', '🧾'), 'Lo registrado', 'Todo lo capturado desde el último inventario', 'abrirHistorial()') +
+            '</div>';
+    }
+    if (equip) {
+        h += _grupoMod('Equip·ax', 'Tu turno y tu equipo') + '<div class="menu">' +
+            _opcion(_ic('sto-horarios', '🗓️'), 'Mis horarios', 'Tus turnos de esta semana y la que sigue', 'abrirHorarios()') +
+            _opcion(_ic('sto-checklists', '✅'), 'Mis check lists',
+                PLANTILLAS.length ? (PLANTILLAS.length + (PLANTILLAS.length === 1 ? ' disponible' : ' disponibles'))
+                                  : 'Ninguno para tu área',
+                PLANTILLAS.length ? 'abrirChecklists()' : '') +
+            _opcion(_ic('sto-evaluaciones', '📝'), 'Evaluaciones', 'Las que tu negocio tiene abiertas', 'abrirEvaluaciones()') +
+            '</div>';
+    }
+    if (!cost && !equip) {
+        h += '<div class="avisos" style="text-align:left">Tu sucursal todavía no tiene apps para el equipo en el ' +
+             'teléfono. Pregúntale a tu encargado.</div>';
+    }
+    h += _grupoMod('Learn·ax', 'Aprende a usar ETAAX') + '<div class="menu">' +
+        _opcion(_ic('rec-tutorial', '📚'), 'Guías de uso', 'Manuales de ETAAX', 'abrirGuias()') + '</div>';
+    m.innerHTML = h;
+    m.hidden = false;
 }
 function _opcion(ico, tit, sub, accion) {
     var off = !accion;
-    return '<button class="mcard mcard-sec"' + (off ? ' disabled style="opacity:.45"' : ' onclick="' + accion + '"') + '>' +
+    return '<button class="mcard mcard-c"' + (off ? ' disabled style="opacity:.45"' : ' onclick="' + accion + '"') + '>' +
         '<span class="mcard-ico">' + ico + '</span>' +
         '<span class="mcard-txt"><b>' + etx(tit) + '</b><small>' + etx(sub) + '</small></span></button>';
+}
+
+/* ══ EQUIP·AX · MIS HORARIOS ═══════════════════════════════════════════════
+   Solo SUS turnos (portal_horarios, v91): esta semana y la que sigue, con la
+   fecha junto a cada día y el total de horas. Si lo prestaron a otra sucursal
+   algún día, ese día dice dónde. */
+var DIAS_L = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+var MES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+function _horas(t) {
+    if (!t || t.desc || !t.in || !t.out) return 0;
+    var a = String(t.in).split(':'), b = String(t.out).split(':');
+    var m = (parseInt(b[0], 10) * 60 + (parseInt(b[1], 10) || 0)) - (parseInt(a[0], 10) * 60 + (parseInt(a[1], 10) || 0));
+    if (m <= 0) m += 24 * 60;            // turno que cruza la medianoche
+    return m / 60;
+}
+function _fechaIso(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function pintarHorarios(H) {
+    var semanas = (H && H.semanas) || [];
+    if (!semanas.length) return '<div class="hvacio">Sin horarios.</div>';
+    var hoy = (H && H.hoy) || '';
+    return semanas.map(function (s, k) {
+        var p = String(s.lunes || '').split('-');
+        var lunes = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10), 12);
+        var dias = {}, sucs = [];
+        (s.turnos || []).forEach(function (t) {
+            if (t.sucursal && sucs.indexOf(t.sucursal) < 0) sucs.push(t.sucursal);
+            Object.keys(t.dias || {}).forEach(function (d) {
+                var v = t.dias[d]; if (!v) return;
+                /* Un día con turno en una sucursal y descanso en otra: manda el turno. */
+                if (!dias[d] || (dias[d].t.desc && !v.desc)) dias[d] = { t: v, suc: t.sucursal || '' };
+            });
+        });
+        var total = 0, nT = 0;
+        var filas = [0, 1, 2, 3, 4, 5, 6].map(function (i) {
+            var f = new Date(lunes); f.setDate(lunes.getDate() + i);
+            var d = dias['d' + i], txt, cls;
+            if (d && d.t && !d.t.desc && d.t.in && d.t.out) { txt = d.t.in + ' – ' + d.t.out; cls = 'turno'; total += _horas(d.t); nT++; }
+            else if (d && d.t && d.t.desc) { txt = 'Descanso'; cls = 'desc'; }
+            else { txt = 'Sin turno'; cls = 'sin'; }
+            var donde = (cls === 'turno' && sucs.length > 1 && d.suc) ? '<small>' + etx(d.suc) + '</small>' : '';
+            return '<div class="hor-dia ' + cls + (_fechaIso(f) === hoy ? ' hoy' : '') + '">' +
+                '<span class="hor-nom">' + DIAS_L[i] + '<small>' + f.getDate() + ' ' + MES_C[f.getMonth()] + '</small></span>' +
+                '<span class="hor-t">' + etx(txt) + donde + '</span></div>';
+        }).join('');
+        var num = String(s.semana || '').split('-W')[1] || '';
+        return '<div class="hor-sem"><div class="menu-grupo">' + (k === 0 ? 'Esta semana' : 'La que sigue') +
+            (num ? ' · semana ' + etx(num) : '') + '<span class="hor-total">' + nT + ' turno' + (nT === 1 ? '' : 's') +
+            ' · ' + (Math.round(total * 10) / 10) + ' h</span></div>' + filas + '</div>';
+    }).join('') +
+    '<div class="avisos">Si algo no cuadra, pregúntale a tu encargado: el rol se arma en el sistema.</div>';
+}
+/* La v91 sin correr: PostgREST contesta que la función no existe. Se dice en
+   palabras de quien usa la app, no con el error crudo. */
+function _sinV91(err) {
+    return /PGRST202|could not find the function|does not exist/i.test(String((err && (err.code + ' ' + err.message)) || ''));
+}
+async function abrirHorarios() {
+    mostrar('pHorarios', 'Mis horarios', 'esta semana y la que sigue', true, false);
+    var cont = $('horariosLista');
+    if (HORARIOS === null) {
+        cont.innerHTML = '<div class="hvacio">Cargando…</div>';
+        if (!navigator.onLine) { cont.innerHTML = '<div class="sinred">Sin internet. Los horarios se leen del servidor.</div>'; return; }
+        try {
+            var r = await _supabase.rpc('portal_horarios', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+            if (r && r.error) {
+                cont.innerHTML = '<div class="hvacio">' + (_sinV91(r.error)
+                    ? 'Esta parte de la app todavía no está activada en tu negocio.'
+                    : 'No se pudieron leer tus horarios. Inténtalo otra vez.') + '</div>';
+                return;
+            }
+            HORARIOS = (r && r.data) || { semanas: [] };
+        } catch (e) { cont.innerHTML = '<div class="hvacio">No se pudieron leer tus horarios. Inténtalo otra vez.</div>'; return; }
+    }
+    cont.innerHTML = pintarHorarios(HORARIOS);
+}
+
+/* ══ EQUIP·AX · EVALUACIONES ═══════════════════════════════════════════════
+   Las abiertas del negocio, sin las de reclutamiento (portal_evaluaciones,
+   v91). Cada una abre su enlace de siempre, el mismo que se manda por WhatsApp. */
+var CAT_EVAL = { operativas: 'Operativa', administrativas: 'Administrativa', mensuales: 'Mensual',
+                 psicometrico: 'Psicométrica', liderazgo: 'Liderazgo' };
+function pintarEvaluaciones(lista) {
+    if (!lista || !lista.length) return '<div class="hvacio">No hay evaluaciones abiertas.<br>Tu encargado las publica desde el sistema.</div>';
+    return lista.map(function (e) {
+        var det = [CAT_EVAL[e.categoria] || '', e.preguntas ? e.preguntas + ' pregunta' + (e.preguntas === 1 ? '' : 's') : '']
+                    .filter(Boolean).join(' · ');
+        return '<a class="guia-it" href="/evaluacion.html?t=' + encodeURIComponent(e.token || '') + '" target="_blank" rel="noopener">' +
+            '<span class="rec-it-ico">' + _ic('sto-evaluaciones', '📝') + '</span>' +
+            '<span style="flex:1;min-width:0"><b>' + etx(e.titulo || '—') + '</b>' +
+            (det ? '<small>' + etx(det) + '</small>' : '') + '</span>' +
+            '<span style="color:var(--dim)">↗</span></a>';
+    }).join('');
+}
+async function abrirEvaluaciones() {
+    mostrar('pEvals', 'Evaluaciones', 'las que tu negocio tiene abiertas', true, false);
+    var cont = $('evalsLista');
+    if (EVALS === null) {
+        cont.innerHTML = '<div class="hvacio">Cargando…</div>';
+        if (!navigator.onLine) { cont.innerHTML = '<div class="sinred">Sin internet. Las evaluaciones se leen del servidor.</div>'; return; }
+        try {
+            var r = await _supabase.rpc('portal_evaluaciones', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+            if (r && r.error) {
+                cont.innerHTML = '<div class="hvacio">' + (_sinV91(r.error)
+                    ? 'Esta parte de la app todavía no está activada en tu negocio.'
+                    : 'No se pudieron leer las evaluaciones. Inténtalo otra vez.') + '</div>';
+                return;
+            }
+            EVALS = (r && r.data) || [];
+        } catch (e) { cont.innerHTML = '<div class="hvacio">No se pudieron leer las evaluaciones. Inténtalo otra vez.</div>'; return; }
+    }
+    cont.innerHTML = pintarEvaluaciones(EVALS);
 }
 
 /* Los checklists de SU área y SU sucursal: lo decide el servidor (v59), que
@@ -1580,7 +1790,7 @@ if ('serviceWorker' in navigator) {
 
 /* ── Arranque ── */
 window.addEventListener('DOMContentLoaded', async function () {
-    pintarTeclado(); pintarPuntos();
+    pintarTeclado(); pintarPuntos(); _iconosEstaticos();
     $('loginAviso').innerHTML = 'Tu NIP dice quién registró qué.<br>Si no lo tienes, pídeselo a tu encargado.';
     /* Si hay sesión guardada, cuenta.js se encarga —pidiendo huella o PIN si hay
        candado— y la portada no se llega a ver. Si no, se muestra. */
@@ -1613,6 +1823,8 @@ window.abrirRecetario = abrirRecetario;
 window.filtrarRecetario = filtrarRecetario;
 window.abrirGuias = abrirGuias;
 window.tomarFotoRun = tomarFotoRun;
+window.abrirHorarios = abrirHorarios;
+window.abrirEvaluaciones = abrirEvaluaciones;
 
 /* Para poder probarlo desde la consola y desde el candado. */
 window._appMovil = {
@@ -1621,11 +1833,13 @@ window._appMovil = {
     horaDe: horaDe, esIOS: esIOS, esSafari: esSafari, esStandalone: esStandalone,
     pintarInstalar: pintarInstalar, yaInstalada: yaInstalada, detectarInstalada: detectarInstalada,
     yaLaTengo: yaLaTengo, pintarPortal: pintarPortal, cuentaRun: cuentaRun,
+    pintarHorarios: pintarHorarios, pintarEvaluaciones: pintarEvaluaciones, appsDelPlan: _appsDelPlan,
     _setRun: function (r) { RUN = r; },
     _set: function (k, v) {
         if (k === 'AREA_COLAB') AREA_COLAB = v; if (k === 'AREA') AREA = v;
         if (k === 'FLUJO') FLUJO = v; if (k === 'SUB') SUB = v;
         if (k === 'SUC') SUC = v; if (k === 'LOTE') LOTE = v; if (k === 'FOTOS') FOTOS = v;
+        if (k === 'APPS') APPS = v; if (k === 'PLANTILLAS') PLANTILLAS = v;
     },
     _get: function (k) { return { AREA: AREA, AREA_COLAB: AREA_COLAB, FLUJO: FLUJO, LOTE: LOTE }[k]; }
 };

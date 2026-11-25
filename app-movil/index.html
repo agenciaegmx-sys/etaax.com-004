@@ -36,37 +36,29 @@
 <main id="main">
 
 <!-- ══ 0 · LA PORTADA ════════════════════════════════════════════════════════
-     Dos puertas, sin mezclarlas. Arriba, lo que se hace SIN entrar —igual que
-     escanear el QR, con el NIP de 5 dígitos—: quien trabaja en barra o cocina no
-     tiene cuenta, tiene NIP, y pedirle correo y contraseña sería inventarle una
-     credencial que no existe. Abajo, la cuenta de siempre, para lo que mueve
-     dinero. Es el mismo trato que hace una app de banco con «consultar saldo». -->
+     Lo PRIMERO es el acceso, y son dos puertas que no se mezclan (Edwin, 25-nov):
+       · LA CLAVE (el NIP de 5 dígitos) abre VISTAS: lo que el equipo consulta y
+         registra en su turno, ordenado por módulo (Cost·ax, Equip·ax, Learn·ax).
+         Quien trabaja en barra o cocina no tiene cuenta, tiene NIP.
+       · USUARIO Y CONTRASEÑA abre los MÓDULOS para usarlos: lo que mueve dinero
+         o cambia el catálogo. Es la misma cuenta de la computadora. -->
 <section class="pant" id="pInicio" hidden>
     <div class="marca"><img src="icons/icono-192.png" alt="" width="54" height="54"><div>
         <div class="marca-n">ETAAX</div><div class="marca-s" id="inicioSub">Tu operación, en el bolsillo</div></div></div>
 
-    <div id="inicioRapido" hidden>
-        <div class="menu-grupo" style="margin-top:18px">Sin entrar · con tu NIP</div>
-        <div class="menu">
-            <button class="mcard" onclick="irNip('registrar')">
-                <span class="mcard-ico">📦</span>
-                <span class="mcard-txt"><b>Registrar movimientos</b>
-                    <small>Entradas, mermas, cortesías y conteo</small></span>
-            </button>
-            <button class="mcard" onclick="irNip('portal')">
-                <span class="mcard-ico">📋</span>
-                <span class="mcard-txt"><b>Portal del colaborador</b>
-                    <small>Tus check lists, el recetario y las guías</small></span>
-            </button>
-        </div>
+    <div class="menu-grupo" style="margin-top:22px">¿Cómo vas a entrar?</div>
+    <div class="menu">
+        <button class="mcard puerta" id="btnPuertaClave" onclick="irNip('menu')">
+            <span class="mcard-ico" data-ic="aut-candado">🔢</span>
+            <span class="mcard-txt"><b>Entrar con mi clave</b>
+                <small>Tu NIP de 5 dígitos · para ver y registrar en tu turno: entradas, recetario, horarios y check lists</small></span>
+        </button>
+        <button class="mcard puerta" onclick="verCuenta()">
+            <span class="mcard-ico" data-ic="usuario">🔐</span>
+            <span class="mcard-txt"><b>Entrar con usuario y contraseña</b>
+                <small>Tu cuenta de ETAAX · para usar los módulos: gastos, insumos, recetas y resultados</small></span>
+        </button>
     </div>
-
-    <div class="menu-grupo" style="margin-top:26px">Con tu cuenta</div>
-    <button class="mcard" onclick="verCuenta()">
-        <span class="mcard-ico">🔐</span>
-        <span class="mcard-txt"><b>Entrar con mi cuenta</b>
-            <small>Gastos, insumos, recetas y resultados</small></span>
-    </button>
 
     <div class="avisos" id="inicioAviso"></div>
 </section>
@@ -124,48 +116,17 @@
     <div class="avisos" id="loginAviso"></div>
 </section>
 
-<!-- ══ 2 · MENÚ ══════════════════════════════════════════════════════════════ -->
+<!-- ══ 2 · LO QUE SE VE CON LA CLAVE, POR MÓDULO ═════════════════════════════
+     Cada vista va con el módulo de ETAAX al que pertenece —el mismo nombre que ve
+     el dueño en la computadora—:
+       · Cost·ax:  entradas, mermas, cortesías, conteo, recetario y lo registrado
+       · Equip·ax: mis horarios, mis check lists y evaluaciones
+       · Learn·ax: las guías de uso
+     Lo arma pintarPortal(): lo que la sucursal no contrató no se ve (portal_apps,
+     v91) y el recetario solo sale a quien cocina o prepara. -->
 <section class="pant" id="pMenu" hidden>
     <div class="quien" id="quienCard"></div>
-    <div class="menu">
-        <button class="mcard" onclick="abrirFlujo('entrada')">
-            <span class="mcard-ico">📦</span>
-            <span class="mcard-txt"><b>Entrada de insumos</b>
-                <small>Llegó mercancía: compra, bonificación, consignación o préstamo pagado</small></span>
-        </button>
-        <button class="mcard" onclick="abrirFlujo('merma')">
-            <span class="mcard-ico">🍷</span>
-            <span class="mcard-txt"><b>Merma</b>
-                <small>Se rompió, se derramó o se desperdició un insumo o un producto del menú</small></span>
-        </button>
-        <button class="mcard" onclick="abrirFlujo('salida')">
-            <span class="mcard-ico">🎁</span>
-            <span class="mcard-txt"><b>Cortesía o préstamo</b>
-                <small>Salió algo sin ser venta: cortesía a un cliente o préstamo a otra área</small></span>
-        </button>
-        <button class="mcard" onclick="abrirFlujo('conteo')">
-            <span class="mcard-ico">📋</span>
-            <span class="mcard-txt"><b>Contar existencias</b>
-                <small>Cuenta botellas o pésalas antes del inventario</small></span>
-        </button>
-        <button class="mcard mcard-sec" onclick="abrirHistorial()">
-            <span class="mcard-ico">🧾</span>
-            <span class="mcard-txt"><b>Lo registrado</b>
-                <small>Todo lo capturado desde el último inventario</small></span>
-        </button>
-    </div>
-
-    <!-- ══ EL PORTAL DEL COLABORADOR ══════════════════════════════════════════
-         Lo de arriba es REGISTRAR: sale dinero o entra producto, y queda
-         escrito. Esto es CONSULTAR Y CUMPLIR: lo que hay que hacer en el turno
-         y cómo se hace. Son dos cabezas distintas y por eso van separados: con
-         todo revuelto en una lista de ocho, nadie encuentra nada a medio turno.
-
-         Las opciones se arman según el perfil (ver pintarPortal): a quien no
-         cocina no se le enseña el recetario — no es un permiso, es no llenarle
-         la pantalla con algo que no va a abrir nunca. -->
-    <div class="menu-grupo" id="grupoPortal" hidden>Tu turno</div>
-    <div class="menu" id="menuPortal" hidden></div>
+    <div id="menuPortal"></div>
     <!-- La tarjeta se arma por plataforma: en Android hay un botón que de verdad
          instala; en iPhone no existe tal cosa —Apple solo permite «Agregar a
          inicio»— así que ahí van los pasos, no un botón que promete y explica. -->
@@ -254,6 +215,17 @@
     </div>
 </section>
 
+<!-- ══ EQUIP·AX · MIS HORARIOS (portal_horarios, v91) ═══════════════════════════
+     Solo los turnos de quien entró: esta semana y la que sigue. -->
+<section class="pant" id="pHorarios" hidden>
+    <div id="horariosLista"></div>
+</section>
+
+<!-- ══ EQUIP·AX · EVALUACIONES (portal_evaluaciones, v91) ══════════════════════ -->
+<section class="pant" id="pEvals" hidden>
+    <div id="evalsLista"></div>
+</section>
+
 <!-- ══ 6 · RECETARIO OPERATIVO (sin un solo costo) ════════════════════════════ -->
 <section class="pant" id="pRecetas" hidden>
     <input class="campo" id="recBuscar" type="search" autocomplete="off"
@@ -294,6 +266,7 @@
 <script src="cuenta.js"></script><!-- la otra puerta: cuenta, candado y biometría -->
 <script src="../staff-area.js?v=f7366b4c"></script><!-- quién ve qué: la MISMA regla del resto del sistema -->
 <script src="../insumo-label.js?v=789551ec"></script><!-- de qué sucursal es un insumo: la MISMA regla -->
+<script src="../etaax-iconos.js?v=7a651810"></script><!-- los íconos de la marca: nada de emojis en los menús -->
 <script src="app.js"></script>
 </body>
 </html>

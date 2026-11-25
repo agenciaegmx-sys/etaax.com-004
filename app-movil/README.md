@@ -13,13 +13,32 @@ mantener; se publica igual que cualquier otro cambio, con un push.
 
 ## Las dos puertas
 
-La app abre como una app de banco: una portada con lo que se puede hacer **sin
-entrar** y, debajo, la cuenta.
+Lo primero es el acceso (Edwin, 25-nov): la portada son dos puertas, y cada una
+lleva a lo suyo **ordenado por módulo**, con los mismos nombres ·ax que se ven
+en la computadora.
 
 | Puerta | Quién | Qué alcanza |
 |---|---|---|
-| **NIP de 5 dígitos** | Barra y cocina | Registrar movimientos · Portal del colaborador |
-| **Correo y contraseña** | Dueño o gerente | Gastos, insumos, recetas, resultados |
+| **Entrar con mi clave** (NIP de 5 dígitos) | Barra, cocina, piso | **Vistas**: lo que se consulta y registra en el turno |
+| **Entrar con usuario y contraseña** | Dueño o gerente | **Usar los módulos**: gastos, cortes, insumos, recetas, resultados |
+
+Con la clave, el menú va así:
+
+| Módulo | Qué trae |
+|---|---|
+| **Cost·ax** | Entrada de insumos · Merma · Cortesía o préstamo · Contar existencias · Recetario (solo barra y cocina) · Lo registrado |
+| **Equip·ax** | Mis horarios · Mis check lists · Evaluaciones |
+| **Learn·ax** | Guías de uso |
+
+**Lo que la sucursal no contrató no se ve** (la regla de la v89): la app le
+pregunta al servidor qué apps tiene la sucursal de quien entra (`portal_apps`,
+v91). Sin la v91 corrida, o sin red, se ve todo, como antes. Con la cuenta, los
+módulos se filtran con el plan del negocio (`negocio_plan`).
+
+**Mis horarios** enseña solo los turnos de quien entró, de esta semana y la que
+sigue (`portal_horarios`, v91), con la fecha, el total de horas y la sucursal si
+lo prestaron. **Evaluaciones** lista las abiertas del negocio, sin las de
+reclutamiento (`portal_evaluaciones`, v91), y abre su enlace de siempre.
 
 **La de arriba funciona igual que escanear el QR** — mismo token, mismo NIP,
 misma seguridad. Es a propósito: quien trabaja en barra no tiene cuenta, tiene
@@ -50,7 +69,7 @@ si el teléfono se pierde, cambiar la contraseña desde el sistema.
 
 ## Qué hace (v1)
 
-Los cuatro flujos del QR, rehechos para una mano y un pulgar:
+Los cuatro flujos del QR (en Cost·ax), rehechos para una mano y un pulgar:
 
 | | |
 |---|---|
@@ -186,8 +205,10 @@ app-movil/
 **No duplica reglas de negocio.** Llama exactamente a las mismas funciones del
 servidor que `entrada.html` —`entrada_validar_nip`, `portal_perfil`,
 `entrada_insumos`, `entrada_recetas`, `entrada_registrar`,
-`inventario_conteo_registrar`, `entrada_historial`— y usa el mismo vocabulario de
-áreas (`/staff-area.js`). Si mañana cambia quién ve qué, cambia en un lugar y las
+`inventario_conteo_registrar`, `entrada_historial`—, más las tres de la v91
+(`portal_apps`, `portal_horarios`, `portal_evaluaciones`, con el mismo candado de
+token + NIP + guardia de intentos), y usa el mismo vocabulario de áreas
+(`/staff-area.js`) y los íconos de la marca (`/etaax-iconos.js`). Si mañana cambia quién ve qué, cambia en un lugar y las
 dos pantallas se enteran.
 
 ### El service worker, y por qué guarda tan poco

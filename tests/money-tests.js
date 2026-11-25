@@ -19517,7 +19517,7 @@ console.log('\n══ BH18 · La app móvil ══');
     /* El recetario solo tiene sentido para quien cocina o prepara. No es un
        permiso —el servidor igual no les devolvería recetas— es no llenarle la
        pantalla a piso y administración con algo que no van a abrir nunca. */
-    const portal = (area, plantillas) => {
+    const portal = (area, plantillas, apps) => {
         const els = {};
         const el = (id) => els[id] || (els[id] = { innerHTML:'', hidden:true });
         const c = { console, Object, Array, String };
@@ -19530,10 +19530,10 @@ console.log('\n══ BH18 · La app móvil ══');
         vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8'), _sa,
                         { filename:'staff-area.js' });
         c.StaffArea = _sa.window.StaffArea; c.etx = (x) => String(x == null ? '' : x);
-        c.AREA_COLAB = area; c.PLANTILLAS = plantillas || [];
+        c.AREA_COLAB = area; c.PLANTILLAS = plantillas || []; c.APPS = apps === undefined ? null : apps;
         vm.createContext(c);
         vm.runInContext('function $(id){return document.getElementById(id);}' +
-            dEx('pintarPortal') + dEx('_opcion'), c, { filename:'app-movil/app.js' });
+            dEx('pintarPortal') + dEx('_opcion') + dEx('_tieneApp') + dEx('_ic') + dEx('_grupoMod'), c, { filename:'app-movil/app.js' });
         c.pintarPortal();
         return el('menuPortal').innerHTML;
     };
@@ -19553,6 +19553,63 @@ console.log('\n══ BH18 · La app móvil ══');
     });
     test('las guías son para todos', () =>
         eq(portal('administracion', []).indexOf('Guías de uso') > -1, true, 'para todos'));
+
+    /* ── Por módulo (25-nov) ──
+       Edwin: «los vamos a identificar por módulo: Cost·ax para registrar
+       entradas y ver recetas con los 5 dígitos, Equip·ax para ver horarios,
+       check lists y evaluaciones». Lo no contratado no se ve (v89/v91). */
+    const orden = (h) => ['Cost', 'Equip', 'Learn'].filter(m => h.indexOf('<span class="mod-nom">' + m) > -1).join(',');
+    test('con la clave, todo va por módulo: Cost·ax, Equip·ax y Learn·ax, en ese orden', () => {
+        const h = portal('barra', [{}]);
+        return eq(orden(h) + ' | ' + (h.indexOf('Entrada de insumos') < h.indexOf('Mis horarios') && h.indexOf('Mis horarios') < h.indexOf('Guías de uso')),
+                  'Cost,Equip,Learn | true', 'orden');
+    });
+    test('Cost·ax trae entradas, mermas, cortesías, conteo, recetario y lo registrado', () => {
+        const h = portal('cocina', [{}]);
+        return eq(['Entrada de insumos', 'Merma', 'Cortesía o préstamo', 'Contar existencias', 'Recetario', 'Lo registrado']
+                  .every(t => h.indexOf(t) > -1), true, 'completo');
+    });
+    test('Equip·ax trae mis horarios, mis check lists y evaluaciones', () => {
+        const h = portal('piso', [{}]);
+        return eq(['Mis horarios', 'Mis check lists', 'Evaluaciones'].every(t => h.indexOf(t) > -1), true, 'completo');
+    });
+    test('una sucursal con solo Cost·ax no ve Equip·ax', () =>
+        eq(orden(portal('barra', [{}], ['costax'])), 'Cost,Learn', 'escondido'));
+    test('…y una con solo Equip·ax no ve Cost·ax (ni el recetario)', () => {
+        const h = portal('cocina', [{}], ['equipax']);
+        return eq(orden(h) + ' ' + (h.indexOf('Recetario') === -1), 'Equip,Learn true', 'escondido');
+    });
+    test('sin saber el plan (v91 sin correr) se ve todo, como antes', () =>
+        eq(orden(portal('barra', [{}], null)) + ' / ' + orden(portal('barra', [{}], 'suite')), 'Cost,Equip,Learn / Cost,Equip,Learn', 'todo'));
+    test('sin ninguna app para el equipo se dice, en vez de dejar la pantalla vacía', () =>
+        eq(portal('barra', [{}], ['finax']).indexOf('todavía no tiene apps para el equipo') > -1, true, 'explicado'));
+
+    /* ── Equip·ax · mis horarios: solo dibuja lo que manda el servidor ── */
+    const hor = (() => {
+        const c = { console, Object, Array, String, Math, Date, parseInt };
+        c.etx = (x) => String(x == null ? '' : x);
+        vm.createContext(c);
+        const am = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
+        vm.runInContext(am.match(/var DIAS_L = \[[^\]]*\];/)[0] + am.match(/var MES_C = \[[^\]]*\];/)[0] +
+            dEx('_horas') + dEx('_fechaIso') + dEx('pintarHorarios'), c, { filename:'app-movil/app.js' });
+        return c.pintarHorarios;
+    })();
+    const H = { hoy:'2026-11-25', semanas:[
+        { semana:'2026-W48', lunes:'2026-11-23', turnos:[
+            { sucursalId:'suc_dos', sucursal:'Polanco', dias:{ d0:{ in:'09:00', out:'17:00' }, d1:{ desc:1 }, d2:{ in:'18:00', out:'02:00' } } },
+            { sucursalId:'suc_principal', sucursal:'Matriz', dias:{ d5:{ in:'18:00', out:'23:00' } } } ] },
+        { semana:'2026-W49', lunes:'2026-11-30', turnos:[] } ] };
+    const hh = hor(H);
+    test('mis horarios: lunes 23 nov, 9:00 – 17:00', () => eq(/Lunes<small>23 nov<\/small><\/span><span class="hor-t">09:00 – 17:00/.test(hh), true, 'lunes'));
+    test('…el descanso se dice «Descanso» y el día sin turno «Sin turno»', () =>
+        eq(/Martes[\s\S]{0,80}Descanso/.test(hh) && /Jueves[\s\S]{0,80}Sin turno/.test(hh), true, 'claro'));
+    test('…el turno que cruza la medianoche cuenta sus 8 horas, y la semana suma 21 h en 3 turnos', () =>
+        eq(hh.indexOf('3 turnos · 21 h') > -1, true, 'total'));
+    test('…el día prestado a otra sucursal dice dónde', () =>
+        eq(/Sábado[\s\S]{0,120}18:00 – 23:00<small>Matriz<\/small>/.test(hh), true, 'dónde'));
+    test('…hoy va marcado', () => eq(/hor-dia turno hoy[\s\S]{0,60}Miércoles/.test(hh), true, 'hoy'));
+    test('…y la semana que sigue, aunque esté vacía, se enseña («La que sigue · semana 49»)', () =>
+        eq(hh.indexOf('La que sigue · semana 49') > -1 && hh.indexOf('0 turnos · 0 h') > -1, true, 'vacía'));
 
     /* ── Al salir, nada del turno anterior se queda ── */
     /* El teléfono de la barra lo usan varias personas: dejar el recetario o los
@@ -19763,8 +19820,12 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
     });
     /* Los botones rápidos solo tienen sentido si la app sabe de qué negocio es.
        Sin credenciales del QR, ofrecerlos sería un botón que lleva a un error. */
-    test('sin credenciales del QR no se ofrecen los botones rápidos', () =>
-        eq(dA('verInicio').indexOf("$('inicioRapido').hidden = !listo;") > -1, true, 'honesto'));
+    /* (25-nov) La portada son dos puertas: la clave (vistas) y la cuenta
+       (módulos). Sin credenciales del QR, la de la clave se APAGA y se explica. */
+    test('sin credenciales del QR la puerta de la clave se apaga', () =>
+        eq(dA('verInicio').indexOf('b.disabled = !listo;') > -1, true, 'honesto'));
+    test('la portada ofrece las dos puertas: clave y usuario/contraseña', () =>
+        eq(ah2.indexOf('Entrar con mi clave') > -1 && ah2.indexOf('Entrar con usuario y contraseña') > -1, true, 'dos puertas'));
     /* Un teléfono recién instalado SIEMPRE llega así: esconder media pantalla
        sin explicar se lee como que la app está incompleta. */
     test('…y se dice cómo conseguirlas, con las dos maneras', () => {
@@ -19849,11 +19910,20 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
     /* Esconder lo que falta haría pensar que la app está rota o incompleta, y
        eso es lo que hace que nadie la vuelva a abrir. Se enseña apagado. */
     test('los módulos que faltan se ven apagados, no escondidos', () => {
-        const t = dA('verHome');
+        const t = dA('pintarHome');
         return eq(t.indexOf("var listo = !!m.fn;") > -1 && t.indexOf("· pronto") > -1, true, 'visible');
     });
     test('…y se dice que es una beta', () =>
-        eq(dA('verHome').indexOf('<b>beta</b>') > -1, true, 'dicho'));
+        eq(dA('pintarHome').indexOf('<b>beta</b>') > -1, true, 'dicho'));
+    /* La cuenta también va por módulo y respeta el plan: lo no contratado no se
+       ve (lo NO LISTO sí, apagado: es otra cosa). */
+    test('la cuenta va por módulo (Admin·ax, Cost·ax, Fin·ax) y esconde lo no contratado', () => {
+        const c = { console, Object, Array }; vm.createContext(c);
+        vm.runInContext(dA('_appsDelPlan'), c);
+        const r = [c._appsDelPlan(null), c._appsDelPlan({ base:['costax'], sucursales:{ s2:['equipax'] } }).join('+'), c._appsDelPlan({ base:'suite' })];
+        return eq(r.join(' | ') + ' | ' + /filter\(function \(g\) \{ return _ctaTiene\(g\.app\); \}\)/.test(dA('pintarHome')),
+                  'suite | costax+equipax | suite | true', 'por plan');
+    });
 
     /* ── Dónde se reparte ── */
     /* Vive solo en el panel maestro a propósito: si el enlace estuviera en el
@@ -26985,10 +27055,12 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
     /* La lista se escribe a mano A PROPÓSITO: cada vez que nace una puerta de
        NIP, esta prueba falla y obliga a mirarla. Así entraron
        `entrada_catalogo` (v80) y `entrada_editar` (v82). */
-    test('la revisión mira de verdad las seis que comprueban el NIP', () => {
+    /* (25-nov) Entraron las tres de la app móvil por módulo (v91): portal_apps,
+       portal_horarios y portal_evaluaciones, las tres con su guardia. */
+    test('la revisión mira de verdad las nueve que comprueban el NIP', () => {
         const conGuardia = puertas.filter(n => ahora[n].texto.indexOf('_nip_guardia') > -1).sort();
         return eq(conGuardia.join(','),
-            'entrada_catalogo,entrada_editar,entrada_historial,entrada_sucursal_de_nip,entrada_validar_nip,portal_perfil',
+            'entrada_catalogo,entrada_editar,entrada_historial,entrada_sucursal_de_nip,entrada_validar_nip,portal_apps,portal_evaluaciones,portal_horarios,portal_perfil',
             conGuardia.join(','));
     });
 
