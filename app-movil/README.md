@@ -156,6 +156,13 @@ sucursal activa (`movil_token`), la app pregunta al abrir si su enlace sigue
 abierto (`movil_estado`) y lo dice en la portada, y con usuario y contraseña no
 se entra si la sucursal (o el negocio, para el dueño) no tiene la app.
 
+**Quién entra con la clave (v93):** con el QR de cualquier sucursal activa entra
+el staff del negocio completo, pero solo el de las sucursales que tienen la app
+(sin sucursal asignada = del negocio entero). La regla vive en `_nip_guardia`,
+la primera puerta de todas las consultas de la clave; una clave buena de una
+sucursal sin app no entra y NO se anota como intento fallido. La portada pone
+arriba del teclado el logo y el nombre de la sucursal del QR (`movil_estado`).
+
 **Los QR ya impresos** (token del negocio) siguen sirviendo mientras el panel
 los acepte («Dejar de aceptarlos» los cierra): los negocios que ya tenían QR
 quedaron con todas sus sucursales activas. `entrada.html` y `checklist.html` los

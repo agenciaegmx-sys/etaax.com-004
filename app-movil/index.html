@@ -72,12 +72,18 @@
      los módulos para usarlos (dueño, gerente y colaboradores con acceso al
      sistema). Mismo estilo que el inicio de sesión del sistema. -->
 <section class="pant" id="pInicio" hidden>
-    <div class="login-card">
-        <div class="login-cab">
-            <img src="../favicon.svg" alt="" width="46" height="46">
-            <div><div class="login-tit">Entrar con tu clave</div>
-                 <div class="login-sub" id="inicioSub">Tu NIP de 5 dígitos</div></div>
-        </div>
+    <!-- (25-nov) COMO EL ACCESO DEL SISTEMA (hub.html): «Bienvenido · Inicia
+         sesión», la tarjeta, los campos con su ícono, el ojo y el botón en
+         terracota. Arriba del teclado, la SUCURSAL del QR —su logo y su nombre,
+         centrados— en vez del isotipo (ya está en la cabecera). -->
+    <div class="ini-hero">
+        <div class="ini-eyebrow">Bienvenido</div>
+        <div class="ini-titulo">Inicia <span>sesión</span></div>
+        <div class="ini-sub">Accede a tu plataforma etaax</div>
+    </div>
+    <div class="auth-card clave-card">
+        <div class="suc-marca" id="sucMarca" hidden></div>
+        <div class="auth-sub centro" id="inicioSub">Ingresa tu clave de 5 dígitos</div>
         <div id="nipZona">
             <div class="nip-wrap">
                 <div class="nip-puntos" id="nipPuntos" aria-live="polite"></div>
@@ -92,16 +98,30 @@
         <span>Iniciar sesión con usuario y contraseña</span>
         <svg class="desplegar-fl" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
     </button>
-    <div class="login-card cuenta-form" id="cuentaForm" hidden>
-        <label class="lbl" for="ctaCorreo">Usuario o correo</label>
-        <input class="campo" id="ctaCorreo" type="text" inputmode="email" autocomplete="username"
-               autocapitalize="none" spellcheck="false" placeholder="tu usuario o tu@correo.com">
-        <label class="lbl" for="ctaPwd">Contraseña</label>
-        <input class="campo" id="ctaPwd" type="password" autocomplete="current-password" placeholder="••••••••">
-        <div class="nip-msg" id="ctaMsg" style="text-align:left"></div>
-        <button class="btn btn-ok" id="ctaBtn" onclick="entrarCuenta()" style="margin-top:8px">Entrar</button>
-        <div class="avisos">Es la misma cuenta con la que entras al sistema desde la computadora: el dueño con su
-            correo, y los colaboradores con acceso con su usuario.</div>
+    <div class="auth-card cuenta-form" id="cuentaForm" hidden>
+        <div class="auth-sub">Ingresa tus datos de cuenta</div>
+        <div class="auth-field">
+            <label class="auth-label" for="ctaCorreo">Correo o usuario</label>
+            <div class="auth-caja">
+                <span class="auth-ic" data-ic="usuario"></span>
+                <input class="auth-input" id="ctaCorreo" type="text" inputmode="email" autocomplete="username"
+                       autocapitalize="none" spellcheck="false" placeholder="tu@correo.com o tu_usuario"
+                       onkeydown="if(event.key==='Enter')entrarCuenta()">
+            </div>
+        </div>
+        <div class="auth-field">
+            <label class="auth-label" for="ctaPwd">Contraseña</label>
+            <div class="auth-caja">
+                <span class="auth-ic" data-ic="candado"></span>
+                <input class="auth-input" id="ctaPwd" type="password" autocomplete="current-password" placeholder="Tu contraseña"
+                       onkeydown="if(event.key==='Enter')entrarCuenta()">
+                <button type="button" class="pwd-toggle" id="ctaOjo" data-ic="ojo" onclick="toggleOjo()" tabindex="-1" aria-label="Mostrar contraseña"></button>
+            </div>
+        </div>
+        <div class="auth-error" id="ctaMsg"></div>
+        <button class="btn-auth" id="ctaBtn" onclick="entrarCuenta()"><span>Iniciar sesión</span><span class="btn-auth-fl" data-ic="flecha"></span></button>
+        <div class="auth-switch"><span class="auth-ic" data-ic="asesor"></span>
+            <span>Es tu cuenta del sistema: el dueño entra con su correo y los colaboradores con acceso, con su usuario.</span></div>
     </div>
 </section>
 
@@ -124,19 +144,24 @@
      se podrá hacer ahí. Lo que todavía no está se enseña APAGADO («pronto») y no
      escondido: esconderlo haría pensar que la app está rota. -->
 <section class="pant" id="pHome" hidden>
-    <div class="saludo" id="homeQuien"></div>
+    <div class="saludo-fila">
+        <div class="saludo" id="homeQuien"></div>
+        <button class="btn-salir" onclick="salirCuenta()"><span data-ic="cerrar-sesion"></span>Cerrar sesión</button>
+    </div>
     <div id="homeMenu"></div>
-    <button class="salir" onclick="salirCuenta()">Cerrar sesión</button>
 </section>
 
 <!-- ══ 2 · EL INICIO CON LA CLAVE: LOS MÓDULOS ═══════════════════════════════
-     Como en el sistema: un botón por módulo, con su nombre ·ax en la isla azul
-     y lo que se hace ahí. Lo arma pintarPortal(); lo no contratado no se ve
-     (portal_apps, v91). -->
+     Como en el sistema: una tarjeta cuadrada por módulo (ícono, «Módulo N» y su
+     isla), su título y «Ver» en terracota. «Cerrar sesión», arriba a la
+     derecha. Lo arma pintarPortal(); lo no contratado no se ve (portal_apps,
+     v91). -->
 <section class="pant" id="pMenu" hidden>
-    <div class="saludo" id="quienCard"></div>
+    <div class="saludo-fila">
+        <div class="saludo" id="quienCard"></div>
+        <button class="btn-salir" onclick="salir()"><span data-ic="cerrar-sesion"></span>Cerrar sesión</button>
+    </div>
     <div id="menuPortal"></div>
-    <button class="salir" onclick="salir()">Cerrar sesión</button>
 </section>
 
 <!-- ══ 2b · DENTRO DE UN MÓDULO ═══════════════════════════════════════════════

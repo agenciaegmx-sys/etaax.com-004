@@ -61,7 +61,9 @@ function rpcs(opc) {
             movil_token: (p) => { const act = ${JSON.stringify(opc.movil || { suc_principal: true, suc_dos: true })};
                 const suc = p.p_suc || (act.suc_principal ? 'suc_principal' : Object.keys(act).find((k) => act[k]));
                 return (suc && act[suc]) ? { token: 'tokA', sucursalId: suc } : null; },
-            movil_estado: (p) => ({ activo: ${opc.apagado ? 'false' : "p.p_token === 'tokA'"}, sucursalId: null }),
+            movil_estado: (p) => (${opc.apagado ? 'false' : "p.p_token === 'tokA'"})
+                ? { activo: true, sucursalId: 'suc_dos', negocio: 'Café de prueba', sucursal: 'Polanco', giro: 'Bar', logo: ${JSON.stringify(opc.logo || '')} }
+                : { activo: false, sucursalId: null },
             /* El colaborador con acceso al sistema: usuario «eli» (Elizabeth, gerente). */
             staff_login: (p) => (p.p_usuario === 'eli' && p.p_hash === window.__pwdhash)
                 ? [{ negocio_id: 'n1', negocio_datos: { nombre: 'Café de prueba' }, staff_id: 's7', nombre: 'Elizabeth Ruiz', rol: 'gerente', sucursal_id: 'suc_dos' }] : [],
@@ -82,6 +84,7 @@ function semilla(opc) {
             localStorage.clear();
             localStorage.setItem('__nube', ${JSON.stringify(JSON.stringify(n))});
             ${opc.ligado === false ? '' : `localStorage.setItem('etaax_appmovil_qr', JSON.stringify({ n: 'n1', t: 'tokA', s: '', nom: 'Café de prueba' }));`}
+            ${process.env.TEMA_CLARO ? "localStorage.setItem('etaax_appmovil_tema', 'claro');" : ''}   // solo para fotos en claro (TEMA_CLARO=1 SHOTS=…)
             localStorage.setItem('__sembrado', '1');
         }
     })();`;
@@ -140,13 +143,38 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
             });
             assert.deepEqual(r, [true, true, true, 'Sin sesión']);
         });
-        await caso('la portada: la CLAVE por default, con su teclado a la vista', async () =>
-            assert.deepEqual(await p.evaluate(() => [document.querySelector('#pInicio .login-tit').textContent, document.querySelectorAll('#teclado .tecla').length,
-                document.getElementById('nipZona').classList.contains('apagada')]), ['Entrar con tu clave', 12, false]));
+        await caso('la portada es la del sistema: «Bienvenido · Inicia sesión» y la CLAVE por default, con su teclado a la vista', async () =>
+            assert.deepEqual(await p.evaluate(() => [document.querySelector('#pInicio .ini-titulo').textContent, document.getElementById('inicioSub').textContent,
+                document.querySelectorAll('#teclado .tecla').length, document.getElementById('nipZona').classList.contains('apagada')]),
+                ['Inicia sesión', 'Ingresa tu clave de 5 dígitos', 12, false]));
+        await p.waitForFunction(() => /Polanco/.test(document.getElementById('sucMarca').textContent), null, { timeout: 8000 }).catch(() => {});
+        await caso('arriba del teclado, la SUCURSAL del QR, centrada: su inicial (sin logo), su nombre y giro · negocio', async () => {
+            const r = await p.evaluate(() => {
+                const m = document.getElementById('sucMarca'), n = m.querySelector('.suc-nom').getBoundingClientRect(), c = document.querySelector('.clave-card').getBoundingClientRect();
+                return [m.hidden, m.querySelector('.suc-ini').textContent, m.querySelector('.suc-nom').textContent, m.querySelector('.suc-giro').textContent,
+                        Math.abs((n.left + n.right) / 2 - (c.left + c.right) / 2) < 2, m.getBoundingClientRect().bottom <= document.getElementById('teclado').getBoundingClientRect().top];
+            });
+            assert.deepEqual(r, [false, 'P', 'Polanco', 'Bar · Café de prueba', true, true]);
+        });
+        await caso('…el ✓ del teclado es la acción, en terracota (como «Iniciar sesión» del sistema)', async () =>
+            assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#teclado [data-k="entrar"]')).backgroundColor), 'rgb(251, 155, 111)'));
         await caso('…y «Iniciar sesión con usuario y contraseña» cerrado, que se despliega al tocarlo', async () => {
             assert.equal(await p.evaluate(() => document.getElementById('cuentaForm').hidden), true);
             await p.click('#btnUsuario');
             assert.deepEqual(await p.evaluate(() => [document.getElementById('cuentaForm').hidden, document.getElementById('btnUsuario').getAttribute('aria-expanded')]), [false, 'true']);
+        });
+        await foto(p, 'm0b-cuenta');
+        await caso('…igual al acceso del sistema: campos con su ícono, el ojo que enseña la contraseña y «Iniciar sesión» en terracota', async () => {
+            const r = await p.evaluate(() => [
+                [...document.querySelectorAll('#cuentaForm .auth-label')].map(x => x.textContent),
+                document.querySelectorAll('#cuentaForm .auth-caja .auth-ic svg.etx-ic').length,
+                document.getElementById('ctaBtn').textContent.trim(),
+                getComputedStyle(document.getElementById('ctaBtn')).backgroundColor]);
+            assert.deepEqual(r, [['Correo o usuario', 'Contraseña'], 2, 'Iniciar sesión', 'rgb(251, 155, 111)']);
+            await p.click('#ctaOjo');
+            assert.equal(await p.evaluate(() => document.getElementById('ctaPwd').type), 'text');
+            await p.click('#ctaOjo');
+            assert.equal(await p.evaluate(() => document.getElementById('ctaPwd').type), 'password');
             await p.click('#btnUsuario');
         });
 
@@ -162,7 +190,25 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
             assert.equal(await p.evaluate(() => document.body.innerText.indexOf('Guías de uso')), -1);
             assert.equal(await sinAncho(p), true);
         });
-        await p.click('#menuPortal [data-mod="costax"]'); await p.waitForTimeout(200);
+        await caso('los módulos en tarjeta CUADRADA como en el sistema (ícono, «Módulo N», isla), lado a lado, con «Ver» en terracota', async () => {
+            const r = await p.evaluate(() => [...document.querySelectorAll('#menuPortal .mod-card')].map(c => {
+                const t = c.querySelector('.mod-tile').getBoundingClientRect(), v = c.querySelector('.btn-ver');
+                return [c.querySelector('.mod-num').textContent, !!c.querySelector('.mod-tile svg.etx-ic'), Math.abs(t.width - t.height) < 2,
+                        Math.round(t.top), v.textContent.trim(), getComputedStyle(v).backgroundColor];
+            }));
+            assert.equal(r.length, 2);
+            assert.deepEqual(r.map(x => [x[0], x[1], x[2], x[4], x[5]]), [['Módulo 1', true, true, 'Ver', 'rgb(251, 155, 111)'], ['Módulo 2', true, true, 'Ver', 'rgb(251, 155, 111)']]);
+            assert.equal(r[0][3], r[1][3], 'lado a lado');
+        });
+        await caso('«Cerrar sesión» es un botón grande arriba a la derecha, junto al saludo', async () => {
+            const r = await p.evaluate(() => {
+                const b = document.querySelector('#pMenu .btn-salir').getBoundingClientRect(), q = document.getElementById('quienCard').getBoundingClientRect(),
+                      m = document.getElementById('menuPortal').getBoundingClientRect();
+                return [b.height >= 44, b.right > innerWidth - 40, b.left > q.left, b.bottom <= m.top, !document.querySelector('#pMenu .salir')];
+            });
+            assert.deepEqual(r, [true, true, true, true, true]);
+        });
+        await p.click('#menuPortal [data-mod="costax"] .btn-ver'); await p.waitForTimeout(200);
         await caso('dentro de Cost·ax: su isla y dos desplegables, Inventarios y Recetas, cerrados', async () =>
             assert.deepEqual(await p.evaluate(() => [[...document.querySelectorAll('#modCuerpo .isla')].map(x => x.textContent),
                 [...document.querySelectorAll('#modCuerpo .despl')].map(b => b.textContent.trim() + ':' + b.getAttribute('aria-expanded'))]),
@@ -174,17 +220,28 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
                 return [[...g.querySelectorAll('.rect b')].map(b => b.textContent), getComputedStyle(g).gridTemplateColumns.split(' ').length]; });
             assert.deepEqual(r, [['Registrar entradas', 'Registrar merma', 'Registrar cortesía / préstamo', 'Registrar existencias', 'Ver lo registrado'], 2]);
         });
+        await p.click('[data-despl="inventarios"]'); await p.waitForTimeout(100);
         await p.click('[data-despl="recetas"]'); await p.waitForTimeout(300);
-        await caso('…y Recetas, las recetas de su área, con la misma vista', async () =>
-            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#rejRecetas .rect b')].map(b => b.textContent)), ['Margarita', 'Paloma']));
-        await p.click('#rejRecetas .rect:has-text("Margarita")'); await p.waitForTimeout(200);
+        await foto(p, 'm2b-recetas');
+        await caso('…Recetas: los CUATRO grupos fijos; los de cocina, opacos para quien es de barra', async () =>
+            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#rejRecetas .rec-grupo')].map(b =>
+                b.querySelector('b').textContent + ':' + (b.disabled ? 'opaco' : b.querySelector('small').textContent) + ':' + (getComputedStyle(b).opacity < 0.5))),
+                ['Recetas alimentos:opaco:true', 'Sub recetas alimentos:opaco:true', 'Recetas bebidas:2 recetas:false', 'Sub recetas bebidas:0 recetas:false']));
+        await p.click('#rejRecetas .rec-grupo[data-grupo="bebidas"]'); await p.waitForTimeout(200);
+        await foto(p, 'm2c-grupo');
+        await caso('…tocar «Recetas bebidas» despliega su lista debajo, y los cuatro grupos se quedan arriba', async () =>
+            assert.deepEqual(await p.evaluate(() => [document.querySelectorAll('#rejRecetas .rec-grupo').length,
+                document.querySelector('.rec-grupo[aria-pressed="true"] b').textContent,
+                [...document.querySelectorAll('#recItems .rect b')].map(b => b.textContent)]), [4, 'Recetas bebidas', ['Margarita', 'Paloma']]));
+        await p.click('#recItems .rect:has-text("Margarita")'); await p.waitForTimeout(200);
         await caso('una receta abre su ficha (sin costos) y «atrás» regresa a Cost·ax con lo que estaba abierto', async () => {
             assert.match(await p.evaluate(() => document.getElementById('recFicha').textContent), /Tequila[\s\S]*Agitar con hielo/);
             await p.click('#btnVolver'); await p.waitForTimeout(200);
-            assert.deepEqual(await p.evaluate(() => [!document.getElementById('pModulo').hidden, !document.getElementById('rejRecetas').hidden]), [true, true]);
+            assert.deepEqual(await p.evaluate(() => [!document.getElementById('pModulo').hidden, !document.getElementById('rejRecetas').hidden,
+                document.querySelectorAll('#recItems .rect').length]), [true, true, 2]);
         });
         await p.click('#btnVolver'); await p.waitForTimeout(150);
-        await p.click('#menuPortal [data-mod="equipax"]'); await p.waitForTimeout(200);
+        await p.click('#menuPortal [data-mod="equipax"] .btn-ver'); await p.waitForTimeout(200);
         await foto(p, 'm3-equipax');
         await caso('dentro de Equip·ax: ver mis horarios, realizar check list y evaluaciones (porque hay una abierta)', async () =>
             assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#modCuerpo .rect b')].map(b => b.textContent)),
@@ -228,7 +285,7 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
         await nip(c.page, '12345');
         await caso('…con solo Equip·ax no ve Cost·ax, y sin evaluaciones abiertas no sale «Evaluaciones»', async () => {
             assert.deepEqual(await islas(c.page, '#menuPortal'), ['Equip·ax']);
-            await c.page.click('#menuPortal [data-mod="equipax"]'); await c.page.waitForTimeout(150);
+            await c.page.click('#menuPortal [data-mod="equipax"] .btn-ver'); await c.page.waitForTimeout(150);
             assert.deepEqual(await c.page.evaluate(() => [...document.querySelectorAll('#modCuerpo .rect b')].map(x => x.textContent)), ['Ver mis horarios', 'Realizar check list']);
         });
         await c.ctx.close();
@@ -236,7 +293,7 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
         await nip(d.page, '12345');
         await caso('sin la v91: se ve todo, y Mis horarios dice que todavía no está activado', async () => {
             assert.deepEqual(await islas(d.page, '#menuPortal'), ['Cost·ax', 'Equip·ax']);
-            await d.page.click('#menuPortal [data-mod="equipax"]'); await d.page.waitForTimeout(150);
+            await d.page.click('#menuPortal [data-mod="equipax"] .btn-ver'); await d.page.waitForTimeout(150);
             await d.page.click('#modCuerpo .rect:has-text("Ver mis horarios")'); await d.page.waitForTimeout(300);
             assert.equal(await d.page.evaluate(() => document.getElementById('horariosLista').textContent.trim()), 'Esta parte de la app todavía no está activada en tu negocio.');
         });

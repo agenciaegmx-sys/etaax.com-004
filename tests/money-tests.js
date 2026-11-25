@@ -18472,9 +18472,9 @@ console.log('\n══ BH95 · La app móvil se activa por sucursal (v92) ══'
         eq(fn(app, 'revisarAcceso').indexOf("rpc('movil_estado', { p_neg: NEG, p_token: TOKEN })") > -1 &&
            fn(app, 'verInicio').indexOf('var listo = !!(NEG && TOKEN) && !ACCESO_APAGADO;') > -1 &&
            fn(app, 'verInicio').indexOf('La app móvil de esta sucursal está apagada') > -1, true));
-    test('…y un NIP rechazado revisa si fue el acceso antes de decir «NIP no reconocido»', () => {
+    test('…y un NIP rechazado revisa si fue el acceso antes de decir que la clave no entró', () => {
         const e = fn(app, 'entrar');
-        return eq(e.indexOf('if (await revisarAcceso()) {') > -1 && e.indexOf('if (await revisarAcceso()) {') < e.indexOf('NIP no reconocido'), true);
+        return eq(e.indexOf('if (await revisarAcceso()) {') > -1 && e.indexOf('if (await revisarAcceso()) {') < e.indexOf('No pudimos entrar con esa clave'), true);
     });
 
     /* ── El QR de check list se retira ── */
@@ -18511,6 +18511,98 @@ console.log('\n══ BH95 · La app móvil se activa por sucursal (v92) ══'
         const c = { console, Object, JSON, Array, String, _data: { movilError: true, sucursales: {} }, esc: (x) => String(x), etaaxJsArg: (x) => String(x) };
         c.window = c; vm.createContext(c); vm.runInContext(admp, c);
         return eq(c.AdmPlanes.seccionMovil('n1').indexOf('supabase-migration-v92.sql') > -1 && c.AdmPlanes.movilResumen('n1') === '', true);
+    });
+})();
+
+/* ═══════ BH96 · LA CLAVE POR SUCURSAL CON APP Y LA APP CON LA CARA DEL SISTEMA (v93, 25-nov) ═══════
+   Edwin: «con el QR de la sucursal… que se lean las claves del negocio completo
+   y los usuarios de todo el staff autorizado de las sucursales que tengan
+   activa la app». Y el diseño: el acceso igual al del sistema, la sucursal
+   (logo y nombre) arriba del teclado, los módulos en tarjeta cuadrada con
+   «Ver» en terracota, «Cerrar sesión» grande arriba a la derecha y el
+   recetario en cuatro grupos fijos. La prueba contra Postgres real es
+   tests/probar-sql-v93.mjs; la de pantalla, probar-app-movil.cjs.           */
+console.log('\n══ BH96 · La clave por sucursal con app; la app con la cara del sistema ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    const v93 = leer('supabase-migration-v93.sql'), v79 = leer('supabase-migration-v79.sql');
+    const app = leer('app-movil/app.js'), css = leer('app-movil/app.css'), html = leer('app-movil/index.html');
+    const sqlFn = (src, n) => { const i = src.indexOf('CREATE OR REPLACE FUNCTION ' + n + '('); return i < 0 ? '' : src.slice(i, src.indexOf('\n$$;', i)); };
+    const fn = (src, n) => { const i = src.indexOf('function ' + n + '('); if (i < 0) return ''; return src.slice(i, src.indexOf('\n}', i) + 2); };
+    const g93 = sqlFn(v93, '_nip_guardia'), g79 = sqlFn(v79, '_nip_guardia');
+
+    test('v93: el guardia de la clave pide que SU sucursal tenga la app (sin asignar = del negocio entero)', () =>
+        eq(/SELECT TRUE, _movil_staff_ok\(p_neg, s\.datos\) INTO v_ok, v_app/.test(g93) &&
+           /IF \(v_ok\) IS TRUE AND \(v_app\) IS TRUE THEN/.test(g93) &&
+           /WHEN NULLIF\(p_datos->>'sucursalId', ''\) IS NULL\s+THEN EXISTS \(SELECT 1 FROM _movil_activas\(p_neg\)\)/.test(sqlFn(v93, '_movil_staff_ok')), true));
+    test('…una clave buena sin app NO se anota como fallo (el freno es por negocio + IP: bloquearía al local)', () =>
+        eq(g93.indexOf('IF (v_ok) IS TRUE THEN\n        RETURN FALSE;') > -1 &&
+           g93.indexOf('IF (v_ok) IS TRUE THEN\n        RETURN FALSE;') < g93.indexOf('INSERT INTO login_intentos'), true));
+    test('…y todo lo demás del guardia de la v79 sigue igual (bloqueo, conteo y olvido)', () => {
+        const sin = (t) => t.replace(/SELECT TRUE, _movil_staff_ok\(p_neg, s\.datos\) INTO v_ok, v_app/, 'SELECT TRUE INTO v_ok')
+            .replace(/\n\s+ORDER BY _movil_staff_ok\(p_neg, s\.datos\) DESC/, '')
+            .replace(/ AND \(v_app\) IS TRUE/, '').replace(/\n        v_app    BOOLEAN := FALSE;/, '')
+            .replace(/\n\n    -- \(v93\)[\s\S]*?IF \(v_ok\) IS TRUE THEN\n        RETURN FALSE;\n    END IF;/, '');
+        return eq(sin(g93), g79);
+    });
+    test('movil_estado (v93) trae la sucursal del QR para la portada: nombre, giro y logo', () => {
+        const m = sqlFn(v93, 'movil_estado');
+        return eq(["'sucursal',", "'giro',", "'logo', COALESCE(_movil_logo(v_ns->'cfg'->v_suc->>'_logo'), _movil_logo(v_n->>'logo'))",
+                   "IF v_ok IS NOT TRUE THEN\n        RETURN jsonb_build_object('activo', false, 'sucursalId', NULL);"].every(x => m.indexOf(x) > -1), true);
+    });
+
+    /* ── La portada ── */
+    test('el acceso es el del sistema: «Bienvenido · Inicia sesión», campos con su ícono, el ojo y el botón en terracota', () =>
+        eq(['<div class="ini-eyebrow">Bienvenido</div>', '<div class="ini-titulo">Inicia <span>sesión</span></div>', 'Ingresa tus datos de cuenta',
+            'data-ic="usuario"', 'data-ic="candado"', 'id="ctaOjo" data-ic="ojo"', 'class="btn-auth" id="ctaBtn"', 'placeholder="tu@correo.com o tu_usuario"']
+            .every(x => html.indexOf(x) > -1) && /\.btn-auth \{[^}]*background:var\(--terra\)/.test(css) &&
+           /--terra:#fb9b6f;/.test(css) && /--terra:#ad4b27;/.test(css), true));
+    test('arriba del teclado, la sucursal del QR (logo y nombre centrados) en vez del isotipo', () =>
+        eq(html.indexOf('id="sucMarca"') > -1 && html.indexOf('id="sucMarca"') < html.indexOf('id="teclado"') &&
+           html.indexOf('login-cab') === -1 && fn(app, 'verInicio').indexOf('pintarMarcaSuc();') > -1 &&
+           /\.suc-marca \{[^}]*align-items:center; text-align:center/.test(css), true));
+    test('…la marca se guarda con el QR y la refresca movil_estado', () =>
+        eq(fn(app, '_guardarQR').indexOf('marca: MARCA') > -1 && fn(app, 'revisarAcceso').indexOf('MARCA = { sucursal: r.data.sucursal') > -1 &&
+           /var NEG_NOM = NEG_NOM \|\| '';/.test(app), true));
+    const marca = (MARCA, NEG_NOM) => {
+        const el = { hidden: true, innerHTML: '', querySelector: () => null };
+        const c = { $: () => el, etx: (x) => String(x), MARCA, NEG_NOM, NEG: 'n1', TOKEN: 't' };
+        vm.createContext(c); vm.runInContext(fn(app, 'pintarMarcaSuc'), c); c.pintarMarcaSuc();
+        return el;
+    };
+    test('…con logo: la imagen, el nombre de la sucursal y el giro · negocio', () => {
+        const el = marca({ sucursal: 'Mammut Pizza Madero', negocio: 'Mammut Pizza', giro: 'Pizzería', logo: 'https://x/l.png' }, '');
+        return eq(el.hidden + ' ' + /<img src="https:\/\/x\/l.png"[\s\S]*<b class="suc-nom">Mammut Pizza Madero<\/b><small class="suc-giro">Pizzería · Mammut Pizza<\/small>/.test(el.innerHTML), 'false true');
+    });
+    test('…sin logo, su inicial; sin saber la sucursal (sin la v93), el nombre del negocio', () => {
+        const a = marca({ sucursal: 'Polanco', negocio: '', giro: '', logo: '' }, '').innerHTML;
+        const b = marca(null, 'Café de prueba').innerHTML;
+        return eq(/<span class="suc-ini">P<\/span>/.test(a) + ' ' + /<b class="suc-nom">Café de prueba<\/b>/.test(b), 'true true');
+    });
+
+    /* ── El inicio ── */
+    test('los módulos en tarjeta cuadrada como en el sistema (ícono, «Módulo N», isla) y «Ver» en terracota', () => {
+        const b = fn(app, '_botonModulo');
+        return eq(b.indexOf('class="mod-tile"') > -1 && b.indexOf("Módulo ' + (n || 1)") > -1 && b.indexOf('_islaHTML(i.nom)') > -1 &&
+                  b.indexOf('class="btn-ver"') > -1 && /\.mod-tile \{[^}]*aspect-ratio:1 \/ 1/.test(css) && /\.btn-ver \{[^}]*background:var\(--terra\)/.test(css), true);
+    });
+    test('«Cerrar sesión» grande, arriba a la derecha, en los dos inicios (clave y cuenta)', () =>
+        eq(/<div class="saludo-fila">\s*<div class="saludo" id="quienCard"><\/div>\s*<button class="btn-salir" onclick="salir\(\)">/.test(html) &&
+           /<div class="saludo-fila">\s*<div class="saludo" id="homeQuien"><\/div>\s*<button class="btn-salir" onclick="salirCuenta\(\)">/.test(html) &&
+           html.indexOf('class="salir"') === -1 && /\.btn-salir \{[^}]*min-height:46px/.test(css), true));
+
+    /* ── El recetario ── */
+    test('las recetas en cuatro grupos fijos: recetas y sub recetas de alimentos y de bebidas', () => {
+        const c = {}; vm.createContext(c);
+        vm.runInContext(app.slice(app.indexOf('var GRUPOS_REC = ['), app.indexOf('];', app.indexOf('var GRUPOS_REC = [')) + 2), c);
+        return eq(vm.runInContext("GRUPOS_REC.map(function(g){return g.t + ':' + g.k + ':' + g.area;}).join(' | ')", c),
+            'Recetas alimentos:alimentos:cocina | Sub recetas alimentos:sub-alimentos:cocina | Recetas bebidas:bebidas:barra | Sub recetas bebidas:sub-bebidas:barra');
+    });
+    test('…los que no son de su área se ven, opacos y sin abrir; el elegido despliega su lista', () => {
+        const r = fn(app, '_cargarRecetasRejilla');
+        return eq(r.indexOf("(ok ? '' : ' disabled')") > -1 && r.indexOf("'No es de tu área'") > -1 &&
+                  fn(app, '_pintarRecetasRejilla').indexOf('if (x.tipo !== _recGrupo) return false;') > -1 &&
+                  /\.rec-grupo\[disabled\] \{ opacity:\.38; \}/.test(css), true);
     });
 })();
 
@@ -19767,9 +19859,11 @@ console.log('\n══ BH18 · La app móvil ══');
         const h = vista('cocina', [{}]).cost, r = (h.match(/<b>[^<]+<\/b>/g) || []).map(x => x.replace(/<[^>]+>/g, ''));
         return eq(r.join(' | '), 'Registrar entradas | Registrar merma | Registrar cortesía / préstamo | Registrar existencias | Ver lo registrado', 'opciones');
     });
-    test('…y Recetas solo para quien cocina o prepara (no a piso ni a administración)', () =>
+    /* (Edwin, 25-nov) Recetas SIEMPRE, con sus cuatro grupos fijos; los que no
+       son del área de quien entró, opacos (BH95 y el arnés de navegador). */
+    test('…y Recetas para todos: los cuatro grupos se ven siempre (opacos los que no son de su área)', () =>
         eq([vista('barra', [{}]).cost.indexOf('data-despl="recetas"') > -1, vista('piso', [{}]).cost.indexOf('data-despl="recetas"') > -1,
-            vista('administracion', [{}]).cost.indexOf('data-despl="recetas"') > -1].join(','), 'true,false,false', 'por área'));
+            vista('administracion', [{}]).cost.indexOf('data-despl="recetas"') > -1].join(','), 'true,true,true', 'siempre'));
     test('dentro de Equip·ax: ver mis horarios y realizar check list', () => {
         const h = vista('piso', [{}]).equip;
         return eq(h.indexOf('Ver mis horarios') > -1 && h.indexOf('Realizar check list') > -1, true, 'completo');
@@ -20034,7 +20128,7 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
         eq(dA('verInicio').indexOf("$('nipZona').classList.toggle('apagada', !listo);") > -1 &&
            dA('verInicio').indexOf('_usuarioAbierto(!listo);') > -1, true, 'honesto'));
     test('la portada: la clave por default y «Iniciar sesión con usuario y contraseña» desplegable', () =>
-        eq(ah2.indexOf('Entrar con tu clave') > -1 && /id="btnUsuario"[^>]*aria-expanded="false"/.test(ah2) &&
+        eq(ah2.indexOf('Ingresa tu clave de 5 dígitos') > -1 && /id="btnUsuario"[^>]*aria-expanded="false"/.test(ah2) &&
            /id="cuentaForm" hidden/.test(ah2) && ah2.indexOf('Iniciar sesión con usuario y contraseña') > -1, true, 'por default'));
     test('la cabecera es la del sistema: ☰, isotipo al centro, tema y quién está en sesión', () =>
         eq(['id="btnCajon"', 'class="hdr-marca"', 'onclick="toggleTema()"', 'id="hdrNombre"', 'id="cajon"'].every(x => ah2.indexOf(x) > -1), true, 'completa'));
@@ -20057,7 +20151,7 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
     /* La SUCURSAL no se guarda: la pone el NIP de quien entra. Guardarla haría
        que el teléfono del encargado sellara todo con la suya. */
     test('…sin guardar la sucursal del encargado', () =>
-        eq(dA('_fijarQR').indexOf("s: ''") > -1, true, 'la pone el NIP'));
+        eq(dA('_fijarQR').indexOf('_guardarQR();') > -1 && dA('_guardarQR').indexOf("s: ''") > -1, true, 'la pone el NIP'));
     /* Dos botones distintos que llevaran al mismo sitio harían sobrar uno. */
     /* (25-nov) Con la clave se llega al inicio por módulos; ya no hay dos botones
        que llevaran a lo mismo. */

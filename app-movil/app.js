@@ -38,7 +38,7 @@ try {
     if (NEG && TOKEN) localStorage.setItem(LS, JSON.stringify({ n: NEG, t: TOKEN, s: SUC }));
     else {
         var g = JSON.parse(localStorage.getItem(LS) || 'null');
-        if (g && g.n && g.t) { NEG = g.n; TOKEN = g.t; SUC = g.s || ''; NEG_NOM = g.nom || ''; }
+        if (g && g.n && g.t) { NEG = g.n; TOKEN = g.t; SUC = g.s || ''; NEG_NOM = g.nom || ''; MARCA = g.marca || null; }
     }
 } catch (e) {}
 
@@ -169,10 +169,17 @@ function mostrar(id, titulo, sub, conVolver, conBarra) {
    el token dentro. La SUCURSAL no se guarda a propósito: la pone el NIP de quien
    entra — guardarla haría que el teléfono del encargado sellara todo con la
    suya. */
-var NEG_NOM = '';
+/* `var` sin pisar: el bloque de arriba ya pudo leer el nombre y la marca
+   guardados (antes esta línea los dejaba en blanco). */
+var NEG_NOM = NEG_NOM || '';
+var MARCA = MARCA || null;       // la sucursal del QR: { sucursal, negocio, giro, logo } (movil_estado, v93)
 function _fijarQR(neg, token, nombre) {
-    NEG = neg; TOKEN = token; NEG_NOM = nombre || ''; ACCESO_APAGADO = false;
-    try { localStorage.setItem(LS, JSON.stringify({ n: NEG, t: TOKEN, s: '', nom: NEG_NOM })); } catch (e) {}
+    NEG = neg; TOKEN = token; NEG_NOM = nombre || ''; ACCESO_APAGADO = false; MARCA = null;
+    _guardarQR();
+    revisarAcceso();               // trae la marca de la sucursal de este token
+}
+function _guardarQR() {
+    try { localStorage.setItem(LS, JSON.stringify({ n: NEG, t: TOKEN, s: '', nom: NEG_NOM, marca: MARCA })); } catch (e) {}
 }
 window._appFijarQR = _fijarQR;
 
@@ -188,7 +195,17 @@ async function revisarAcceso() {
     try {
         var r = await _supabase.rpc('movil_estado', { p_neg: NEG, p_token: TOKEN });
         if (r && !r.error && r.data && r.data.activo === false) { ACCESO_APAGADO = true; return true; }
-        if (r && !r.error && r.data && r.data.activo === true) ACCESO_APAGADO = false;
+        if (r && !r.error && r.data && r.data.activo === true) {
+            ACCESO_APAGADO = false;
+            /* (v93) De qué sucursal es este QR: su nombre y su logo van arriba
+               del teclado. Sin la v93 no viene y queda el nombre del negocio. */
+            if (r.data.negocio !== undefined) {
+                MARCA = { sucursal: r.data.sucursal || '', negocio: r.data.negocio || '', giro: r.data.giro || '', logo: r.data.logo || '' };
+                if (r.data.negocio) NEG_NOM = r.data.negocio;
+                _guardarQR();
+                pintarMarcaSuc();
+            }
+        }
     } catch (e) {}
     return false;
 }
@@ -206,7 +223,8 @@ function verInicio() {
     var listo = !!(NEG && TOKEN) && !ACCESO_APAGADO;
     NIP = ''; pintarPuntos(); $('nipMsg').textContent = '';
     $('nipZona').classList.toggle('apagada', !listo);
-    $('inicioSub').textContent = listo ? ((NEG_NOM ? NEG_NOM + ' · ' : '') + 'tu NIP de 5 dígitos')
+    pintarMarcaSuc();
+    $('inicioSub').textContent = listo ? 'Ingresa tu clave de 5 dígitos'
         : (ACCESO_APAGADO ? 'Este acceso ya no está activo' : 'Este teléfono todavía no está ligado');
     $('inicioAviso').innerHTML = listo
         ? 'Tu clave dice quién registró qué. Si no la tienes, pídesela a tu encargado.'
@@ -219,6 +237,29 @@ function verInicio() {
           '<b>QR de tu sucursal</b>. Después entras solo con tu clave.';
     _usuarioAbierto(!listo);
     mostrar('pInicio', 'Entrar', '', false, false);
+}
+/* LA SUCURSAL DEL QR, ARRIBA DEL TECLADO (Edwin, 25-nov): su logo y su
+   nombre, centrados. Sin logo, su inicial en un círculo; sin saber todavía la
+   sucursal (sin la v93 o sin red), el nombre del negocio. */
+function pintarMarcaSuc() {
+    var el = $('sucMarca'); if (!el) return;
+    var m = MARCA || {}, nom = m.sucursal || m.negocio || NEG_NOM || '';
+    if (!NEG || !TOKEN || !nom) { el.hidden = true; el.innerHTML = ''; return; }
+    var sub = [m.giro, (m.sucursal && m.negocio && m.negocio !== m.sucursal) ? m.negocio : ''].filter(Boolean).join(' · ');
+    var ini = '<span class="suc-ini">' + etx(nom.trim().charAt(0).toUpperCase()) + '</span>';
+    el.innerHTML = '<span class="suc-logo">' + (m.logo ? '<img src="' + etx(m.logo) + '" alt="">' : ini) + '</span>' +
+        '<b class="suc-nom">' + etx(nom) + '</b>' + (sub ? '<small class="suc-giro">' + etx(sub) + '</small>' : '');
+    var img = el.querySelector('img');
+    if (img) img.onerror = function () { var c = el.querySelector('.suc-logo'); if (c) c.innerHTML = ini; };
+    el.hidden = false;
+}
+/* El ojo de la contraseña, como en el sistema. */
+function toggleOjo() {
+    var i = $('ctaPwd'), b = $('ctaOjo'); if (!i || !b) return;
+    var ver = i.type === 'password';
+    i.type = ver ? 'text' : 'password';
+    b.innerHTML = _ic(ver ? 'ojo-oculto' : 'ojo', ver ? '🙈' : '👁');
+    b.setAttribute('aria-label', ver ? 'Ocultar contraseña' : 'Mostrar contraseña');
 }
 function _usuarioAbierto(si) {
     $('cuentaForm').hidden = !si;
@@ -390,7 +431,7 @@ var TECLAS = ['1','2','3','4','5','6','7','8','9','borrar','0','entrar'];
 function pintarTeclado() {
     $('teclado').innerHTML = TECLAS.map(function (k) {
         if (k === 'borrar') return '<button class="tecla tecla-acc" data-k="borrar" aria-label="Borrar">⌫</button>';
-        if (k === 'entrar') return '<button class="tecla tecla-acc" data-k="entrar" aria-label="Entrar">✓</button>';
+        if (k === 'entrar') return '<button class="tecla tecla-acc tecla-ok" data-k="entrar" aria-label="Entrar">✓</button>';
         return '<button class="tecla" data-k="' + k + '">' + k + '</button>';
     }).join('');
     $('teclado').onclick = function (e) {
@@ -432,7 +473,9 @@ async function entrar() {
         if (!rv.data) {
             /* ¿El NIP, o el acceso? Si apagaron la sucursal, decirlo. */
             if (await revisarAcceso()) { _entrando = false; verInicio(); return; }
-            $('nipMsg').innerHTML = 'NIP no reconocido.<br>Pídele a tu encargado tu NIP de 5 dígitos.';
+            /* (v93) Una clave buena de una sucursal SIN la app tampoco entra; el
+               servidor no dice cuál de las dos fue (así no se adivinan claves). */
+            $('nipMsg').innerHTML = 'No pudimos entrar con esa clave.<br>Revisa tu NIP; si es correcto, tu sucursal quizá no tiene la app móvil: pregúntale a tu encargado.';
             NIP = ''; pintarPuntos(); _entrando = false; return;
         }
         COLAB = rv.data; NIPHASH = h;
@@ -604,7 +647,7 @@ function salir() {
        varias personas: dejar el recetario o los checklists de quien acaba de
        salir le enseñaría al siguiente lo que no le toca. */
     INSUMOS = []; RECETAS = null; PLANTILLAS = []; RECETARIO = null; RUN = null;
-    APPS = null; HORARIOS = null; EVALS = null; ULT_MOD = ''; _recQ = '';
+    APPS = null; HORARIOS = null; EVALS = null; ULT_MOD = ''; _recQ = ''; _recGrupo = '';
     _abierto = { inventarios: false, recetas: false };
     pintarPuntos();
     $('nipMsg').textContent = '';
@@ -654,9 +697,9 @@ function _grupoMod(nombre, lema) {
     return '<div class="mod-cab"><span class="mod-nom">' + nom + '</span><span class="mod-lema">' + etx(lema) + '</span></div>';
 }
 var MODS_INFO = {
-    costax:  { nom: 'Cost·ax',  lema: 'Inventario y recetas',
+    costax:  { nom: 'Cost·ax',  lema: 'Inventario y recetas', ico: 'mod-recetas-insumos', corto: 'Entradas, mermas, existencias y recetario.',
                txt: 'Registra entradas, mermas, cortesías y existencias, y consulta cómo se prepara cada receta de tu área.' },
-    equipax: { nom: 'Equip·ax', lema: 'Tu turno',
+    equipax: { nom: 'Equip·ax', lema: 'Tu turno', ico: 'mod-equipax', corto: 'Horarios, check lists y evaluaciones.',
                txt: 'Tus horarios de la semana, tus check lists y, cuando las haya, tus evaluaciones.' }
 };
 function _islaHTML(nombre) {
@@ -668,21 +711,26 @@ var FLECHA = '<svg class="desplegar-fl" width="18" height="18" viewBox="0 0 24 2
 function pintarPortal() {
     var m = $('menuPortal');
     if (!m) return;
-    var cost = _tieneApp('costax'), equip = _tieneApp('equipax'), h = '';
-    if (cost) h += _botonModulo('costax');
-    if (equip) h += _botonModulo('equipax');
-    if (!cost && !equip) {
-        h += '<div class="avisos" style="text-align:left">Tu sucursal todavía no tiene apps para el equipo en el ' +
-             'teléfono. Pregúntale a tu encargado.</div>';
-    }
+    var ids = ['costax', 'equipax'].filter(_tieneApp), h;
+    h = ids.length
+        ? '<div class="mods' + (ids.length === 1 ? ' uno' : '') + '">' + ids.map(function (id, k) { return _botonModulo(id, k + 1); }).join('') + '</div>'
+        : '<div class="avisos" style="text-align:left">Tu sucursal todavía no tiene apps para el equipo en el ' +
+          'teléfono. Pregúntale a tu encargado.</div>';
     m.innerHTML = h;
     m.hidden = false;
 }
-function _botonModulo(id) {
-    var i = MODS_INFO[id];
-    return '<button class="modulo" data-mod="' + id + '" onclick="abrirModulo(\'' + id + '\')">' +
-        '<span class="modulo-col">' + _islaHTML(i.nom) + '<span class="modulo-txt"><b>' + etx(i.lema) + '</b>' + etx(i.txt) + '</span></span>' +
-        '<span class="fl" aria-hidden="true">›</span></button>';
+/* (Edwin, 25-nov) Como los módulos del sistema: la tarjeta cuadrada con su
+   ícono, «Módulo N» y su isla; debajo su título, y «Ver» en terracota. */
+function _botonModulo(id, n) {
+    var i = MODS_INFO[id], ir = "abrirModulo('" + id + "')";
+    return '<div class="mod-card" data-mod="' + id + '">' +
+        '<button class="mod-tile" onclick="' + ir + '" aria-label="' + etx(i.nom + ' · ' + i.lema) + '">' +
+            '<span class="mod-tile-ico">' + _ic(i.ico, '') + '</span>' +
+            '<span class="mod-num">Módulo ' + (n || 1) + '</span>' + _islaHTML(i.nom) + '</button>' +
+        '<b class="mod-tit">' + etx(i.lema) + '</b>' +
+        '<span class="mod-corto">' + etx(i.corto) + '</span>' +
+        '<button class="btn-ver" onclick="' + ir + '"><span>Ver</span>' + _ic('flecha', '→') + '</button>' +
+    '</div>';
 }
 function _opcion(ico, tit, sub, accion) { return _rect(ico, tit, sub, accion); }
 /* Un rectángulo de la rejilla de dos columnas. Sin acción = apagado (se ve, no se esconde). */
@@ -713,8 +761,6 @@ function pintarModulo(id) {
     var i = MODS_INFO[id];
     var h = '<div class="mod-cabeza">' + _islaHTML(i.nom) + '<p>' + etx(i.txt) + '</p></div>';
     if (id === 'costax') {
-        var a = window.StaffArea ? StaffArea.norm(AREA_COLAB) : '';
-        var cocina = !a || a === 'barra' || a === 'cocina';
         h += _despl('inventarios', _ic('mod-inventarios', '📦'), 'Inventarios') +
             '<div class="rejilla" id="rejInventarios"' + (_abierto.inventarios ? '' : ' hidden') + '>' +
                 _rect(_ic('ins-agregar', '📦'), 'Registrar entradas', 'Llegó mercancía', "abrirFlujo('entrada')") +
@@ -723,10 +769,10 @@ function pintarModulo(id) {
                 _rect(_ic('ins-stock', '📋'), 'Registrar existencias', 'Cuenta o pesa antes del inventario', "abrirFlujo('conteo')") +
                 _rect(_ic('ins-historial', '🧾'), 'Ver lo registrado', 'Desde el último inventario', 'abrirHistorial()') +
             '</div>';
-        if (cocina) {
-            h += _despl('recetas', _ic('cat-recetas', '📖'), 'Recetas') +
-                '<div class="rejilla" id="rejRecetas"' + (_abierto.recetas ? '' : ' hidden') + '></div>';
-        }
+        /* Recetas: los CUATRO grupos siempre a la vista; los que no son de su
+           área, opacos (Edwin, 25-nov). */
+        h += _despl('recetas', _ic('cat-recetas', '📖'), 'Recetas') +
+            '<div class="rec-zona" id="rejRecetas"' + (_abierto.recetas ? '' : ' hidden') + '></div>';
     } else if (id === 'equipax') {
         var nE = (EVALS && EVALS.length) || 0, nC = PLANTILLAS.length;
         h += '<div class="rejilla">' +
@@ -753,9 +799,23 @@ function toggleDespl(k) {
 /* Las recetas de su área, en la misma rejilla. El buscador se pinta una vez y
    solo se repinta la lista: así no se pierde el teclado al escribir. */
 var _recQ = '';
+/* LOS CUATRO GRUPOS DEL RECETARIO (Edwin, 25-nov): recetas y sub-recetas de
+   alimentos y de bebidas, fijos arriba. Tocar uno despliega su lista (cada
+   receta abre su ficha técnica); los que no son del área de quien entró se
+   quedan a la vista pero opacos. Qué ve cada quien lo sigue decidiendo el
+   servidor (portal_recetas): aquí solo se acomoda por tipo. */
+var GRUPOS_REC = [
+    { k: 'alimentos',     t: 'Recetas alimentos',     area: 'cocina', ico: ['rec-alimentos', '🍳'] },
+    { k: 'sub-alimentos', t: 'Sub recetas alimentos', area: 'cocina', ico: ['rec-sub-alimentos', '🥣'] },
+    { k: 'bebidas',       t: 'Recetas bebidas',       area: 'barra',  ico: ['rec-bebidas', '🍸'] },
+    { k: 'sub-bebidas',   t: 'Sub recetas bebidas',   area: 'barra',  ico: ['rec-sub-bebidas', '🧪'] }
+];
+var _recGrupo = '';
+function _grupoPermitido(g) { return areasPermitidas().indexOf(g.area) > -1; }
 async function _cargarRecetasRejilla() {
     var r = $('rejRecetas'); if (!r) return;
-    if (RECETARIO === null) {
+    var alguno = GRUPOS_REC.some(_grupoPermitido);
+    if (RECETARIO === null && alguno) {
         r.innerHTML = '<div class="hvacio">Cargando…</div>';
         if (!navigator.onLine) { r.innerHTML = '<div class="sinred">Sin internet. El recetario se lee del servidor.</div>'; return; }
         try {
@@ -764,11 +824,32 @@ async function _cargarRecetasRejilla() {
         } catch (e) { RECETARIO = []; }
     }
     if (!$('rejRecetas')) return;
-    $('rejRecetas').innerHTML = ((RECETARIO || []).length > 6
-        ? '<input class="campo rejilla-buscar" id="recQ" type="search" autocomplete="off" placeholder="Buscar receta…" ' +
-          'value="' + etx(_recQ) + '" oninput="buscarRecetaRejilla(this.value)">' : '') +
-        '<div class="rejilla-sub" id="recItems"></div>';
+    if (_recGrupo && !GRUPOS_REC.some(function (g) { return g.k === _recGrupo && _grupoPermitido(g); })) _recGrupo = '';
+    var de = function (k) { return (RECETARIO || []).filter(function (x) { return x.tipo === k; }); };
+    var g0 = GRUPOS_REC.filter(function (g) { return g.k === _recGrupo; })[0];
+    var n0 = g0 ? de(g0.k).length : 0;
+    $('rejRecetas').innerHTML =
+        '<div class="rejilla rec-grupos">' + GRUPOS_REC.map(function (g) {
+            var ok = _grupoPermitido(g), n = ok ? de(g.k).length : 0;
+            return '<button class="rect rec-grupo" data-grupo="' + g.k + '"' + (ok ? '' : ' disabled') +
+                ' aria-pressed="' + (g.k === _recGrupo ? 'true' : 'false') + '">' +
+                '<span class="rect-ico">' + _ic(g.ico[0], g.ico[1]) + '</span>' +
+                '<span><b>' + etx(g.t) + '</b><small>' + (ok ? n + (n === 1 ? ' receta' : ' recetas') : 'No es de tu área') + '</small></span></button>';
+        }).join('') + '</div>' +
+        (g0 ? '<div class="rec-lista"><div class="rec-lista-tit">' + etx(g0.t) + '</div>' +
+              (n0 > 6 ? '<input class="campo rejilla-buscar" id="recQ" type="search" autocomplete="off" placeholder="Buscar receta…" ' +
+                        'value="' + etx(_recQ) + '" oninput="buscarRecetaRejilla(this.value)">' : '') +
+              '<div class="rejilla" id="recItems"></div></div>' : '');
+    $('rejRecetas').querySelector('.rec-grupos').onclick = function (e) {
+        var b = e.target.closest('[data-grupo]'); if (!b || b.disabled) return;
+        elegirGrupoRec(b.getAttribute('data-grupo'));
+    };
     _pintarRecetasRejilla();
+}
+function elegirGrupoRec(k) {
+    _recGrupo = (_recGrupo === k) ? '' : k;
+    _recQ = '';
+    _cargarRecetasRejilla();
 }
 function buscarRecetaRejilla(q) { _recQ = String(q || ''); _pintarRecetasRejilla(); }
 var ICO_REC = { bebidas: ['rec-bebidas', '🍸'], 'sub-bebidas': ['rec-sub-bebidas', '🧪'], alimentos: ['rec-alimentos', '🍳'], 'sub-alimentos': ['rec-sub-alimentos', '🥣'] };
@@ -776,6 +857,7 @@ function _pintarRecetasRejilla() {
     var cont = $('recItems'); if (!cont) return;
     var q = _recQ.trim().toLowerCase(), pal = q ? q.split(/\s+/) : [];
     var lista = (RECETARIO || []).filter(function (x) {
+        if (x.tipo !== _recGrupo) return false;
         if (!pal.length) return true;
         var t = [x.nombre, x.grupo, x.categoria].join(' ').toLowerCase();
         return pal.every(function (w) { return t.indexOf(w) >= 0; });
@@ -788,7 +870,7 @@ function _pintarRecetasRejilla() {
                 ([x.grupo, x.categoria].filter(Boolean).length ? '<small>' + etx([x.grupo, x.categoria].filter(Boolean).join(' · ')) + '</small>' : '') +
                 '</span></button>';
         }).join('')
-        : '<div class="hvacio">' + (q ? 'Nada con «' + etx(q) + '».' : 'No hay recetas para tu área.') + '</div>';
+        : '<div class="hvacio">' + (q ? 'Nada con «' + etx(q) + '».' : 'No hay recetas en este grupo.') + '</div>';
     cont.onclick = function (e) {
         var b = e.target.closest('[data-rec]'); if (!b) return;
         verReceta(lista[parseInt(b.getAttribute('data-rec'), 10)]);
@@ -2023,6 +2105,8 @@ window.abrirModulo = abrirModulo;
 window.toggleDespl = toggleDespl;
 window.buscarRecetaRejilla = buscarRecetaRejilla;
 window.toggleUsuario = toggleUsuario;
+window.toggleOjo = toggleOjo;
+window.elegirGrupoRec = elegirGrupoRec;
 window.abrirCajon = abrirCajon;
 window.cerrarCajon = cerrarCajon;
 window.salir = salir;
