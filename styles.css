@@ -658,32 +658,36 @@ textarea:focus {
 .costeo-label { color: var(--text-muted); }
 .costeo-pct   { color: var(--text-dim); font-size: 11px; margin-left: 6px; }
 
-/* Múltiplo del costeo sugerido — mismo lenguaje visual que los FACTORES de insumos */
-.costeo-mult {
-    display: flex; align-items: center; gap: 8px;
-    margin: 0 0 10px; padding: 7px 9px;
-    background: rgba(245, 200, 66, 0.06);
-    border: 1px solid rgba(245, 200, 66, 0.28);
-    border-radius: 7px;
+/* Tipo de platillo del costeo: food cost meta, gasto operativo y utilidad
+   objetivo arriba de las dos columnas (aplican a las dos). */
+.costeo-perfil {
+    display: grid; grid-template-columns: minmax(170px, 1.4fr) repeat(3, minmax(110px, 1fr)) auto;
+    align-items: end; gap: 10px 12px; margin: 0 0 14px; padding: 12px 14px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
 }
-.costeo-mult-lbl {
-    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
-    color: var(--text-dim); white-space: nowrap;
+.costeo-perfil .cp-campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.costeo-perfil .cp-campo > span:first-child {
+    font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); white-space: nowrap;
 }
-.costeo-mult input {
-    width: 68px; padding: 4px 7px;
-    background: var(--surface); border: 1px solid rgba(245, 200, 66, 0.45);
-    border-radius: 5px; color: var(--accent-text);
-    font-family: inherit; font-size: 14px; font-weight: 700;
-    font-variant-numeric: tabular-nums; text-align: center;
+.costeo-perfil select, .costeo-perfil input {
+    width: 100%; box-sizing: border-box; padding: 7px 9px; min-height: 36px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+    color: var(--text); font-family: inherit; font-size: 13px;
 }
-.costeo-mult input:focus { outline: none; border-color: var(--accent); }
-.costeo-mult-hint { font-size: 10px; color: var(--text-dim); flex: 1; }
-.costeo-mult button {
+.costeo-perfil .cp-in { position: relative; display: block; }
+.costeo-perfil .cp-in input { padding-right: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.costeo-perfil .cp-in i { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 12px; color: var(--text-dim); pointer-events: none; }
+.costeo-perfil :is(select, input):focus { outline: none; border-color: var(--accent); }
+.costeo-perfil .cp-util b { font-size: 20px; line-height: 36px; font-variant-numeric: tabular-nums; color: var(--accent-text); }
+.costeo-perfil .cp-reset {
+    align-self: end; min-height: 36px; padding: 6px 10px; white-space: nowrap;
     background: transparent; border: 1px solid var(--border); color: var(--text-dim);
-    border-radius: 5px; padding: 3px 8px; font-size: 12px; cursor: pointer; font-family: inherit;
+    border-radius: 7px; font-size: 11.5px; cursor: pointer; font-family: inherit;
 }
-.costeo-mult button:hover { color: var(--accent-text); border-color: rgba(245, 200, 66, 0.45); }
+.costeo-perfil .cp-reset:hover { color: var(--text); border-color: var(--text-dim); }
+.costeo-perfil .cp-nota { grid-column: 1 / -1; font-size: 11.5px; line-height: 1.5; color: var(--text-dim); }
+@media (max-width: 760px) { .costeo-perfil { grid-template-columns: 1fr 1fr; } .costeo-perfil .cp-tipo { grid-column: 1 / -1; } }
+.costeo-mult-hint { font-size: 10px; color: var(--text-dim); letter-spacing: 0; text-transform: none; margin-left: 6px; }
 
 .costeo-val {
     font-weight: 600;

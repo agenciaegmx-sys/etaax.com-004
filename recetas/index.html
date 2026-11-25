@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles.css?v=d87bdb06">
+    <link rel="stylesheet" href="../styles.css?v=fb5e89be">
     <style>
         /* Modo embebido (?embed=1: escandallo abierto en modal dentro de otro
            escandallo): solo el escandallo — sin acciones que naveguen a otro lado. */
@@ -34,7 +34,7 @@
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=8adeb658">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/recetas/recetas-ui.css?v=e483f18f">
+<link rel="stylesheet" href="/recetas/recetas-ui.css?v=09ae3fd5">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -326,19 +326,28 @@
 
                     <!-- Costeo normal (recetas) -->
                     <div id="costeoNormal">
+                        <!-- EL TIPO DE PLATILLO MANDA (EtaaxCore.perfilCosteo): pone el food
+                             cost meta y el gasto operativo. Los campos vacíos usan lo del
+                             tipo (se ajusta para todo el negocio en la carátula); escritos,
+                             son solo de esta receta. -->
+                        <div class="costeo-perfil" id="costeoPerfil">
+                            <label class="cp-campo cp-tipo"><span>Tipo de platillo</span>
+                                <select id="s-perfil" onchange="calcularCosteos()"></select></label>
+                            <label class="cp-campo"><span>Food cost meta</span>
+                                <span class="cp-in"><input type="number" id="s-food" step="0.5" min="1" max="99" placeholder="30"
+                                    title="Lo que debe costar el insumo sobre el precio sin IVA. Vacío = el del tipo de platillo."
+                                    oninput="calcularCosteos()"><i>%</i></span></label>
+                            <label class="cp-campo"><span>Gasto operativo</span>
+                                <span class="cp-in"><input type="number" id="s-op" step="0.5" min="0" max="99" placeholder="40"
+                                    title="Lo que se lleva la operación (personal, energía, renta, equipo). Vacío = el del tipo de platillo."
+                                    oninput="calcularCosteos()"><i>%</i></span></label>
+                            <div class="cp-campo cp-util"><span>Utilidad neta objetivo</span><b id="s-util-obj">30%</b></div>
+                            <button type="button" class="cp-reset" onclick="resetMultiploReceta()" title="Volver a los porcentajes del tipo de platillo">Usar los del tipo</button>
+                            <div class="cp-nota" id="s-perfil-nota"></div>
+                        </div>
                         <div class="costeo-grid">
                             <div class="costeo-col col-sugerido">
-                                <div class="costeo-col-title">📐 Costeo Sugerido</div>
-                                <!-- Múltiplo editable: precio de platillo = costo bruto × múltiplo.
-                                     Vacío = 3.33 (la regla de siempre, 30% de costo bruto). -->
-                                <div class="costeo-mult">
-                                    <span class="costeo-mult-lbl">Múltiplo ×</span>
-                                    <input type="number" id="s-multiplo" step="0.01" min="0.1" placeholder="3.33"
-                                           title="Precio de platillo = costo bruto × múltiplo. Vacío = 3.33 (30% de costo bruto)."
-                                           oninput="calcularCosteos()">
-                                    <span class="costeo-mult-hint" id="s-mult-hint">30% de costo bruto</span>
-                                    <button type="button" onclick="resetMultiploReceta()" title="Volver al 3.33 de siempre">↺</button>
-                                </div>
+                                <div class="costeo-col-title">📐 Costeo Sugerido <span class="costeo-mult-hint" id="s-mult-hint"></span></div>
                                 <div class="costeo-row"><span class="costeo-label">Costo Bruto <span class="costeo-pct" id="s-pct-bruto">30%</span></span><span class="costeo-val val-amber" id="s-costobruto">$0.00</span></div>
                                 <div class="costeo-row"><span class="costeo-label">Gasto Operativo <span class="costeo-pct" id="s-pct-gasto">40%</span></span><span class="costeo-val val-white" id="s-gasto">$0.00</span></div>
                                 <div class="costeo-row"><span class="costeo-label">Utilidad Neta <span class="costeo-pct" id="s-pct-utilidad">30%</span></span><span class="costeo-val val-white" id="s-utilidad">$0.00</span></div>
@@ -361,7 +370,7 @@
                                 </div>
                                 <div class="costeo-row"><span class="costeo-label">Precio sin IVA <span class="costeo-pct">÷ 1.16</span></span><span class="costeo-val val-white" id="a-siniva">$0.00</span></div>
                                 <div class="costeo-row"><span class="costeo-label">Costo Bruto <span class="costeo-pct" id="a-costobruto-pct">—%</span></span><span class="costeo-val val-white" id="a-costobruto-monto">$0.00</span></div>
-                                <div class="costeo-row"><span class="costeo-label">Gasto Operativo <span class="costeo-pct">40%</span></span><span class="costeo-val val-white" id="a-gasto">$0.00</span></div>
+                                <div class="costeo-row"><span class="costeo-label">Gasto Operativo <span class="costeo-pct" id="a-pct-gasto">40%</span></span><span class="costeo-val val-white" id="a-gasto">$0.00</span></div>
                                 <div class="costeo-row"><span class="costeo-label">Utilidad Neta <span class="costeo-pct" id="a-utilidad-pct">—%</span></span><span class="costeo-val val-white" id="a-utilidad-monto">$0.00</span></div>
                                 <div class="divider">precio final</div>
                                 <div class="costeo-row"><span class="costeo-label">IVA incluido <span class="costeo-pct">16%</span></span><span class="costeo-val val-white" id="a-iva">$0.00</span></div>
@@ -972,11 +981,31 @@
                 <option value="">Activas e inactivas</option>
                 <option value="activa">Solo activas</option>
                 <option value="inactiva">Solo inactivas</option></select>
+            <select id="caratulaFiltroTipo" onchange="renderCaratulaDetalleTabla()"
+                class="filtro-select" style="font-size:12px;padding:5px 10px;min-width:150px">
+                <option value="">Todos los tipos</option></select>
             <span id="caratulaContador" style="font-size:11px;color:var(--text-muted);margin-left:4px"></span>
+            <label class="car-toggle" id="carProyWrap"><input type="checkbox" id="carVerProy" onchange="setCarProy(this.checked)"> Proyección sugerida</label>
         </div>
         <div id="caratulaDetalleBody" style="padding:16px 20px"></div>
     </div>
 </div>
+
+<!-- ══ LOS PORCENTAJES POR TIPO DE PLATILLO (costeo_config, v90) ══ -->
+<dialog id="dlgPerfilesCosteo" class="car-dlg" aria-labelledby="dlgPerfTit">
+    <div class="car-dlg-cab">
+        <h3 id="dlgPerfTit">Porcentajes por tipo de platillo</h3>
+        <button type="button" class="car-dlg-x" onclick="cerrarPerfilesCosteo()" aria-label="Cerrar">✕</button>
+    </div>
+    <p class="car-dlg-txt">Valen para todas las recetas de cada tipo. Si una receta trae su propio porcentaje en el escandallo, conserva el suyo.</p>
+    <div id="dlgPerfCuerpo"></div>
+    <div class="car-dlg-pie">
+        <span id="dlgPerfAviso"></span>
+        <button type="button" class="btn-vista" id="dlgPerfRef" onclick="restablecerPerfilesCosteo()">Usar la referencia</button>
+        <button type="button" class="btn-vista" onclick="cerrarPerfilesCosteo()">Cancelar</button>
+        <button type="button" class="btn-vista car-primario" id="dlgPerfGuardar" onclick="guardarPerfilesCosteo()">Guardar</button>
+    </div>
+</dialog>
 
 <!-- ══ MODAL COSTEO FLOTANTE ══════════════════════════════ -->
 <div id="modalCosteoFlotante" style="display:none;position:fixed;inset:0;z-index:10001;
@@ -1002,7 +1031,7 @@
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="/etaax-store.js?v=3bbcc75c"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
-<script src="/etaax-core.js?v=def2b0d3"></script><!-- fórmulas de dinero: antes de app.js -->
+<script src="/etaax-core.js?v=9caf2536"></script><!-- fórmulas de dinero: antes de app.js -->
 <script src="/insumo-label.js?v=789551ec"></script>
 <script src="/multi-select.js"></script><!-- filtros de grupo/categoría con palomitas -->
 <script src="/reordenar.js?v=977fee61"></script><!-- orden manual del catálogo (arrastrar filas) -->
@@ -1010,7 +1039,7 @@
 <script src="/etaax-nav.js"></script>
 <script src="/qr-pairing.js"></script>
 <script src="../security.js?v=c188734e"></script>
-<script src="../app.js?v=bc2e88b5"></script>
+<script src="../app.js?v=21a85432"></script>
 <script src="/recetas/subreceta-rendimientos.js?v=201d53b1"></script>
 <script>
 function toggleNav() {
@@ -3085,8 +3114,7 @@ function crearReceta(tipo) {
     // si veníamos de editar una inactiva).
     var _pillN = document.getElementById('statusPill');
     if (_pillN) { _pillN.textContent = 'Activa'; _pillN.classList.remove('pill-red'); _pillN.classList.add('pill-amber'); }
-    var _multN = document.getElementById('s-multiplo');
-    if (_multN) _multN.value = '';                          // receta nueva → múltiplo default
+    if (typeof _cargarCosteoEditor === 'function') _cargarCosteoEditor({});   // nueva → lo del tipo de platillo
     var _selloN = document.getElementById('recSello');
     if (_selloN) _selloN.innerHTML = '';                    // receta nueva → sin sello
     window._escDirty = false; // editor nuevo en blanco → sin cambios pendientes
@@ -4107,13 +4135,6 @@ function abrirFichaReceta(id) {
 
     const costo = (r.ingredientes||[]).reduce((s,i) =>
         s + costoIngredienteVivo(i), 0);
-    const _sugF     = EtaaxCore.costeoReceta(costo, r);
-    const sPlatillo = _sugF.platillo;
-    const sComedor  = _sugF.comedor;
-    const precioEnCarta = parseFloat(r.precioEnCarta) || 0;
-    const aSinIva = precioEnCarta > 0 ? precioEnCarta / 1.16 : 0;
-    const aCostoP = aSinIva > 0 ? (costo/aSinIva)*100 : 0;
-    const aUtilidadP = aSinIva > 0 ? 100 - aCostoP - 40 : 0;
 
     const iconos = { alimentos:'🍽️', 'sub-alimentos':'🥣', bebidas:'🥃', 'sub-bebidas':'🧃' };
 
@@ -4468,15 +4489,19 @@ function abrirFichaCosteo() {
     // ── Recetas normales: costeo sugerido/aplicado ────────────
     const costo = (r.ingredientes||[]).reduce((s,i) =>
         s + costoIngredienteVivo(i), 0);
-    const _sugF      = EtaaxCore.costeoReceta(costo, r);
+    /* Todo del núcleo y con el TIPO de platillo de la receta: antes aquí el
+       1.16 y el 40% estaban escritos a mano. */
+    const _cpF       = EtaaxCore.costeoConPerfil(costo, r, _costeoCfg());
+    const _sugF      = _cpF.sugerido, _aplF = _cpF.aplicado;
     const sPlatillo  = _sugF.platillo;
     const sComedor   = _sugF.comedor;
-    const precioEnCarta = parseFloat(r.precioEnCarta) || 0;
-    const aSinIva    = precioEnCarta > 0 ? precioEnCarta / 1.16 : 0;
-    const aCostoP    = aSinIva > 0 ? (costo/aSinIva)*100 : 0;
-    const aUtilidadP = aSinIva > 0 ? 100 - aCostoP - 40 : 0;
-    const colorCB    = aCostoP<=32?'var(--green)':aCostoP<=45?'var(--accent)':'var(--red)';
-    const colorUt    = aUtilidadP>=25?'var(--green)':aUtilidadP>=10?'var(--accent)':'var(--red)';
+    const precioEnCarta = _aplF.precio;
+    const aSinIva    = _aplF.sinIva;
+    const aCostoP    = _aplF.brutoPct;
+    const aUtilidadP = _aplF.utilidadPct;
+    const _colDiag   = _cpF.diagnostico.clave === 'optimo' ? 'var(--green)' : _cpF.diagnostico.clave === 'vigilar' ? 'var(--accent)' : 'var(--red)';
+    const colorCB    = _colDiag;
+    const colorUt    = _colDiag;
 
     document.getElementById('costeoFlotanteContenido').innerHTML = `
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -4484,7 +4509,7 @@ function abrirFichaCosteo() {
             <div style="background:var(--surface2);border:1px solid var(--accent);
                 border-radius:10px;padding:16px">
                 <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;
-                    color:var(--accent);margin-bottom:12px">📐 Costeo Sugerido</div>
+                    color:var(--accent);margin-bottom:12px">📐 Costeo Sugerido · ${etx(_cpF.perfil.nombre)}</div>
                 ${[
                     ['Costo Bruto',_pctSug(_sugF.brutoPct), '$'+costo.toFixed(2), 'var(--accent)'],
                     ['Gasto Operativo',_pctSug(_sugF.gastoOpPct), '$'+_sugF.gastoOp.toFixed(2), ''],
@@ -4526,10 +4551,10 @@ function abrirFichaCosteo() {
                         color:var(--text);letter-spacing:1px">$${precioEnCarta.toFixed(2)}</div>
                 </div>
                 ${[
-                    ['Precio sin IVA','÷1.16', '$'+aSinIva.toFixed(2), ''],
+                    ['Precio sin IVA','÷'+(1 + EtaaxCore.COSTEO_IVA_PCT/100).toFixed(2), '$'+aSinIva.toFixed(2), ''],
                     ['Costo Bruto', aCostoP.toFixed(1)+'%', '$'+costo.toFixed(2), colorCB],
-                    ['Gasto Operativo','40%', '$'+(aSinIva*0.40).toFixed(2), ''],
-                    ['Utilidad Neta', aUtilidadP.toFixed(1)+'%', '$'+(aSinIva*(aUtilidadP/100)).toFixed(2), colorUt],
+                    ['Gasto Operativo',_pctSug(_aplF.gastoOpPct), '$'+_aplF.gastoOp.toFixed(2), ''],
+                    ['Utilidad Neta', aUtilidadP.toFixed(1)+'%', '$'+_aplF.utilidad.toFixed(2), colorUt],
                 ].map(([lbl,pct,val,c]) => `
                 <div style="display:flex;justify-content:space-between;align-items:center;
                     padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
@@ -4664,10 +4689,193 @@ function cerrarCaratulaBtnX(){
 // (cargarLogoCaratula eliminado: el logo sale del negocio/sucursal — reporte-marca.js)
 function verCaratula(){if(!_exigeRec('caratula','No puedes ver la carátula de costos.'))return;mostrarCaratulaSelector();var vc=document.getElementById('vistaCaratula');if(vc){vc.style.display='block';var cerrado=document.getElementById('nav')?.classList.contains('cerrado');vc.style.left=cerrado?'50px':'200px';}if(window.etaaxNav)etaaxNav.go(verCaratula);}
 function mostrarCaratulaSelector(){caratulaTipoActual=null;document.getElementById('caratulaSelectorView').style.display='block';document.getElementById('caratulaDetalleView').style.display='none';document.getElementById('caratulaBtnVolver').style.display='none';document.getElementById('caratulaBtnPrint').style.display='none';document.getElementById('caratulaTituloHeader').textContent='📊 Carátula de Costos';renderCaratulaSelector();}
-function renderCaratulaSelector(){var recetas=getRecetasScope(),grid=document.getElementById('caratulaSelectorGrid');grid.innerHTML=CARATULA_GRUPOS.map(function(g){var lista=recetas.filter(function(r){return r.tipo===g.key;}),cnt=lista.length,vacio=cnt===0,bu='';if(g.tipo==='normal'&&cnt>0){var suma=0,n=0;lista.forEach(function(r){var p=parseFloat(r.precioEnCarta)||0;if(!p)return;var c=(r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0),si=p/1.16;if(si>0){suma+=100-(c/si)*100-40;n++;}});if(n>0){var pr=suma/n,col=pr>=30?'var(--green)':pr>=15?'var(--accent)':'var(--red)';bu='<div style="margin-top:6px;font-size:11px;font-weight:700;color:'+col+'">'+pr.toFixed(1)+'% utilidad neta promedio</div>';}}var grupos=[...new Set(lista.map(function(r){return r.grupo;}).filter(Boolean))];var gb=grupos.length>0?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+grupos.slice(0,4).map(function(gr){return '<span style="font-size:9px;background:var(--surface);border:1px solid var(--border);padding:2px 7px;border-radius:8px;color:var(--text-dim)">'+etx(gr)+'</span>';}).join('')+(grupos.length>4?'<span style="font-size:9px;color:var(--text-dim)">+'+(grupos.length-4)+'</span>':'')+'</div>':'';var sinP=g.tipo==='normal'?lista.filter(function(r){return !parseFloat(r.precioEnCarta);}).length:0;return '<button onclick="'+(cnt>0?'verCaratulaGrupo(\''+g.key+'\')':'')+'" class="cat-btn" style="border-color:'+(cnt>0?g.color:'var(--border)')+';'+(vacio?'opacity:0.4;cursor:default;':'')+'padding:16px 18px;align-items:flex-start;text-align:left;"><div style="display:flex;align-items:flex-start;gap:12px;width:100%"><span style="font-size:28px;flex-shrink:0;margin-top:2px">'+g.emoji+'</span><div style="flex:1;min-width:0"><div class="cat-btn-title" style="color:'+(cnt>0?g.color:'var(--text-muted)')+';font-size:14px">'+g.label+'</div><div class="cat-btn-desc" style="margin-top:2px">'+g.desc+'</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><span style="font-size:24px;font-weight:700;color:var(--text)">'+cnt+'</span><span style="font-size:11px;color:var(--text-dim)">recetas</span>'+(sinP>0?'<span style="font-size:10px;color:var(--accent);background:rgba(245,200,66,0.12);padding:1px 8px;border-radius:8px">'+sinP+' sin precio</span>':'')+'</div>'+gb+bu+'</div>'+(cnt>0?'<span style="color:var(--text-dim);font-size:18px;align-self:center">›</span>':'')+'</div></button>';}).join('');}
-function verCaratulaGrupo(key){caratulaTipoActual=key;var g=CARATULA_GRUPOS.find(function(x){return x.key===key;});document.getElementById('caratulaSelectorView').style.display='none';document.getElementById('caratulaDetalleView').style.display='block';document.getElementById('caratulaBtnVolver').style.display='inline-block';document.getElementById('caratulaBtnPrint').style.display='inline-flex';if(typeof _aplicarPermisosRec==='function')_aplicarPermisosRec();document.getElementById('caratulaTituloHeader').textContent=g.emoji+' '+g.label;var sub=document.getElementById('caratulaSubtitulo');if(sub)sub.textContent=g.subtitulo;_pintarMarcaCaratula();document.getElementById('caratulaBuscar').value='';document.getElementById('caratulaFiltroStatus').value='';var recetas=getRecetasScope().filter(function(r){return r.tipo===key;});var grupos=[...new Set(recetas.map(function(r){return r.grupo;}).filter(Boolean))].sort();var sel=document.getElementById('caratulaFiltroGrupo');sel.innerHTML='<option value="">Todos los grupos</option>'+grupos.map(function(gr){return '<option value="'+etx(gr)+'">'+etx(gr)+'</option>';}).join('');renderCaratulaDetalleTabla();}
-function renderCaratulaDetalleTabla(){var key=caratulaTipoActual;if(!key)return;var g=CARATULA_GRUPOS.find(function(x){return x.key===key;});var q=(document.getElementById('caratulaBuscar')?.value||'').toLowerCase(),gF=document.getElementById('caratulaFiltroGrupo')?.value||'',sF=document.getElementById('caratulaFiltroStatus')?.value||'';var recetas=getRecetasScope().filter(function(r){return r.tipo===key;});if(q)recetas=recetas.filter(function(r){return r.nombre.toLowerCase().includes(q)||(r.grupo||'').toLowerCase().includes(q)||(r.categoria||'').toLowerCase().includes(q);});if(gF)recetas=recetas.filter(function(r){return r.grupo===gF;});if(sF==='activa')recetas=recetas.filter(function(r){return r.status!=='inactiva';});if(sF==='inactiva')recetas=recetas.filter(function(r){return r.status==='inactiva';});var cnt=document.getElementById('caratulaContador');if(cnt)cnt.textContent=recetas.length+' recetas';var body=document.getElementById('caratulaDetalleBody');if(!recetas.length){body.innerHTML='<div style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:10px">🔍</div><div>Sin resultados</div></div>';return;}body.innerHTML=g.tipo==='normal'?renderCaratulaTablaRecetas(recetas,g):renderCaratulaTablaSubRecetas(recetas,g);}
-function renderCaratulaTablaRecetas(recetas,g){var sU=0,cU=0;var filas=recetas.map(function(r){var c=(r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0),sC=EtaaxCore.costeoReceta(c,r).comedor,p=parseFloat(r.precioEnCarta)||0,si=p>0?p/1.16:0,cP=si>0?(c/si)*100:0,uP=si>0?100-cP-40:0,uM=si*(uP/100),tP=p>0,in2=r.status==='inactiva',gr=_grupoSubcat(r),rend=getRendimientoNeto(r,g);if(tP){sU+=uP;cU++;}var cU2=uP>=30?'var(--green)':uP>=15?'var(--accent)':'var(--red)',bU=uP>=30?'rgba(61,190,122,0.12)':uP>=15?'rgba(245,200,66,0.12)':'rgba(224,90,58,0.12)';return '<tr style="opacity:'+(in2?'0.5':'1')+'"><td style="font-size:12px;font-weight:600"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button class="btn-ver-ficha" onclick="abrirFichaDesdeCaratula(\''+r.id+'\')">📋 Ver</button>'+r.nombre+(in2?'<span style="font-size:9px;color:var(--text-dim);background:var(--surface2);padding:1px 6px;border-radius:4px">inactiva</span>':'')+'</div>'+(gr?'<div style="font-size:10px;color:var(--text-dim);font-weight:400;margin-top:2px">'+etx(gr)+'</div>':'')+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+rend+'</td><td style="text-align:right;color:var(--accent);font-weight:600">$'+c.toFixed(2)+'</td><td style="text-align:right;color:var(--text-muted)">$'+sC.toFixed(2)+'</td><td style="text-align:right;font-weight:600;color:'+(tP?'var(--green)':'var(--text-dim)')+'">'+(tP?'$'+p.toFixed(2):'—')+'</td><td style="text-align:right;color:var(--text-muted)">'+(tP?'$'+uM.toFixed(2):'—')+'</td><td style="text-align:center">'+(tP?'<span style="color:'+cU2+';background:'+bU+';border-radius:20px;padding:2px 10px;font-weight:700;font-size:12px">'+uP.toFixed(0)+'%</span>':'<span style="color:var(--text-dim)">—</span>')+'</td></tr>';}).join('');var prom=cU>0?sU/cU:null,cP2=prom!==null?(prom>=30?'var(--green)':prom>=15?'var(--accent)':'var(--red)'):'var(--text-dim)',bP=prom!==null?(prom>=30?'rgba(61,190,122,0.12)':prom>=15?'rgba(245,200,66,0.12)':'rgba(224,90,58,0.12)'):'transparent';return '<div class="tabla-wrap"><table><thead><tr><th style="text-align:left">NOMBRE DE RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:right">PRECIO SUGERIDO c/IVA</th><th style="text-align:right">PRECIO EN CARTA</th><th style="text-align:right">$ UTILIDAD NETA</th><th style="text-align:center;width:90px">% UTILIDAD</th></tr></thead><tbody>'+filas+'</tbody><tfoot><tr><td colspan="6" style="padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);text-align:right">Porcentaje promedio de utilidad neta</td><td style="text-align:center;padding:10px 12px">'+(prom!==null?'<span style="color:'+cP2+';background:'+bP+';border-radius:20px;padding:4px 14px;font-weight:800;font-size:14px">'+prom.toFixed(2)+'%</span>':'<span style="color:var(--text-dim)">—</span>')+'</td></tr></tfoot></table></div>';}
+function renderCaratulaSelector(){var recetas=getRecetasScope(),grid=document.getElementById('caratulaSelectorGrid');grid.innerHTML=CARATULA_GRUPOS.map(function(g){var lista=recetas.filter(function(r){return r.tipo===g.key;}),cnt=lista.length,vacio=cnt===0,bu='';if(g.tipo==='normal'&&cnt>0){var suma=0,n=0;lista.forEach(function(r){if(!(parseFloat(r.precioEnCarta)>0))return;suma+=EtaaxCore.costeoConPerfil(_carCosto(r),r,_costeoCfg()).aplicado.utilidadPct;n++;});if(n>0){var pr=suma/n,col=pr>=30?'var(--green)':pr>=15?'var(--accent)':'var(--red)';bu='<div style="margin-top:6px;font-size:11px;font-weight:700;color:'+col+'">'+pr.toFixed(1)+'% utilidad neta promedio</div>';}}var grupos=[...new Set(lista.map(function(r){return r.grupo;}).filter(Boolean))];var gb=grupos.length>0?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+grupos.slice(0,4).map(function(gr){return '<span style="font-size:9px;background:var(--surface);border:1px solid var(--border);padding:2px 7px;border-radius:8px;color:var(--text-dim)">'+etx(gr)+'</span>';}).join('')+(grupos.length>4?'<span style="font-size:9px;color:var(--text-dim)">+'+(grupos.length-4)+'</span>':'')+'</div>':'';var sinP=g.tipo==='normal'?lista.filter(function(r){return !parseFloat(r.precioEnCarta);}).length:0;return '<button onclick="'+(cnt>0?'verCaratulaGrupo(\''+g.key+'\')':'')+'" class="cat-btn" style="border-color:'+(cnt>0?g.color:'var(--border)')+';'+(vacio?'opacity:0.4;cursor:default;':'')+'padding:16px 18px;align-items:flex-start;text-align:left;"><div style="display:flex;align-items:flex-start;gap:12px;width:100%"><span style="font-size:28px;flex-shrink:0;margin-top:2px">'+g.emoji+'</span><div style="flex:1;min-width:0"><div class="cat-btn-title" style="color:'+(cnt>0?g.color:'var(--text-muted)')+';font-size:14px">'+g.label+'</div><div class="cat-btn-desc" style="margin-top:2px">'+g.desc+'</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><span style="font-size:24px;font-weight:700;color:var(--text)">'+cnt+'</span><span style="font-size:11px;color:var(--text-dim)">recetas</span>'+(sinP>0?'<span style="font-size:10px;color:var(--accent);background:rgba(245,200,66,0.12);padding:1px 8px;border-radius:8px">'+sinP+' sin precio</span>':'')+'</div>'+gb+bu+'</div>'+(cnt>0?'<span style="color:var(--text-dim);font-size:18px;align-self:center">›</span>':'')+'</div></button>';}).join('');}
+function verCaratulaGrupo(key){caratulaTipoActual=key;var g=CARATULA_GRUPOS.find(function(x){return x.key===key;});document.getElementById('caratulaSelectorView').style.display='none';document.getElementById('caratulaDetalleView').style.display='block';document.getElementById('caratulaBtnVolver').style.display='inline-block';document.getElementById('caratulaBtnPrint').style.display='inline-flex';if(typeof _aplicarPermisosRec==='function')_aplicarPermisosRec();document.getElementById('caratulaTituloHeader').textContent=g.emoji+' '+g.label;var sub=document.getElementById('caratulaSubtitulo');if(sub)sub.textContent=g.subtitulo;_pintarMarcaCaratula();document.getElementById('caratulaBuscar').value='';document.getElementById('caratulaFiltroStatus').value='';var recetas=getRecetasScope().filter(function(r){return r.tipo===key;});var grupos=[...new Set(recetas.map(function(r){return r.grupo;}).filter(Boolean))].sort();var sel=document.getElementById('caratulaFiltroGrupo');sel.innerHTML='<option value="">Todos los grupos</option>'+grupos.map(function(gr){return '<option value="'+etx(gr)+'">'+etx(gr)+'</option>';}).join('');_carPrepararTipos(recetas,g);renderCaratulaDetalleTabla();}
+function renderCaratulaDetalleTabla(){var key=caratulaTipoActual;if(!key)return;var g=CARATULA_GRUPOS.find(function(x){return x.key===key;});var recetas=_carRecetasFiltradas();var cnt=document.getElementById('caratulaContador');if(cnt)cnt.textContent=recetas.length+' recetas';var body=document.getElementById('caratulaDetalleBody');if(!recetas.length){body.innerHTML='<div style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:10px">🔍</div><div>Sin resultados</div></div>';return;}body.innerHTML=g.tipo==='normal'?renderCaratulaTablaRecetas(recetas,g):renderCaratulaTablaSubRecetas(recetas,g);}
+/* ══ CARÁTULA DE COSTOS · RECETAS (25-nov) ════════════════════════════════
+   Cada receta en dos renglones: lo REAL (lo que deja el precio de la carta)
+   y la PROYECCIÓN SUGERIDA (lo que costaría con la meta de su tipo). Las
+   metas salen del tipo de platillo de cada receta (EtaaxCore.perfilCosteo):
+   un fuerte no gasta lo que una bebida. Todo el dinero sale del núcleo. */
+var _carVerProy = true;
+try { _carVerProy = localStorage.getItem('etaax_car_proy') !== '0'; } catch (e) {}
+function setCarProy(si) { _carVerProy = !!si; try { localStorage.setItem('etaax_car_proy', si ? '1' : '0'); } catch (e) {} renderCaratulaDetalleTabla(); }
+function _carCosto(r) { return (r.ingredientes || []).reduce(function (s, i) { return s + costoIngredienteVivo(i); }, 0); }
+function _car$(v) { return '$' + (Number(v) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function _carPct(v) { return (Math.round(v * 10) / 10).toFixed(1) + '%'; }
+function _carPctC(v) { return (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, '') + '%'; }
+function _carRango(arr) {
+    if (!arr.length) return '—';
+    var mn = Math.min.apply(null, arr), mx = Math.max.apply(null, arr);
+    return Math.abs(mx - mn) < 0.05 ? _carPctC(mn) : _carPctC(mn).replace('%', '') + '–' + _carPctC(mx);
+}
+/* Los filtros de pantalla e impresión, en un solo lugar. */
+function _carRecetasFiltradas() {
+    var key = caratulaTipoActual; if (!key) return [];
+    var q = (document.getElementById('caratulaBuscar')?.value || '').toLowerCase(),
+        gF = document.getElementById('caratulaFiltroGrupo')?.value || '',
+        sF = document.getElementById('caratulaFiltroStatus')?.value || '',
+        tF = document.getElementById('caratulaFiltroTipo')?.value || '';
+    var recetas = getRecetasScope().filter(function (r) { return r.tipo === key; });
+    if (q) recetas = recetas.filter(function (r) { return r.nombre.toLowerCase().includes(q) || (r.grupo || '').toLowerCase().includes(q) || (r.categoria || '').toLowerCase().includes(q); });
+    if (gF) recetas = recetas.filter(function (r) { return r.grupo === gF; });
+    if (sF === 'activa') recetas = recetas.filter(function (r) { return r.status !== 'inactiva'; });
+    if (sF === 'inactiva') recetas = recetas.filter(function (r) { return r.status === 'inactiva'; });
+    if (tF) { var cfg = _costeoCfg(); recetas = recetas.filter(function (r) { return EtaaxCore.perfilCosteo(r, cfg).id === tF; }); }
+    return recetas;
+}
+/* El filtro de tipo enseña solo los tipos que trae el grupo, con cuántas. */
+function _carPrepararTipos(recetas, g) {
+    var sel = document.getElementById('caratulaFiltroTipo'), proy = document.getElementById('carProyWrap');
+    var normal = g && g.tipo === 'normal';
+    if (proy) { proy.style.display = normal ? '' : 'none'; var cb = document.getElementById('carVerProy'); if (cb) cb.checked = _carVerProy; }
+    if (!sel) return;
+    sel.style.display = normal ? '' : 'none';
+    var cfg = _costeoCfg(), cuenta = {};
+    (recetas || []).forEach(function (r) { var id = EtaaxCore.perfilCosteo(r, cfg).id; cuenta[id] = (cuenta[id] || 0) + 1; });
+    var previo = sel.value;
+    sel.innerHTML = '<option value="">Todos los tipos</option>' + EtaaxCore.COSTEO_PERFILES.filter(function (p) { return cuenta[p.id]; })
+        .map(function (p) { return '<option value="' + p.id + '">' + etx(p.nombre) + ' (' + cuenta[p.id] + ')</option>'; }).join('');
+    sel.value = cuenta[previo] ? previo : '';
+}
+function _carTipoCelda(r, pf, puedeEd) {
+    var nom = etx(pf.nombre) + (pf.auto ? ' <em>· automático</em>' : '');
+    if (!puedeEd) return '<div class="car-tipo"><span>' + nom + '</span></div>';
+    var q = String(r.id).replace(/'/g, "\\'");
+    return '<div class="car-tipo"><select aria-label="Tipo de platillo de ' + etx(r.nombre) + '" onchange="carCambiarTipo(\'' + q + '\',this.value)">' +
+        '<option value=""' + (pf.auto ? ' selected' : '') + '>Automático · ' + etx(EtaaxCore.perfilTipo(EtaaxCore.perfilAdivinado(r), _costeoCfg()).nombre) + '</option>' +
+        EtaaxCore.COSTEO_PERFILES.map(function (p) { return '<option value="' + p.id + '"' + (!pf.auto && pf.id === p.id ? ' selected' : '') + '>' + etx(p.nombre) + '</option>'; }).join('') +
+        '</select></div>';
+}
+function _carEstado(real, meta) { return real - meta <= 0.5 ? 'ok' : real - meta <= 5 ? 'vig' : 'mal'; }
+function renderCaratulaTablaRecetas(recetas, g) {
+    var cfg = _costeoCfg(), puedeEd = (typeof _puedeRec !== 'function') || _puedeRec('editar');
+    var foods = [], ops = [], utils = [], tipos = {}, sF = 0, sU = 0, nP = 0, nOk = 0;
+    var cuerpo = recetas.map(function (r) {
+        var c = _carCosto(r), k = EtaaxCore.costeoConPerfil(c, r, cfg), pf = k.perfil, a = k.aplicado, sg = k.sugerido, d = k.diagnostico;
+        var tP = a.precio > 0, in2 = r.status === 'inactiva', gr = _grupoSubcat(r), rend = getRendimientoNeto(r, g);
+        foods.push(pf.food); ops.push(pf.op); utils.push(pf.util); tipos[pf.id] = pf.nombre;
+        if (tP) { sF += a.brutoPct; sU += a.utilidadPct; nP++; if (d.clave === 'optimo') nOk++; }
+        var est = tP ? _carEstado(a.brutoPct, pf.food) : 'na';
+        var q = String(r.id).replace(/'/g, "\\'");
+        var real = '<tr class="car-real">' +
+            '<td class="car-nom"><div class="car-nom-l"><button class="btn-ver-ficha" onclick="abrirFichaDesdeCaratula(\'' + q + '\')">📋 Ver</button><b>' + etx(r.nombre) + '</b>' +
+                (in2 ? '<span class="car-inact">inactiva</span>' : '') + '</div>' +
+                (gr ? '<div class="car-grp">' + etx(gr) + '</div>' : '') + _carTipoCelda(r, pf, puedeEd) + '</td>' +
+            '<td class="c car-rend">' + etx(rend) + '</td>' +
+            '<td class="n car-costo">' + _car$(c) + '</td>' +
+            '<td class="n car-fc e-' + est + '">' + (tP ? '<span>' + _carPct(a.brutoPct) + '</span>' : '—') + '</td>' +
+            '<td class="n car-precio">' + (tP ? _car$(a.precio) : '<span class="car-sin">Sin precio</span>') + '</td>' +
+            '<td class="n car-op">' + (tP ? _car$(a.gastoOp) + '<small>' + _carPctC(pf.op) + '</small>' : '—') + '</td>' +
+            '<td class="n">' + (tP ? _car$(a.iva) : '—') + '</td>' +
+            '<td class="n car-utm">' + (tP ? _car$(a.utilidad) : '—') + '</td>' +
+            '<td class="n car-ut e-' + est + '">' + (tP ? '<span>' + _carPct(a.utilidadPct) + '</span>' : '—') + '</td>' +
+            '<td class="c"><span class="car-diag d-' + d.clave + '">' + etx(d.texto) + '</span></td></tr>';
+        if (!_carVerProy) return '<tbody class="car-par' + (in2 ? ' car-in' : '') + '">' + real + '</tbody>';
+        var dif = tP ? a.precio - sg.comedor : 0;
+        var gap = !tP ? '<span class="car-gap">Precio sugerido</span>'
+            : dif < -0.5 ? '<span class="car-gap g-falta">Faltan ' + _car$(-dif) + '</span>'
+            : dif > 0.5 ? '<span class="car-gap g-sobra">' + _car$(dif) + ' arriba</span>'
+            : '<span class="car-gap g-ok">En la meta</span>';
+        var proy = '<tr class="car-proy">' +
+            '<td class="car-nom"><i>Proyección sugerida</i><small>regla ' + Math.round(pf.food) + '-' + Math.round(pf.op) + '-' + Math.round(pf.util) + ' · ' + etx(pf.nombre).toLowerCase() + '</small></td>' +
+            '<td></td>' +
+            '<td class="n">' + _car$(c) + '</td>' +
+            '<td class="n car-fc"><span>' + _carPct(pf.food) + '</span></td>' +
+            '<td class="n car-precio">' + _car$(sg.comedor) + '<small>delivery ' + _car$(sg.delivery) + '</small></td>' +
+            '<td class="n car-op">' + _car$(sg.gastoOp) + '<small>' + _carPctC(pf.op) + '</small></td>' +
+            '<td class="n">' + _car$(sg.iva) + '</td>' +
+            '<td class="n">' + _car$(sg.utilidad) + '</td>' +
+            '<td class="n car-ut"><span>' + _carPct(pf.util) + '</span></td>' +
+            '<td class="c">' + gap + '</td></tr>';
+        return '<tbody class="car-par' + (in2 ? ' car-in' : '') + '">' + real + proy + '</tbody>';
+    }).join('');
+    var solo = Object.keys(tipos).length === 1 ? tipos[Object.keys(tipos)[0]] : '';
+    var pF = nP ? sF / nP : null, pU = nP ? sU / nP : null;
+    var metaF = foods.length ? foods.reduce(function (a, b) { return a + b; }, 0) / foods.length : 30;
+    var kpi = '<div class="car-kpis">' +
+        '<div class="car-kpi k-food"><span>Meta de food cost</span><b>' + _carRango(foods) + '</b><small>' +
+            (pF !== null ? 'Real promedio <em class="e-' + _carEstado(pF, metaF) + '">' + _carPct(pF) + '</em>' : 'Sin precios en carta') + '</small></div>' +
+        '<div class="car-kpi k-op"><span>Gasto operativo</span><b>' + _carRango(ops) + '</b><small>' + (solo ? etx(solo) : 'Según el tipo de platillo') + '</small></div>' +
+        '<div class="car-kpi k-ut"><span>Utilidad neta objetivo</span><b>' + _carRango(utils) + '</b><small>' +
+            (pU !== null ? 'Real promedio <em class="e-' + _carEstado(pF, metaF) + '">' + _carPct(pU) + '</em>' : '—') + '</small></div>' +
+        '<div class="car-kpi-acc"><div class="car-kpi-cuenta"><b>' + nOk + '</b> de ' + nP + ' en la meta' + (recetas.length > nP ? '<br><span>' + (recetas.length - nP) + ' sin precio</span>' : '') + '</div>' +
+            '<button type="button" class="btn-vista" id="btnPerfilesCosteo" onclick="abrirPerfilesCosteo()">Ajustar porcentajes</button></div>' +
+        '</div>';
+    return kpi + '<div class="tabla-wrap car-wrap"><table class="car-tabla"><thead><tr>' +
+        '<th class="l">Nombre de receta</th><th class="c">Rendimiento neto</th><th class="n">Costo bruto</th><th class="n car-fc">Food cost %</th>' +
+        '<th class="n">Precio carta c/IVA</th><th class="n car-op">Costo operativo</th><th class="n">IVA ' + EtaaxCore.COSTEO_IVA_PCT + '%</th>' +
+        '<th class="n">Utilidad neta $</th><th class="n car-ut">Utilidad neta %</th><th class="c">Diagnóstico</th></tr></thead>' + cuerpo +
+        '<tfoot><tr><td colspan="3" class="l">Promedio de ' + nP + ' receta' + (nP === 1 ? '' : 's') + ' con precio</td>' +
+        '<td class="n car-fc">' + (pF !== null ? '<span>' + _carPct(pF) + '</span>' : '—') + '</td><td colspan="4"></td>' +
+        '<td class="n car-ut">' + (pU !== null ? '<span>' + _carPct(pU) + '</span>' : '—') + '</td>' +
+        '<td class="c">' + nOk + ' de ' + nP + ' óptimas</td></tr></tfoot></table></div>';
+}
+/* Cambiar el tipo de UNA receta desde la carátula (es editar el escandallo). */
+function carCambiarTipo(id, v) {
+    if (!_exigeRec('editar', 'No puedes cambiar el tipo de platillo de una receta.')) { renderCaratulaDetalleTabla(); return; }
+    var lista = getRecetas(), i = lista.findIndex(function (x) { return x.id === id; });
+    if (i < 0) return;
+    var antes = JSON.parse(JSON.stringify(lista[i]));
+    lista[i] = Object.assign({}, lista[i], { perfilCosteo: v || '', fechaGuardado: new Date().toISOString(), updatedBy: _usuarioActualRec() });
+    if (typeof _registrarCambiosReceta === 'function') { try { _registrarCambiosReceta(lista[i], antes); } catch (e) {} }
+    setRecetas(lista);
+    if (typeof _sbUpReceta === 'function') _sbUpReceta(lista[i]);
+    _carPrepararTipos(getRecetasScope().filter(function (r) { return r.tipo === caratulaTipoActual; }), CARATULA_GRUPOS.find(function (x) { return x.key === caratulaTipoActual; }));
+    renderCaratulaDetalleTabla();
+}
+/* ── El cuadro de los porcentajes por tipo ── */
+function _perfilesFila(p, cfg, puede) {
+    var t = EtaaxCore.perfilTipo(p.id, cfg);
+    var dis = puede ? '' : ' disabled';
+    return '<div class="pf-fila" data-id="' + p.id + '">' +
+        '<div class="pf-nom"><b>' + etx(p.nombre) + '</b><small>' + (p.min != null ? 'Recomendado ' + p.min + '–' + p.max + '% de gasto operativo. ' : '') + etx(p.por) + '</small></div>' +
+        '<label class="pf-in"><span>Food cost meta</span><span class="cp-in"><input type="number" step="0.5" min="1" max="99" data-k="food" value="' + t.food + '"' + dis + ' oninput="_perfilesUtil(this)"><i>%</i></span></label>' +
+        '<label class="pf-in"><span>Gasto operativo</span><span class="cp-in"><input type="number" step="0.5" min="0" max="99" data-k="op" value="' + t.op + '"' + dis + ' oninput="_perfilesUtil(this)"><i>%</i></span></label>' +
+        '<div class="pf-in pf-ut"><span>Utilidad objetivo</span><b>' + _carPctC(t.util) + '</b></div></div>';
+}
+function abrirPerfilesCosteo(cfg) {
+    var d = document.getElementById('dlgPerfilesCosteo'); if (!d) return;
+    var puede = (typeof _puedeRec !== 'function') || _puedeRec('editar');
+    cfg = cfg || _costeoCfg();
+    document.getElementById('dlgPerfCuerpo').innerHTML = EtaaxCore.COSTEO_PERFILES.map(function (p) { return _perfilesFila(p, cfg, puede); }).join('');
+    document.getElementById('dlgPerfGuardar').style.display = puede ? '' : 'none';
+    document.getElementById('dlgPerfRef').style.display = puede ? '' : 'none';
+    document.getElementById('dlgPerfAviso').textContent = puede ? '' : 'Solo quien edita escandallos puede cambiarlos.';
+    if (!d.open) { try { d.showModal(); } catch (e) { d.setAttribute('open', ''); } }
+}
+function cerrarPerfilesCosteo() { var d = document.getElementById('dlgPerfilesCosteo'); if (d && d.open) { try { d.close(); } catch (e) { d.removeAttribute('open'); } } }
+function _perfilesUtil(inp) {
+    var f = inp.closest('.pf-fila'), food = parseFloat(f.querySelector('[data-k="food"]').value) || 0, op = parseFloat(f.querySelector('[data-k="op"]').value) || 0;
+    var b = f.querySelector('.pf-ut b'), u = 100 - food - op;
+    b.textContent = _carPctC(u); b.style.color = u < 0 ? 'var(--red)' : '';
+}
+function restablecerPerfilesCosteo() { abrirPerfilesCosteo({}); document.getElementById('dlgPerfAviso').textContent = 'Valores de referencia: toca Guardar para usarlos.'; }
+async function guardarPerfilesCosteo() {
+    if (!_exigeRec('editar', 'No puedes cambiar los porcentajes del costeo.')) return;
+    var perfiles = {}, malo = '';
+    document.querySelectorAll('#dlgPerfCuerpo .pf-fila').forEach(function (f) {
+        var id = f.dataset.id, ref = EtaaxCore.COSTEO_PERFILES.find(function (p) { return p.id === id; });
+        var food = parseFloat(f.querySelector('[data-k="food"]').value), op = parseFloat(f.querySelector('[data-k="op"]').value);
+        if (!(food > 0 && food < 100) || !(op >= 0 && op < 100)) { malo = ref.nombre; return; }
+        if (food !== ref.food || op !== ref.op) perfiles[id] = { food: food, op: op };   // solo lo que se aparta de la referencia
+    });
+    if (malo) { alert('Revisa los porcentajes de «' + malo + '»: van de 0 a 99.'); return; }
+    var donde = await _costeoCfgGuardar(Object.assign({}, _costeoCfg(), { perfiles: perfiles }));
+    cerrarPerfilesCosteo();
+    if (typeof window._costeoCfgCambio === 'function') window._costeoCfgCambio();
+    if (donde === 'local') alert('Se guardó solo en este dispositivo: falta correr la migración v90 en Supabase para que lo vean las demás cuentas.');
+}
+/* Los % por tipo cambiaron (aquí o llegaron de la nube): repintar lo abierto. */
+window._costeoCfgCambio = function () {
+    var vc = document.getElementById('vistaCaratula');
+    if (vc && vc.style.display !== 'none') {
+        if (caratulaTipoActual) { _carPrepararTipos(getRecetasScope().filter(function (r) { return r.tipo === caratulaTipoActual; }), CARATULA_GRUPOS.find(function (x) { return x.key === caratulaTipoActual; })); renderCaratulaDetalleTabla(); }
+        else renderCaratulaSelector();
+    }
+    var ed = document.getElementById('costoTotalDisplay');
+    if (ed && ed.offsetParent !== null && typeof calcularCosteos === 'function') { try { calcularCosteos(); } catch (e) {} }
+};
 /* Grupo · subcategoría bajo el nombre. En sub-recetas solo hay grupo; en recetas
    la subcategoría distingue lo que el grupo no (dos "Spritz" de grupos distintos
    se leían idénticos en la carátula). */
@@ -4676,7 +4884,7 @@ function _grupoSubcat(r){
 }
 function _fmtNum(n){if(n===0)return '0';return parseFloat(n.toFixed(3))+'';}
 function renderCaratulaTablaSubRecetas(recetas,g){var filas=recetas.map(function(r){var c=(r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0),cx=r.camposExtra||{};var rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNum(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uB=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var ps=datosPorcionesSub(r,c),pD=ps.map(function(p){return '<div>'+etx(p.nombre)+' · '+_fmtNum(p.cantidad)+' porciones</div>';}).join('')||'—',uPD=ps.map(function(p){return '<div>'+_fmtNum(p.contenidoBase)+' '+etx(p.unidadBase)+'</div>';}).join('')||'—',cPH=ps.map(function(p){return '<div>$'+p.costo.toFixed(2)+'</div>';}).join('')||'—';var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="opacity:'+(in2?'0.5':'1')+'"><td style="font-size:12px;font-weight:600"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button class="btn-ver-ficha" onclick="abrirFichaDesdeCaratula(\''+r.id+'\')">📋 Ver</button>'+r.nombre+(in2?'<span style="font-size:9px;color:var(--text-dim);background:var(--surface2);padding:1px 6px;border-radius:4px">inactiva</span>':'')+'</div>'+(gr?'<div style="font-size:10px;color:var(--text-dim);font-weight:400;margin-top:2px">'+etx(gr)+'</div>':'')+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+rS+'</td><td style="text-align:right;color:var(--accent);font-weight:600">$'+c.toFixed(2)+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+pD+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+uPD+'</td><td style="text-align:right;color:var(--green);font-weight:600">'+cPH+'</td><td style="text-align:right;font-weight:600;color:var(--text-muted)">'+(cKL>0?'$'+cKL.toFixed(2)+'<span style="font-size:9px;margin-left:2px;color:var(--text-dim)">/'+uB+'</span>':'—')+'</td></tr>';}).join('');return '<div class="tabla-wrap"><table><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+filas+'</tbody></table></div>';}
-function imprimirCaratula(){if(!_exigeRec('caratulaImprimir','No puedes imprimir la carátula de costos.'))return;if(!caratulaTipoActual)return;var q=(document.getElementById('caratulaBuscar')?.value||'').toLowerCase(),gF=document.getElementById('caratulaFiltroGrupo')?.value||'',sF=document.getElementById('caratulaFiltroStatus')?.value||'';var recetas=getRecetasScope().filter(function(r){return r.tipo===caratulaTipoActual;});if(q)recetas=recetas.filter(function(r){return r.nombre.toLowerCase().includes(q)||(r.grupo||'').toLowerCase().includes(q)||(r.categoria||'').toLowerCase().includes(q);});if(gF)recetas=recetas.filter(function(r){return r.grupo===gF;});if(sF==='activa')recetas=recetas.filter(function(r){return r.status!=='inactiva';});if(sF==='inactiva')recetas=recetas.filter(function(r){return r.status==='inactiva';});if(!recetas.length){alert('No hay recetas para imprimir.');return;}var g=CARATULA_GRUPOS.find(function(x){return x.key===caratulaTipoActual;});abrirVentanaImpresion(buildPlantillaCaratula(recetas,g));}
+function imprimirCaratula(){if(!_exigeRec('caratulaImprimir','No puedes imprimir la carátula de costos.'))return;if(!caratulaTipoActual)return;var recetas=_carRecetasFiltradas();if(!recetas.length){alert('No hay recetas para imprimir.');return;}var g=CARATULA_GRUPOS.find(function(x){return x.key===caratulaTipoActual;});abrirVentanaImpresion(buildPlantillaCaratula(recetas,g,{proyeccion:_carVerProy}));}
 
 // Copiar receta/sub-receta DESDE LA LISTA (el botón 📋 de la card, como en
 // insumos): confirmación + contraseña de admin, duplicado independiente con
@@ -5037,7 +5245,7 @@ window.addEventListener('load', function() {
 <script src="/nav-pref.js?v=5555aa4b"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
-<script src="/novedades.js?v=94a2317e"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=300c0a63"></script><!-- aviso de actualizaciones del sistema -->
 <script src="/etaax-iconos.js?v=7a651810"></script>
 <script src="/etaax-sidebar.js?v=b1bccada"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>

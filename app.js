@@ -139,8 +139,57 @@ function _sbUpReceta(rec) {
 function _sbDelReceta(id) {
     sbDelete('recetas', id);
 }
+/* ══ LOS PORCENTAJES DEL COSTEO POR TIPO DE PLATILLO (costeo_config, v90) ══
+   Lo que el negocio ajustó desde la carátula; lo que no ajustó sale de la
+   referencia del núcleo (EtaaxCore.COSTEO_PERFILES). Una copia en
+   localStorage para la hoja impresa y para abrir sin red.
+   _costeoCfgTabla: null = no se sabe aún · true = existe · false = falta la v90
+   (entonces se guarda solo en este dispositivo, sin mandar a la cola de salida
+   algo que va a fallar ocho veces). */
+var _costeoCfgCache = null, _costeoCfgTabla = null;
+function _costeoCfg() {
+    if (_costeoCfgCache) return _costeoCfgCache;
+    try { _costeoCfgCache = JSON.parse(localStorage.getItem(_sk('costeo_cfg')) || 'null'); } catch (e) {}
+    return _costeoCfgCache || {};
+}
+function _costeoTablaFalta(err) {
+    var m = String((err && ((err.code || '') + ' ' + (err.message || ''))) || '');
+    return /42P01|PGRST205|does not exist|could not find the table/i.test(m);
+}
+async function _costeoCfgPull() {
+    var negId = getNegocioActivo();
+    if (!negId || typeof _supabase === 'undefined') return;
+    try {
+        var r = await _supabase.from('costeo_config').select('datos').eq('negocio_id', negId).maybeSingle();
+        if (r.error) { if (_costeoTablaFalta(r.error)) _costeoCfgTabla = false; return; }
+        _costeoCfgTabla = true;
+        if (r.data && r.data.datos) {
+            _costeoCfgCache = r.data.datos;
+            try { localStorage.setItem(_sk('costeo_cfg'), JSON.stringify(_costeoCfgCache)); } catch (e) {}
+            if (typeof window._costeoCfgCambio === 'function') window._costeoCfgCambio();
+        }
+    } catch (e) {}
+}
+/* Devuelve 'nube' si viaja a Supabase o 'local' si falta la migración v90. */
+async function _costeoCfgGuardar(cfg) {
+    cfg = Object.assign({}, cfg, { actualizado: new Date().toISOString(), por: _usuarioActualRec() });
+    _costeoCfgCache = cfg;
+    try { localStorage.setItem(_sk('costeo_cfg'), JSON.stringify(cfg)); } catch (e) {}
+    if (_costeoCfgTabla === null) {
+        var negId = getNegocioActivo();
+        try {
+            var r = await _supabase.from('costeo_config').select('negocio_id').eq('negocio_id', negId).maybeSingle();
+            _costeoCfgTabla = !(r.error && _costeoTablaFalta(r.error));
+        } catch (e) {}
+    }
+    if (_costeoCfgTabla === false) return 'local';
+    if (typeof sbUpsertDoc === 'function') sbUpsertDoc('costeo_config', cfg);
+    return 'nube';
+}
+
 async function _sbInitRecetas() {
     var negId = getNegocioActivo(); if (!negId) return;
+    _costeoCfgPull();   // no se espera: los % por tipo llegan y se repintan solos
     var res = await _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true});
     if (res.error) {
         // Sin conexión / error de esquema: usar respaldo local.
@@ -426,6 +475,10 @@ async function guardarReceta() {
         // Múltiplo del costeo sugerido ('' = default 3.33). Se guarda como número
         // para que reportes y carátula lo lean sin parsear.
         multiploCosteo: _multiploDelEditor(),
+        // Tipo de platillo ('' = se adivina por el grupo) y gasto operativo
+        // propio ('' = el del tipo). Ver EtaaxCore.perfilCosteo.
+        perfilCosteo: _perfilDelEditor(),
+        gastoOpPct:   _opDelEditor(),
         ingredientes: JSON.parse(JSON.stringify(ingredientes)),
         fotos:        JSON.parse(JSON.stringify(fotosReceta)),
         foto:         fotosReceta[0] || '',  // compatibilidad plantillas
@@ -557,8 +610,7 @@ function cargarReceta(id) {
     document.getElementById('cristaleria').value   = r.cristaleria  || '';
     document.getElementById('procedimiento').value = r.procedimiento|| '';
     document.getElementById('precioEnCarta').value = r.precioEnCarta|| '';
-    var _multEl = document.getElementById('s-multiplo');
-    if (_multEl) _multEl.value = r.multiploCosteo || '';   // vacío = 3.33 de siempre
+    _cargarCosteoEditor(r);   // tipo de platillo, food cost meta y gasto operativo
     _pintarSelloReceta(r);
 
     // Tiempo
@@ -764,7 +816,7 @@ body { font-family:'DM Sans',sans-serif; background:#fff; color:#15140f; }
 const LOGO_SVG_DARK_BG='<svg xmlns="http://www.w3.org/2000/svg" height="27" viewBox="4650 98600 244400 53400"><g transform="matrix(1172.115912,0,0,1172.115912,3418.038957,87250.941841)"><g transform="matrix(1,0,0,1.05042,-2.857143,-0.529412)"><path d="M4,31C4,19.5 12.5,10.5 25,10.5C37.5,10.5 45.5,19.5 45.5,30.5C45.5,32 45.3,33.5 45,35L14,35C15.5,40.5 19.5,44 25,44C29.5,44 33,42 35,39.5L43.5,43.5C40,49.5 33,53 25,53C12.5,53 4,44 4,31Z" fill="#f0ece4"/></g><g transform="matrix(1,0,0,1,-2.857143,0)"><path d="M14.5,28L37,28C35.5,23 31.5,20 25.5,20C19.5,20 16,23 14.5,28Z" fill="#0f0e0c"/></g><path d="M52,12L61,12L61,21L72,21L72,30L61,30L61,42C61,44.8 62.5,46 65,46L72,46L72,54.5L64.5,54.5C57,54.5 52,50.5 52,43L52,30L46,30L46,21L52,21L52,12Z" fill="#f0ece4"/><g transform="matrix(1,0,0,1,-3.571429,0)"><path d="M78,41C78,34.5 83.5,30.5 92.5,29.5L104,28.5L104,27.5C104,23.5 101.5,21 97,21C93,21 90,23 89,26.5L80.5,24C82.5,17.5 89,13 97,13C107.5,13 113,18.5 113,28.5L113,54.5L104,54.5L104,51C102,53.5 98.5,55 94,55C85.5,55 78,50.5 78,41Z" fill="#f0ece4"/></g><g transform="matrix(1,0,0,1,-2.857143,0)"><path d="M104,37L95.5,38C92.5,38.5 90.5,40 90.5,42.5C90.5,45 92.5,46.5 95.5,46.5C101,46.5 104,43.5 104,39L104,37Z" fill="#0f0e0c"/></g><path d="M126,41C126,34.5 131.5,30.5 140.5,29.5L152,28.5L152,27.5C152,23.5 149.5,21 145,21C141,21 138,23 137,26.5L128.5,24C130.5,17.5 137,13 145,13C155.5,13 161,18.5 161,28.5L161,54.5L152,54.5L152,51C150,53.5 146.5,55 142,55C133.5,55 126,50.5 126,41Z" fill="#f0ece4"/><path d="M152,37L143.5,38C140.5,38.5 138.5,40 138.5,42.5C138.5,45 140.5,46.5 143.5,46.5C149,46.5 152,43.5 152,39L152,37Z" fill="#0f0e0c"/><g transform="matrix(1,0,0,1,-3.571429,0)"><path d="M168,13L179,13L190,30L201,13L212,13L196.5,34.5L213,54.5L202,54.5L190,38.5L178,54.5L167,54.5L183.5,34.5L168,13Z" fill="#f0ece4"/></g><g transform="matrix(1.086406,0,0,1.086406,70.712678,4.362883)"><circle cx="45" cy="11" r="6" fill="#3dbe7a"/></g></g></svg>';
 function _getRendNeto(r,g){var cx=r.camposExtra||{};if(g.key==='alimentos')return (parseFloat(cx.porciones)||1)+' '+(cx.unidadPorcion||'PLATILLO').toUpperCase();if(g.key==='bebidas'){if(cx.rendimientoBebida&&cx.unidadRendimientoBebida)return cx.rendimientoBebida+' '+cx.unidadRendimientoBebida.toUpperCase();return '1 BEBIDA';}return '1 '+g.rendDefault;}
 function _fmtNumP(n){if(n===0)return '0';return parseFloat(n.toFixed(3))+'';}
-function buildPlantillaCaratula(recetas,grupo){var _mk=(typeof etaaxMarca==='function')?etaaxMarca():{negocio:'',emoji:'',sucursal:'',logo:''};var estab=_mk.negocio||'Establecimiento',g=grupo||{label:'Recetas',tipo:'normal',rendDefault:'PLATILLO',emoji:'',key:'alimentos',subtitulo:'Carátula de Costos'};var esSub=g.tipo==='sub',fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'}),subtitulo=g.subtitulo||'Carátula de Costos';/* Mismo criterio que CSS_PRINT_BASE: en papel la tinta no brilla.
+function buildPlantillaCaratula(recetas,grupo,opc){var _mk=(typeof etaaxMarca==='function')?etaaxMarca():{negocio:'',emoji:'',sucursal:'',logo:''};var estab=_mk.negocio||'Establecimiento',g=grupo||{label:'Recetas',tipo:'normal',rendDefault:'PLATILLO',emoji:'',key:'alimentos',subtitulo:'Carátula de Costos'};var esSub=g.tipo==='sub',fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'}),subtitulo=g.subtitulo||'Carátula de Costos';/* Mismo criterio que CSS_PRINT_BASE: en papel la tinta no brilla.
    OJO con el semáforo: los tres tonos no solo son de colores distintos,
    tienen LUMINOSIDADES distintas a propósito (rojo 18%, verde 27%, ámbar
    39%). Muchas cocinas imprimen en blanco y negro, y un verde y un rojo
@@ -774,7 +826,29 @@ function buildPlantillaCaratula(recetas,grupo){var _mk=(typeof etaaxMarca==='fun
    lápiz en la mano — sin rejilla, seguir un renglón hasta la columna de
    utilidad es imposible. Nada por debajo de #767267 en texto ni de #cfcabd
    en líneas, y cada pastilla con su borde. */
-var CSS=`* { margin:0; padding:0; box-sizing:border-box; }body { font-family:'DM Sans',sans-serif; background:#fff; color:#15140f; -webkit-print-color-adjust:exact; print-color-adjust:exact; }.pagina { width:27.9cm; min-height:20.9cm; display:flex; flex-direction:column; }.pie-hoja { margin-top:auto; }.cab { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; border-bottom:4px solid #1f8a52; }.cab-left { display:flex; align-items:center; gap:12px; }.cab-right { display:flex; align-items:center; gap:14px; }.neg-nombre { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:1px; color:#15140f; line-height:1; }.neg-sub { font-size:9px; letter-spacing:3px; text-transform:uppercase; color:#56514a; margin-top:2px; }.neg-logo { width:52px; height:52px; object-fit:contain; border:1.5px solid #b9b3a5; border-radius:6px; }.fecha-txt { font-size:9px; color:#56514a; letter-spacing:1px; text-align:right; }.fecha-cnt { font-size:10px; color:#3f3b33; margin-top:2px; text-align:right; font-weight:600; }table.ct { width:100%; border-collapse:collapse; border:1.5px solid #8d8778; }table.ct thead th { padding:8px 10px; font-size:8.5px; font-weight:700; color:#000; background:#eee; text-transform:uppercase; letter-spacing:1.5px; border:1px solid #cfcabd; }table.ct tbody td { padding:7px 10px; font-size:11px; border:1px solid #cfcabd; }table.ct tbody tr:nth-child(even) td { background:#f2f0ea; }table.ct tfoot td { background:#e4f6ec; border-top:3px solid #1f8a52; border-bottom:1.5px solid #8d8778; padding:9px 10px; }.pill { display:inline-block; border-radius:20px; padding:3px 11px; font-size:11px; font-weight:700; border:1.5px solid currentColor; }.pill.pg { background:#e4f6ec; color:#14603a; } .pill.pa { background:#fbf2d9; color:#8a6400; } .pill.pr { background:#f6d8d2; color:#7a1105; }.grp { font-size:8.5px; color:#56514a; margin-top:1px; }.footer { display:flex; justify-content:space-between; padding:10px 20px; border-top:2px solid #8d8778; font-size:9px; color:#56514a; }.footer strong { color:#14603a; }@media print { @page { size:letter landscape; margin:0; } }`;function cc(r){return (r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0);}var tablaHTML;if(!esSub){var sU=0,cU=0;var filas=recetas.map(function(r){var c=cc(r),_s=EtaaxCore.costeoReceta(c,r),sC=_s.comedor,sD=_s.delivery,p=parseFloat(r.precioEnCarta)||0,_a=EtaaxCore.costeoAplicado(p,c),si=_a.sinIva,cP=_a.brutoPct,uP=_a.utilidadPct,uM=_a.utilidad,tP=p>0,in2=r.status==='inactiva',gr=[(r.grupo||''),(r.categoria||'')].filter(Boolean).join(' · '),rend=_getRendNeto(r,g);if(tP){sU+=uP;cU++;}var pc=uP>=30?'pg':uP>=15?'pa':'pr';return '<tr style="'+(in2?'color:#6a6558':'')+'"><td style="font-weight:600">'+r.nombre+(in2?' <span style="font-size:8px;color:#56514a;border:1px solid #8d8778;padding:1px 4px;border-radius:3px">inactiva</span>':'')+(gr?'<div class="grp">'+gr+'</div>':'')+'</td><td style="text-align:center;color:#3f3b33">'+rend+'</td><td style="text-align:right;color:#7a5500;font-weight:700">$'+c.toFixed(2)+'</td><td style="text-align:right;color:#3f3b33">$'+sC.toFixed(2)+'</td><td style="text-align:right;color:#3f3b33">$'+sD.toFixed(2)+'</td><td style="text-align:right;font-weight:700;color:'+(tP?'#14603a':'#8d8778')+'">'+(tP?'$'+p.toFixed(2):'—')+'</td><td style="text-align:right;color:#1f1d17;font-weight:600">'+(tP?'$'+uM.toFixed(2):'—')+'</td><td style="text-align:center">'+(tP?'<span class="pill '+pc+'">'+uP.toFixed(0)+'%</span>':'<span style="color:#8d8778">—</span>')+'</td></tr>';}).join('');var prom=cU>0?sU/cU:null,pc2=prom!==null?(prom>=30?'pg':prom>=15?'pa':'pr'):'';tablaHTML='<table class="ct"><thead><tr><th style="text-align:left">NOMBRE DE RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:right">SUGERIDO COMEDOR · IVA</th><th style="text-align:right">SUGERIDO DELIVERY · IVA</th><th style="text-align:right">PRECIO EN CARTA</th><th style="text-align:right">$ DE UTILIDAD NETA</th><th style="text-align:center">% DE UTILIDAD NETA</th></tr></thead><tbody>'+filas+'</tbody><tfoot><tr><td colspan="7" style="text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#1f1d17">Porcentaje promedio de utilidad neta</td><td style="text-align:center">'+(prom!==null?'<span class="pill '+pc2+'" style="font-size:13px;padding:4px 16px">'+prom.toFixed(2)+'%</span>':'<span style="color:#8d8778">—</span>')+'</td></tr></tfoot></table>';}else{var fS=recetas.map(function(r){var c=cc(r),cx=r.camposExtra||{},rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNumP(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uBase=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var pQ=parseFloat(cx.porcionesQty)||0,pUn=(cx.porcionesUnidad||'pzs').toLowerCase(),pP=parseFloat(cx.pesoPorcion)||0,uPor=(cx.unidadPesoPorcion||'').toLowerCase(),pD='—',uPD='—',cP=0;if(pQ>0){pD=pQ.toFixed(0)+' porciones';cP=c/pQ;if(rN>0)uPD=_fmtNumP(rN/pQ)+' '+rU.toLowerCase();else if(pP>0)uPD=_fmtNumP(pP)+' '+uPor;}else if(pP>0&&rN>0){var pC=rN/pP;pD=pC.toFixed(0)+' porciones';cP=c/pC;uPD=_fmtNumP(pP)+' '+uPor;}var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="'+(in2?'color:#6a6558':'')+'"><td style="font-weight:600">'+r.nombre+(in2?' <span style="font-size:8px;color:#56514a;border:1px solid #8d8778;padding:1px 4px;border-radius:3px">inactiva</span>':'')+(gr?'<div class="grp">'+gr+'</div>':'')+'</td><td style="text-align:center;color:#1f1d17">'+rS+'</td><td style="text-align:right;color:#7a5500;font-weight:700">$'+c.toFixed(2)+'</td><td style="text-align:center;color:#1f1d17">'+pD+'</td><td style="text-align:center;color:#1f1d17">'+uPD+'</td><td style="text-align:right;color:#14603a;font-weight:700">'+(cP>0?'$'+cP.toFixed(2):'—')+'</td><td style="text-align:right;color:#1f1d17;font-weight:600">'+(cKL>0?'$'+cKL.toFixed(2)+' <span style="font-size:8px;color:#56514a">/'+uBase+'</span>':'—')+'</td></tr>';}).join('');tablaHTML='<table class="ct"><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+fS+'</tbody></table>';}var _hdrDer='<div class="fecha-txt">'+fecha+'</div><div class="fecha-cnt">'+recetas.length+' recetas</div>';var _hdr=(typeof etaaxReporteHeader==='function')?etaaxReporteHeader(subtitulo,_hdrDer):'<div class="cab"><div class="cab-left"><div><div class="neg-nombre">'+estab+'</div><div class="neg-sub">'+subtitulo+'</div></div></div><div class="cab-right"><div>'+_hdrDer+'</div></div></div>';var _ftr=(typeof etaaxReporteFooter==='function')?etaaxReporteFooter(g.emoji+' '+g.label):'<div class="footer"><span>etaax.com · EGMx Consultoría Estratégica a&b</span><strong>'+g.emoji+' '+g.label+'</strong><span>'+fecha+'</span></div>';var pagina='<div class="pagina">'+_hdr+tablaHTML+'<div class="pie-hoja">'+_ftr+'</div></div>';return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>'+subtitulo+' — '+estab+'</title><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"><style>'+CSS+'</style></head><body>'+pagina+'<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt></body></html>';}
+var CSS=`* { margin:0; padding:0; box-sizing:border-box; }body { font-family:'DM Sans',sans-serif; background:#fff; color:#15140f; -webkit-print-color-adjust:exact; print-color-adjust:exact; }.pagina { width:27.9cm; min-height:20.9cm; display:flex; flex-direction:column; }.pie-hoja { margin-top:auto; }.cab { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; border-bottom:4px solid #1f8a52; }.cab-left { display:flex; align-items:center; gap:12px; }.cab-right { display:flex; align-items:center; gap:14px; }.neg-nombre { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:1px; color:#15140f; line-height:1; }.neg-sub { font-size:9px; letter-spacing:3px; text-transform:uppercase; color:#56514a; margin-top:2px; }.neg-logo { width:52px; height:52px; object-fit:contain; border:1.5px solid #b9b3a5; border-radius:6px; }.fecha-txt { font-size:9px; color:#56514a; letter-spacing:1px; text-align:right; }.fecha-cnt { font-size:10px; color:#3f3b33; margin-top:2px; text-align:right; font-weight:600; }table.ct { width:100%; border-collapse:collapse; border:1.5px solid #8d8778; }table.ct thead th { padding:8px 10px; font-size:8.5px; font-weight:700; color:#000; background:#eee; text-transform:uppercase; letter-spacing:1.5px; border:1px solid #cfcabd; }table.ct tbody td { padding:7px 10px; font-size:11px; border:1px solid #cfcabd; }table.ct tbody tr:nth-child(even) td { background:#f2f0ea; }table.ct tfoot td { background:#e4f6ec; border-top:3px solid #1f8a52; border-bottom:1.5px solid #8d8778; padding:9px 10px; }.pill { display:inline-block; border-radius:20px; padding:3px 11px; font-size:11px; font-weight:700; border:1.5px solid currentColor; }.pill.pg { background:#e4f6ec; color:#14603a; } .pill.pa { background:#fbf2d9; color:#8a6400; } .pill.pr { background:#f6d8d2; color:#7a1105; }.grp { font-size:8.5px; color:#56514a; margin-top:1px; }.footer { display:flex; justify-content:space-between; padding:10px 20px; border-top:2px solid #8d8778; font-size:9px; color:#56514a; }.footer strong { color:#14603a; }.pill.pn { background:#f2f0ea; color:#3f3b33; }table.car tbody.par { border-bottom:1.5px solid #8d8778; }table.car tbody tr td { padding:5px 8px; font-size:10px; vertical-align:middle; }table.car tbody tr:nth-child(even) td { background:none; }table.car td.n { text-align:right; } table.car td.c { text-align:center; }table.car td.op { background:#e9f0f8; color:#1d4e89; font-weight:600; }table.car td small { display:block; font-size:8px; color:#56514a; font-weight:500; } table.car td.op small { color:#1d4e89; }table.car tr.proy td { background:#f7f6f2; color:#3f3b33; font-size:9px; padding-top:3px; padding-bottom:5px; }table.car tr.proy td.op { background:#eef3f9; }table.car tr.proy i { color:#3f3b33; }table.car .inact { font-size:8px; color:#56514a; border:1px solid #8d8778; padding:1px 4px; border-radius:3px; }table.car .pill { padding:2px 8px; font-size:9.5px; }.metas { display:flex; flex-wrap:wrap; gap:6px 16px; padding:8px 20px; font-size:9px; color:#3f3b33; border-bottom:1px solid #cfcabd; }.metas b { color:#1f1d17; } .metas-t { font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:#1f1d17; }@media print { @page { size:letter landscape; margin:0; } }`;function cc(r){return (r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0);}var tablaHTML;if(!esSub){
+/* CARÁTULA IMPRESA (25-nov): la misma que la pantalla. Cada receta con su
+   renglón REAL y, debajo, la PROYECCIÓN SUGERIDA con la meta de su tipo de
+   platillo; el gasto operativo ya no es un 40 fijo. Todo el dinero sale de
+   EtaaxCore.costeoConPerfil. Colores con la regla de arriba (luminosidades
+   distintas, nada más claro que #767267 en texto). */
+var _cfgC=(typeof _costeoCfg==='function')?_costeoCfg():{},_proy=!(opc&&opc.proyeccion===false);
+var $f=function(v){return '$'+(Number(v)||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});};
+var pc=function(v){return (Math.round(v*10)/10).toFixed(1)+'%';};
+var pcc=function(v){return (Math.round(v*10)/10).toFixed(1).replace(/\.0$/,'')+'%';};
+var dcls={optimo:'pg',vigilar:'pa',ajustar:'pr',perdida:'pr',sinprecio:'pn'};
+var sF=0,sU=0,nP=0,nOk=0,tiposVistos={};
+var filas=recetas.map(function(r){var c=cc(r),k=EtaaxCore.costeoConPerfil(c,r,_cfgC),pf=k.perfil,a=k.aplicado,sg=k.sugerido,d=k.diagnostico,tP=a.precio>0,in2=r.status==='inactiva',gr=[(r.grupo||''),(r.categoria||'')].filter(Boolean).join(' · '),rend=_getRendNeto(r,g);tiposVistos[pf.id]=pf;
+if(tP){sF+=a.brutoPct;sU+=a.utilidadPct;nP++;if(d.clave==='optimo')nOk++;}
+var est=!tP?'':(a.brutoPct-pf.food<=0.5?'pg':a.brutoPct-pf.food<=5?'pa':'pr');
+var real='<tr class="real"'+(in2?' style="color:#6a6558"':'')+'><td class="nom"><b>'+etx(r.nombre)+'</b>'+(in2?' <span class="inact">inactiva</span>':'')+'<div class="grp">'+(gr?etx(gr)+' · ':'')+etx(pf.nombre)+'</div></td><td class="c">'+etx(rend)+'</td><td class="n" style="color:#7a5500;font-weight:700">'+$f(c)+'</td><td class="n">'+(tP?'<span class="pill '+est+'">'+pc(a.brutoPct)+'</span>':'—')+'</td><td class="n" style="font-weight:700">'+(tP?$f(a.precio):'<span style="color:#6a6558">Sin precio</span>')+'</td><td class="n op">'+(tP?$f(a.gastoOp)+'<small>'+pcc(pf.op)+'</small>':'—')+'</td><td class="n">'+(tP?$f(a.iva):'—')+'</td><td class="n" style="font-weight:600">'+(tP?$f(a.utilidad):'—')+'</td><td class="n">'+(tP?'<span class="pill '+est+'">'+pc(a.utilidadPct)+'</span>':'—')+'</td><td class="c"><span class="pill '+dcls[d.clave]+'">'+d.texto+'</span></td></tr>';
+if(!_proy)return '<tbody class="par">'+real+'</tbody>';
+var dif=tP?a.precio-sg.comedor:0,gap=!tP?'—':dif<-0.5?'Faltan '+$f(-dif):dif>0.5?$f(dif)+' arriba':'En la meta';
+var proy='<tr class="proy"><td class="nom"><i>Proyección sugerida</i><div class="grp">regla '+Math.round(pf.food)+'-'+Math.round(pf.op)+'-'+Math.round(pf.util)+'</div></td><td></td><td class="n">'+$f(c)+'</td><td class="n">'+pc(pf.food)+'</td><td class="n">'+$f(sg.comedor)+'<small>delivery '+$f(sg.delivery)+'</small></td><td class="n op">'+$f(sg.gastoOp)+'<small>'+pcc(pf.op)+'</small></td><td class="n">'+$f(sg.iva)+'</td><td class="n">'+$f(sg.utilidad)+'</td><td class="n">'+pc(pf.util)+'</td><td class="c" style="font-size:9px;font-weight:700;color:'+(tP&&dif<-0.5?'#7a1105':'#14603a')+'">'+gap+'</td></tr>';
+return '<tbody class="par">'+real+proy+'</tbody>';}).join('');
+var metas=EtaaxCore.COSTEO_PERFILES.filter(function(p){return tiposVistos[p.id];}).map(function(p){var t=EtaaxCore.perfilTipo(p.id,_cfgC);return '<span><b>'+etx(t.nombre)+'</b> food cost '+pcc(t.food)+' · operativo '+pcc(t.op)+' · utilidad '+pcc(t.util)+'</span>';}).join('');
+var pF=nP?sF/nP:null,pU=nP?sU/nP:null;
+tablaHTML='<div class="metas"><span class="metas-t">Metas por tipo de platillo</span>'+metas+'</div><table class="ct car"><thead><tr><th style="text-align:left">NOMBRE DE RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:right">FOOD COST %</th><th style="text-align:right">PRECIO CARTA C/IVA</th><th style="text-align:right">COSTO OPERATIVO</th><th style="text-align:right">IVA '+EtaaxCore.COSTEO_IVA_PCT+'%</th><th style="text-align:right">UTILIDAD NETA $</th><th style="text-align:right">UTILIDAD NETA %</th><th style="text-align:center">DIAGNÓSTICO</th></tr></thead>'+filas+'<tfoot><tr><td colspan="3" style="text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#1f1d17">Promedio de '+nP+' con precio</td><td class="n">'+(pF!==null?'<span class="pill pn">'+pc(pF)+'</span>':'—')+'</td><td colspan="4"></td><td class="n">'+(pU!==null?'<span class="pill pn" style="font-size:12px">'+pc(pU)+'</span>':'—')+'</td><td class="c" style="font-size:9px;font-weight:700;color:#1f1d17">'+nOk+' de '+nP+' óptimas</td></tr></tfoot></table>';}else{var fS=recetas.map(function(r){var c=cc(r),cx=r.camposExtra||{},rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNumP(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uBase=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var pQ=parseFloat(cx.porcionesQty)||0,pUn=(cx.porcionesUnidad||'pzs').toLowerCase(),pP=parseFloat(cx.pesoPorcion)||0,uPor=(cx.unidadPesoPorcion||'').toLowerCase(),pD='—',uPD='—',cP=0;if(pQ>0){pD=pQ.toFixed(0)+' porciones';cP=c/pQ;if(rN>0)uPD=_fmtNumP(rN/pQ)+' '+rU.toLowerCase();else if(pP>0)uPD=_fmtNumP(pP)+' '+uPor;}else if(pP>0&&rN>0){var pC=rN/pP;pD=pC.toFixed(0)+' porciones';cP=c/pC;uPD=_fmtNumP(pP)+' '+uPor;}var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="'+(in2?'color:#6a6558':'')+'"><td style="font-weight:600">'+r.nombre+(in2?' <span style="font-size:8px;color:#56514a;border:1px solid #8d8778;padding:1px 4px;border-radius:3px">inactiva</span>':'')+(gr?'<div class="grp">'+gr+'</div>':'')+'</td><td style="text-align:center;color:#1f1d17">'+rS+'</td><td style="text-align:right;color:#7a5500;font-weight:700">$'+c.toFixed(2)+'</td><td style="text-align:center;color:#1f1d17">'+pD+'</td><td style="text-align:center;color:#1f1d17">'+uPD+'</td><td style="text-align:right;color:#14603a;font-weight:700">'+(cP>0?'$'+cP.toFixed(2):'—')+'</td><td style="text-align:right;color:#1f1d17;font-weight:600">'+(cKL>0?'$'+cKL.toFixed(2)+' <span style="font-size:8px;color:#56514a">/'+uBase+'</span>':'—')+'</td></tr>';}).join('');tablaHTML='<table class="ct"><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+fS+'</tbody></table>';}var _hdrDer='<div class="fecha-txt">'+fecha+'</div><div class="fecha-cnt">'+recetas.length+' recetas</div>';var _hdr=(typeof etaaxReporteHeader==='function')?etaaxReporteHeader(subtitulo,_hdrDer):'<div class="cab"><div class="cab-left"><div><div class="neg-nombre">'+estab+'</div><div class="neg-sub">'+subtitulo+'</div></div></div><div class="cab-right"><div>'+_hdrDer+'</div></div></div>';var _ftr=(typeof etaaxReporteFooter==='function')?etaaxReporteFooter(g.emoji+' '+g.label):'<div class="footer"><span>etaax.com · EGMx Consultoría Estratégica a&b</span><strong>'+g.emoji+' '+g.label+'</strong><span>'+fecha+'</span></div>';var pagina='<div class="pagina">'+_hdr+tablaHTML+'<div class="pie-hoja">'+_ftr+'</div></div>';return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>'+subtitulo+' — '+estab+'</title><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"><style>'+CSS+'</style></head><body>'+pagina+'<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt></body></html>';}
 
 
 function buildWrapperHTML(paginasHTML, titulo) {
@@ -1075,14 +1149,15 @@ function buildPlantillaAdministrativa(recetas) {
         var costo = (r.ingredientes||[]).reduce(function(s,i) {
             return s + costoIngredienteVivo(i);
         }, 0);
-        var _sug         = EtaaxCore.costeoReceta(costo, r);   // múltiplo propio de la receta
+        var _cp          = EtaaxCore.costeoConPerfil(costo, r, _costeoCfg());   // tipo de platillo + lo propio
+        var _sug         = _cp.sugerido;
         var sPlatillo    = _sug.platillo;
         var sComedor     = _sug.comedor;
         var sDelivery    = _sug.delivery;
         var _pctComedor  = 100 + EtaaxCore.COSTEO_IVA_PCT;
         var _pctDelivery = 100 + EtaaxCore.COSTEO_IVA_PCT + EtaaxCore.COSTEO_DELIVERY_PCT;
         var precioEnCarta = parseFloat(r.precioEnCarta) || 0;
-        var _apl         = EtaaxCore.costeoAplicado(precioEnCarta, costo);
+        var _apl         = _cp.aplicado;
         var aCostoP      = _apl.brutoPct;
         var aUtilidadP   = _apl.utilidadPct;
 
@@ -1173,7 +1248,7 @@ function buildPlantillaAdministrativa(recetas) {
                     R += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
                     // SUGERIDO
                     R += '<div style="background:#f2f0ea;border:1px solid #8a6400;border-radius:6px;padding:8px 10px">';
-                    R += '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#8a6400;margin-bottom:5px">📐 Costeo Sugerido</div>';
+                    R += '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#8a6400;margin-bottom:5px">📐 Costeo Sugerido · '+_cp.perfil.nombre+'</div>';
                     var _p1 = function(v){ return (Math.round(v*10)/10).toFixed(1).replace(/\.0$/,''); };
                     R += cr('Costo Bruto '+_p1(_sug.brutoPct)+'%','$'+costo.toFixed(2),true,'#7a5500');
                     R += cr('Gasto Operativo '+_p1(_sug.gastoOpPct)+'%','$'+_sug.gastoOp.toFixed(2),false);
@@ -1189,9 +1264,10 @@ function buildPlantillaAdministrativa(recetas) {
                     if(precioEnCarta > 0){
                         R += '<div style="font-size:13px;font-weight:700;color:#1a1916;margin-bottom:4px">$'+precioEnCarta.toFixed(2)+'<span style="font-size:8px;color:#56514a;font-weight:400;margin-left:4px">con IVA</span></div>';
                         R += cr('Precio sin IVA','$'+_apl.sinIva.toFixed(2),false,'#3f3b33');
-                        R += cr('Costo Bruto','<span style="color:'+(aCostoP<=32?'#14603a':aCostoP<=45?'#7a5500':'#a8331b')+'">'+aCostoP.toFixed(1)+'%</span>  $'+costo.toFixed(2),false);
-                        R += cr('Gasto Operativo '+_apl.gastoOpPct+'%','$'+_apl.gastoOp.toFixed(2),false);
-                        R += cr('Utilidad Neta','<span style="color:'+(aUtilidadP>=25?'#14603a':aUtilidadP>=10?'#7a5500':'#a8331b')+'">'+aUtilidadP.toFixed(1)+'%</span>  $'+_apl.utilidad.toFixed(2),false);
+                        var _colD = _cp.diagnostico.clave==='optimo'?'#14603a':_cp.diagnostico.clave==='vigilar'?'#7a5500':'#a8331b';   // contra la meta del tipo
+                        R += cr('Costo Bruto','<span style="color:'+_colD+'">'+aCostoP.toFixed(1)+'%</span>  $'+costo.toFixed(2),false);
+                        R += cr('Gasto Operativo '+_p1(_apl.gastoOpPct)+'%','$'+_apl.gastoOp.toFixed(2),false);
+                        R += cr('Utilidad Neta','<span style="color:'+_colD+'">'+aUtilidadP.toFixed(1)+'%</span>  $'+_apl.utilidad.toFixed(2),false);
                         R += cr('IVA incluido '+EtaaxCore.COSTEO_IVA_PCT+'%','$'+_apl.iva.toFixed(2),false,'#3f3b33');
                         R += priceRow('Precio Comedor','$'+_apl.comedor.toFixed(2),'#e4f6ec','#14603a');
                         R += priceRow('Precio Delivery +'+EtaaxCore.COSTEO_DELIVERY_PCT+'%','$'+_apl.delivery.toFixed(2),'#e4f6ec','#14603a');
@@ -2253,9 +2329,12 @@ function calcularCosteos() {
 
     document.getElementById('costoTotalDisplay').textContent = '$'+costoTotal.toFixed(2);
 
-    // Costeo sugerido: el múltiplo del escandallo manda (vacío = 3.33 de siempre).
-    // La fórmula vive en el núcleo — aquí solo se pinta.
-    var _sug = EtaaxCore.costeoReceta(costoTotal, _multiploDelEditor());
+    // Costeo sugerido: el TIPO de platillo pone el food cost meta y el gasto
+    // operativo; la receta puede traer los suyos. La fórmula vive en el núcleo
+    // — aquí solo se pinta.
+    var _pf  = EtaaxCore.perfilCosteo(_recetaDelEditor(), _costeoCfg());
+    var _sug = EtaaxCore.costeoReceta(costoTotal, _pf.multiplo, _pf.op);
+    _pintarPerfilEditor(_pf);
     setVal('s-costobruto', costoTotal);
     setVal('s-gasto',      _sug.gastoOp);
     setVal('s-utilidad',   _sug.utilidad);
@@ -2271,7 +2350,8 @@ function calcularCosteos() {
            el 1.56 estaban escritos a mano aquí, en la ficha impresa y en la
            carátula: tocar el recargo de delivery en el núcleo dejaba a los
            tres diciendo lo de antes. */
-        const _apl           = EtaaxCore.costeoAplicado(precioEnCarta, costoTotal);
+        const _apl           = EtaaxCore.costeoAplicado(precioEnCarta, costoTotal, _pf.op);
+        const _diag          = EtaaxCore.diagnosticoCosteo(_apl, _pf);
         const aSinIva        = _apl.sinIva;
         const aCostoBrutoPct = _apl.brutoPct;
         const aUtilidadPct   = _apl.utilidadPct;
@@ -2285,13 +2365,16 @@ function calcularCosteos() {
         document.getElementById('a-costobruto-monto').textContent = '$'+costoTotal.toFixed(2);
         document.getElementById('a-utilidad-monto').textContent   = '$'+_apl.utilidad.toFixed(2);
 
+        /* El color lo da la meta del TIPO, no un 32% general: un postre al
+           33% de food cost puede estar bien y un fuerte al 31% no. */
+        var _cls = _diag.clave === 'optimo' ? 'costeo-pct val-green' : _diag.clave === 'vigilar' ? 'costeo-pct val-amber' : 'costeo-pct val-red';
         var cbEl = document.getElementById('a-costobruto-pct');
         cbEl.textContent = aCostoBrutoPct.toFixed(1)+'%';
-        cbEl.className   = aCostoBrutoPct <= 32 ? 'costeo-pct val-green' : aCostoBrutoPct <= 45 ? 'costeo-pct val-amber' : 'costeo-pct val-red';
+        cbEl.className   = _cls;
 
         var utilEl = document.getElementById('a-utilidad-pct');
         utilEl.textContent = aUtilidadPct.toFixed(1)+'%';
-        utilEl.className   = aUtilidadPct >= 25 ? 'costeo-pct val-green' : aUtilidadPct >= 10 ? 'costeo-pct val-amber' : 'costeo-pct val-red';
+        utilEl.className   = _cls;
     } else {
         ['a-siniva','a-gasto','a-iva','a-comedor','a-delivery','a-costobruto-monto','a-utilidad-monto'].forEach(function(id){
             var el = document.getElementById(id); if(el) el.textContent = '$0.00';
@@ -2324,6 +2407,8 @@ var _REC_HIST_CAMPOS = [
     { k:'tiempo',        lbl:'Tiempo' },
     { k:'precioEnCarta', lbl:'Precio en carta', money:true },
     { k:'multiploCosteo',lbl:'Múltiplo de costeo' },
+    { k:'perfilCosteo',  lbl:'Tipo de platillo' },
+    { k:'gastoOpPct',    lbl:'Gasto operativo %' },
     { k:'status',        lbl:'Estatus' }
 ];
 function _rvTxt(v) { return (v === undefined || v === null || v === '') ? '—' : String(v); }
@@ -2403,13 +2488,68 @@ function _pintarSelloReceta(r) {
 }
 
 // Múltiplo tecleado en el escandallo (vacío/0 → null = default del núcleo).
+/* El food cost meta de ESTA receta, como múltiplo (100 ÷ meta). Vacío = el
+   del tipo de platillo (null). Se guarda como multiploCosteo para que todo lo
+   que ya lo leía —ficha, carátula, reportes— siga funcionando. */
 function _multiploDelEditor() {
-    var el = document.getElementById('s-multiplo');
+    var el = document.getElementById('s-food');
     var v = el ? parseFloat(el.value) : NaN;
-    return (v > 0) ? v : null;
+    return (v > 0 && v < 100) ? 100 / v : null;
 }
-// Los porcentajes del costeo sugerido dejan de ser fijos: los dicta el múltiplo.
-// La utilidad se pinta en rojo cuando el múltiplo no alcanza a pagar el 40% de gasto.
+function _opDelEditor() {
+    var el = document.getElementById('s-op');
+    if (!el || el.value === '') return '';
+    var v = parseFloat(el.value);
+    return (isFinite(v) && v >= 0 && v < 100) ? v : '';
+}
+function _perfilDelEditor() {
+    var el = document.getElementById('s-perfil');
+    return el ? el.value : '';
+}
+/* La receta tal como está en el editor, para preguntarle al núcleo su tipo. */
+function _recetaDelEditor() {
+    var v = function (id) { var e = document.getElementById(id); return e ? e.value : ''; };
+    return { tipo: recetaTipoActual || 'alimentos', grupo: v('grupo'), categoria: v('categoria'),
+             perfilCosteo: _perfilDelEditor(), multiploCosteo: _multiploDelEditor(), gastoOpPct: _opDelEditor() };
+}
+function _fmtPctCosteo(v) { return (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, ''); }
+function _cargarCosteoEditor(r) {
+    r = r || {};
+    var m = parseFloat(r.multiploCosteo);
+    var f = document.getElementById('s-food'), o = document.getElementById('s-op'), t = document.getElementById('s-perfil');
+    if (f) f.value = m > 0 ? String(Math.round(100 / m * 100) / 100) : '';   // vacío = el del tipo
+    if (o) o.value = (r.gastoOpPct === '' || r.gastoOpPct == null) ? '' : r.gastoOpPct;
+    if (t) { _opcionesPerfilEditor(); t.value = r.perfilCosteo || ''; }
+}
+function _opcionesPerfilEditor() {
+    var t = document.getElementById('s-perfil');
+    if (!t || (t.options && t.options.length)) return;
+    t.innerHTML = '<option value="">Automático</option>' + EtaaxCore.COSTEO_PERFILES.map(function (p) {
+        return '<option value="' + p.id + '">' + p.nombre + '</option>';
+    }).join('');
+}
+/* El tipo de platillo y sus tres números arriba del costeo. Los campos vacíos
+   enseñan (placeholder) lo que pone el tipo. */
+function _pintarPerfilEditor(pf) {
+    _opcionesPerfilEditor();
+    var t = document.getElementById('s-perfil');
+    if (t && t.options && t.options[0]) t.options[0].textContent = 'Automático · ' + EtaaxCore.perfilTipo(EtaaxCore.perfilAdivinado(_recetaDelEditor()), _costeoCfg()).nombre;
+    var f = document.getElementById('s-food'), o = document.getElementById('s-op');
+    if (f) f.placeholder = _fmtPctCosteo(pf.foodTipo);
+    if (o) o.placeholder = _fmtPctCosteo(pf.opTipo);
+    var u = document.getElementById('s-util-obj');
+    if (u) { u.textContent = _fmtPctCosteo(pf.util) + '%'; u.style.color = pf.util < 0 ? 'var(--red)' : ''; }
+    var nota = document.getElementById('s-perfil-nota');
+    if (nota) {
+        var propio = pf.foodPropio || pf.opPropio;
+        nota.textContent = (pf.min != null ? pf.nombre + ': gasto operativo recomendado ' + pf.min + '–' + pf.max + '%. ' : '') + pf.por +
+            (propio ? ' Esta receta trae su propio ' + (pf.foodPropio && pf.opPropio ? 'food cost y gasto operativo' : pf.foodPropio ? 'food cost' : 'gasto operativo') + '.' : '');
+    }
+    var ag = document.getElementById('a-pct-gasto');
+    if (ag) ag.textContent = _fmtPctCosteo(pf.op) + '%';
+}
+// Los porcentajes del costeo sugerido los dicta el tipo de platillo (y lo
+// propio de la receta). La utilidad se pinta en rojo cuando no alcanza.
 function _pintarPctSugerido(sug) {
     var _txt = function (id, t, cls) {
         var el = document.getElementById(id); if (!el) return;
@@ -2423,15 +2563,17 @@ function _pintarPctSugerido(sug) {
          sug.utilidadPct < 0 ? 'costeo-pct val-red' : sug.utilidadPct < 15 ? 'costeo-pct val-amber' : 'costeo-pct');
     var hint = document.getElementById('s-mult-hint');
     if (hint) {
-        hint.textContent = _pct(sug.brutoPct) + ' de costo bruto' +
+        hint.textContent = '× ' + sug.multiplo.toFixed(2) + ' sobre el costo' +
             (sug.utilidadPct < 0 ? ' · no cubre el gasto operativo' : '');
         hint.style.color = sug.utilidadPct < 0 ? 'var(--red)' : '';
     }
 }
-// Volver al múltiplo de siempre (3.33 = 30% de costo bruto).
+// Volver a lo que pone el tipo de platillo (food cost y gasto operativo).
 function resetMultiploReceta() {
-    var el = document.getElementById('s-multiplo');
-    if (el) { el.value = ''; calcularCosteos(); window._escDirty = true; if (window._avisarDirty) _avisarDirty(); }
+    var f = document.getElementById('s-food'), o = document.getElementById('s-op');
+    if (f) f.value = '';
+    if (o) o.value = '';
+    calcularCosteos(); window._escDirty = true; if (window._avisarDirty) _avisarDirty();
 }
 
 function setVal(id, val) {

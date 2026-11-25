@@ -1558,7 +1558,7 @@
        Sin múltiplo guardado se usa el default exacto 1/0.30 — así las recetas viejas
        no cambian ni un centavo.
          m = 2.5  →  costo bruto 40% · gasto op 40% · utilidad neta 20%              */
-    var COSTEO_GASTO_OP_PCT = 40;    // fijo (por ahora no editable)
+    var COSTEO_GASTO_OP_PCT = 40;    // el de «General»; cada tipo de platillo trae el suyo (COSTEO_PERFILES)
     /* ══ COBRO DE LA SUSCRIPCIÓN: fecha de corte y días de tolerancia ══════════
        Una sola verdad para "¿este negocio está al corriente?". La misma regla vive
        además en SQL (negocio_esta_activo), porque el gate no puede depender de que
@@ -1635,15 +1635,22 @@
         var m = n(r && (r.multiploCosteo != null ? r.multiploCosteo : r));   // acepta receta o número
         return m > 0 ? m : COSTEO_MULT_DEFAULT;
     }
-    function costeoReceta(costo, multiplo) {
-        var c = n(costo), m = multiploReceta(multiplo);
+    /* El gasto operativo ya no es un 40 fijo: depende del TIPO de platillo
+       (ver COSTEO_PERFILES). Sin dato, el 40 de siempre. */
+    function _gastoOp(v) {
+        if (v === '' || v === null || v === undefined) return COSTEO_GASTO_OP_PCT;
+        var x = parseFloat(v);
+        return (isFinite(x) && x >= 0 && x < 100) ? x : COSTEO_GASTO_OP_PCT;
+    }
+    function costeoReceta(costo, multiplo, gastoOpPct) {
+        var c = n(costo), m = multiploReceta(multiplo), op = _gastoOp(gastoOpPct);
         var platillo = c > 0 ? c * m : 0;
         var brutoPct = 100 / m;                                    // el múltiplo ES el inverso del % de costo
-        var utilPct  = 100 - brutoPct - COSTEO_GASTO_OP_PCT;       // puede salir negativa: es el aviso de que el múltiplo no da
+        var utilPct  = 100 - brutoPct - op;                        // puede salir negativa: es el aviso de que el múltiplo no da
         return {
             multiplo: m, costoBruto: c, platillo: platillo,
-            brutoPct: brutoPct, gastoOpPct: COSTEO_GASTO_OP_PCT, utilidadPct: utilPct,
-            gastoOp:  platillo * (COSTEO_GASTO_OP_PCT / 100),
+            brutoPct: brutoPct, gastoOpPct: op, utilidadPct: utilPct,
+            gastoOp:  platillo * (op / 100),
             utilidad: platillo * (utilPct / 100),
             iva:      platillo * (COSTEO_IVA_PCT / 100),
             comedor:  platillo * (1 + COSTEO_IVA_PCT / 100),
@@ -1663,26 +1670,125 @@
        La base de TODO es el precio sin IVA: el gasto operativo, la utilidad y
        el delivery se miden sobre lo que el negocio de verdad cobra, no sobre
        el precio con impuesto. */
-    function costeoAplicado(precioCarta, costo) {
-        var p = n(precioCarta), c = n(costo);
+    function costeoAplicado(precioCarta, costo, gastoOpPct) {
+        var p = n(precioCarta), c = n(costo), op = _gastoOp(gastoOpPct);
         var sinIva   = p > 0 ? p / (1 + COSTEO_IVA_PCT / 100) : 0;
         var brutoPct = sinIva > 0 ? (c / sinIva) * 100 : 0;
         /* Puede salir negativa, y así tiene que salir: es el aviso de que el
            precio de la carta no alcanza a pagar el costo y el gasto. */
-        var utilPct  = sinIva > 0 ? 100 - brutoPct - COSTEO_GASTO_OP_PCT : 0;
+        var utilPct  = sinIva > 0 ? 100 - brutoPct - op : 0;
         return {
             precio:   p,
             sinIva:   sinIva,
             costoBruto: c,
             brutoPct: brutoPct,
-            gastoOpPct: COSTEO_GASTO_OP_PCT,
+            gastoOpPct: op,
             utilidadPct: utilPct,
-            gastoOp:  sinIva * (COSTEO_GASTO_OP_PCT / 100),
+            gastoOp:  sinIva * (op / 100),
             utilidad: sinIva * (utilPct / 100),
             iva:      p - sinIva,
             comedor:  p,
             delivery: sinIva * (1 + (COSTEO_IVA_PCT + COSTEO_DELIVERY_PCT) / 100),
         };
+    }
+
+    /* ══ EL TIPO DE PLATILLO MANDA EN EL COSTEO ══════════════════════════════
+       No todo lo de la carta gasta lo mismo para salir a la mesa. Un plato
+       fuerte ocupa cocineros, estufa, horno, almacén y una mesa por más
+       tiempo; una bebida se arma al instante en la barra. Cargarles a todos
+       el mismo 40% de gasto operativo esconde pérdidas en los fuertes y
+       castiga a las bebidas. Los rangos son los de la referencia de Edwin
+       (25-nov-2026); el valor de cada tipo es el centro del rango, y el
+       negocio lo ajusta en la carátula (costeo_config, v90).
+
+       Cada receta puede además traer lo SUYO: `multiploCosteo` (su food cost
+       meta, el múltiplo es 100 ÷ meta) y `gastoOpPct`. Vacío = lo del tipo.
+       Sin tipo elegido se adivina por el grupo/categoría (`auto`); lo que no
+       se reconoce queda en «General», la regla 30-40-30 de siempre, para que
+       ninguna receta vieja cambie de número por una suposición.             */
+    var COSTEO_PERFILES = [
+        { id:'entrada', nombre:'Entradas',             food:30, op:33, min:30, max:35,
+          por:'Preparación rápida, alta rotación y menos tiempo de servicio: generan flujo.' },
+        { id:'fuerte',  nombre:'Platos fuertes',       food:30, op:44, min:42, max:45,
+          por:'El motor del restaurante: más cocina, equipo, almacén y servicio de salón.' },
+        { id:'postre',  nombre:'Postres',              food:30, op:38, min:35, max:40,
+          por:'Se adelantan en mise en place y se montan al momento; su insumo suele ser barato.' },
+        { id:'bebida',  nombre:'Bebidas y coctelería', food:30, op:28, min:25, max:30,
+          por:'Se preparan al instante en barra, con poca merma y menos personal.' },
+        { id:'general', nombre:'General',              food:30, op:40, min:null, max:null,
+          por:'La regla 30-40-30 de siempre, para lo que no tiene tipo.' }
+    ];
+    function _perfilBase(id) {
+        for (var i = 0; i < COSTEO_PERFILES.length; i++) if (COSTEO_PERFILES[i].id === id) return COSTEO_PERFILES[i];
+        return null;
+    }
+    function _sinAcentos(s) {
+        s = String(s || '').toLowerCase();
+        try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+        return s;
+    }
+    /* Adivinar el tipo con lo que ya dice la receta. Solo palabras que no
+       dejan duda: lo demás se queda en «General» hasta que alguien lo elija. */
+    function perfilAdivinado(r) {
+        r = r || {};
+        var t = String(r.tipo || '');
+        if (t === 'bebidas') return 'bebida';
+        if (t !== 'alimentos') return 'general';
+        var s = _sinAcentos((r.grupo || '') + ' ' + (r.categoria || ''));
+        if (/postre|dulce|reposter|helad|pastel|nieve/.test(s)) return 'postre';
+        if (/entrada|botana|aperitiv|tapa|snack|ensalada|sopa|antojit|compartir|ceviche|crudo|tostada/.test(s)) return 'entrada';
+        if (/fuerte|principal|plato|corte|pasta|hamburgues|pizza/.test(s)) return 'fuerte';
+        return 'general';
+    }
+    function _pctCfg(v, minimo) {
+        if (v === '' || v === null || v === undefined) return null;
+        var x = parseFloat(v);
+        return (isFinite(x) && x >= minimo && x < 100) ? x : null;
+    }
+    /* Los porcentajes de un tipo para ESTE negocio: los suyos (cfg) o los de
+       la referencia. */
+    function perfilTipo(id, cfg) {
+        var b = _perfilBase(id) || _perfilBase('general');
+        var c = (cfg && cfg.perfiles && cfg.perfiles[b.id]) || {};
+        var food = _pctCfg(c.food, 0.5), op = _pctCfg(c.op, 0);
+        food = food === null ? b.food : food;
+        op   = op   === null ? b.op   : op;
+        return { id: b.id, nombre: b.nombre, food: food, op: op, util: 100 - food - op,
+                 min: b.min, max: b.max, por: b.por,
+                 ajustado: food !== b.food || op !== b.op };
+    }
+    /* Lo que manda en UNA receta: su tipo (elegido o adivinado) y, encima, lo
+       suyo si lo trae. */
+    function perfilCosteo(r, cfg) {
+        r = r || {};
+        var elegido = _perfilBase(r.perfilCosteo) ? r.perfilCosteo : '';
+        var t = perfilTipo(elegido || perfilAdivinado(r), cfg);
+        var m = n(r.multiploCosteo), opR = _pctCfg(r.gastoOpPct, 0);
+        var food = m > 0 ? 100 / m : t.food;
+        var op   = opR !== null ? opR : t.op;
+        return { id: t.id, nombre: t.nombre, auto: !elegido,
+                 food: food, op: op, util: 100 - food - op, multiplo: 100 / food,
+                 foodTipo: t.food, opTipo: t.op, foodPropio: m > 0, opPropio: opR !== null,
+                 min: t.min, max: t.max, por: t.por };
+    }
+    /* El costeo completo de una receta con su tipo: lo sugerido (la meta) y lo
+       aplicado (lo que de verdad deja el precio de la carta). */
+    function costeoConPerfil(costo, r, cfg) {
+        var pf = perfilCosteo(r, cfg);
+        var sug = costeoReceta(costo, pf.multiplo, pf.op);
+        var apl = costeoAplicado(r && r.precioEnCarta, costo, pf.op);
+        return { perfil: pf, sugerido: sug, aplicado: apl, diagnostico: diagnosticoCosteo(apl, pf) };
+    }
+    /* El veredicto del renglón. Con el gasto fijo, la utilidad solo baja de
+       la meta si el food cost la pasa: por eso se mide contra el food cost.
+       Medio punto de holgura para que un 30.04% no salga como «ajustar».   */
+    function diagnosticoCosteo(apl, pf) {
+        if (!apl || !(apl.precio > 0)) return { clave: 'sinprecio', texto: 'Sin precio' };
+        if (apl.utilidadPct < 0)       return { clave: 'perdida',   texto: 'Pérdida' };
+        var dif = apl.brutoPct - pf.food;
+        if (dif <= 0.5) return { clave: 'optimo',  texto: 'Óptimo' };
+        if (dif <= 5)   return { clave: 'vigilar', texto: 'Vigilar' };
+        return { clave: 'ajustar', texto: 'Ajustar merma o precio' };
     }
 
     /* ¿QUÉ TANTO DE UN PERIODO ESTÁ CUBIERTO POR OTROS?
@@ -2360,6 +2466,8 @@
         previsionApartadoRango: previsionApartadoRango, previsionUsadoRango: previsionUsadoRango,
         importeLetra: importeLetra,
         multiploReceta: multiploReceta, costeoReceta: costeoReceta, costeoAplicado: costeoAplicado,
+        COSTEO_PERFILES: COSTEO_PERFILES, perfilAdivinado: perfilAdivinado, perfilTipo: perfilTipo,
+        perfilCosteo: perfilCosteo, costeoConPerfil: costeoConPerfil, diagnosticoCosteo: diagnosticoCosteo,
         coberturaPeriodo: coberturaPeriodo,
         propinasReparto: propinasReparto, propinasAjuste: propinasAjuste,
         COSTEO_MULT_DEFAULT: COSTEO_MULT_DEFAULT, COSTEO_GASTO_OP_PCT: COSTEO_GASTO_OP_PCT,

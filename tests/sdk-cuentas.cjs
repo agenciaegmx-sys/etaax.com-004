@@ -36,6 +36,9 @@ function sdkEtx() {
         q.then = function (res, rej) {
             if (errCol) return Promise.resolve({ data: null, error: { message: errCol, code: '42703' } }).then(res, rej);
             var db = nube(), filas = db[tabla] || [], data = null, total = null;
+            /* Una migración que todavía no se corre: la tabla no existe (como PostgREST). */
+            if ((db.__sinTabla || []).indexOf(tabla) > -1)
+                return Promise.resolve({ data: null, error: { message: 'relation "public.' + tabla + '" does not exist', code: '42P01' } }).then(res, rej);
             var pasa = function (r) { return f.every(function (c) { return c[2] === 'in' ? c[1].indexOf(val(r, c[0])) > -1 : val(r, c[0]) === c[1]; }); };
             if (modo === 'upsert') {
                 (Array.isArray(valor) ? valor : [valor]).forEach(function (v) {
