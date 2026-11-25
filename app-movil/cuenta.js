@@ -212,7 +212,7 @@ async function entrarCuenta() {
            Antes el enlace de descarga las llevaba dentro, lo que significaba
            repartir por WhatsApp el mismo secreto impreso en el QR de la barra —
            y un enlace distinto por negocio que nadie sabía cuál era. */
-        await resolverNegocio(msg);
+        if (await resolverNegocio(msg) === 'apagado') { await _cerrarSinApp(msg, 'tu negocio'); return; }
         msg.textContent = '';
         ofrecerCandado();
     } catch (e) {
@@ -267,18 +267,43 @@ async function entrarColaborador(usuario, pwd, msg) {
     _lsSet(LLAVE_CORREO, usuario);
     _lsSet(LLAVE_PERFIL, JSON.stringify({ tipo: 'colaborador', nombre: fila.nombre || usuario, puesto: _rolNombre(fila.rol),
         rol: fila.rol || '', negocioId: fila.negocio_id, negocio: nd.nombre || '', sucursalId: fila.sucursal_id || '' }));
-    try {
-        var t = await c.rpc('entrada_token_asegurar', { p_neg: fila.negocio_id });
-        if (t && !t.error && t.data) window._appFijarQR(fila.negocio_id, t.data, nd.nombre || '');
-    } catch (e) { /* sin token: la clave se queda apagada en este teléfono */ }
+    var tm = await _tokenMovil(c, fila.negocio_id, fila.sucursal_id || '');
+    if (tm && tm.apagado) { await _cerrarSinApp(msg, 'tu sucursal'); return false; }
+    if (tm && tm.token) window._appFijarQR(fila.negocio_id, tm.token, nd.nombre || '');
     return true;
+}
+
+/* ══ EL TOKEN DE LA SUCURSAL (v92) ══════════════════════════════════════════
+   La app móvil no es una puerta abierta: existe solo para las sucursales que
+   ETAAX activó desde su panel, y cada sucursal tiene SU token. movil_token lo
+   da a quien es del negocio (dueño, colaboradores, admin) y SOLO si esa
+   sucursal tiene la app; si no, NULL → { apagado: true }.
+   Sin la v92 (la función no existe), el token del negocio de siempre. */
+function _faltaFn(err) { return /Could not find the function|does not exist|PGRST202/i.test(((err && err.message) || '') + ' ' + ((err && err.code) || '')); }
+async function _tokenMovil(c, neg, suc) {
+    try {
+        var r = await c.rpc('movil_token', { p_neg: neg, p_suc: suc || '' });
+        if (r && !r.error) return (r.data && r.data.token) ? { token: r.data.token, sucursalId: r.data.sucursalId || '' } : { apagado: true };
+        if (!_faltaFn(r && r.error)) return null;
+        var t = await c.rpc('entrada_token_asegurar', { p_neg: neg });
+        return (t && !t.error && t.data) ? { token: t.data } : null;
+    } catch (e) { return null; /* sin token: la clave se queda apagada en este teléfono */ }
+}
+/* Sin la app activa no se entra: se cierra la sesión que se acaba de abrir y
+   se dice por qué (no es una contraseña mala). */
+async function _cerrarSinApp(msg, quien) {
+    try { await iniciar().auth.signOut(); } catch (e) {}
+    SESION = null;
+    _lsDel(LLAVE_PERFIL);
+    if (msg) msg.textContent = 'La app móvil no está activa para ' + quien + '. ETAAX la activa desde su panel; mientras, entra desde la computadora.';
 }
 
 /* ══ DE QUÉ NEGOCIO ES ESTE TELÉFONO ═══════════════════════════════════════
    Con la sesión puesta, la app lo averigua sola: pregunta qué negocios alcanza
-   esta cuenta y pide el token del QR —la misma función que usa el botón de
-   «QR de entradas» del sistema—. Con eso, los botones de NIP quedan listos para
-   el equipo de barra y cocina SIN que nadie reparta un enlace con secretos.
+   esta cuenta y pide el token de la sucursal —movil_token, la misma función que
+   usa «Versión móvil» en el hub—. Con eso, los botones de NIP quedan listos para
+   el equipo de barra y cocina SIN que nadie reparta un enlace con secretos. Si
+   ninguna sucursal tiene la app (v92), no se entra.
 
    Un teléfono se configura UNA vez: el encargado entra con su cuenta, y de ahí
    en adelante su equipo entra solo con su NIP. */
@@ -300,11 +325,13 @@ async function resolverNegocio(msg) {
             neg = elegido;
         }
         if (msg) msg.textContent = 'Preparando ' + (neg.nombre || '') + '…';
-        var t = await SB.rpc('entrada_token_asegurar', { p_neg: neg.id });
-        if (t.error || !t.data) return;
+        /* Sin sucursal: Matriz si tiene la app, si no la primera que la tenga. */
+        var tm = await _tokenMovil(SB, neg.id, '');
+        if (tm && tm.apagado) return 'apagado';
+        if (!tm || !tm.token) return;
         /* La sucursal NO se guarda: la pone el NIP de quien entre. Guardarla
            haría que el teléfono del encargado sellara todo con SU sucursal. */
-        window._appFijarQR(neg.id, t.data, neg.nombre || '');
+        window._appFijarQR(neg.id, tm.token, neg.nombre || '');
     } catch (e) { /* sin negocio resuelto: la puerta del NIP se queda apagada */ }
 }
 

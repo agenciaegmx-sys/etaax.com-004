@@ -753,7 +753,7 @@ async function betaAppCopiar() {
 <script src="/staff-etaax.js?v=cf3b415f"></script><!-- Staff ETAAX: reglas compartidas -->
 <script src="/admin-staff-etaax.js?v=2b941941"></script><!-- Staff ETAAX: la pantalla del panel (v88) -->
 <script src="/etaax-apps-ui.js?v=58f96d85"></script><!-- el selector de apps (Cost·ax, Fin·ax, Equip·ax) -->
-<script src="/admin-planes.js?v=16c8138d"></script><!-- planes por apps: editar, invitar, solicitudes (v89) -->
+<script src="/admin-planes.js?v=f6b6a16c"></script><!-- planes por apps: editar, invitar, solicitudes (v89) -->
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -1005,7 +1005,7 @@ async function adminLogin() {
 
 /* ── CARGA DE DATOS ── */
 async function cargarDatos() {
-    var [resU, resN, resS, resP, resSub, resSol, resSucs, resInv] = await Promise.all([
+    var [resU, resN, resS, resP, resSub, resSol, resSucs, resInv, resMov] = await Promise.all([
         _supabase.from('usuarios').select('*'),
         _supabase.from('negocios').select('*'),
         _supabase.from('staff').select('*'),
@@ -1013,7 +1013,8 @@ async function cargarDatos() {
         _supabase.from('suscripciones').select('*'),
         _supabase.from('solicitudes_plan').select('*').order('created_at', { ascending: false }),
         _supabase.from('negocio_sucursales').select('negocio_id,datos'),
-        _supabase.from('invitaciones').select('*').order('creada_at', { ascending: false })
+        _supabase.from('invitaciones').select('*').order('creada_at', { ascending: false }),
+        _supabase.from('movil_acceso').select('negocio_id,datos')   // v92: la app móvil por sucursal
     ]);
 
     _data.usuarios    = (resU.data || []).filter(function(u){ return u.id !== ADMIN_EMAIL; });
@@ -1025,6 +1026,9 @@ async function cargarDatos() {
     _data.solicitudes = resSol.error ? [] : (resSol.data || []); // tabla v36 (si no existe aún, bandeja vacía)
     // Si falta correr la v49, la pestaña se ve vacía en vez de tumbar el panel.
     _data.invitaciones = resInv.error ? [] : (resInv.data || []);
+    // Sin la v92 la tabla no existe: el detalle lo dice en vez de tumbar el panel.
+    _data.movil = {}; _data.movilError = !!resMov.error;
+    (resMov.data || []).forEach(function(r){ _data.movil[r.negocio_id] = r.datos || {}; });
     _data.sucsNeg = {};
     // Antes solo se guardaba el CONTEO. La lista completa (con nombre y logo) hace
     // falta para poder emitir un recibo a nombre de una sucursal concreta.
@@ -1265,7 +1269,8 @@ function renderNegocios() {
         return '<tr class="clickable" onclick="abrirDetalleNegocio(\'' + etaaxJsArg(n.id) + '\')">' +
             '<td><strong>' + esc(d.emoji||'🏢') + ' ' + esc(d.nombre||'—') + '</strong>' +
                 '<div class="text-dim" style="font-size:11px">' + esc(d.tipo||'—') + ' · ' + staff + ' colab.</div>' +
-                (window.AdmPlanes ? '<div style="font-size:11px;color:var(--cyan)">' + esc(AdmPlanes.resumen(n.id)) + '</div>' : '') + '</td>' +
+                (window.AdmPlanes ? '<div style="font-size:11px;color:var(--cyan)">' + esc(AdmPlanes.resumen(n.id)) + '</div>' : '') +
+                (window.AdmPlanes && AdmPlanes.movilResumen && AdmPlanes.movilResumen(n.id) ? '<div style="font-size:11px;color:var(--muted)">' + esc(AdmPlanes.movilResumen(n.id)) + '</div>' : '') + '</td>' +
             '<td class="text-dim">' + esc(dueno ? (dueno.nombre||'—') : '—') + '</td>' +
             '<td>' + badge + '</td>' +
             '<td class="text-dim">' + vence + '</td>' +
@@ -2661,6 +2666,7 @@ function abrirDetalleNegocio(nid) {
             staffHtml +
         '</div>' +
         (window.AdmPlanes ? AdmPlanes.seccionDetalle(n.id) : '') +
+        (window.AdmPlanes && AdmPlanes.seccionMovil ? AdmPlanes.seccionMovil(n.id) : '') +
         '<button onclick="entrarComoAdmin()" ' +
             'style="width:100%;margin-top:20px;background:var(--gold);color:#0a0908;font-family:\'DM Sans\',sans-serif;' +
             'font-size:13px;font-weight:700;padding:12px;border-radius:8px;border:none;cursor:pointer;letter-spacing:.5px">' +

@@ -171,10 +171,27 @@ function mostrar(id, titulo, sub, conVolver, conBarra) {
    suya. */
 var NEG_NOM = '';
 function _fijarQR(neg, token, nombre) {
-    NEG = neg; TOKEN = token; NEG_NOM = nombre || '';
+    NEG = neg; TOKEN = token; NEG_NOM = nombre || ''; ACCESO_APAGADO = false;
     try { localStorage.setItem(LS, JSON.stringify({ n: NEG, t: TOKEN, s: '', nom: NEG_NOM })); } catch (e) {}
 }
 window._appFijarQR = _fijarQR;
+
+/* ══ ¿ESTE ENLACE SIGUE ABIERTO? (v92) ══════════════════════════════════════
+   La app existe solo para las sucursales que ETAAX activó, y cada sucursal
+   tiene su token: si la apagaron (o el QR viejo ya no se acepta), la clave no
+   entraría y el colaborador vería «NIP no reconocido» sin saber por qué. Se
+   pregunta al abrir y se dice claro. Sin red o sin la v92 no se apaga nada: la
+   puerta de verdad sigue siendo el servidor en cada consulta. */
+var ACCESO_APAGADO = false;
+async function revisarAcceso() {
+    if (!NEG || !TOKEN || !window._supabase) return false;
+    try {
+        var r = await _supabase.rpc('movil_estado', { p_neg: NEG, p_token: TOKEN });
+        if (r && !r.error && r.data && r.data.activo === false) { ACCESO_APAGADO = true; return true; }
+        if (r && !r.error && r.data && r.data.activo === true) ACCESO_APAGADO = false;
+    } catch (e) {}
+    return false;
+}
 
 /* ══ 0 · LA PORTADA ════════════════════════════════════════════════════════
    (25-nov) Por default, la CLAVE: el teclado del NIP a la vista, que es lo que
@@ -186,12 +203,17 @@ function verInicio() {
          · que alguien entre UNA vez con su cuenta (el encargado configura el
            teléfono y su equipo ya solo usa su clave);
          · o abrir el QR de tu sucursal, que trae las credenciales. */
-    var listo = !!(NEG && TOKEN);
+    var listo = !!(NEG && TOKEN) && !ACCESO_APAGADO;
     NIP = ''; pintarPuntos(); $('nipMsg').textContent = '';
     $('nipZona').classList.toggle('apagada', !listo);
-    $('inicioSub').textContent = listo ? ((NEG_NOM ? NEG_NOM + ' · ' : '') + 'tu NIP de 5 dígitos') : 'Este teléfono todavía no está ligado';
+    $('inicioSub').textContent = listo ? ((NEG_NOM ? NEG_NOM + ' · ' : '') + 'tu NIP de 5 dígitos')
+        : (ACCESO_APAGADO ? 'Este acceso ya no está activo' : 'Este teléfono todavía no está ligado');
     $('inicioAviso').innerHTML = listo
         ? 'Tu clave dice quién registró qué. Si no la tienes, pídesela a tu encargado.'
+        : ACCESO_APAGADO
+        ? '<b style="color:var(--txt)">La app móvil de esta sucursal está apagada</b><br>' +
+          'O este QR ya no es el vigente. Pídele a tu encargado el <b>QR de tu sucursal</b> ' +
+          '(en el sistema: menú de la cuenta → Versión móvil).'
         : '<b style="color:var(--txt)">¿Eres de barra o cocina?</b><br>' +
           'Pídele a tu encargado que entre una vez con su cuenta aquí abajo, o abre el ' +
           '<b>QR de tu sucursal</b>. Después entras solo con tu clave.';
@@ -408,6 +430,8 @@ async function entrar() {
             NIP = ''; pintarPuntos(); _entrando = false; return;
         }
         if (!rv.data) {
+            /* ¿El NIP, o el acceso? Si apagaron la sucursal, decirlo. */
+            if (await revisarAcceso()) { _entrando = false; verInicio(); return; }
             $('nipMsg').innerHTML = 'NIP no reconocido.<br>Pídele a tu encargado tu NIP de 5 dígitos.';
             NIP = ''; pintarPuntos(); _entrando = false; return;
         }
@@ -1980,6 +2004,8 @@ window.addEventListener('DOMContentLoaded', async function () {
     var conSesion = false;
     try { conSesion = window._cuenta ? await window._cuenta.alAbrir() : false; } catch (e) {}
     if (!conSesion) verInicio();
+    /* Después de pintar: si el acceso está apagado, la portada lo dice. */
+    if (navigator.onLine && await revisarAcceso() && _PANT === 'pInicio') verInicio();
 });
 
 /* Lo que el HTML llama por onclick. */
@@ -2024,7 +2050,7 @@ window._appMovil = {
     pintarInstalar: pintarInstalar, yaInstalada: yaInstalada, detectarInstalada: detectarInstalada,
     yaLaTengo: yaLaTengo, pintarPortal: pintarPortal, cuentaRun: cuentaRun,
     pintarHorarios: pintarHorarios, pintarEvaluaciones: pintarEvaluaciones, appsDelPlan: _appsDelPlan,
-    pintarModulo: pintarModulo, sesionInfo: function () { return _sesionInfo(); },
+    pintarModulo: pintarModulo, sesionInfo: function () { return _sesionInfo(); }, revisarAcceso: revisarAcceso,
     _setRun: function (r) { RUN = r; },
     _set: function (k, v) {
         if (k === 'AREA_COLAB') AREA_COLAB = v; if (k === 'AREA') AREA = v;

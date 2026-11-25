@@ -84,6 +84,15 @@ function sdkEtx() {
         negocio_esta_activo: function () { return true; },
         /* El token del QR del negocio (v27): uno por negocio. */
         entrada_token_asegurar: function (p) { return 'tok-' + p.p_neg; },
+        /* La app móvil por sucursal (v92): el token de UNA sucursal, si la tiene
+           activa en movil_acceso (sin sucursal: Matriz o la primera activa). */
+        movil_token: function (p) {
+            var m = (nube().movil_acceso || []).find(function (x) { return x.negocio_id === p.p_neg; });
+            var act = (m && m.datos && m.datos.sucursales) || {};
+            var suc = p.p_suc || (act.suc_principal === true ? 'suc_principal' : Object.keys(act).filter(function (k) { return act[k] === true; })[0]);
+            if (!suc || act[suc] !== true) return null;
+            return { token: 'tok-' + p.p_neg + '-' + suc, sucursalId: suc };
+        },
         admin_etx_uid: function (p) { var x = (nube().__auth || []).find(function (u) { return u.email === String(p.p_email).toLowerCase(); }); return x ? x.id : null; },
         admin_etx_clave: function (p) {
             var db = nube(), x = (db.__auth || []).find(function (u) { return u.id === p.p_uid; });

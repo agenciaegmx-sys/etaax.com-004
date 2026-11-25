@@ -3,21 +3,24 @@
 
    (Edwin, 25-nov) No hay app que bajar de una tienda: la versión móvil es web
    (/app-movil/) y cada quien la deja en su celular con «Agregar a inicio». Su
-   enlace es el del QR de entradas de siempre —negocio + token del QR + la
-   sucursal—, que ya no vive en Inventarios: se muda al menú de la cuenta del
-   hub («Versión móvil»), donde se despliega el QR o se copia el enlace.
+   enlace es el QR de la sucursal —negocio + token de la sucursal—, que vive en
+   el menú de la cuenta del hub («Versión móvil»), donde se despliega el QR o se
+   copia el enlace.
 
-   Los QR que ya están impresos en las barras siguen sirviendo: llevan a
-   /entrada.html y esa página los manda aquí con las mismas credenciales.
+   NO ES UNA APP ABIERTA (v92). Solo existe para una sucursal que ETAAX activó
+   desde el panel admin (movil_acceso), y cada sucursal tiene SU token: el QR de
+   Polanco no abre Matriz, y apagar una sucursal apaga su QR en el servidor. Por
+   eso el hub solo ofrece la entrada si la sucursal activa tiene la app.
+
+   Los QR que ya están impresos en las barras (token del negocio) siguen
+   sirviendo mientras el panel los acepte: llevan a /entrada.html y esa página
+   los manda aquí con las mismas credenciales.
 
    QUIÉN LO VE: el mismo permiso de antes, «Generar el QR de entradas»
    (inventarios.qr). El dueño y el administrador siempre. NO se pregunta por el
-   plan: la versión móvil ya no es solo de Cost·ax (Equip·ax trae horarios y
-   check lists) y la propia app esconde lo que la sucursal no contrató.
+   plan de apps: la propia app esconde lo que la sucursal no contrató.
 
-   El token es el mismo secreto que lleva el QR impreso: el enlace no abre nada
-   que una foto del QR no abriera ya. Lo que autoriza cada registro es la clave
-   de 5 dígitos de cada persona.
+   Sin la v92 todo sigue como antes (token del negocio para todas).
    ══════════════════════════════════════════════════════════════════════════ */
 (function () {
     'use strict';
@@ -35,10 +38,39 @@
     }
     function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
-    /* El permiso, sin el plan (ver arriba). Si el ayudante de permisos no cargó
-       se deja pasar: la puerta de verdad es el servidor (entrada_token_asegurar
-       solo contesta a quien es del negocio). */
+    /* ── ¿La sucursal tiene la app? (v92) ──
+       Se lee movil_acceso (el negocio la lee; solo el admin la escribe) y se
+       guarda en el navegador para pintar el menú sin esperar a la red. Sin la
+       v92 la tabla no existe: todo sigue como antes. */
+    function _llave(negId) { return 'etaax_' + negId + '_movil'; }
+    function _leer(negId) { try { return JSON.parse(localStorage.getItem(_llave(negId)) || 'null'); } catch (e) { return null; } }
+    function _guardar(negId, v) { try { localStorage.setItem(_llave(negId), JSON.stringify(v)); } catch (e) {} }
+    function _faltaV92(err) { return /movil_acceso|movil_token|does not exist|Could not find|PGRST20[25]|42P01/i.test(((err && err.message) || '') + ' ' + ((err && err.code) || '')); }
+    function activa(negId, sucId) {
+        var m = _leer(negId || _neg());
+        if (!m) return false;                 // sin saber todavía: no se ofrece una puerta que quizá no abre
+        if (m.sinV92) return true;
+        var l = m.sucursales || {};
+        return l[sucId || _suc() || 'suc_principal'] === true;
+    }
+    async function revisar(negId, luego) {
+        negId = negId || _neg();
+        if (!negId || !window._supabase) return;
+        var antes = JSON.stringify(_leer(negId)), ahora;
+        try {
+            var r = await window._supabase.from('movil_acceso').select('datos').eq('negocio_id', negId).maybeSingle();
+            if (r.error) { if (!_faltaV92(r.error)) return; ahora = { sinV92: true }; }
+            else ahora = { sucursales: ((r.data && r.data.datos) || {}).sucursales || {} };
+        } catch (e) { return; }
+        _guardar(negId, ahora);
+        if (typeof luego === 'function') luego(JSON.stringify(ahora) !== antes);
+    }
+
+    /* El permiso (sin el plan, ver arriba) Y la sucursal con la app. Si el
+       ayudante de permisos no cargó, el permiso se deja pasar: la puerta de
+       verdad es el servidor (movil_token solo contesta a quien es del negocio). */
     function puede() {
+        if (!activa()) return false;
         var c = _ctx();
         if (c.ctxType !== 'staff') return true;
         if ((c.rol || '') === 'admin') return true;
@@ -146,21 +178,35 @@
         var m = _marca();
         var suc = _suc();
         document.getElementById('etxMovilSub').textContent = suc && m.sucursal
-            ? 'QR de ' + m.sucursal + ' · cada quien entra a su sucursal con su clave'
-            : 'QR del negocio · cada quien entra a su sucursal con su clave';
+            ? 'QR de ' + m.sucursal + ' · solo abre esta sucursal'
+            : 'QR de la sucursal · cada quien entra con su clave';
         box.innerHTML = '<div style="background:none;padding:0">Generando…</div>';
         inp.value = ''; _url = '';
         if (!d.open) { try { d.showModal(); } catch (e) { d.setAttribute('open', ''); } }
-        var token = '';
+        var token = '', sucQr = suc;
         try {
-            var r = await window._supabase.rpc('entrada_token_asegurar', { p_neg: negId });
-            if (r.error) throw r.error;
-            token = r.data || '';
+            /* El token de ESTA sucursal (v92). NULL = la sucursal no tiene la app. */
+            var r = await window._supabase.rpc('movil_token', { p_neg: negId, p_suc: suc || '' });
+            if (r.error && _faltaV92(r.error)) {
+                /* Sin la v92: el token del negocio, como antes. */
+                r = await window._supabase.rpc('entrada_token_asegurar', { p_neg: negId });
+                if (r.error) throw r.error;
+                token = r.data || '';
+            } else {
+                if (r.error) throw r.error;
+                if (!r.data || !r.data.token) {
+                    _guardar(negId, { sucursales: {} });
+                    box.innerHTML = '<div class="em-err" style="background:none;padding:0">La app móvil no está activa en esta sucursal.<br>' +
+                        '<span style="color:var(--text-dim,#aaa498)">ETAAX la activa desde su panel.</span></div>';
+                    return;
+                }
+                token = r.data.token; sucQr = r.data.sucursalId || suc;
+            }
         } catch (e) {
             box.innerHTML = '<div class="em-err" style="background:none;padding:0">No se pudo preparar el enlace.<br>' + _esc((e && e.message) || e) + '</div>';
             return;
         }
-        _url = enlace(negId, token, suc);
+        _url = enlace(negId, token, sucQr);
         inp.value = _url;
         var pintar = function () {
             box.innerHTML = '';
@@ -231,5 +277,5 @@
         setTimeout(limpiar, 2000);
     }
 
-    window.EtaaxAccesoMovil = { puede: puede, enlace: enlace, abrir: abrir, cerrar: cerrar };
+    window.EtaaxAccesoMovil = { puede: puede, activa: activa, revisar: revisar, enlace: enlace, abrir: abrir, cerrar: cerrar };
 })();

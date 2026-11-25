@@ -18321,8 +18321,9 @@ console.log('\n══ BH93 · La versión móvil: su QR y su enlace ══');
     const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
     const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
     const land = fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8');
-    const modulo = (ctxObj, permOk) => {
-        const store = { etaax_ctx: JSON.stringify(ctxObj), etaax_negocio_activo: 'n1' };
+    const modulo = (ctxObj, permOk, movil) => {
+        const store = { etaax_ctx: JSON.stringify(ctxObj), etaax_negocio_activo: 'n1',
+                        etaax_n1_movil: JSON.stringify(movil || { sucursales: { suc_principal: true } }) };
         const w = { localStorage: { getItem: (k) => store[k] == null ? null : store[k] }, location: { origin: 'https://etaax.com' },
                     etaaxPerm: (neg, rol, permiso) => permiso === 'inventarios.qr' && permOk };
         w.window = w; vm.createContext(w); vm.runInContext(am, w, { filename: 'etaax-acceso-movil.js' });
@@ -18336,8 +18337,9 @@ console.log('\n══ BH93 · La versión móvil: su QR y su enlace ══');
         eq(modulo({ ctxType: 'owner' }).puede() && modulo({ ctxType: 'staff', rol: 'admin' }, false).puede(), true));
     test('un colaborador, solo con el permiso de antes («Generar el QR de entradas»)', () =>
         eq(modulo({ ctxType: 'staff', rol: 'gerente' }, true).puede() + ' / ' + modulo({ ctxType: 'staff', rol: 'mesero' }, false).puede(), 'true / false'));
-    test('el token sale del servidor (entrada_token_asegurar), no se inventa', () =>
-        eq(/rpc\('entrada_token_asegurar', \{ p_neg: negId \}\)/.test(am), true));
+    test('el token sale del servidor (movil_token; sin la v92, entrada_token_asegurar), no se inventa', () =>
+        eq(/rpc\('movil_token', \{ p_neg: negId, p_suc: suc \|\| '' \}\)/.test(am) &&
+           /rpc\('entrada_token_asegurar', \{ p_neg: negId \}\)/.test(am), true));
     test('el hub lo ofrece en el menú de la cuenta, con su permiso', () =>
         eq(/EtaaxAccesoMovil\.puede\(\)\)\s*l\.push\(\{ id: 'etxHdMovilOp'/.test(hub) && hub.indexOf('/etaax-acceso-movil.js?v=') > -1, true));
     test('Inventarios ya no tiene su «QR de entradas»', () =>
@@ -18360,11 +18362,157 @@ console.log('\n══ BH93 · La versión móvil: su QR y su enlace ══');
         vm.runInContext(ent.slice(ent.indexOf('<script>') + 8, ent.indexOf('</script>')), w2);
         return eq(a + ' | ' + b, '/app-movil/?n=n1&t=tk&s=suc | sin ir');
     });
-    test('la landing tiene su acceso directo a la versión móvil', () =>
-        eq((land.match(/href="\/app-movil\/"/g) || []).length >= 2, true));
+    /* (25-nov, después) Edwin: «el acceso a la versión móvil no debe estar en la
+       landing, no es a público abierto». Solo por el QR o el enlace de cada
+       sucursal (BH95). */
+    test('la landing NO tiene acceso a la versión móvil (no es una app abierta)', () =>
+        eq(land.indexOf('/app-movil/') === -1 && land.indexOf('btn-movil') === -1, true));
 
 })();
 
+
+/* ═══════ BH95 · LA APP MÓVIL SE ACTIVA POR SUCURSAL (v92, 25-nov) ═══════
+   Edwin: «el acceso a la versión móvil no debe estar en la landing… solo por
+   medio del QR, link, dentro de cada negocio… solo si existe una sucursal
+   activa existe el acceso a la app móvil… activarlo desde el panel admin, así
+   como administro las aplicaciones». Y: el QR de check list ya no se usa.
+   La puerta de verdad es _entrada_token_ok (la prueba contra Postgres real es
+   tests/probar-sql-v92.mjs); aquí, que cada pantalla la respete.          */
+console.log('\n══ BH95 · La app móvil se activa por sucursal (v92) ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    const v92 = leer('supabase-migration-v92.sql');
+    const am = leer('etaax-acceso-movil.js'), hub = leer('hub.html');
+    const app = leer('app-movil/app.js'), cta = leer('app-movil/cuenta.js');
+    const ck = leer('administrativo/checklists.html'), ckp = leer('checklist.html');
+    const adm = leer('admin.html'), admp = leer('admin-planes.js');
+    const fn = (src, n) => { const i = src.indexOf('function ' + n + '('); if (i < 0) return ''; const j = src.indexOf('\n}', i); return src.slice(i, j + 2); };
+    const sqlFn = (n) => { const i = v92.indexOf('CREATE OR REPLACE FUNCTION ' + n + '('); return i < 0 ? '' : v92.slice(i, v92.indexOf('$$;', i)); };
+
+    /* ── La migración ── */
+    test('v92: _entrada_token_ok (la puerta de TODAS las consultas de la clave) acepta el token de una sucursal ACTIVA…', () =>
+        eq(/_movil_sucursal_de\(p_neg, p_token\) IS NOT NULL/.test(sqlFn('_entrada_token_ok')), true));
+    test('…y el viejo del negocio solo si se siguen aceptando los QR anteriores y hay alguna sucursal activa', () => {
+        const c = sqlFn('_entrada_token_ok');
+        return eq(c.indexOf("m.datos->>'qrAnterior'") > -1 && c.indexOf('EXISTS (SELECT 1 FROM _movil_activas(p_neg))') > -1, true);
+    });
+    test('…y sigue abierta a anon (la política de la foto del ticket es TO anon)', () =>
+        eq(/GRANT EXECUTE ON FUNCTION _entrada_token_ok\(TEXT, TEXT\) TO anon, authenticated;/.test(v92) &&
+           !/REVOKE[^\n]*_entrada_token_ok/.test(v92), true));
+    test('los negocios que ya usaban el QR quedan como estaban (sin pisar lo que el admin apague al re-correr)', () =>
+        eq(/WHERE COALESCE\(n\.entrada_token, ''\) <> ''\s*ON CONFLICT \(negocio_id\) DO NOTHING;/.test(v92) && v92.indexOf("'qrAnterior', true") > -1, true));
+    test('movil_acceso: el negocio la LEE y solo el admin la escribe (el dueño no se activa la app solo)', () => {
+        const pol = v92.match(/CREATE POLICY "[^"]+" ON movil_acceso FOR \w+/g) || [];
+        return eq(pol.join(' | '), 'CREATE POLICY "own_lee" ON movil_acceso FOR SELECT | CREATE POLICY "staff_lee" ON movil_acceso FOR SELECT | CREATE POLICY "admin_all" ON movil_acceso FOR ALL');
+    });
+    test('movil_token: mismo candado que entrada_token_asegurar (IS NOT TRUE, sin anon)', () =>
+        eq(/\(v_owner = auth\.uid\(\) OR es_staff_de\(p_neg\) OR is_platform_admin\(\)\) IS NOT TRUE THEN/.test(sqlFn('movil_token')) &&
+           /REVOKE ALL ON FUNCTION movil_token\(TEXT, TEXT\)\s+FROM PUBLIC, anon;/.test(v92), true));
+    test('el token de la sucursal NO se guarda en ninguna tabla: sale del secreto del negocio', () =>
+        eq(/sha256\(convert_to\(p_tok \|\| '\|' \|\| p_suc, 'UTF8'\)\)/.test(sqlFn('_movil_token_suc')) && !/ADD COLUMN[^\n]*token/i.test(v92), true));
+
+    /* ── El hub: la entrada solo si la sucursal tiene la app ── */
+    const modulo = (store) => {
+        const w = { localStorage: { getItem: (k) => store[k] == null ? null : store[k], setItem: (k, v) => { store[k] = String(v); } },
+                    location: { origin: 'https://etaax.com' } };
+        w.window = w; vm.createContext(w); vm.runInContext(am, w);
+        return w.EtaaxAccesoMovil;
+    };
+    const base = (movil, suc) => Object.assign({ etaax_ctx: JSON.stringify({ ctxType: 'owner' }), etaax_negocio_activo: 'n1' },
+        suc ? { etaax_sucursal_activa: suc } : {}, movil === undefined ? {} : { etaax_n1_movil: JSON.stringify(movil) });
+    test('el hub ofrece «Versión móvil» solo si la sucursal activa tiene la app', () => {
+        const m = { sucursales: { suc_principal: true, suc_dos: false } };
+        return eq([modulo(base(m, 'suc_principal')).puede(), modulo(base(m, 'suc_dos')).puede()].join(), 'true,false');
+    });
+    test('…sin saber todavía (nada guardado) no se ofrece una puerta que quizá no abre', () =>
+        eq(modulo(base(undefined, 'suc_principal')).puede(), false));
+    test('…sin la v92 (la tabla no existe) todo sigue como antes', () =>
+        eq(modulo(base({ sinV92: true }, 'suc_dos')).puede(), true));
+    testAsyncCola.push(['hub: revisar() lee movil_acceso, lo guarda y avisa si cambió (para repintar el menú)', async () => {
+        const store = base(undefined, 'suc_dos'), cambios = [];
+        let resp = { data: { datos: { sucursales: { suc_dos: true } } }, error: null };
+        const q = { select: () => q, eq: () => q, maybeSingle: () => Promise.resolve(resp) };
+        const g = { localStorage: { getItem: (k) => store[k] == null ? null : store[k], setItem: (k, v) => { store[k] = String(v); } },
+                    location: { origin: 'https://etaax.com' }, _supabase: { from: (t) => { eq(t, 'movil_acceso'); return q; } } };
+        g.window = g; vm.createContext(g); vm.runInContext(am, g);
+        await g.EtaaxAccesoMovil.revisar('n1', (c) => cambios.push(c));
+        await g.EtaaxAccesoMovil.revisar('n1', (c) => cambios.push(c));
+        const puede1 = g.EtaaxAccesoMovil.puede();
+        resp = { data: null, error: { message: 'relation "public.movil_acceso" does not exist', code: '42P01' } };
+        await g.EtaaxAccesoMovil.revisar('n1', (c) => cambios.push(c));
+        eq(cambios.join() + ' ' + puede1 + ' ' + store.etaax_n1_movil, 'true,false,true true {"sinV92":true}');
+    }]);
+    test('hub: al entrar a una sucursal se revisa y el menú se repinta si cambió', () =>
+        eq(/EtaaxAccesoMovil\.revisar\(neg\.id, function \(cambio\) \{ if \(cambio\) _pintarHeader\(\); \}\)/.test(hub), true));
+    test('el QR lleva el token y la sucursal que da el SERVIDOR; si la sucursal no tiene la app, lo dice', () => {
+        const a = fn(am, 'abrir');
+        return eq(a.indexOf("token = r.data.token; sucQr = r.data.sucursalId || suc;") > -1 &&
+                  a.indexOf('_url = enlace(negId, token, sucQr);') > -1 &&
+                  a.indexOf('La app móvil no está activa en esta sucursal.') > -1, true);
+    });
+
+    /* ── La app ── */
+    testAsyncCola.push(['app (cuenta): el token de la sucursal; sin app → apagado; sin la v92 → el del negocio', async () => {
+        const c = { console };
+        vm.createContext(c);
+        vm.runInContext(fn(cta, '_faltaFn') + '\n' + fn(cta, '_tokenMovil').replace(/^function/, 'async function'), c);
+        const cliente = (mapa) => ({ rpc: async (f, p) => mapa[f] ? mapa[f](p) : { data: null, error: null } });
+        const r1 = await c._tokenMovil(cliente({ movil_token: (p) => ({ data: { token: 'tk-' + p.p_suc, sucursalId: p.p_suc }, error: null }) }), 'n1', 'suc_dos');
+        const r2 = await c._tokenMovil(cliente({ movil_token: () => ({ data: null, error: null }) }), 'n1', 'suc_dos');
+        const r3 = await c._tokenMovil(cliente({ movil_token: () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.movil_token' } }),
+                                                entrada_token_asegurar: () => ({ data: 'tokNeg', error: null }) }), 'n1', '');
+        const r4 = await c._tokenMovil(cliente({ movil_token: () => ({ data: null, error: { message: 'no autorizado' } }) }), 'n1', '');
+        eq(JSON.stringify([r1, r2, r3, r4]), '[{"token":"tk-suc_dos","sucursalId":"suc_dos"},{"apagado":true},{"token":"tokNeg"},null]');
+    }]);
+    test('app (cuenta): sin la app activa NO se entra; se cierra la sesión y se dice por qué', () =>
+        eq(cta.indexOf("if (await resolverNegocio(msg) === 'apagado') { await _cerrarSinApp(msg, 'tu negocio'); return; }") > -1 &&
+           cta.indexOf("if (tm && tm.apagado) { await _cerrarSinApp(msg, 'tu sucursal'); return false; }") > -1 &&
+           /auth\.signOut\(\)/.test(fn(cta, '_cerrarSinApp')), true));
+    test('app (clave): pregunta si el enlace sigue abierto (movil_estado) y, si no, la portada lo dice', () =>
+        eq(fn(app, 'revisarAcceso').indexOf("rpc('movil_estado', { p_neg: NEG, p_token: TOKEN })") > -1 &&
+           fn(app, 'verInicio').indexOf('var listo = !!(NEG && TOKEN) && !ACCESO_APAGADO;') > -1 &&
+           fn(app, 'verInicio').indexOf('La app móvil de esta sucursal está apagada') > -1, true));
+    test('…y un NIP rechazado revisa si fue el acceso antes de decir «NIP no reconocido»', () => {
+        const e = fn(app, 'entrar');
+        return eq(e.indexOf('if (await revisarAcceso()) {') > -1 && e.indexOf('if (await revisarAcceso()) {') < e.indexOf('NIP no reconocido'), true);
+    });
+
+    /* ── El QR de check list se retira ── */
+    test('Check lists ya no genera su QR (los check lists se hacen en la app)', () =>
+        eq(/abrirQrChecklist|qrCkModal|entrada_token_asegurar/.test(ck) === false && ck.indexOf('app móvil') > -1, true));
+    test('los QR de check list ya impresos abren la app, antes de pintar nada (como entrada.html)', () => {
+        const i = ckp.indexOf("location.replace('/app-movil/' + q)");
+        let a = null, b = 'sin ir';
+        const w = { location: { search: '?n=n1&t=tk&s=suc', replace: (u) => { a = u; } } };
+        vm.createContext(w); vm.runInContext(ckp.slice(ckp.indexOf('<script>') + 8, ckp.indexOf('</script>')), w);
+        const w2 = { location: { search: '?n=n1&t=tk&web=1', replace: (u) => { b = u; } } };
+        vm.createContext(w2); vm.runInContext(ckp.slice(ckp.indexOf('<script>') + 8, ckp.indexOf('</script>')), w2);
+        return eq((i > -1 && i < ckp.indexOf('negocio-tab.js')) + ' ' + a + ' | ' + b, 'true /app-movil/?n=n1&t=tk&s=suc | sin ir');
+    });
+
+    /* ── El panel admin ── */
+    test('admin: carga movil_acceso y el detalle del negocio trae «App móvil»', () =>
+        eq(adm.indexOf("_supabase.from('movil_acceso').select('negocio_id,datos')") > -1 &&
+           adm.indexOf('AdmPlanes.seccionMovil(n.id)') > -1, true));
+    testAsyncCola.push(['admin: activar una sucursal guarda solo las sucursales vivas y conserva lo demás', async () => {
+        const subidas = [];
+        const c = { console, Object, JSON, Array, String, Promise, Date,
+            _data: { sucursales: { n1: [{ id: 'suc_principal', nombre: 'Matriz' }, { id: 'suc_dos', nombre: 'Polanco' }] },
+                     movil: { n1: { sucursales: { suc_principal: true, suc_vieja: true }, qrAnterior: true } } },
+            _supabase: { from: (t) => ({ upsert: async (reg, o) => { subidas.push([t, reg.negocio_id, reg.datos, o.onConflict]); return { error: null }; } }) },
+            esc: (x) => String(x), etaaxJsArg: (x) => String(x), admAlert: () => {} };
+        c.window = c; vm.createContext(c); vm.runInContext(admp, c);
+        await c.AdmPlanes.toggleMovil('n1', 'suc_dos');
+        eq(JSON.stringify(subidas), '[["movil_acceso","n1",{"sucursales":{"suc_principal":true,"suc_dos":true},"qrAnterior":true},"negocio_id"]]');
+        eq(c.AdmPlanes.movilResumen('n1'), 'App móvil: 2 de 2 sucursales');
+        eq(/Activa[\s\S]*Activa/.test(c.AdmPlanes.seccionMovil('n1')) && c.AdmPlanes.seccionMovil('n1').indexOf('Dejar de aceptarlos') > -1, true);
+    }]);
+    test('admin: sin la v92, el detalle lo dice en vez de tumbar el panel', () => {
+        const c = { console, Object, JSON, Array, String, _data: { movilError: true, sucursales: {} }, esc: (x) => String(x), etaaxJsArg: (x) => String(x) };
+        c.window = c; vm.createContext(c); vm.runInContext(admp, c);
+        return eq(c.AdmPlanes.seccionMovil('n1').indexOf('supabase-migration-v92.sql') > -1 && c.AdmPlanes.movilResumen('n1') === '', true);
+    });
+})();
 
 /* ═══════════ SUITE BH92 · INSUMOS SUBE SOLO LO QUE CAMBIÓ (CPU de Supabase) ═════
    24-nov: Supabase avisó que el proyecto pasaba del 80 % de CPU. setInsumos()
@@ -19899,9 +20047,13 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
     });
     /* El login resuelve el negocio y guarda el token en el teléfono: eso es lo
        que habilita la puerta del NIP sin repartir secretos. */
+    /* (v92) El token es el de la SUCURSAL (movil_token); sin la v92, el del
+       negocio de siempre (entrada_token_asegurar), dentro de _tokenMovil. */
     test('entrar con la cuenta deja listo el teléfono para los NIP', () =>
-        eq(dC('resolverNegocio').indexOf("rpc('entrada_token_asegurar'") > -1 &&
-           dC('resolverNegocio').indexOf('window._appFijarQR(') > -1, true, 'configurado'));
+        eq(dC('resolverNegocio').indexOf("_tokenMovil(SB, neg.id, '')") > -1 &&
+           dC('resolverNegocio').indexOf('window._appFijarQR(neg.id, tm.token') > -1 &&
+           dC('_tokenMovil').indexOf("rpc('movil_token'") > -1 &&
+           dC('_tokenMovil').indexOf("rpc('entrada_token_asegurar'") > -1, true, 'configurado'));
     /* La SUCURSAL no se guarda: la pone el NIP de quien entra. Guardarla haría
        que el teléfono del encargado sellara todo con la suya. */
     test('…sin guardar la sucursal del encargado', () =>
@@ -19918,7 +20070,7 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
         return eq(dC('entrarCuenta').indexOf("correo.indexOf('@') < 0") > -1 &&
                   t.indexOf("rpc('staff_login'") > -1 && t.indexOf("rpc('obtener_staff_cred'") > -1 &&
                   t.indexOf('signInWithPassword({ email: cred.email, password: cred.password })') > -1 &&
-                  t.indexOf("rpc('entrada_token_asegurar'") > -1, true, 'como el hub');
+                  t.indexOf("_tokenMovil(c, fila.negocio_id, fila.sucursal_id || '')") > -1, true, 'como el hub');
     });
     testAsyncCola.push(['app móvil: el hash de la contraseña del colaborador es el MISMO de security.js (v2 y la envoltura del viejo)', () => {
         const ctx = crearContexto(); ctx.crypto = require('crypto').webcrypto; ctx.TextEncoder = TextEncoder;

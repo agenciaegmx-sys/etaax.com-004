@@ -8,7 +8,8 @@
      · elige las apps con las que nace un negocio nuevo (invitaciones.plan: un
        trigger de la v89 lo pasa a su suscripción al usarse la invitación);
      · activa las solicitudes de cambio que manda el dueño (tipo 'apps') y le
-       pone sus apps a la sucursal nueva que se pidió.
+       pone sus apps a la sucursal nueva que se pidió;
+     · activa o apaga la APP MÓVIL de cada sucursal (movil_acceso, v92).
 
    Los precios vienen de precios.js (EtaaxPrecios); el selector, de
    etaax-apps-ui.js (EtaaxAppsUI). Sin plan guardado = paquete completo, que es
@@ -181,7 +182,79 @@
         return await guardarPlan(negId, p);
     }
 
+    /* ── LA APP MÓVIL POR SUCURSAL (v92) ─────────────────────────────────────
+       (Edwin, 25-nov) La app móvil no es una puerta abierta: existe solo para
+       las sucursales que se activan aquí, como las apps. Cada sucursal tiene su
+       propio QR (token derivado del secreto del negocio) y apagarla aquí apaga
+       ese QR en el servidor: la clave de 5 dígitos deja de entrar.
+       Los negocios que ya usaban el QR quedaron activos y aceptando los QR
+       impresos antes (token del negocio); «Dejar de aceptarlos» los cierra.
+       movil_acceso la lee el negocio y la escribe solo el admin (RLS). */
+    function faltaV92(err) { return /movil_acceso|does not exist|schema cache|42P01/i.test(((err && err.message) || '') + ' ' + ((err && err.code) || '')); }
+    function movilDe(negId) { return ((window._data && _data.movil) || {})[negId] || null; }
+    /* Solo las sucursales vivas cuentan: una dada de baja no deja la app prendida. */
+    function movilActivas(negId) {
+        var m = movilDe(negId), act = (m && m.sucursales) || {};
+        return sucsDe(negId).filter(function (s) { return act[s.id] === true; });
+    }
+    function movilResumen(negId) {
+        if (window._data && _data.movilError) return '';
+        var n = movilActivas(negId).length, t = sucsDe(negId).length;
+        return n ? 'App móvil: ' + (t > 1 ? n + ' de ' + t + ' sucursales' : 'activa') : '';
+    }
+    function seccionMovil(negId) {
+        var cab = '<div class="detail-section"><div class="detail-section-title">App móvil</div>';
+        if (window._data && _data.movilError)
+            return cab + '<div style="font-size:12.5px;color:var(--muted)">Falta correr supabase-migration-v92.sql en Supabase (SQL Editor). ' +
+                'Mientras, la app móvil sigue abierta para todo negocio que tenga su QR.</div></div>';
+        var m = movilDe(negId) || {}, act = m.sucursales || {};
+        return cab +
+            '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Solo las sucursales activas tienen app móvil. Cada una tiene su QR (el dueño lo saca del hub: menú de la cuenta → Versión móvil); apagarla cierra ese QR.</div>' +
+            sucsDe(negId).map(function (s) {
+                var on = act[s.id] === true;
+                return '<div class="neg-item"><div><div class="neg-item-nombre">' + q(s.nombre) + '</div>' +
+                    '<div class="neg-item-meta" style="color:' + (on ? 'var(--cyan)' : 'var(--muted)') + '">' + (on ? 'Activa' : 'Sin app móvil') + '</div></div>' +
+                    '<button class="btn-mini admm-tgl" style="margin-left:auto;flex-shrink:0" data-on="' + (on ? '1' : '0') + '" onclick="AdmPlanes.toggleMovil(\'' + a(negId) + '\',\'' + a(s.id) + '\')">' +
+                        (on ? 'Apagar' : 'Activar') + '</button></div>';
+            }).join('') +
+            (m.qrAnterior ? '<div style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">Acepta también los QR impresos antes del 25-nov (abren cualquier sucursal activa). ' +
+                '<button class="btn-mini" style="margin-top:6px" onclick="AdmPlanes.cerrarQrViejos(\'' + a(negId) + '\')">Dejar de aceptarlos</button></div>' : '') +
+        '</div>';
+    }
+    async function guardarMovil(negId, datos) {
+        var reg = { negocio_id: negId, datos: datos, updated_at: new Date().toISOString() };
+        var r = await _supabase.from('movil_acceso').upsert(reg, { onConflict: 'negocio_id' });
+        if (r.error) return faltaV92(r.error) ? 'Falta correr supabase-migration-v92.sql en Supabase (SQL Editor).' : (r.error.message || 'Error');
+        _data.movil = _data.movil || {};
+        _data.movil[negId] = datos;
+        return null;
+    }
+    function _repintar(negId) {
+        if (typeof renderNegocios === 'function') renderNegocios();
+        if (typeof abrirDetalleNegocio === 'function') abrirDetalleNegocio(negId);
+    }
+    async function toggleMovil(negId, sucId) {
+        var m = movilDe(negId) || {}, act = m.sucursales || {}, nuevo = {};
+        sucsDe(negId).forEach(function (s) { nuevo[s.id] = act[s.id] === true; });
+        nuevo[sucId] = !nuevo[sucId];
+        var e = await guardarMovil(negId, Object.assign({}, m, { sucursales: nuevo }));
+        if (e) { aviso(e); return; }
+        _repintar(negId);
+    }
+    function cerrarQrViejos(negId) {
+        var hacer = async function () {
+            var m = movilDe(negId) || {};
+            var e = await guardarMovil(negId, Object.assign({}, m, { qrAnterior: false }));
+            if (e) { aviso(e); return; }
+            _repintar(negId);
+        };
+        var msg = 'Los QR impresos antes del 25-nov dejarán de abrir la app. Cada sucursal activa tendrá que imprimir el suyo desde el hub (menú de la cuenta → Versión móvil).';
+        if (typeof admConfirm === 'function') admConfirm('Cerrar los QR anteriores', msg, hacer, { yesLabel: 'Cerrarlos' });
+        else if (confirm(msg)) hacer();
+    }
+
     window.AdmPlanes = {
+        seccionMovil: seccionMovil, movilResumen: movilResumen, toggleMovil: toggleMovil, cerrarQrViejos: cerrarQrViejos, guardarMovil: guardarMovil,
         resumen: resumen, cotizacion: cotizacion, seccionDetalle: seccionDetalle, editar: editar,
         invitacionHTML: invitacionHTML, elegirInvitacion: elegirInvitacion, invitacionPlan: invitacionPlan,
         invitacionReset: invitacionReset, pintarInvitacion: pintarInvitacion,

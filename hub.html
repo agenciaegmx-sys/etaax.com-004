@@ -2042,7 +2042,8 @@ function _pintarHeader() {
             if (s && s.style.display !== 'none') l.push({ id: 'etxHdInfoSucOp', icono: 'sh-info-sucursal', texto: 'Información de sucursal', fn: abrirInfoSucursal });
             if (n && n.style.display !== 'none') l.push({ id: 'etxHdInfoNegOp', icono: 'sh-info-negocio', texto: 'Información del negocio', fn: abrirInfoNegocio });
             /* (25-nov) El QR de entradas se mudó aquí desde Inventarios: es el
-               acceso a la versión móvil (QR o enlace). Mismo permiso de antes. */
+               acceso a la versión móvil (QR o enlace). Mismo permiso de antes, y
+               solo si ETAAX activó la app en esta sucursal (v92). */
             if (window.EtaaxAccesoMovil && EtaaxAccesoMovil.puede())
                 l.push({ id: 'etxHdMovilOp', icono: 'adm-celular', texto: 'Versión móvil · QR y enlace', fn: function () { EtaaxAccesoMovil.abrir(); } });
             return l;
@@ -3795,6 +3796,9 @@ function _showModulos(neg) {
     }
     // Las apps que contrató la sucursal, frescas de la nube (el dock se repinta solo si cambian).
     if (neg.id && window.etaaxPlanRefrescar) etaaxPlanRefrescar(neg.id, function (cambio) { if (cambio) _pintarHeader(); });
+    /* (v92) ¿Esta sucursal tiene la app móvil? Solo entonces el menú de la
+       cuenta ofrece su QR. Se lee fresco y el menú se repinta si cambió. */
+    if (neg.id && window.EtaaxAccesoMovil) EtaaxAccesoMovil.revisar(neg.id, function (cambio) { if (cambio) _pintarHeader(); });
     /* Staff ETAAX: de los módulos se regresa a las sucursales del negocio (y de
        ahí a su portada). «Información del negocio» es del dueño. */
     var btnEtx = document.getElementById('btnEtxSucursales');
@@ -4858,7 +4862,7 @@ async function guardarNuevaPassword(){
 <script src="admin-guard.js"></script>
 <script src="/etaax-iconos.js?v=7a651810"></script><!-- los iconos de la marca: uno solo para todo el sistema -->
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script><!-- organización del negocio y giro de la sucursal: una sola lista -->
-<script src="/etaax-acceso-movil.js?v=b8fdd003"></script><!-- el QR y el enlace de la versión móvil (menú de la cuenta) -->
+<script src="/etaax-acceso-movil.js?v=e3a3da63"></script><!-- el QR y el enlace de la versión móvil (menú de la cuenta) -->
 <script src="/etaax-header.js?v=a0ec334a"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="/hub-interacciones.js?v=43cd2b2b"></script>
 <script src="/hub-modulos.js?v=215e805a"></script>

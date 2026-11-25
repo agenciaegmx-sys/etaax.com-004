@@ -38,6 +38,8 @@ function nube() {
         negocios: [{ id: 'n1', usuario_id: 'u1', datos: { nombre: 'Café de prueba' } }],
         negocio_sucursales: [{ negocio_id: 'n1', datos: { sucursales: [{ id: 'suc_principal', nombre: 'Matriz', activa: true }, { id: 'suc_dos', nombre: 'Dos', activa: true }] } }],
         suscripciones: [{ negocio_id: 'n1', estado: 'activa', plan: null }],
+        /* (v92) La app móvil, activa solo en Matriz. */
+        movil_acceso: [{ negocio_id: 'n1', datos: { sucursales: { suc_principal: true, suc_dos: false } } }],
         negocio_insumos: [], cortes: [], req_pedido: [], req_historial: [], permisos: []
     };
 }
@@ -258,7 +260,7 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
         });
         /* (25-nov) El QR de entradas se mudó de Inventarios al menú de la cuenta:
            es el acceso a la versión móvil, con su QR y su enlace. */
-        await caso('…y «Versión móvil · QR y enlace» también: abre su QR y el enlace de la app con el token del negocio', async () => {
+        await caso('…y «Versión móvil · QR y enlace» también (Matriz tiene la app): abre su QR con el token DE LA SUCURSAL', async () => {
             await p.evaluate(() => { window.QRCode = function (el, o) { el.innerHTML = '<canvas width="210" height="210"></canvas>'; el.dataset.texto = o.text; }; });
             await p.click('#etxHdCuenta');
             await p.click('#etxHdMovilOp');
@@ -266,9 +268,27 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             const r = await p.evaluate(() => [document.getElementById('etxMovilDlg').open, document.getElementById('etxMovilUrl').value,
                 document.querySelector('#etxMovilQr [data-texto]') && document.querySelector('#etxMovilQr [data-texto]').dataset.texto]);
             assert.equal(r[0], true);
-            assert.match(r[1], /\/app-movil\/\?n=n1&t=tok-n1/);
+            assert.equal(r[1].replace(/^https?:\/\/[^/]+/, ''), '/app-movil/?n=n1&t=tok-n1-suc_principal&s=suc_principal');
             assert.equal(r[2], r[1]);
             await p.click('#etxMovilDlg [data-em="cerrar"]');
+        });
+        /* (v92) Solo si ETAAX activó la app en esa sucursal. */
+        await caso('…y si el admin apaga la app en Matriz, el menú ya no la ofrece', async () => {
+            const r = await p.evaluate(async () => {
+                const db = window.__nube.leer(); db.movil_acceso[0].datos.sucursales.suc_principal = false; window.__nube.escribir(db);
+                let cambio = null;
+                await EtaaxAccesoMovil.revisar('n1', (c) => { cambio = c; });
+                return cambio;
+            });
+            assert.equal(r, true);
+            await p.evaluate(() => { _pintarHeader(); });
+            await p.click('#etxHdCuenta');
+            assert.equal(await p.evaluate(() => !!document.getElementById('etxHdMovilOp')), false);
+            await p.keyboard.press('Escape');
+            await p.evaluate(async () => {
+                const db = window.__nube.leer(); db.movil_acceso[0].datos.sucursales.suc_principal = true; window.__nube.escribir(db);
+                await EtaaxAccesoMovil.revisar('n1', () => {}); _pintarHeader();
+            });
         });
         await caso('…y las sucursales se despliegan bajo su botón, que se expande', async () => {
             await p.click('#btnCambiarSucursal');

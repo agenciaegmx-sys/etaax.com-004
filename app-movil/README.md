@@ -142,11 +142,25 @@ que registrara el equipo quedaría sellado con la de él.
 **El QR y el enlace viven en el hub** (25-nov): menú de la cuenta (arriba a la
 derecha) → **«Versión móvil · QR y enlace»** (`/etaax-acceso-movil.js`, permiso
 «Generar el QR de entradas»). Ahí se imprime o se descarga el QR para pegarlo en
-la barra y se copia el enlace para mandarlo por WhatsApp. Es el mismo QR de
-entradas de antes —negocio + token + sucursal—, que ya no vive en Inventarios.
-**Los QR ya impresos siguen sirviendo:** `entrada.html` los manda a
-`/app-movil/` con las mismas credenciales (`&web=1` deja la página vieja). La
-landing (`index.html`) trae «Abrir versión móvil».
+la barra y se copia el enlace para mandarlo por WhatsApp. Es el QR de entradas
+de antes, que ya no vive en Inventarios.
+
+**No es una app abierta (v92).** No está en la landing: solo existe para las
+sucursales que ETAAX activa en el panel admin (detalle del negocio → «App
+móvil», tabla `movil_acceso`, que el negocio lee y solo el admin escribe). Cada
+sucursal tiene **su propio token** (`sha256(entrada_token|sucursal)`, no se
+guarda en ninguna tabla) y la puerta de todas las consultas de la clave
+—`_entrada_token_ok`— solo lo acepta si esa sucursal está activa: apagarla en el
+panel apaga su QR en el servidor. El hub ofrece «Versión móvil» solo en una
+sucursal activa (`movil_token`), la app pregunta al abrir si su enlace sigue
+abierto (`movil_estado`) y lo dice en la portada, y con usuario y contraseña no
+se entra si la sucursal (o el negocio, para el dueño) no tiene la app.
+
+**Los QR ya impresos** (token del negocio) siguen sirviendo mientras el panel
+los acepte («Dejar de aceptarlos» los cierra): los negocios que ya tenían QR
+quedaron con todas sus sucursales activas. `entrada.html` y `checklist.html` los
+mandan a `/app-movil/` con las mismas credenciales (`&web=1` deja la página
+vieja). El QR de check list se retiró: los check lists se hacen en la app.
 
 **En iPhone, el ícono de inicio no ve lo de Safari**: si al abrirlo dice que el
 teléfono no está ligado, alguien con usuario y contraseña (el encargado o un

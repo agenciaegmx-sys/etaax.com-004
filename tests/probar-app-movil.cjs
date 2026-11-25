@@ -56,6 +56,12 @@ function rpcs(opc) {
                 { nombre: 'Margarita', tipo: 'bebidas', grupo: 'Coctelería', categoria: 'Clásicos', ingredientes: [{ nombre: 'Tequila', cantidad: 60, unidad: 'ML' }], procedimiento: 'Agitar con hielo.' },
                 { nombre: 'Paloma', tipo: 'bebidas', grupo: 'Coctelería', categoria: 'De la casa', ingredientes: [], procedimiento: '' }] : null,
             entrada_token_asegurar: () => 'tokA',
+            /* (v92) La app móvil por sucursal: el token de una sucursal activa
+               (aquí siempre 'tokA') y si el enlace sigue abierto. */
+            movil_token: (p) => { const act = ${JSON.stringify(opc.movil || { suc_principal: true, suc_dos: true })};
+                const suc = p.p_suc || (act.suc_principal ? 'suc_principal' : Object.keys(act).find((k) => act[k]));
+                return (suc && act[suc]) ? { token: 'tokA', sucursalId: suc } : null; },
+            movil_estado: (p) => ({ activo: ${opc.apagado ? 'false' : "p.p_token === 'tokA'"}, sucursalId: null }),
             /* El colaborador con acceso al sistema: usuario «eli» (Elizabeth, gerente). */
             staff_login: (p) => (p.p_usuario === 'eli' && p.p_hash === window.__pwdhash)
                 ? [{ negocio_id: 'n1', negocio_datos: { nombre: 'Café de prueba' }, staff_id: 's7', nombre: 'Elizabeth Ruiz', rol: 'gerente', sucursal_id: 'suc_dos' }] : [],
@@ -277,6 +283,37 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
         await caso('el dueño entra con su correo y ve sus módulos (sin plan = todos)', async () =>
             assert.deepEqual(await islas(h.page, '#homeMenu'), ['Cost·ax', 'Admin·ax', 'Fin·ax', 'Equip·ax']));
         await h.ctx.close();
+
+        /* (v92) La app no es una puerta abierta: solo para las sucursales que
+           ETAAX activó, y cada una con su QR. */
+        console.log('\n══ App móvil · solo con la sucursal activa (v92) ══');
+        const k = await abrir(browser, { apagado: true });
+        await k.page.waitForFunction(() => /ya no está activo/.test(document.getElementById('inicioSub').textContent), null, { timeout: 8000 }).catch(() => {});
+        await foto(k.page, 'm7-apagada');
+        await caso('si apagaron la app de esta sucursal (o el QR ya no vale), la portada lo dice y la clave se apaga', async () => {
+            const r = await k.page.evaluate(() => [document.getElementById('inicioSub').textContent,
+                document.getElementById('nipZona').classList.contains('apagada'), /apagada/.test(document.getElementById('inicioAviso').textContent)]);
+            assert.deepEqual(r, ['Este acceso ya no está activo', true, true]);
+        });
+        await k.ctx.close();
+        const m = await abrir(browser, { ligado: false, movil: { suc_principal: true, suc_dos: false } });
+        await m.page.fill('#ctaCorreo', 'eli'); await m.page.fill('#ctaPwd', 'Eli#2026');
+        await m.page.click('#ctaBtn');
+        await m.page.waitForFunction(() => /no está activa/.test(document.getElementById('ctaMsg').textContent) || !document.getElementById('pHome').hidden || !document.getElementById('pCandado').hidden, null, { timeout: 15000 });
+        await caso('con usuario y contraseña: si SU sucursal no tiene la app, no entra (y se dice por qué, no «contraseña mala»)', async () => {
+            const r = await m.page.evaluate(() => [document.getElementById('ctaMsg').textContent, document.getElementById('pHome').hidden,
+                localStorage.getItem('etaax_movil_perfil'), sessionStorage.getItem('__ses')]);
+            assert.match(r[0], /no está activa para tu sucursal/);
+            assert.deepEqual(r.slice(1), [true, null, null]);
+        });
+        await m.ctx.close();
+        const o = await abrir(browser, { ligado: false, movil: {} });
+        await o.page.fill('#ctaCorreo', 'duena@etaax.prueba'); await o.page.fill('#ctaPwd', 'secreta');
+        await o.page.click('#ctaBtn');
+        await o.page.waitForFunction(() => /no está activa/.test(document.getElementById('ctaMsg').textContent) || !document.getElementById('pHome').hidden || !document.getElementById('pCandado').hidden, null, { timeout: 15000 });
+        await caso('…y el dueño tampoco, si ninguna sucursal de su negocio la tiene', async () =>
+            assert.match(await o.page.evaluate(() => document.getElementById('ctaMsg').textContent), /no está activa para tu negocio/));
+        await o.ctx.close();
     } finally {
         await browser.close();
     }

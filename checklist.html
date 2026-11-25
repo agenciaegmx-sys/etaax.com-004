@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
+<!-- (25-nov) EL QR DE CHECK LIST SE RETIRA: los check lists se hacen en la app
+     móvil (Equip·ax → Realizar check list), con el QR de la sucursal que vive
+     en el hub. Los QR que ya están impresos llevan aquí con las credenciales
+     del negocio: esta página los manda a /app-movil/ con las mismas (como
+     entrada.html). `&web=1` deja la página de siempre. Va antes que todo. -->
+<script>
+(function () {
+    try {
+        var q = location.search || '';
+        if (/[?&]n=/.test(q) && /[?&]t=/.test(q) && !/[?&]web=1(&|$)/.test(q)) location.replace('/app-movil/' + q);
+    } catch (e) {}
+})();
+</script>
 <script src="/negocio-tab.js?v=39197e12"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <meta charset="UTF-8">
 <script src="/theme.js?v=64b86f6e"></script>

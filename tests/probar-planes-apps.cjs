@@ -214,6 +214,20 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
             assert.equal(p.ciclo, 'anual');
             assert.equal(await pa.evaluate(() => !!document.querySelector('.admp-ov')), false);
         });
+        /* (v92) La app móvil se activa por sucursal, aquí, como las apps. */
+        await pa.evaluate(() => abrirDetalleNegocio('A')); await pa.waitForTimeout(250);
+        await caso('«App móvil» en el detalle: el negocio nace sin app en ninguna sucursal', async () => {
+            const t = await pa.evaluate(() => document.getElementById('detailBody').textContent.replace(/\s+/g, ' '));
+            assert.match(t, /App móvil.*Matriz\s*Sin app móvil\s*Activar\s*Tulum\s*Sin app móvil\s*Activar/);
+        });
+        await pa.click('#detailBody .admm-tgl >> nth=0'); await pa.waitForTimeout(400);
+        await foto(pa, 'p3b-admin-movil');
+        await caso('activar la Matriz la guarda en movil_acceso (Tulum sigue sin app) y el detalle lo dice', async () => {
+            const m = ((await nubeDe(pa)).movil_acceso || [])[0] || {};
+            assert.deepEqual([m.negocio_id, m.datos && m.datos.sucursales], ['A', { suc_principal: true, suc_tul: false }]);
+            const t = await pa.evaluate(() => document.getElementById('detailBody').textContent.replace(/\s+/g, ' '));
+            assert.match(t, /Matriz\s*Activa\s*Apagar\s*Tulum\s*Sin app móvil\s*Activar/);
+        });
         await pa.evaluate(() => { cerrarDetail(); switchTab('invitaciones'); }); await pa.waitForTimeout(400);
         await caso('una invitación sin elegir nada nace con el paquete completo', async () =>
             assert.match(await texto(pa, '#invPlanResumen'), /Paquete completo · \$1,799\/mes · mensual/));
