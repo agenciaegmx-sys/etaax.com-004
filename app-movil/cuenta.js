@@ -40,6 +40,7 @@ var LLAVE_SESION = 'etaax-movil-auth';     // ≠ 'sb-…' para sobrevivir al ba
 var LLAVE_PIN    = 'etaax_movil_pin';      // el PIN de desbloqueo, hasheado
 var LLAVE_BIO    = 'etaax_movil_bio';      // id de la credencial de huella/Face ID
 var LLAVE_CORREO = 'etaax_movil_correo';   // para saludar y prellenar, no es secreto
+var LLAVE_PERFIL = 'etaax_movil_perfil';   // quién entró (nombre, puesto, negocio): para la cabecera
 
 var SB = null;            // el cliente de la app
 var SESION = null;        // la sesión viva
@@ -62,6 +63,32 @@ async function hashPin(pin) {
     return Array.prototype.map.call(new Uint8Array(buf),
         function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
 }
+
+/* ── La contraseña de un colaborador ──────────────────────────────────────
+   La MISMA cuenta que /security.js (hub y alta de staff): 'v2$' + SHA-256 de
+   'etaax-staff|' + contraseña, y la envoltura 'v2L$' del hash viejo para quien
+   no ha entrado desde la v30. Se repite aquí porque security.js trae el cierre
+   por inactividad del sistema, que en la app no aplica; el candado del repo
+   exige que las dos den lo mismo. */
+async function _sha256Hex(s) {
+    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+    return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+}
+async function hashPwdStaff(pwd) { return 'v2$' + await _sha256Hex('etaax-staff|' + pwd); }
+function hashPwdStaffLegacy(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) { h = (Math.imul(31, h) + s.charCodeAt(i)) | 0; }
+    return (h >>> 0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0, 16).replace(/[^a-z0-9]/gi, 'x');
+}
+async function hashPwdStaffWrap(legacy) { return 'v2L$' + await _sha256Hex('etaax-staff|' + legacy); }
+function _rolNombre(r) {
+    var m = { admin: 'Administración', gerente: 'Gerente', chef: 'Chef', jefe_barra: 'Jefe de barra', jefe_cocina: 'Jefe de cocina',
+              cajero: 'Caja', mesero: 'Mesero', barra: 'Barra', cocina: 'Cocina', otro: '' };
+    if (Object.prototype.hasOwnProperty.call(m, r)) return m[r];
+    r = String(r || '').replace(/_/g, ' ');
+    return r ? r.charAt(0).toUpperCase() + r.slice(1) : '';
+}
+function perfil() { try { return JSON.parse(_ls(LLAVE_PERFIL) || 'null'); } catch (e) { return null; } }
 
 /* ── El cliente ───────────────────────────────────────────────────────────── */
 function iniciar() {
@@ -154,6 +181,18 @@ async function entrarCuenta() {
     if (!correo || !pwd) { msg.textContent = 'Pon tu correo y tu contraseña.'; return; }
     if (!navigator.onLine) { msg.textContent = 'Sin internet. Entrar necesita señal.'; return; }
     var btn = $('ctaBtn'); btn.disabled = true; msg.textContent = 'Verificando…';
+    /* SIN @ ES UN COLABORADOR con acceso al sistema (su usuario), igual que en
+       el login del hub. Con @, la cuenta del dueño en Supabase. */
+    if (correo.indexOf('@') < 0) {
+        var okC = false;
+        try { okC = await entrarColaborador(correo, pwd, msg); } catch (e) { msg.textContent = 'Error: ' + ((e && e.message) || e); }
+        btn.disabled = false;
+        if (!okC) return;
+        $('ctaPwd').value = '';
+        msg.textContent = '';
+        ofrecerCandado();
+        return;
+    }
     try {
         var r = await iniciar().auth.signInWithPassword({ email: correo, password: pwd });
         btn.disabled = false;
@@ -165,6 +204,8 @@ async function entrarCuenta() {
         }
         SESION = r.data.session;
         _lsSet(LLAVE_CORREO, correo);
+        var _u = (r.data && r.data.user) || {}, _m = _u.user_metadata || {};
+        _lsSet(LLAVE_PERFIL, JSON.stringify({ tipo: 'dueno', nombre: _m.nombre || correo, puesto: '' }));
         msg.textContent = 'Preparando tu negocio…';
         $('ctaPwd').value = '';
         /* LAS CREDENCIALES DEL NEGOCIO SALEN DE AQUÍ, no del enlace.
@@ -177,6 +218,60 @@ async function entrarCuenta() {
     } catch (e) {
         btn.disabled = false; msg.textContent = 'Error: ' + ((e && e.message) || e);
     }
+}
+
+/* ══ ENTRAR COMO COLABORADOR (usuario y contraseña del sistema) ═════════════
+   El mismo camino que el login del hub:
+     1. staff_login (v77): usuario + hash, solo colaboradores ACTIVOS, con el
+        freno de intentos del servidor. Prueba el hash v2 y, si no, la envoltura
+        del viejo (y lo sube a v2, como el hub).
+     2. obtener_staff_cred: la cuenta compartida del negocio para colaboradores
+        (staff-auth.js). Con ella la app lee y escribe lo de SU negocio por RLS
+        (es_staff_de) y nada más.
+     3. Liga el teléfono a su negocio (el token del QR): desde ahí su equipo ya
+        puede entrar con la clave en ese teléfono.
+   El mensaje de error no dice si el usuario existe. */
+async function entrarColaborador(usuario, pwd, msg) {
+    var c = iniciar();
+    if (!c) { msg.textContent = 'No se pudo preparar la conexión.'; return false; }
+    var limitado = function (r) { return !!(r && r.error && /rate_limited/i.test(r.error.message || '')); };
+    var espera = 'Demasiados intentos. Espera 15 minutos y vuelve a intentar.';
+    var h2 = await hashPwdStaff(pwd), usado = h2;
+    var r1 = await c.rpc('staff_login', { p_usuario: usuario, p_hash: h2 });
+    if (limitado(r1)) { msg.textContent = espera; return false; }
+    var fila = (r1 && !r1.error && r1.data && r1.data[0]) || null;
+    if (!fila) {
+        var hw = await hashPwdStaffWrap(hashPwdStaffLegacy(pwd));
+        var r2 = await c.rpc('staff_login', { p_usuario: usuario, p_hash: hw });
+        if (limitado(r2)) { msg.textContent = espera; return false; }
+        fila = (r2 && !r2.error && r2.data && r2.data[0]) || null;
+        if (fila) {
+            usado = hw;
+            try { c.rpc('staff_actualizar_hash', { p_usuario: usuario, p_hash_viejo: hw, p_hash_nuevo: h2 }).then(function () {}, function () {}); } catch (e) {}
+        }
+    }
+    if (!fila) { msg.textContent = 'Usuario o contraseña incorrectos.'; return false; }
+    msg.textContent = 'Preparando tu negocio…';
+    var rc = await c.rpc('obtener_staff_cred', { p_neg: fila.negocio_id, p_hash: usado });
+    if (limitado(rc)) { msg.textContent = espera; return false; }
+    var cred = (rc && !rc.error && rc.data) || null;
+    if (!cred || !cred.email) {
+        msg.textContent = 'Tu usuario es correcto, pero tu negocio todavía no tiene activa la cuenta de colaboradores. ' +
+                          'El dueño la activa entrando una vez al sistema desde la computadora.';
+        return false;
+    }
+    var s = await c.auth.signInWithPassword({ email: cred.email, password: cred.password });
+    if (s.error) { msg.textContent = 'No se pudo abrir la sesión de tu negocio: ' + s.error.message; return false; }
+    SESION = s.data.session;
+    var nd = fila.negocio_datos || {};
+    _lsSet(LLAVE_CORREO, usuario);
+    _lsSet(LLAVE_PERFIL, JSON.stringify({ tipo: 'colaborador', nombre: fila.nombre || usuario, puesto: _rolNombre(fila.rol),
+        rol: fila.rol || '', negocioId: fila.negocio_id, negocio: nd.nombre || '', sucursalId: fila.sucursal_id || '' }));
+    try {
+        var t = await c.rpc('entrada_token_asegurar', { p_neg: fila.negocio_id });
+        if (t && !t.error && t.data) window._appFijarQR(fila.negocio_id, t.data, nd.nombre || '');
+    } catch (e) { /* sin token: la clave se queda apagada en este teléfono */ }
+    return true;
 }
 
 /* ══ DE QUÉ NEGOCIO ES ESTE TELÉFONO ═══════════════════════════════════════
@@ -358,6 +453,7 @@ function abrirConSesion() { window._appCuentaLista(); }
 async function salirCuenta() {
     try { await iniciar().auth.signOut({ scope: 'local' }); } catch (e) {}
     SESION = null;
+    _lsDel(LLAVE_PERFIL);
     /* El candado se queda puesto: es de ESTE teléfono, no de la sesión. Borrarlo
        al salir obligaría a configurarlo otra vez en cada entrada. */
     window._appCuentaFuera();
@@ -368,13 +464,15 @@ window._cuenta = {
     iniciar: iniciar, alAbrir: alAbrir, entrarCuenta: entrarCuenta,
     salirCuenta: salirCuenta, hayBiometria: hayBiometria,
     sesion: function () { return SESION; },
+    perfil: perfil,
     resolverNegocio: resolverNegocio,
     correo: function () { return _ls(LLAVE_CORREO); },
     /* El cliente con la sesión de la cuenta: la portada de la cuenta lo usa para
        leer el plan del negocio (negocio_plan, v89) y esconder lo no contratado. */
     cliente: function () { return SB; },
     /* Para probarlo desde la consola y desde el candado del repo. */
-    _hashPin: hashPin, _llaves: { sesion: LLAVE_SESION, pin: LLAVE_PIN, bio: LLAVE_BIO }
+    _hashPin: hashPin, _hashPwdStaff: hashPwdStaff, _hashPwdStaffWrap: hashPwdStaffWrap, _hashPwdStaffLegacy: hashPwdStaffLegacy,
+    _llaves: { sesion: LLAVE_SESION, pin: LLAVE_PIN, bio: LLAVE_BIO }
 };
 window.entrarCuenta   = entrarCuenta;
 window.salirCuenta    = salirCuenta;

@@ -18363,23 +18363,6 @@ console.log('\n══ BH93 · La versión móvil: su QR y su enlace ══');
     test('la landing tiene su acceso directo a la versión móvil', () =>
         eq((land.match(/href="\/app-movil\/"/g) || []).length >= 2, true));
 
-    /* La app escanea el QR ella misma (en iPhone el ícono de inicio no ve lo de Safari). */
-    const amv = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
-    const creds = (() => {
-        const i = amv.indexOf('function _credsDeQR(');
-        const a = amv.indexOf('{', i); let d = 0, j = a;
-        for (; j < amv.length; j++) { if (amv[j] === '{') d++; else if (amv[j] === '}' && !--d) break; }
-        const c = { URL, location: { origin: 'https://etaax.com' } }; vm.createContext(c);
-        vm.runInContext(amv.slice(i, j + 1), c);
-        return c._credsDeQR;
-    })();
-    test('el escáner de la app acepta el QR impreso de siempre (entrada.html)', () =>
-        eq(JSON.stringify(creds('https://etaax.com/entrada.html?n=n1&t=tk&s=suc')), '{"n":"n1","t":"tk","s":"suc"}'));
-    test('…y el nuevo de la versión móvil', () =>
-        eq(JSON.stringify(creds('https://etaax.com/app-movil/?n=n1&t=tk')), '{"n":"n1","t":"tk","s":""}'));
-    test('…pero no un QR de otro sitio, de otra página, ni uno sin token', () =>
-        eq([creds('https://otro.com/entrada.html?n=n1&t=tk'), creds('https://etaax.com/hub.html?n=n1&t=tk'),
-            creds('https://etaax.com/app-movil/?n=n1'), creds('hola')].every(x => x === null), true));
 })();
 
 
@@ -19517,7 +19500,8 @@ console.log('\n══ BH18 · La app móvil ══');
        LA REGLA: ninguna decisión se reescribe aquí. Qué recetas ve cada quien,
        qué checklists le tocan y qué campos viajan lo decide el servidor, por
        las MISMAS consultas que usa checklist.html. */
-    ['checklist_plantillas', 'checklist_registrar', 'portal_recetas', 'portal_guias'].forEach(rpc => {
+    /* (25-nov) Las guías salieron de la app (Edwin: «en esta vista no sirven»). */
+    ['checklist_plantillas', 'checklist_registrar', 'portal_recetas'].forEach(rpc => {
         const chk = fs.readFileSync(path.join(RAIZ, 'checklist.html'), 'utf8');
         test('el portal usa la misma consulta: ' + rpc, () =>
             eq(ajs.indexOf("'" + rpc + "'") > -1 && chk.indexOf("'" + rpc + "'") > -1, true, 'la misma'));
@@ -19593,7 +19577,7 @@ console.log('\n══ BH18 · La app móvil ══');
     /* El recetario solo tiene sentido para quien cocina o prepara. No es un
        permiso —el servidor igual no les devolvería recetas— es no llenarle la
        pantalla a piso y administración con algo que no van a abrir nunca. */
-    const portal = (area, plantillas, apps) => {
+    const vista = (area, plantillas, apps, evals) => {
         const els = {};
         const el = (id) => els[id] || (els[id] = { innerHTML:'', hidden:true });
         const c = { console, Object, Array, String };
@@ -19603,62 +19587,59 @@ console.log('\n══ BH18 · La app móvil ══');
            corren, que es como se construye un candado frágil. */
         const _sa = { console }; _sa.window = _sa;
         vm.createContext(_sa);
-        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8'), _sa,
-                        { filename:'staff-area.js' });
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8'), _sa, { filename:'staff-area.js' });
         c.StaffArea = _sa.window.StaffArea; c.etx = (x) => String(x == null ? '' : x);
         c.AREA_COLAB = area; c.PLANTILLAS = plantillas || []; c.APPS = apps === undefined ? null : apps;
+        c.EVALS = evals === undefined ? null : evals; c._abierto = { inventarios: true, recetas: true };
         vm.createContext(c);
+        const am = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
         vm.runInContext('function $(id){return document.getElementById(id);}' +
-            dEx('pintarPortal') + dEx('_opcion') + dEx('_tieneApp') + dEx('_ic') + dEx('_grupoMod'), c, { filename:'app-movil/app.js' });
+            am.match(/var MODS_INFO = \{[\s\S]*?\n\};/)[0] + am.match(/var FLECHA = '[^\n]*';/)[0] +
+            dEx('pintarPortal') + dEx('_botonModulo') + dEx('_rect') + dEx('_tieneApp') + dEx('_ic') + dEx('_islaHTML') +
+            dEx('pintarModulo') + dEx('_despl'), c, { filename:'app-movil/app.js' });
         c.pintarPortal();
-        return el('menuPortal').innerHTML;
+        return { inicio: el('menuPortal').innerHTML, cost: c.pintarModulo('costax'), equip: c.pintarModulo('equipax') };
     };
-    test('a quien cocina se le ofrece el recetario', () =>
-        eq(portal('cocina', [{}]).indexOf('Recetario') > -1, true, 'le sirve'));
-    test('…y a barra también', () =>
-        eq(portal('barra', [{}]).indexOf('Recetario') > -1, true, 'le sirve'));
-    test('…pero no a piso ni a administración', () =>
-        eq(portal('piso', [{}]).indexOf('Recetario') === -1 &&
-           portal('administracion', [{}]).indexOf('Recetario') === -1, true, 'sin ruido'));
-    /* Sin checklists para su área, la opción se enseña APAGADA en vez de
-       esconderse: así se sabe que existe y que no le tocan, en vez de que
-       parezca que la app está incompleta. */
-    test('sin checklists, la opción se ve apagada y dice por qué', () => {
-        const h = portal('barra', []);
+    const islas = (h) => (h.match(/<span class="isla">[^<]*<i>·<\/i>[^<]*<\/span>/g) || []).map(x => x.replace(/<[^>]+>/g, '')).join(',');
+    /* (25-nov) Edwin: «adentro los botones similar a los módulos de etaax: el de
+       Cost·ax con su botón azul, y abajo dos desplegables, Inventarios y Recetas…
+       después la sección igual de Equip·ax… y las guías se van». */
+    test('con la clave, el inicio son los módulos con su isla azul: Cost·ax y Equip·ax', () =>
+        eq(islas(vista('barra', [{}]).inicio), 'Cost·ax,Equip·ax', 'módulos'));
+    test('…cada uno con una explicación breve', () => {
+        const h = vista('barra', [{}]).inicio;
+        return eq(h.indexOf('Inventario y recetas') > -1 && h.indexOf('Tu turno') > -1, true, 'explicado');
+    });
+    test('las guías ya no salen', () => eq(JSON.stringify(vista('barra', [{}])).indexOf('Guías'), -1, 'fuera'));
+    test('dentro de Cost·ax: dos desplegables, Inventarios y Recetas', () => {
+        const h = vista('cocina', [{}]).cost;
+        return eq((h.match(/class="despl" data-despl="(\w+)"/g) || []).join(' '), 'class="despl" data-despl="inventarios" class="despl" data-despl="recetas"', 'dos');
+    });
+    test('…Inventarios: registrar entradas, merma, cortesía/préstamo, existencias y ver lo registrado, en rectángulos', () => {
+        const h = vista('cocina', [{}]).cost, r = (h.match(/<b>[^<]+<\/b>/g) || []).map(x => x.replace(/<[^>]+>/g, ''));
+        return eq(r.join(' | '), 'Registrar entradas | Registrar merma | Registrar cortesía / préstamo | Registrar existencias | Ver lo registrado', 'opciones');
+    });
+    test('…y Recetas solo para quien cocina o prepara (no a piso ni a administración)', () =>
+        eq([vista('barra', [{}]).cost.indexOf('data-despl="recetas"') > -1, vista('piso', [{}]).cost.indexOf('data-despl="recetas"') > -1,
+            vista('administracion', [{}]).cost.indexOf('data-despl="recetas"') > -1].join(','), 'true,false,false', 'por área'));
+    test('dentro de Equip·ax: ver mis horarios y realizar check list', () => {
+        const h = vista('piso', [{}]).equip;
+        return eq(h.indexOf('Ver mis horarios') > -1 && h.indexOf('Realizar check list') > -1, true, 'completo');
+    });
+    test('…sin checklists, «Realizar check list» se ve apagado y dice por qué', () => {
+        const h = vista('barra', []).equip;
         return eq(h.indexOf('Ninguno para tu área') > -1 && h.indexOf('disabled') > -1, true, 'explicado');
     });
-    test('las guías son para todos', () =>
-        eq(portal('administracion', []).indexOf('Guías de uso') > -1, true, 'para todos'));
-
-    /* ── Por módulo (25-nov) ──
-       Edwin: «los vamos a identificar por módulo: Cost·ax para registrar
-       entradas y ver recetas con los 5 dígitos, Equip·ax para ver horarios,
-       check lists y evaluaciones». Lo no contratado no se ve (v89/v91). */
-    const orden = (h) => ['Cost', 'Equip', 'Learn'].filter(m => h.indexOf('<span class="mod-nom">' + m) > -1).join(',');
-    test('con la clave, todo va por módulo: Cost·ax, Equip·ax y Learn·ax, en ese orden', () => {
-        const h = portal('barra', [{}]);
-        return eq(orden(h) + ' | ' + (h.indexOf('Entrada de insumos') < h.indexOf('Mis horarios') && h.indexOf('Mis horarios') < h.indexOf('Guías de uso')),
-                  'Cost,Equip,Learn | true', 'orden');
-    });
-    test('Cost·ax trae entradas, mermas, cortesías, conteo, recetario y lo registrado', () => {
-        const h = portal('cocina', [{}]);
-        return eq(['Entrada de insumos', 'Merma', 'Cortesía o préstamo', 'Contar existencias', 'Recetario', 'Lo registrado']
-                  .every(t => h.indexOf(t) > -1), true, 'completo');
-    });
-    test('Equip·ax trae mis horarios, mis check lists y evaluaciones', () => {
-        const h = portal('piso', [{}]);
-        return eq(['Mis horarios', 'Mis check lists', 'Evaluaciones'].every(t => h.indexOf(t) > -1), true, 'completo');
-    });
-    test('una sucursal con solo Cost·ax no ve Equip·ax', () =>
-        eq(orden(portal('barra', [{}], ['costax'])), 'Cost,Learn', 'escondido'));
-    test('…y una con solo Equip·ax no ve Cost·ax (ni el recetario)', () => {
-        const h = portal('cocina', [{}], ['equipax']);
-        return eq(orden(h) + ' ' + (h.indexOf('Recetario') === -1), 'Equip,Learn true', 'escondido');
-    });
+    test('…y Evaluaciones SOLO si el negocio tiene alguna abierta', () =>
+        eq([vista('barra', [{}], null, [{ titulo: 'x' }]).equip.indexOf('Evaluaciones') > -1,
+            vista('barra', [{}], null, []).equip.indexOf('Evaluaciones') > -1,
+            vista('barra', [{}], null, null).equip.indexOf('Evaluaciones') > -1].join(','), 'true,false,false', 'solo si hay'));
+    test('una sucursal con solo Cost·ax no ve Equip·ax, y al revés', () =>
+        eq(islas(vista('barra', [{}], ['costax']).inicio) + ' / ' + islas(vista('barra', [{}], ['equipax']).inicio), 'Cost·ax / Equip·ax', 'por plan'));
     test('sin saber el plan (v91 sin correr) se ve todo, como antes', () =>
-        eq(orden(portal('barra', [{}], null)) + ' / ' + orden(portal('barra', [{}], 'suite')), 'Cost,Equip,Learn / Cost,Equip,Learn', 'todo'));
+        eq(islas(vista('barra', [{}], null).inicio), 'Cost·ax,Equip·ax', 'todo'));
     test('sin ninguna app para el equipo se dice, en vez de dejar la pantalla vacía', () =>
-        eq(portal('barra', [{}], ['finax']).indexOf('todavía no tiene apps para el equipo') > -1, true, 'explicado'));
+        eq(vista('barra', [{}], ['finax']).inicio.indexOf('todavía no tiene apps para el equipo') > -1, true, 'explicado'));
 
     /* ── Equip·ax · mis horarios: solo dibuja lo que manda el servidor ── */
     const hor = (() => {
@@ -19694,7 +19675,7 @@ console.log('\n══ BH18 · La app móvil ══');
     test('cerrar sesión borra lo cargado del turno anterior', () => {
         const t = dEx('salir');
         return eq(t.indexOf('PLANTILLAS = []') > -1 && t.indexOf('RECETARIO = null') > -1 &&
-                  t.indexOf('GUIAS = null') > -1 && t.indexOf('RUN = null') > -1, true, 'limpio');
+                  t.indexOf('EVALS = null') > -1 && t.indexOf('HORARIOS = null') > -1 && t.indexOf('RUN = null') > -1, true, 'limpio');
     });
 
     /* ── Las fotos, una sola implementación ── */
@@ -19898,10 +19879,17 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
        Sin credenciales del QR, ofrecerlos sería un botón que lleva a un error. */
     /* (25-nov) La portada son dos puertas: la clave (vistas) y la cuenta
        (módulos). Sin credenciales del QR, la de la clave se APAGA y se explica. */
-    test('sin credenciales del QR la puerta de la clave se apaga', () =>
-        eq(dA('verInicio').indexOf('b.disabled = !listo;') > -1, true, 'honesto'));
-    test('la portada ofrece las dos puertas: clave y usuario/contraseña', () =>
-        eq(ah2.indexOf('Entrar con mi clave') > -1 && ah2.indexOf('Entrar con usuario y contraseña') > -1, true, 'dos puertas'));
+    /* (25-nov) La clave por default (el teclado a la vista) y el usuario y la
+       contraseña en un desplegable. Sin credenciales del QR, la clave se apaga,
+       se explica y la cuenta se abre sola. */
+    test('sin credenciales del QR la clave se apaga y la cuenta se abre sola', () =>
+        eq(dA('verInicio').indexOf("$('nipZona').classList.toggle('apagada', !listo);") > -1 &&
+           dA('verInicio').indexOf('_usuarioAbierto(!listo);') > -1, true, 'honesto'));
+    test('la portada: la clave por default y «Iniciar sesión con usuario y contraseña» desplegable', () =>
+        eq(ah2.indexOf('Entrar con tu clave') > -1 && /id="btnUsuario"[^>]*aria-expanded="false"/.test(ah2) &&
+           /id="cuentaForm" hidden/.test(ah2) && ah2.indexOf('Iniciar sesión con usuario y contraseña') > -1, true, 'por default'));
+    test('la cabecera es la del sistema: ☰, isotipo al centro, tema y quién está en sesión', () =>
+        eq(['id="btnCajon"', 'class="hdr-marca"', 'onclick="toggleTema()"', 'id="hdrNombre"', 'id="cajon"'].every(x => ah2.indexOf(x) > -1), true, 'completa'));
     /* Un teléfono recién instalado SIEMPRE llega así: esconder media pantalla
        sin explicar se lee como que la app está incompleta. */
     test('…y se dice cómo conseguirlas, con las dos maneras', () => {
@@ -19919,8 +19907,30 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
     test('…sin guardar la sucursal del encargado', () =>
         eq(dA('_fijarQR').indexOf("s: ''") > -1, true, 'la pone el NIP'));
     /* Dos botones distintos que llevaran al mismo sitio harían sobrar uno. */
-    test('cada botón lleva a lo que ofrece', () =>
-        eq(dA('entrar').indexOf("if (_destinoNip === 'portal')") > -1, true, 'sin confundir'));
+    /* (25-nov) Con la clave se llega al inicio por módulos; ya no hay dos botones
+       que llevaran a lo mismo. */
+    test('entrar con la clave lleva al inicio por módulos', () =>
+        eq(dA('entrar').indexOf("ULT_MOD = '';\n        irInicio();") > -1, true, 'al inicio'));
+    /* Usuario y contraseña: el dueño con su correo y los colaboradores con acceso
+       con su usuario, por el MISMO camino del hub. */
+    test('sin @ entra un colaborador con acceso al sistema (staff_login + la cuenta del negocio)', () => {
+        const t = dC('entrarColaborador');
+        return eq(dC('entrarCuenta').indexOf("correo.indexOf('@') < 0") > -1 &&
+                  t.indexOf("rpc('staff_login'") > -1 && t.indexOf("rpc('obtener_staff_cred'") > -1 &&
+                  t.indexOf('signInWithPassword({ email: cred.email, password: cred.password })') > -1 &&
+                  t.indexOf("rpc('entrada_token_asegurar'") > -1, true, 'como el hub');
+    });
+    testAsyncCola.push(['app móvil: el hash de la contraseña del colaborador es el MISMO de security.js (v2 y la envoltura del viejo)', () => {
+        const ctx = crearContexto(); ctx.crypto = require('crypto').webcrypto; ctx.TextEncoder = TextEncoder;
+        ctx.btoa = (x) => Buffer.from(x, 'binary').toString('base64'); ctx.unescape = unescape;
+        cargarJS(ctx, 'security.js');
+        const sec = { v2: ctx._hashPwdStaff, wrap: ctx._hashPwdStaffWrap, leg: ctx._hashPwdStaffLegacy };
+        const c2 = { crypto: require('crypto').webcrypto, TextEncoder, btoa: ctx.btoa, unescape, Math, Array, String, Object };
+        vm.createContext(c2);
+        vm.runInContext(dC('_sha256Hex') + dC('hashPwdStaff') + dC('hashPwdStaffLegacy') + dC('hashPwdStaffWrap'), c2);
+        return Promise.all([sec.v2('Clave#1'), c2.hashPwdStaff('Clave#1'), sec.wrap(sec.leg('Clave#1')), c2.hashPwdStaffWrap(c2.hashPwdStaffLegacy('Clave#1'))])
+            .then(r => { if (r[0] !== r[1] || r[2] !== r[3] || r[0].indexOf('v2$') !== 0) throw new Error('distintos: ' + r.join(' ')); });
+    }]);
 
     /* ── La sesión de la cuenta ── */
     /* supabase-config.js guarda en sessionStorage —se borra al cerrar— y además

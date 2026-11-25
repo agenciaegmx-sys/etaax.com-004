@@ -49,20 +49,65 @@ body {
 button, input, select, textarea { font-family:inherit; font-size:16px; color:inherit; }
 button { cursor:pointer; background:none; border:none; }
 
-/* ── Cabecera ── */
+/* ── Cabecera (25-nov): como la del sistema ──
+   ☰ a la izquierda, el isotipo al centro EXACTO de la pantalla (no del espacio
+   que sobra), y a la derecha el tema y quién está en sesión. */
 .hdr {
     position:fixed; top:0; left:0; right:0; z-index:40;
-    display:flex; align-items:center; gap:10px;
-    padding:calc(var(--safe-t) + 8px) 14px 10px;
+    display:flex; align-items:center; gap:8px; min-height:60px;
+    padding:calc(var(--safe-t) + 8px) 12px 8px;
     background:color-mix(in srgb, var(--bg) 92%, transparent);
     backdrop-filter:blur(12px); border-bottom:1px solid var(--borde);
 }
-.hdr-volver { width:44px; height:44px; font-size:24px; color:var(--txt2); border-radius:12px; flex-shrink:0; }
+.hdr-ico { width:42px; height:42px; display:flex; align-items:center; justify-content:center; border-radius:12px;
+    color:var(--txt); flex-shrink:0; border:1px solid var(--borde); background:var(--sup); font-size:18px; }
+.hdr-ico:active { border-color:var(--marca); }
+.hdr-marca { position:absolute; left:50%; top:calc(var(--safe-t) + 30px); transform:translate(-50%,-50%);
+    width:44px; height:44px; display:flex; align-items:center; justify-content:center; }
+.hdr-marca img { width:34px; height:34px; display:block; }
+.hdr-izq { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.hdr-der { margin-left:auto; display:flex; align-items:center; gap:8px; min-width:0; }
+/* La sesión nunca alcanza al isotipo del centro: la mitad de la pantalla menos su espacio. */
+.hdr-cuenta { display:flex; align-items:center; gap:8px; min-width:0; max-width:calc(50vw - 42px); height:42px; padding:0 10px 0 5px;
+    border:1px solid var(--borde); background:var(--sup); border-radius:12px; text-align:left; color:var(--txt); }
+.hdr-avatar { width:30px; height:30px; flex-shrink:0; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:color-mix(in srgb, var(--marca) 16%, transparent); color:var(--marca); font-size:12.5px; font-weight:700; }
+.hdr-avatar .etx-ic { width:18px; height:18px; color:var(--marca); }
+.hdr-quien { display:flex; flex-direction:column; min-width:0; line-height:1.15; }
+.hdr-quien b { font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hdr-quien small { font-size:10.5px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hdr-quien small.on { color:var(--verde); }
+@media (max-width:380px) { .hdr-quien { display:none; } .hdr-cuenta { padding:0 5px; } }
+
+/* La barra del título de cada pantalla (con su regreso) */
+.tit-barra { position:sticky; top:calc(60px + var(--safe-t)); z-index:30; display:flex; align-items:center; gap:8px;
+    max-width:560px; margin:0 auto; padding:10px 12px 8px; background:var(--bg); }
+.hdr-volver { width:42px; height:42px; display:flex; align-items:center; justify-content:center; color:var(--txt2); border-radius:12px; flex-shrink:0; }
 .hdr-volver:active { background:var(--sup); }
 .hdr-txt { flex:1; min-width:0; }
-.hdr-tit { font-family:'Bebas Neue',sans-serif; font-size:19px; letter-spacing:1.4px; line-height:1.1; }
-.hdr-sub { font-size:11.5px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.hdr-tema { width:44px; height:44px; font-size:19px; border-radius:12px; flex-shrink:0; }
+.hdr-tit { font-size:17px; font-weight:700; letter-spacing:-.2px; line-height:1.2; }
+.hdr-sub { font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* ── El menú de tres líneas (cajón) ── */
+.cajon-fondo { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.5); }
+.cajon { position:fixed; z-index:61; top:0; bottom:0; left:0; width:min(320px, 86vw); overflow-y:auto;
+    background:var(--bg2); border-right:1px solid var(--borde);
+    padding:calc(var(--safe-t) + 18px) 16px calc(var(--safe-b) + 18px); display:flex; flex-direction:column; gap:14px;
+    animation:cajonEntra .2s ease-out both; }
+@keyframes cajonEntra { from { transform:translateX(-100%); } to { transform:none; } }
+@media (prefers-reduced-motion:reduce) { .cajon { animation:none; } }
+.cajon-sesion { display:flex; align-items:center; gap:12px; padding:14px; border:1px solid var(--borde); border-radius:var(--r); background:var(--sup); }
+.cajon-sesion .hdr-avatar { width:44px; height:44px; font-size:16px; }
+.cajon-sesion b { display:block; font-size:15.5px; }
+.cajon-sesion small { display:block; font-size:12px; color:var(--dim); line-height:1.45; }
+.cajon-nav { display:flex; flex-direction:column; gap:4px; }
+.cajon-it { display:flex; align-items:center; gap:12px; width:100%; min-height:50px; padding:10px 12px; border-radius:12px;
+    font-size:15px; color:var(--txt); text-align:left; }
+.cajon-it:active, .cajon-it.on { background:color-mix(in srgb, var(--marca) 12%, transparent); }
+.cajon-it .etx-ic { width:22px; height:22px; color:var(--marca); }
+.cajon-it i { font-style:normal; }
+.cajon-pie { margin-top:auto; display:flex; flex-direction:column; gap:6px; border-top:1px solid var(--borde); padding-top:12px; }
+.cajon .instalar { margin-top:0; }
 
 .pant { padding:16px 16px 0; max-width:560px; margin:0 auto; }
 .lbl { display:block; font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:var(--dim); margin:16px 0 7px; }
@@ -347,9 +392,62 @@ body.con-barra { padding-bottom:calc(var(--safe-b) + 108px); }
 
 @media (min-width:600px) { .teclado { max-width:360px; } }
 
-/* ── Ligar el teléfono con el QR (la cámara, dentro de la app) ── */
-.esc-marco { position:relative; width:100%; max-width:420px; margin:6px auto 14px; aspect-ratio:1/1;
-    border-radius:18px; overflow:hidden; background:#000; border:1px solid var(--borde); }
-.esc-marco video { width:100%; height:100%; object-fit:cover; display:block; }
-.esc-mira { position:absolute; inset:16%; border:3px solid var(--marca); border-radius:16px;
-    box-shadow:0 0 0 999px rgba(0,0,0,.35); pointer-events:none; }
+/* ══ PORTADA, INICIO Y MÓDULOS (25-nov) ═══════════════════════════════════════
+   El mismo lenguaje del sistema: tarjetas sobrias, la isla azul petróleo con el
+   nombre ·ax de cada módulo y opciones en rectángulos de dos columnas. */
+.login-card { background:var(--sup); border:1px solid var(--borde); border-radius:18px; padding:20px 18px; }
+.login-cab { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+.login-cab img { flex-shrink:0; }
+.login-tit { font-size:19px; font-weight:700; letter-spacing:-.2px; }
+.login-sub { font-size:12.5px; color:var(--dim); margin-top:2px; }
+.login-card .avisos { margin-top:14px; }
+#nipZona.apagada { opacity:.4; pointer-events:none; }
+.desplegar { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; min-height:54px;
+    margin-top:12px; padding:0 16px; border:1px solid var(--borde); border-radius:var(--r); background:transparent;
+    color:var(--txt); font-size:14.5px; font-weight:600; text-align:left; }
+.desplegar-fl { flex-shrink:0; color:var(--dim); transition:transform .2s; }
+.desplegar[aria-expanded="true"] .desplegar-fl { transform:rotate(180deg); }
+.cuenta-form { margin-top:10px; }
+.cuenta-form .lbl:first-child { margin-top:0; }
+
+.saludo { margin:4px 2px 16px; }
+.saludo b { display:block; font-size:21px; font-weight:700; letter-spacing:-.3px; }
+.saludo small { display:block; font-size:12.5px; color:var(--dim); margin-top:2px; }
+
+/* La isla del módulo, igual que en el sistema */
+.isla { display:inline-flex; align-items:center; height:32px; padding:0 15px; border-radius:999px; flex-shrink:0;
+    background:linear-gradient(135deg,#17525a 0%,#21707a 100%); color:#fff; font-size:15.5px; font-weight:700;
+    letter-spacing:-.1px; box-shadow:0 6px 16px rgba(14,48,53,.28); white-space:nowrap; }
+.isla i { font-style:normal; color:#ffb48f; margin:0 1px; }
+.modulo { display:flex; align-items:center; gap:14px; width:100%; text-align:left; padding:16px; margin-bottom:12px;
+    background:var(--sup); border:1px solid var(--borde); border-radius:18px; color:var(--txt); }
+.modulo:active { border-color:var(--marca); }
+.modulo-txt { flex:1; min-width:0; font-size:13px; color:var(--txt2); line-height:1.5; }
+.modulo-txt b { display:block; color:var(--txt); font-size:14px; margin-top:8px; }
+.modulo .fl { color:var(--dim); font-size:20px; flex-shrink:0; }
+.modulo-col { display:flex; flex-direction:column; align-items:flex-start; min-width:0; flex:1; }
+.mod-cabeza { display:flex; flex-direction:column; align-items:flex-start; gap:10px; margin:4px 2px 16px; }
+.mod-cabeza p { font-size:13px; color:var(--txt2); line-height:1.55; margin:0; }
+
+/* Los desplegables de dentro de un módulo y sus rectángulos */
+.despl { display:flex; align-items:center; gap:12px; width:100%; min-height:58px; padding:0 16px; margin-top:10px;
+    background:var(--sup); border:1px solid var(--borde); border-radius:var(--r); color:var(--txt);
+    font-size:15.5px; font-weight:700; text-align:left; }
+.despl .etx-ic { width:22px; height:22px; color:var(--marca); }
+.despl .desplegar-fl { margin-left:auto; }
+.despl[aria-expanded="true"] { border-color:color-mix(in srgb, var(--marca) 55%, transparent); }
+.despl[aria-expanded="true"] .desplegar-fl { transform:rotate(180deg); }
+.rejilla { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:9px; }
+.rect { display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between; gap:10px; min-height:96px;
+    padding:13px 12px; text-align:left; background:var(--bg2); border:1px solid var(--borde); border-radius:13px; color:var(--txt); }
+.rect:active { border-color:var(--marca); }
+.rect[disabled] { opacity:.45; }
+.rect .etx-ic { width:24px; height:24px; color:var(--marca); }
+.rect b { font-size:14px; font-weight:650; line-height:1.3; }
+.rect small { display:block; font-size:11.5px; color:var(--dim); font-weight:400; margin-top:2px; line-height:1.35; }
+.rect-ico { font-size:20px; line-height:1; }
+.rejilla-buscar { grid-column:1 / -1; }
+.rejilla .hvacio { grid-column:1 / -1; }
+
+.rejilla-sub { display:contents; }
+.modulo-cta { margin-bottom:10px; }

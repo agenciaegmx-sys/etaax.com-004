@@ -67,7 +67,7 @@ var _instalador = null;
    por campo con una lista blanca, sin un solo costo. Es a propósito —si mañana
    alguien agrega un campo con dinero adentro, con lista blanca no se filtra
    solo—. No pedir «la receta completa» desde aquí es parte de eso. */
-var PLANTILLAS = [], RECETARIO = null, GUIAS = null;
+var PLANTILLAS = [], RECETARIO = null;
 var RUN = null;                  // el checklist que se está ejecutando
 var _recFiltro = '', _recTab = '';
 
@@ -126,7 +126,7 @@ async function hashNip(pin) {
 function toggleTema() {
     var o = document.documentElement.getAttribute('data-tema') === 'oscuro';
     document.documentElement.setAttribute('data-tema', o ? 'claro' : 'oscuro');
-    $('temaIco').textContent = o ? '🌙' : '☀️';
+    _pintarTemaIco();
     try { localStorage.setItem('etaax_appmovil_tema', o ? 'claro' : 'oscuro'); } catch (e) {}
     var mt = document.querySelector('meta[name="theme-color"]');
     if (mt) mt.setAttribute('content', o ? '#f3f1ec' : '#13120f');
@@ -138,18 +138,29 @@ try {
     }
 } catch (e) {}
 
+function _pintarTemaIco() {
+    var claro = document.documentElement.getAttribute('data-tema') === 'claro';
+    var el = $('temaIco'); if (!el) return;
+    /* La luna se ofrece en el claro y el sol en el oscuro: el botón dice a qué cambia. */
+    el.innerHTML = _ic(claro ? 'hd-luna' : 'hd-sol', claro ? '☾' : '☀');
+}
+
 /* ── Navegación entre pantallas ── */
-var PANTS = ['pInicio', 'pCuenta', 'pCandado', 'pPin', 'pHome',
-             'pLogin', 'pMenu', 'pFlujo', 'pHist', 'pChecks', 'pRun', 'pRecetas', 'pReceta', 'pGuias',
-             'pHorarios', 'pEvals', 'pEscanear'];
+var PANTS = ['pInicio', 'pCandado', 'pPin', 'pHome', 'pMenu', 'pModulo',
+             'pFlujo', 'pHist', 'pChecks', 'pRun', 'pRecetas', 'pReceta', 'pHorarios', 'pEvals'];
+var _PANT = '';
+/* La barra del título (con su regreso) sale solo en las pantallas de adentro:
+   en la portada y en los inicios el contenido se presenta solo. */
 function mostrar(id, titulo, sub, conVolver, conBarra) {
-    if (id !== 'pEscanear') _pararCam();      // la cámara no se queda prendida al salir
-    PANTS.forEach(function (p) { $(p).hidden = (p !== id); });
+    PANTS.forEach(function (p) { var e = $(p); if (e) e.hidden = (p !== id); });
     $('hdrTit').textContent = titulo;
     $('hdrSub').textContent = sub || '';
-    $('btnVolver').hidden = !conVolver;
+    $('titBarra').hidden = !conVolver;
     $('barra').hidden = !conBarra;
     document.body.classList.toggle('con-barra', !!conBarra);
+    _PANT = id;
+    cerrarCajon();
+    pintarCabecera();
     window.scrollTo(0, 0);
 }
 
@@ -166,120 +177,47 @@ function _fijarQR(neg, token, nombre) {
 window._appFijarQR = _fijarQR;
 
 /* ══ 0 · LA PORTADA ════════════════════════════════════════════════════════
-   Dos puertas que no se mezclan. La del NIP (QR) y la de la cuenta.
-   `_destinoNip` recuerda a cuál de las dos cosas iba quien tecleó su NIP: sin
-   eso, el botón del portal y el de registrar llevarían al mismo sitio y uno de
-   los dos sobraría. */
-var _destinoNip = 'menu';
+   (25-nov) Por default, la CLAVE: el teclado del NIP a la vista, que es lo que
+   usa el equipo. Abajo, desplegable, el usuario y la contraseña. */
 function verInicio() {
-    /* La puerta de la clave solo sirve si la app sabe de qué negocio es. Sin
-       eso NO se esconde: se APAGA y se dice cómo conseguirlo, porque un
-       teléfono recién instalado SIEMPRE llega así y una puerta que desaparece
-       se lee como que la app está incompleta.
-
-       Se consigue de dos maneras, y las dos están a la mano:
+    /* La clave solo sirve si la app sabe de qué negocio es. Sin eso NO se
+       esconde: se APAGA, se dice cómo conseguirlo y se abre la cuenta, que es
+       una de las dos maneras:
          · que alguien entre UNA vez con su cuenta (el encargado configura el
            teléfono y su equipo ya solo usa su clave);
-         · o escanear el QR de la sucursal, que trae las credenciales. */
+         · o abrir el QR de tu sucursal, que trae las credenciales. */
     var listo = !!(NEG && TOKEN);
-    var b = $('btnPuertaClave');
-    if (b) { b.disabled = !listo; b.classList.toggle('apagada', !listo); }
-    var esc = $('btnEscanearQR');
-    if (esc) esc.hidden = listo;
-    $('inicioSub').textContent = listo && NEG_NOM ? NEG_NOM : 'Tu operación, en el bolsillo';
+    NIP = ''; pintarPuntos(); $('nipMsg').textContent = '';
+    $('nipZona').classList.toggle('apagada', !listo);
+    $('inicioSub').textContent = listo ? ((NEG_NOM ? NEG_NOM + ' · ' : '') + 'tu NIP de 5 dígitos') : 'Este teléfono todavía no está ligado';
     $('inicioAviso').innerHTML = listo
         ? 'Tu clave dice quién registró qué. Si no la tienes, pídesela a tu encargado.'
         : '<b style="color:var(--txt)">¿Eres de barra o cocina?</b><br>' +
-          'Este teléfono todavía no está ligado a un negocio. Escanea el <b>QR de tu sucursal</b> ' +
-          'con el botón de arriba (es el que está pegado en la barra), o pídele a tu encargado que ' +
-          'entre una vez con su cuenta aquí. Después entras solo con tu clave.';
-    mostrar('pInicio', 'ETAAX', listo ? 'elige cómo entrar' : 'empieza por aquí', false, false);
+          'Pídele a tu encargado que entre una vez con su cuenta aquí abajo, o abre el ' +
+          '<b>QR de tu sucursal</b>. Después entras solo con tu clave.';
+    _usuarioAbierto(!listo);
+    mostrar('pInicio', 'Entrar', '', false, false);
 }
-function irNip(destino) {
-    _destinoNip = destino || 'menu';
-    NIP = ''; pintarPuntos(); $('nipMsg').textContent = '';
-    mostrar('pLogin', 'Entrar con tu clave', 'tu NIP de 5 dígitos', true, false);
-}
-function verCuenta() {
-    $('ctaMsg').textContent = '';
-    var c = window._cuenta ? window._cuenta.correo() : '';
-    if (c && !$('ctaCorreo').value) $('ctaCorreo').value = c;
-    mostrarCuenta('pCuenta', 'Entrar', 'con tu cuenta de ETAAX');
-}
-/* ══ LIGAR EL TELÉFONO CON EL QR, DESDE LA APP ═════════════════════════════
-   En iPhone la app de la pantalla de inicio guarda sus datos aparte de Safari:
-   el QR que se escanea con la cámara del teléfono se abre en Safari y no llega
-   hasta el ícono. Por eso la app lo escanea ella misma (jsQR, desde jsDelivr,
-   que la CSP ya permite). En Android no hace falta, pero sirve igual.
-
-   Se acepta SOLO un QR de ETAAX: el de entradas (/entrada.html) o el de la
-   versión móvil (/app-movil/), con negocio y token. Cualquier otro se ignora. */
-var JSQR = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-var _cam = null, _camPaso = null;
-function _pararCam() {
-    if (_camPaso) { cancelAnimationFrame(_camPaso); _camPaso = null; }
-    if (_cam) { try { _cam.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} _cam = null; }
-    var v = $('escVideo'); if (v) { try { v.srcObject = null; } catch (e) {} }
-}
-function _cargarJsQR() {
-    return new Promise(function (ok, mal) {
-        if (window.jsQR) { ok(); return; }
-        var s = document.createElement('script');
-        s.src = JSQR; s.onload = ok; s.onerror = mal;
-        document.head.appendChild(s);
-    });
-}
-/* ¿Es un QR de ETAAX? Devuelve {n, t, s} o null. */
-function _credsDeQR(txt) {
-    var u;
-    try { u = new URL(String(txt || '').trim(), location.origin); } catch (e) { return null; }
-    var deEtaax = u.origin === location.origin || /(^|\.)etaax\.com$/i.test(u.hostname);
-    if (!deEtaax || !/\/(entrada\.html|app-movil\/?(index\.html)?)$/.test(u.pathname)) return null;
-    var n2 = u.searchParams.get('n'), t2 = u.searchParams.get('t');
-    if (!n2 || !t2) return null;
-    return { n: n2, t: t2, s: u.searchParams.get('s') || '' };
-}
-function _ligar(c) {
-    _pararCam();
-    NEG = c.n; TOKEN = c.t; SUC = c.s || '';
-    try { localStorage.setItem(LS, JSON.stringify({ n: NEG, t: TOKEN, s: SUC })); } catch (e) {}
-    toast('Teléfono ligado. Ya puedes entrar con tu clave.', 'ok');
-    irNip('menu');
-}
-async function escanearQR() {
-    mostrar('pEscanear', 'Escanear el QR', 'el de tu sucursal', true, false);
-    var msg = $('escMsg'), v = $('escVideo');
-    msg.textContent = 'Abriendo la cámara…';
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        msg.textContent = 'Este teléfono no deja usar la cámara aquí. Pídele a tu encargado que entre una vez con su cuenta.';
-        return;
+function _usuarioAbierto(si) {
+    $('cuentaForm').hidden = !si;
+    $('btnUsuario').setAttribute('aria-expanded', si ? 'true' : 'false');
+    if (si) {
+        var c = window._cuenta ? window._cuenta.correo() : '';
+        if (c && !$('ctaCorreo').value) $('ctaCorreo').value = c;
     }
-    try { await _cargarJsQR(); }
-    catch (e) { msg.textContent = 'Sin internet: para ligar el teléfono hace falta señal.'; return; }
-    try { _cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); }
-    catch (e) { msg.textContent = 'No se pudo abrir la cámara. Revisa que la app tenga permiso de usarla.'; return; }
-    v.srcObject = _cam;
-    try { await v.play(); } catch (e) {}
-    msg.textContent = 'Apunta al QR de tu sucursal';
-    var cv = document.createElement('canvas'), g = cv.getContext('2d', { willReadFrequently: true });
-    var paso = function () {
-        if (!_cam) return;
-        if (v.readyState >= 2 && v.videoWidth) {
-            var k = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
-            cv.width = Math.round(v.videoWidth * k); cv.height = Math.round(v.videoHeight * k);
-            g.drawImage(v, 0, 0, cv.width, cv.height);
-            var r = window.jsQR(g.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height, { inversionAttempts: 'dontInvert' });
-            if (r && r.data) {
-                var c = _credsDeQR(r.data);
-                if (c) { _ligar(c); return; }
-                msg.textContent = 'Ese QR no es de ETAAX. Busca el de tu sucursal.';
-            }
-        }
-        _camPaso = requestAnimationFrame(paso);
-    };
-    paso();
 }
-
+function toggleUsuario() {
+    var abrir = $('cuentaForm').hidden;
+    _usuarioAbierto(abrir);
+    if (abrir) { $('ctaMsg').textContent = ''; setTimeout(function () { try { $('cuentaForm').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }, 60); }
+}
+/* Nombres de antes: la clave y la cuenta viven ahora en la misma portada. */
+function irNip() { verInicio(); }
+function verCuenta() {
+    verInicio();
+    $('ctaMsg').textContent = '';
+    _usuarioAbierto(true);
+}
 /* cuenta.js no conoce las pantallas: se las pide a la cáscara por aquí. */
 function mostrarCuenta(id, tit, sub) { mostrar(id, tit, sub, true, false); }
 function toastC(m, c) { toast(m, c); }
@@ -289,14 +227,18 @@ function toastC(m, c) { toast(m, c); }
    diciendo dónde sí se hace: esconderlo haría pensar que la app está rota o
    incompleta, y eso es lo que hace que nadie la vuelva a abrir. */
 var MODULOS_CUENTA = [
-    { app:'finax',  mod:'Admin\u00b7ax', lema:'Ingresos y egresos', items:[
+    { app:'costax', mod:'Cost\u00b7ax',  lema:'Insumos, recetas e inventarios del negocio', items:[
+        { ic:'cat-insumos',    resp:'🥃', tit:'Insumos',     sub:'Consultar, corregir precios, agregar uno', fn:'' },
+        { ic:'cat-recetas',    resp:'📖', tit:'Recetas',     sub:'Consultar y crear una sencilla', fn:'' },
+        { ic:'mod-inventarios',resp:'📦', tit:'Inventarios', sub:'El último cierre y lo registrado', fn:'' } ] },
+    { app:'finax',  mod:'Admin\u00b7ax', lema:'Ingresos y egresos del día', items:[
         { ic:'fin-gastos',     resp:'💸', tit:'Agregar un gasto', sub:'Con su foto, desde donde estés', fn:'' },
-        { ic:'cor-corte-caja', resp:'🧾', tit:'Ver los cortes',   sub:'Lo capturado desde la computadora', fn:'' } ] },
-    { app:'costax', mod:'Cost\u00b7ax',  lema:'Insumos y recetas', items:[
-        { ic:'cat-insumos', resp:'🥃', tit:'Insumos', sub:'Consultar, corregir precios, agregar uno', fn:'' },
-        { ic:'cat-recetas', resp:'📖', tit:'Recetas', sub:'Consultar y crear una sencilla', fn:'' } ] },
-    { app:'finax',  mod:'Fin\u00b7ax',   lema:'Salud financiera', items:[
-        { ic:'fin-resumen-resultados', resp:'📊', tit:'Resultados', sub:'El resumen del mes y las estadísticas', fn:'' } ] }
+        { ic:'cor-corte-caja', resp:'🧾', tit:'Ver los cortes',   sub:'Lo capturado en la computadora', fn:'' } ] },
+    { app:'finax',  mod:'Fin\u00b7ax',   lema:'La salud financiera del negocio', items:[
+        { ic:'fin-resumen-resultados', resp:'📊', tit:'Resultados', sub:'El resumen del mes y las estadísticas', fn:'' } ] },
+    { app:'equipax', mod:'Equip\u00b7ax', lema:'Tu equipo', items:[
+        { ic:'sto-horarios',   resp:'🗓️', tit:'Horarios del equipo', sub:'El rol de la semana', fn:'' },
+        { ic:'sto-checklists', resp:'✅', tit:'Check lists',         sub:'Lo que se cumplió en cada turno', fn:'' } ] }
 ];
 /* Las apps del NEGOCIO para la cuenta: la base y las de cada sucursal juntas
    (la cuenta no está atada a una sucursal). null = no se sabe → se ve todo. */
@@ -314,12 +256,12 @@ function _appsDelPlan(plan) {
 }
 function _ctaTiene(app) { return APPS_CTA === null || APPS_CTA === 'suite' || APPS_CTA.indexOf(app) > -1; }
 function verHome() {
-    var correo = (window._cuenta && window._cuenta.correo()) || '';
-    $('homeQuien').innerHTML = '<b>' + etx(NEG_NOM || 'Tu cuenta') + '</b>' +
-        (correo ? '<small>' + etx(correo) + '</small>' : '') +
+    var ses = _sesionInfo();
+    $('homeQuien').innerHTML = '<b>Hola, ' + etx(_primerNombre(ses.nombre)) + '</b>' +
+        (ses.det ? '<small>' + etx(ses.det) + '</small>' : '') +
         (NEG && TOKEN ? '<small style="color:var(--verde);margin-top:4px">✓ Tu equipo ya puede entrar con su clave en este teléfono</small>' : '');
     pintarHome();
-    mostrar('pHome', 'Tu cuenta', correo, false, false);
+    mostrar('pHome', 'Tu cuenta', '', false, false);
     /* El plan se pide con la sesión de la cuenta. Si no se puede (sin red, sin
        la v89), se queda viendo todo: esconder por un error dejaría a un dueño
        sin sus módulos. */
@@ -333,19 +275,90 @@ function verHome() {
 function pintarHome() {
     var visibles = MODULOS_CUENTA.filter(function (g) { return _ctaTiene(g.app); });
     $('homeMenu').innerHTML = visibles.map(function (g) {
-        return _grupoMod(g.mod, g.lema) + '<div class="menu">' + g.items.map(function (m) {
-            var listo = !!m.fn;
-            return '<button class="mcard mcard-c"' + (listo ? ' onclick="' + m.fn + '"' : ' disabled style="opacity:.45"') + '>' +
-                '<span class="mcard-ico">' + _ic(m.ic, m.resp) + '</span>' +
-                '<span class="mcard-txt"><b>' + etx(m.tit) + '</b><small>' + etx(m.sub) +
-                (listo ? '' : ' <span style="color:var(--dim)">· pronto</span>') + '</small></span></button>';
-        }).join('') + '</div>';
+        return '<div class="modulo modulo-cta"><span class="modulo-col">' + _islaHTML(g.mod) +
+            '<span class="modulo-txt">' + etx(g.lema) + '</span></span></div>' +
+            '<div class="rejilla" style="margin:-4px 0 18px">' + g.items.map(function (m) {
+                var listo = !!m.fn;
+                return _rect(_ic(m.ic, m.resp), m.tit, m.sub + (listo ? '' : ' · pronto'), m.fn);
+            }).join('') + '</div>';
     }).join('') +
-    '<div class="avisos" style="margin-top:14px;text-align:left">Esta app es una <b>beta</b>: lo que ' +
+    '<div class="avisos" style="margin-top:6px;text-align:left">Esta app es una <b>beta</b>: lo que ' +
     'todavía no está aquí se sigue haciendo desde la computadora, igual que siempre.</div>';
 }
 window._appCuentaLista = verHome;
 window._appCuentaFuera = verInicio;
+
+/* ══ LA CABECERA Y EL MENÚ DE TRES LÍNEAS ═════════════════════════════════
+   Quién está en sesión sale de la clave (COLAB) o de la cuenta (cuenta.js).
+   Es lo mismo en el navegador y en la app instalada: la única diferencia es
+   que la tarjeta de «Instalar» ya no se ofrece donde ya está instalada, y vive
+   aquí dentro, no en las pantallas. */
+function _sesionInfo() {
+    if (COLAB) {
+        var area = (window.StaffArea && AREA_COLAB) ? StaffArea.nom(AREA_COLAB).replace(/^[^A-Za-zÁÉÍÓÚÑáéíóúñ]+/, '') : '';
+        return { tipo: 'clave', nombre: COLAB, estado: 'Sesión activa',
+                 det: [PUESTO, area, NEG_NOM].filter(Boolean).join(' · ') };
+    }
+    var cta = window._cuenta;
+    if (cta && cta.sesion && cta.sesion()) {
+        var p = (typeof cta.perfil === 'function' && cta.perfil()) || null;
+        return { tipo: 'cuenta', nombre: (p && p.nombre) || cta.correo() || 'Tu cuenta', estado: 'Sesión activa',
+                 det: [(p && p.puesto) || (p ? '' : cta.correo()), NEG_NOM].filter(Boolean).join(' · ') };
+    }
+    return { tipo: '', nombre: 'Sin sesión', estado: NEG && TOKEN ? 'entra con tu clave' : 'entra con tu cuenta',
+             det: NEG_NOM || 'Entra con tu clave o con tu cuenta' };
+}
+function _iniciales(n) {
+    var p = String(n || '').trim().split(/\s+/).filter(Boolean);
+    return ((p[0] || '').charAt(0) + (p[1] || '').charAt(0)).toUpperCase() || '·';
+}
+function pintarCabecera() {
+    if (!$('hdrNombre')) return;
+    var s = _sesionInfo();
+    $('hdrNombre').textContent = s.tipo ? _primerNombre(s.nombre) : s.nombre;
+    $('hdrEstado').textContent = s.estado;
+    $('hdrEstado').classList.toggle('on', !!s.tipo);
+    $('hdrAvatar').innerHTML = s.tipo ? etx(_iniciales(s.nombre)) : _ic('usuario', '');
+}
+function abrirCajon() {
+    pintarCajon();
+    $('cajon').hidden = false; $('cajonFondo').hidden = false;
+    $('btnCajon').setAttribute('aria-expanded', 'true');
+}
+function cerrarCajon() {
+    var c = $('cajon'); if (!c || c.hidden) return;
+    c.hidden = true; $('cajonFondo').hidden = true;
+    $('btnCajon').setAttribute('aria-expanded', 'false');
+}
+function _itCajon(ico, txt, accion, on) {
+    return '<button class="cajon-it' + (on ? ' on' : '') + '" onclick="cerrarCajon();' + accion + '">' + ico + '<span>' + etx(txt) + '</span></button>';
+}
+function pintarCajon() {
+    var s = _sesionInfo();
+    $('cajonSesion').innerHTML = '<div class="cajon-sesion"><span class="hdr-avatar">' +
+        (s.tipo ? etx(_iniciales(s.nombre)) : _ic('usuario', '')) + '</span><div style="min-width:0">' +
+        '<b>' + etx(s.nombre) + '</b>' + (s.det ? '<small>' + etx(s.det) + '</small>' : '') +
+        '<small style="color:' + (s.tipo ? 'var(--verde)' : 'var(--dim)') + '">' + etx(s.estado) + '</small></div></div>';
+    var nav = '';
+    if (s.tipo === 'clave') {
+        nav += _itCajon(_ic('hd-inicio', '⌂'), 'Inicio', 'irInicio()', _PANT === 'pMenu');
+        if (_tieneApp('costax')) nav += _itCajon(_ic('mod-recetas-insumos', '◆'), 'Cost·ax · inventario y recetas', "abrirModulo('costax')", _PANT === 'pModulo' && ULT_MOD === 'costax');
+        if (_tieneApp('equipax')) nav += _itCajon(_ic('mod-equipax', '◆'), 'Equip·ax · tu turno', "abrirModulo('equipax')", _PANT === 'pModulo' && ULT_MOD === 'equipax');
+    } else if (s.tipo === 'cuenta') {
+        nav += _itCajon(_ic('hd-inicio', '⌂'), 'Inicio', 'verHome()', _PANT === 'pHome');
+    } else {
+        nav += _itCajon(_ic('aut-candado', '•'), 'Entrar con tu clave', 'verInicio()', _PANT === 'pInicio');
+        nav += _itCajon(_ic('usuario', '•'), 'Entrar con usuario y contraseña', 'verCuenta()', false);
+    }
+    $('cajonNav').innerHTML = nav;
+    var claro = document.documentElement.getAttribute('data-tema') === 'claro';
+    $('cajonPie').innerHTML =
+        _itCajon(_ic(claro ? 'hd-luna' : 'hd-sol', '◐'), claro ? 'Tema oscuro' : 'Tema claro', 'toggleTema()', false) +
+        (s.tipo === 'clave' ? _itCajon(_ic('cerrar-sesion', '⎋'), 'Cerrar sesión', 'salir()', false) : '') +
+        (s.tipo === 'cuenta' ? _itCajon(_ic('cerrar-sesion', '⎋'), 'Cerrar sesión', 'salirCuenta()', false) : '');
+    pintarInstalar();
+    detectarInstalada();
+}
 
 /* ══ 1 · ENTRAR CON EL NIP ═════════════════════════════════════════════════
    Teclado propio y no el del sistema: con dedos mojados y en media luz, cinco
@@ -403,14 +416,9 @@ async function entrar() {
         /* El catálogo y los checklists se piden EN PARALELO: en serie son dos
            viajes a Supabase con la señal de una cocina, y el colaborador los
            espera mirando la pantalla de entrar. */
-        await Promise.all([cargarInsumos(), cargarPlantillas(), cargarApps()]);
-        irMenu();
-        /* Quien tocó «Portal del colaborador» quería el portal, no el menú de
-           registrar: llevarlo al menú le haría buscar otra vez lo que ya pidió. */
-        if (_destinoNip === 'portal') {
-            if (PLANTILLAS.length) abrirChecklists();
-            else if (window.StaffArea) abrirRecetario();
-        }
+        await Promise.all([cargarInsumos(), cargarPlantillas(), cargarApps(), cargarEvals()]);
+        ULT_MOD = '';
+        irInicio();
     } catch (e) {
         $('nipMsg').textContent = 'Error: ' + ((e && e.message) || e);
     }
@@ -533,20 +541,37 @@ function unoPorProducto(lista) {
     return orden.map(function (k) { return por[k]; });
 }
 
-/* ══ 2 · MENÚ ══════════════════════════════════════════════════════════════ */
-function irMenu() {
-    /* «Atrás» desde la clave o la cuenta, sin haber entrado: a la portada, no a
-       un menú vacío de alguien que no se identificó. */
-    if (!COLAB) { verInicio(); return; }
-    FLUJO = ''; SEL = null; LOTE = []; FOTOS = []; SUB = {}; RUN = null;
-    var det = [PUESTO, (window.StaffArea && AREA_COLAB) ? StaffArea.nom(AREA_COLAB) : '']
-                .filter(Boolean).join(' · ');
-    $('quienCard').innerHTML = '<b>' + etx(COLAB) + '</b>' +
-        (det ? '<small>' + etx(det) + '</small>' : '');
+/* ══ 2 · EL INICIO Y EL REGRESO ════════════════════════════════════════════
+   irInicio: los módulos (o la portada, o la cuenta). irMenu: «a donde estabas»
+   —el módulo que se abrió, o el inicio—; es lo que llaman las pantallas al
+   terminar (registrar un lote, mandar un check list). volver: la flecha. */
+var ULT_MOD = '';
+function _limpiarCaptura() { FLUJO = ''; SEL = null; LOTE = []; FOTOS = []; SUB = {}; RUN = null; }
+function _cuentaActiva() { return !COLAB && !!(window._cuenta && window._cuenta.sesion && window._cuenta.sesion()); }
+function irInicio() {
+    if (!COLAB) { if (_cuentaActiva()) verHome(); else verInicio(); return; }
+    ULT_MOD = ''; _limpiarCaptura();
+    pintarSaludo();
     pintarPortal();
-    pintarInstalar();
-    detectarInstalada();
-    mostrar('pMenu', 'Tu turno', NEG_NOM || 'elige qué hacer', false, false);
+    mostrar('pMenu', 'Inicio', '', false, false);
+}
+function irMenu() {
+    /* «Atrás» sin haber entrado: a la portada, no a un menú vacío de alguien
+       que no se identificó. */
+    if (!COLAB) { if (_cuentaActiva()) verHome(); else verInicio(); return; }
+    if (ULT_MOD) { _limpiarCaptura(); abrirModulo(ULT_MOD); } else irInicio();
+}
+function volver() {
+    if (_PANT === 'pModulo') { irInicio(); return; }
+    if (_PANT === 'pRun') { RUN = null; abrirChecklists(); return; }
+    if (_PANT === 'pCandado' || _PANT === 'pPin') { verInicio(); return; }
+    irMenu();
+}
+function _primerNombre(n) { return String(n || '').trim().split(/\s+/)[0] || ''; }
+function pintarSaludo() {
+    var det = [PUESTO, (window.StaffArea && AREA_COLAB) ? StaffArea.nom(AREA_COLAB).replace(/^[^A-Za-zÁÉÍÓÚÑáéíóúñ]+/, '') : '', NEG_NOM]
+                .filter(Boolean).join(' · ');
+    $('quienCard').innerHTML = '<b>Hola, ' + etx(_primerNombre(COLAB)) + '</b>' + (det ? '<small>' + etx(det) + '</small>' : '');
 }
 
 function salir() {
@@ -554,8 +579,9 @@ function salir() {
     /* TODO lo del turno anterior se borra. El teléfono de la barra lo usan
        varias personas: dejar el recetario o los checklists de quien acaba de
        salir le enseñaría al siguiente lo que no le toca. */
-    INSUMOS = []; RECETAS = null; PLANTILLAS = []; RECETARIO = null; GUIAS = null; RUN = null;
-    APPS = null; HORARIOS = null; EVALS = null;
+    INSUMOS = []; RECETAS = null; PLANTILLAS = []; RECETARIO = null; RUN = null;
+    APPS = null; HORARIOS = null; EVALS = null; ULT_MOD = ''; _recQ = '';
+    _abierto = { inventarios: false, recetas: false };
     pintarPuntos();
     $('nipMsg').textContent = '';
     verInicio();
@@ -603,50 +629,155 @@ function _grupoMod(nombre, lema) {
     var nom = k > 0 ? etx(nombre.slice(0, k)) + '<i>·</i>' + etx(nombre.slice(k + 1)) : etx(nombre);
     return '<div class="mod-cab"><span class="mod-nom">' + nom + '</span><span class="mod-lema">' + etx(lema) + '</span></div>';
 }
+var MODS_INFO = {
+    costax:  { nom: 'Cost·ax',  lema: 'Inventario y recetas',
+               txt: 'Registra entradas, mermas, cortesías y existencias, y consulta cómo se prepara cada receta de tu área.' },
+    equipax: { nom: 'Equip·ax', lema: 'Tu turno',
+               txt: 'Tus horarios de la semana, tus check lists y, cuando las haya, tus evaluaciones.' }
+};
+function _islaHTML(nombre) {
+    var k = String(nombre).indexOf('·');
+    return '<span class="isla">' + (k > 0 ? etx(nombre.slice(0, k)) + '<i>·</i>' + etx(nombre.slice(k + 1)) : etx(nombre)) + '</span>';
+}
+var FLECHA = '<svg class="desplegar-fl" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+/* El inicio con la clave: un botón por módulo, como en el sistema. */
 function pintarPortal() {
     var m = $('menuPortal');
     if (!m) return;
-    var a = window.StaffArea ? StaffArea.norm(AREA_COLAB) : '';
-    var cocina = !a || a === 'barra' || a === 'cocina';
-    var cost = _tieneApp('costax'), equip = _tieneApp('equipax');
-    var h = '';
-    if (cost) {
-        h += _grupoMod('Cost·ax', 'Inventario y recetas') + '<div class="menu">' +
-            _opcion(_ic('ins-agregar', '📦'), 'Entrada de insumos',
-                'Llegó mercancía: compra, bonificación, consignación o préstamo pagado', "abrirFlujo('entrada')") +
-            _opcion(_ic('ins-drenado', '🍷'), 'Merma',
-                'Se rompió, se derramó o se desperdició un insumo o un producto del menú', "abrirFlujo('merma')") +
-            _opcion(_ic('cor-salida-efectivo', '🎁'), 'Cortesía o préstamo',
-                'Salió algo sin ser venta: cortesía a un cliente o préstamo a otra área', "abrirFlujo('salida')") +
-            _opcion(_ic('ins-stock', '📋'), 'Contar existencias', 'Cuenta botellas o pésalas antes del inventario', "abrirFlujo('conteo')") +
-            (cocina ? _opcion(_ic('cat-recetas', '📖'), 'Recetario', 'Cómo se prepara, paso a paso', 'abrirRecetario()') : '') +
-            _opcion(_ic('ins-historial', '🧾'), 'Lo registrado', 'Todo lo capturado desde el último inventario', 'abrirHistorial()') +
-            '</div>';
-    }
-    if (equip) {
-        h += _grupoMod('Equip·ax', 'Tu turno y tu equipo') + '<div class="menu">' +
-            _opcion(_ic('sto-horarios', '🗓️'), 'Mis horarios', 'Tus turnos de esta semana y la que sigue', 'abrirHorarios()') +
-            _opcion(_ic('sto-checklists', '✅'), 'Mis check lists',
-                PLANTILLAS.length ? (PLANTILLAS.length + (PLANTILLAS.length === 1 ? ' disponible' : ' disponibles'))
-                                  : 'Ninguno para tu área',
-                PLANTILLAS.length ? 'abrirChecklists()' : '') +
-            _opcion(_ic('sto-evaluaciones', '📝'), 'Evaluaciones', 'Las que tu negocio tiene abiertas', 'abrirEvaluaciones()') +
-            '</div>';
-    }
+    var cost = _tieneApp('costax'), equip = _tieneApp('equipax'), h = '';
+    if (cost) h += _botonModulo('costax');
+    if (equip) h += _botonModulo('equipax');
     if (!cost && !equip) {
         h += '<div class="avisos" style="text-align:left">Tu sucursal todavía no tiene apps para el equipo en el ' +
              'teléfono. Pregúntale a tu encargado.</div>';
     }
-    h += _grupoMod('Learn·ax', 'Aprende a usar ETAAX') + '<div class="menu">' +
-        _opcion(_ic('rec-tutorial', '📚'), 'Guías de uso', 'Manuales de ETAAX', 'abrirGuias()') + '</div>';
     m.innerHTML = h;
     m.hidden = false;
 }
-function _opcion(ico, tit, sub, accion) {
+function _botonModulo(id) {
+    var i = MODS_INFO[id];
+    return '<button class="modulo" data-mod="' + id + '" onclick="abrirModulo(\'' + id + '\')">' +
+        '<span class="modulo-col">' + _islaHTML(i.nom) + '<span class="modulo-txt"><b>' + etx(i.lema) + '</b>' + etx(i.txt) + '</span></span>' +
+        '<span class="fl" aria-hidden="true">›</span></button>';
+}
+function _opcion(ico, tit, sub, accion) { return _rect(ico, tit, sub, accion); }
+/* Un rectángulo de la rejilla de dos columnas. Sin acción = apagado (se ve, no se esconde). */
+function _rect(ico, tit, sub, accion) {
     var off = !accion;
-    return '<button class="mcard mcard-c"' + (off ? ' disabled style="opacity:.45"' : ' onclick="' + accion + '"') + '>' +
-        '<span class="mcard-ico">' + ico + '</span>' +
-        '<span class="mcard-txt"><b>' + etx(tit) + '</b><small>' + etx(sub) + '</small></span></button>';
+    return '<button class="rect"' + (off ? ' disabled' : ' onclick="' + accion + '"') + '>' +
+        '<span class="rect-ico">' + ico + '</span>' +
+        '<span><b>' + etx(tit) + '</b>' + (sub ? '<small>' + etx(sub) + '</small>' : '') + '</span></button>';
+}
+
+/* ══ DENTRO DE UN MÓDULO ═══════════════════════════════════════════════════
+   Cost·ax: dos desplegables —Inventarios y Recetas— con sus opciones en
+   rectángulos de dos columnas. Las recetas son las de SU área (portal_recetas
+   las filtra en el servidor), y el desplegable solo sale a quien cocina o
+   prepara. Equip·ax: mis horarios, check list y, solo si el negocio tiene
+   evaluaciones abiertas, evaluaciones. Qué quedó abierto se recuerda al volver. */
+var _abierto = { inventarios: false, recetas: false };
+function abrirModulo(id) {
+    if (!MODS_INFO[id]) { irInicio(); return; }
+    ULT_MOD = id;
+    var i = MODS_INFO[id];
+    /* La isla ya dice qué módulo es: la barra de arriba solo dice a dónde regresa. */
+    mostrar('pModulo', 'Inicio', '', true, false);
+    $('modCuerpo').innerHTML = pintarModulo(id);
+    if (id === 'costax' && _abierto.recetas) _cargarRecetasRejilla();
+}
+function pintarModulo(id) {
+    var i = MODS_INFO[id];
+    var h = '<div class="mod-cabeza">' + _islaHTML(i.nom) + '<p>' + etx(i.txt) + '</p></div>';
+    if (id === 'costax') {
+        var a = window.StaffArea ? StaffArea.norm(AREA_COLAB) : '';
+        var cocina = !a || a === 'barra' || a === 'cocina';
+        h += _despl('inventarios', _ic('mod-inventarios', '📦'), 'Inventarios') +
+            '<div class="rejilla" id="rejInventarios"' + (_abierto.inventarios ? '' : ' hidden') + '>' +
+                _rect(_ic('ins-agregar', '📦'), 'Registrar entradas', 'Llegó mercancía', "abrirFlujo('entrada')") +
+                _rect(_ic('ins-drenado', '🍷'), 'Registrar merma', 'Se rompió o se desperdició', "abrirFlujo('merma')") +
+                _rect(_ic('cor-salida-efectivo', '🎁'), 'Registrar cortesía / préstamo', 'Salió sin ser venta', "abrirFlujo('salida')") +
+                _rect(_ic('ins-stock', '📋'), 'Registrar existencias', 'Cuenta o pesa antes del inventario', "abrirFlujo('conteo')") +
+                _rect(_ic('ins-historial', '🧾'), 'Ver lo registrado', 'Desde el último inventario', 'abrirHistorial()') +
+            '</div>';
+        if (cocina) {
+            h += _despl('recetas', _ic('cat-recetas', '📖'), 'Recetas') +
+                '<div class="rejilla" id="rejRecetas"' + (_abierto.recetas ? '' : ' hidden') + '></div>';
+        }
+    } else if (id === 'equipax') {
+        var nE = (EVALS && EVALS.length) || 0, nC = PLANTILLAS.length;
+        h += '<div class="rejilla">' +
+            _rect(_ic('sto-horarios', '🗓️'), 'Ver mis horarios', 'Esta semana y la que sigue', 'abrirHorarios()') +
+            _rect(_ic('sto-checklists', '✅'), 'Realizar check list',
+                nC ? (nC + (nC === 1 ? ' disponible' : ' disponibles')) : 'Ninguno para tu área', nC ? 'abrirChecklists()' : '') +
+            (nE ? _rect(_ic('sto-evaluaciones', '📝'), 'Evaluaciones', nE + (nE === 1 ? ' por realizar' : ' por realizar'), 'abrirEvaluaciones()') : '') +
+            '</div>';
+    }
+    return h;
+}
+function _despl(k, ico, txt) {
+    return '<button class="despl" data-despl="' + k + '" aria-expanded="' + (_abierto[k] ? 'true' : 'false') + '" ' +
+        'onclick="toggleDespl(\'' + k + '\')">' + ico + '<span>' + etx(txt) + '</span>' + FLECHA + '</button>';
+}
+function toggleDespl(k) {
+    _abierto[k] = !_abierto[k];
+    var b = document.querySelector('[data-despl="' + k + '"]');
+    if (b) b.setAttribute('aria-expanded', _abierto[k] ? 'true' : 'false');
+    var r = $(k === 'inventarios' ? 'rejInventarios' : 'rejRecetas');
+    if (r) r.hidden = !_abierto[k];
+    if (k === 'recetas' && _abierto[k]) _cargarRecetasRejilla();
+}
+/* Las recetas de su área, en la misma rejilla. El buscador se pinta una vez y
+   solo se repinta la lista: así no se pierde el teclado al escribir. */
+var _recQ = '';
+async function _cargarRecetasRejilla() {
+    var r = $('rejRecetas'); if (!r) return;
+    if (RECETARIO === null) {
+        r.innerHTML = '<div class="hvacio">Cargando…</div>';
+        if (!navigator.onLine) { r.innerHTML = '<div class="sinred">Sin internet. El recetario se lee del servidor.</div>'; return; }
+        try {
+            var x = await _supabase.rpc('portal_recetas', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+            RECETARIO = (x && x.data) || [];
+        } catch (e) { RECETARIO = []; }
+    }
+    if (!$('rejRecetas')) return;
+    $('rejRecetas').innerHTML = ((RECETARIO || []).length > 6
+        ? '<input class="campo rejilla-buscar" id="recQ" type="search" autocomplete="off" placeholder="Buscar receta…" ' +
+          'value="' + etx(_recQ) + '" oninput="buscarRecetaRejilla(this.value)">' : '') +
+        '<div class="rejilla-sub" id="recItems"></div>';
+    _pintarRecetasRejilla();
+}
+function buscarRecetaRejilla(q) { _recQ = String(q || ''); _pintarRecetasRejilla(); }
+var ICO_REC = { bebidas: ['rec-bebidas', '🍸'], 'sub-bebidas': ['rec-sub-bebidas', '🧪'], alimentos: ['rec-alimentos', '🍳'], 'sub-alimentos': ['rec-sub-alimentos', '🥣'] };
+function _pintarRecetasRejilla() {
+    var cont = $('recItems'); if (!cont) return;
+    var q = _recQ.trim().toLowerCase(), pal = q ? q.split(/\s+/) : [];
+    var lista = (RECETARIO || []).filter(function (x) {
+        if (!pal.length) return true;
+        var t = [x.nombre, x.grupo, x.categoria].join(' ').toLowerCase();
+        return pal.every(function (w) { return t.indexOf(w) >= 0; });
+    });
+    cont.innerHTML = lista.length
+        ? lista.map(function (x, i) {
+            var ic = ICO_REC[x.tipo] || ['cat-recetas', '📖'];
+            return '<button class="rect" data-rec="' + i + '"><span class="rect-ico">' + _ic(ic[0], ic[1]) + '</span>' +
+                '<span><b>' + etx(x.nombre || '—') + '</b>' +
+                ([x.grupo, x.categoria].filter(Boolean).length ? '<small>' + etx([x.grupo, x.categoria].filter(Boolean).join(' · ')) + '</small>' : '') +
+                '</span></button>';
+        }).join('')
+        : '<div class="hvacio">' + (q ? 'Nada con «' + etx(q) + '».' : 'No hay recetas para tu área.') + '</div>';
+    cont.onclick = function (e) {
+        var b = e.target.closest('[data-rec]'); if (!b) return;
+        verReceta(lista[parseInt(b.getAttribute('data-rec'), 10)]);
+    };
+}
+/* Evaluaciones: se piden al entrar para saber si la opción sale (solo si el
+   negocio tiene alguna abierta). Sin la v91 se queda en null y no sale. */
+async function cargarEvals() {
+    EVALS = null;
+    try {
+        var r = await _supabase.rpc('portal_evaluaciones', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+        if (r && !r.error && Array.isArray(r.data)) EVALS = r.data;
+    } catch (e) {}
 }
 
 /* ══ EQUIP·AX · MIS HORARIOS ═══════════════════════════════════════════════
@@ -1422,34 +1553,6 @@ function verReceta(r) {
               'Esta receta todavía no tiene el procedimiento escrito.</div>');
 }
 
-/* ══ GUÍAS DE USO ══════════════════════════════════════════════════════════ */
-async function abrirGuias() {
-    mostrar('pGuias', 'Guías de uso', 'manuales de ETAAX', true, false);
-    if (GUIAS === null) {
-        $('guiasLista').innerHTML = '<div class="hvacio">Cargando…</div>';
-        if (!navigator.onLine) {
-            $('guiasLista').innerHTML = '<div class="sinred">Sin internet. Las guías se leen del servidor.</div>';
-            return;
-        }
-        try {
-            var r = await _supabase.rpc('portal_guias', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
-            GUIAS = (r && r.data) || [];
-        } catch (e) { GUIAS = []; }
-    }
-    $('guiasLista').innerHTML = (GUIAS && GUIAS.length)
-        ? GUIAS.map(function (g) {
-            /* target=_blank + rel=noopener: sin eso, la página abierta puede
-               manipular la que la abrió. Y en una app instalada, salir a un PDF
-               sin pestaña nueva deja al colaborador sin forma de volver. */
-            return '<a class="guia-it" href="' + etx(g.url || '#') + '" target="_blank" rel="noopener">' +
-                '<span class="rec-it-ico">' + (String(g.tipo || '') === 'video' ? '🎬' : '📄') + '</span>' +
-                '<span style="flex:1;min-width:0"><b>' + etx(g.titulo || '—') + '</b>' +
-                (g.descripcion ? '<small>' + etx(g.descripcion) + '</small>' : '') + '</span>' +
-                '<span style="color:var(--dim)">↗</span></a>';
-        }).join('')
-        : '<div class="hvacio">Todavía no hay guías publicadas.</div>';
-}
-
 /* ══ 4 · LO REGISTRADO ═════════════════════════════════════════════════════ */
 var ICONO = { entrada: '📦', merma: '🍷', salida: '🎁' };
 var NOMBRE = { entrada: 'Entrada', merma: 'Merma', salida: 'Cortesía / préstamo' };
@@ -1870,8 +1973,8 @@ if ('serviceWorker' in navigator) {
 
 /* ── Arranque ── */
 window.addEventListener('DOMContentLoaded', async function () {
-    pintarTeclado(); pintarPuntos(); _iconosEstaticos();
-    $('loginAviso').innerHTML = 'Tu NIP dice quién registró qué.<br>Si no lo tienes, pídeselo a tu encargado.';
+    pintarTeclado(); pintarPuntos(); _iconosEstaticos(); _pintarTemaIco(); pintarCabecera();
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrarCajon(); });
     /* Si hay sesión guardada, cuenta.js se encarga —pidiendo huella o PIN si hay
        candado— y la portada no se llega a ver. Si no, se muestra. */
     var conSesion = false;
@@ -1888,6 +1991,14 @@ window.irNip = irNip;
 window.mostrarCuenta = mostrarCuenta;
 window.toastC = toastC;
 window.irMenu = irMenu;
+window.irInicio = irInicio;
+window.volver = volver;
+window.abrirModulo = abrirModulo;
+window.toggleDespl = toggleDespl;
+window.buscarRecetaRejilla = buscarRecetaRejilla;
+window.toggleUsuario = toggleUsuario;
+window.abrirCajon = abrirCajon;
+window.cerrarCajon = cerrarCajon;
 window.salir = salir;
 window.abrirFlujo = abrirFlujo;
 window.abrirHistorial = abrirHistorial;
@@ -1901,10 +2012,8 @@ window.yaLaTengo = yaLaTengo;
 window.abrirChecklists = abrirChecklists;
 window.abrirRecetario = abrirRecetario;
 window.filtrarRecetario = filtrarRecetario;
-window.abrirGuias = abrirGuias;
 window.tomarFotoRun = tomarFotoRun;
 window.abrirHorarios = abrirHorarios;
-window.escanearQR = escanearQR;
 window.abrirEvaluaciones = abrirEvaluaciones;
 
 /* Para poder probarlo desde la consola y desde el candado. */
@@ -1915,13 +2024,13 @@ window._appMovil = {
     pintarInstalar: pintarInstalar, yaInstalada: yaInstalada, detectarInstalada: detectarInstalada,
     yaLaTengo: yaLaTengo, pintarPortal: pintarPortal, cuentaRun: cuentaRun,
     pintarHorarios: pintarHorarios, pintarEvaluaciones: pintarEvaluaciones, appsDelPlan: _appsDelPlan,
-    credsDeQR: _credsDeQR, ligar: _ligar,
+    pintarModulo: pintarModulo, sesionInfo: function () { return _sesionInfo(); },
     _setRun: function (r) { RUN = r; },
     _set: function (k, v) {
         if (k === 'AREA_COLAB') AREA_COLAB = v; if (k === 'AREA') AREA = v;
         if (k === 'FLUJO') FLUJO = v; if (k === 'SUB') SUB = v;
         if (k === 'SUC') SUC = v; if (k === 'LOTE') LOTE = v; if (k === 'FOTOS') FOTOS = v;
-        if (k === 'APPS') APPS = v; if (k === 'PLANTILLAS') PLANTILLAS = v;
+        if (k === 'APPS') APPS = v; if (k === 'PLANTILLAS') PLANTILLAS = v; if (k === 'EVALS') EVALS = v;
     },
     _get: function (k) { return { AREA: AREA, AREA_COLAB: AREA_COLAB, FLUJO: FLUJO, LOTE: LOTE }[k]; }
 };

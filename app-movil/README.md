@@ -149,8 +149,8 @@ entradas de antes —negocio + token + sucursal—, que ya no vive en Inventario
 landing (`index.html`) trae «Abrir versión móvil».
 
 **En iPhone, el ícono de inicio no ve lo de Safari**: si al abrirlo dice que el
-teléfono no está ligado, se toca **«Escanear el QR de mi sucursal»** y la app
-lee el QR con la cámara (jsQR). Se hace una sola vez.
+teléfono no está ligado, alguien con usuario y contraseña (el encargado o un
+colaborador con acceso al sistema) entra una vez en ese teléfono y queda ligado.
 
 - **Android:** Chrome ofrece **«Instalar»** —un aviso abajo o en el menú ⋮—. Es
   una instalación de verdad: la app queda en el cajón de aplicaciones.

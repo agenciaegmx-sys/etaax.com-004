@@ -21,75 +21,88 @@
 </head>
 <body>
 
-<!-- ══ CABECERA ══════════════════════════════════════════════════════════════
-     Fija arriba porque en estas pantallas uno se pierde: el título dice SIEMPRE
-     en qué flujo está parado y quién lo está registrando. -->
+<!-- ══ CABECERA (25-nov, como la del sistema) ═════════════════════════════════
+     Tres líneas a la izquierda (el menú), el isotipo al centro, y a la derecha
+     el tema y quién está en sesión. La misma en el navegador y en la app
+     instalada: nada aquí depende de cómo se abrió. -->
 <header class="hdr" id="hdr">
-    <button class="hdr-volver" id="btnVolver" onclick="irMenu()" hidden>←</button>
-    <div class="hdr-txt">
-        <div class="hdr-tit" id="hdrTit">Registro</div>
-        <div class="hdr-sub" id="hdrSub">barra / cocina</div>
+    <div class="hdr-izq">
+        <button class="hdr-ico" id="btnCajon" onclick="abrirCajon()" aria-label="Menú" aria-controls="cajon" aria-expanded="false">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <button class="hdr-ico" onclick="toggleTema()" aria-label="Cambiar tema"><span id="temaIco"></span></button>
     </div>
-    <button class="hdr-tema" onclick="toggleTema()" aria-label="Cambiar tema"><span id="temaIco">☀️</span></button>
+    <button class="hdr-marca" onclick="irInicio()" aria-label="Inicio"><img src="../favicon.svg" alt="ETAAX" width="34" height="34"></button>
+    <div class="hdr-der">
+        <button class="hdr-cuenta" id="hdrCuenta" onclick="abrirCajon()" aria-label="Tu sesión">
+            <span class="hdr-avatar" id="hdrAvatar"></span>
+            <span class="hdr-quien"><b id="hdrNombre">Sin sesión</b><small id="hdrEstado">entra con tu clave</small></span>
+        </button>
+    </div>
 </header>
+
+<!-- ══ EL MENÚ DE TRES LÍNEAS ════════════════════════════════════════════════
+     Quién está en sesión, a dónde ir, instalarla en el teléfono, el tema y
+     cerrar sesión. Lo arma pintarCajon(). -->
+<div class="cajon-fondo" id="cajonFondo" hidden onclick="cerrarCajon()"></div>
+<aside class="cajon" id="cajon" aria-label="Menú" hidden>
+    <div id="cajonSesion"></div>
+    <nav class="cajon-nav" id="cajonNav"></nav>
+    <!-- La tarjeta se arma por plataforma: en Android hay un botón que de verdad
+         instala; en iPhone no existe tal cosa —Apple solo permite «Agregar a
+         inicio»— así que ahí van los pasos, no un botón que promete y explica. -->
+    <div class="instalar" id="instalar" hidden></div>
+    <div class="cajon-pie" id="cajonPie"></div>
+</aside>
 
 <main id="main">
 
-<!-- ══ 0 · LA PORTADA ════════════════════════════════════════════════════════
-     Lo PRIMERO es el acceso, y son dos puertas que no se mezclan (Edwin, 25-nov):
-       · LA CLAVE (el NIP de 5 dígitos) abre VISTAS: lo que el equipo consulta y
-         registra en su turno, ordenado por módulo (Cost·ax, Equip·ax, Learn·ax).
-         Quien trabaja en barra o cocina no tiene cuenta, tiene NIP.
-       · USUARIO Y CONTRASEÑA abre los MÓDULOS para usarlos: lo que mueve dinero
-         o cambia el catálogo. Es la misma cuenta de la computadora. -->
-<section class="pant" id="pInicio" hidden>
-    <div class="marca"><img src="icons/icono-192.png" alt="" width="54" height="54"><div>
-        <div class="marca-n">ETAAX</div><div class="marca-s" id="inicioSub">Tu operación, en el bolsillo</div></div></div>
+<!-- La barra del título: la pantalla en la que estás y cómo regresar. En la
+     portada y en el inicio no hace falta; ahí el contenido se presenta solo. -->
+<div class="tit-barra" id="titBarra" hidden>
+    <button class="hdr-volver" id="btnVolver" onclick="volver()" aria-label="Regresar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="hdr-txt"><div class="hdr-tit" id="hdrTit">ETAAX</div><div class="hdr-sub" id="hdrSub"></div></div>
+</div>
 
-    <div class="menu-grupo" style="margin-top:22px">¿Cómo vas a entrar?</div>
-    <div class="menu">
-        <button class="mcard puerta" id="btnPuertaClave" onclick="irNip('menu')">
-            <span class="mcard-ico" data-ic="aut-candado">🔢</span>
-            <span class="mcard-txt"><b>Entrar con mi clave</b>
-                <small>Tu NIP de 5 dígitos · para ver y registrar en tu turno: entradas, recetario, horarios y check lists</small></span>
-        </button>
-        <!-- Solo cuando el teléfono no está ligado a un negocio. En iPhone la app
-             de inicio guarda sus datos aparte de Safari: el QR escaneado con la
-             cámara del teléfono no llega hasta ella, así que se escanea DESDE la
-             app. Se hace una vez. -->
-        <button class="mcard puerta" id="btnEscanearQR" onclick="escanearQR()" hidden>
-            <span class="mcard-ico" data-ic="sto-qr">📷</span>
-            <span class="mcard-txt"><b>Escanear el QR de mi sucursal</b>
-                <small>Liga este teléfono a tu negocio para entrar con tu clave. Se hace una sola vez.</small></span>
-        </button>
-        <button class="mcard puerta" onclick="verCuenta()">
-            <span class="mcard-ico" data-ic="usuario">🔐</span>
-            <span class="mcard-txt"><b>Entrar con usuario y contraseña</b>
-                <small>Tu cuenta de ETAAX · para usar los módulos: gastos, insumos, recetas y resultados</small></span>
-        </button>
+<!-- ══ 0 · LA PORTADA: ENTRAR ════════════════════════════════════════════════
+     Por default, la CLAVE (el NIP de 5 dígitos): es lo que usa el equipo, y abre
+     las VISTAS del turno. Abajo, desplegable, el usuario y la contraseña: abre
+     los módulos para usarlos (dueño, gerente y colaboradores con acceso al
+     sistema). Mismo estilo que el inicio de sesión del sistema. -->
+<section class="pant" id="pInicio" hidden>
+    <div class="login-card">
+        <div class="login-cab">
+            <img src="../favicon.svg" alt="" width="46" height="46">
+            <div><div class="login-tit">Entrar con tu clave</div>
+                 <div class="login-sub" id="inicioSub">Tu NIP de 5 dígitos</div></div>
+        </div>
+        <div id="nipZona">
+            <div class="nip-wrap">
+                <div class="nip-puntos" id="nipPuntos" aria-live="polite"></div>
+                <div class="nip-msg" id="nipMsg"></div>
+            </div>
+            <div class="teclado" id="teclado"></div>
+        </div>
+        <div class="avisos" id="inicioAviso"></div>
     </div>
 
-    <div class="avisos" id="inicioAviso"></div>
-</section>
-
-<!-- ══ 0a · LIGAR EL TELÉFONO CON EL QR ═══════════════════════════════════════ -->
-<section class="pant" id="pEscanear" hidden>
-    <div class="esc-marco"><video id="escVideo" playsinline muted autoplay></video><i class="esc-mira"></i></div>
-    <div class="nip-msg" id="escMsg" aria-live="polite"></div>
-    <div class="avisos">Es el QR que está pegado en la barra, la cocina o la bodega. Si no lo encuentras,
-        pídele a tu encargado que entre una vez con su cuenta en este teléfono.</div>
-</section>
-
-<!-- ══ 0b · ENTRAR CON LA CUENTA ═════════════════════════════════════════════ -->
-<section class="pant" id="pCuenta" hidden>
-    <label class="lbl" for="ctaCorreo">Correo</label>
-    <input class="campo" id="ctaCorreo" type="email" inputmode="email" autocomplete="username"
-           autocapitalize="none" spellcheck="false" placeholder="tu@correo.com">
-    <label class="lbl" for="ctaPwd">Contraseña</label>
-    <input class="campo" id="ctaPwd" type="password" autocomplete="current-password" placeholder="••••••••">
-    <div class="nip-msg" id="ctaMsg" style="text-align:left"></div>
-    <button class="btn btn-ok" id="ctaBtn" onclick="entrarCuenta()" style="margin-top:8px">Entrar</button>
-    <div class="avisos">Es la misma cuenta con la que entras al sistema desde la computadora.</div>
+    <button class="desplegar" id="btnUsuario" aria-expanded="false" aria-controls="cuentaForm" onclick="toggleUsuario()">
+        <span>Iniciar sesión con usuario y contraseña</span>
+        <svg class="desplegar-fl" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="login-card cuenta-form" id="cuentaForm" hidden>
+        <label class="lbl" for="ctaCorreo">Usuario o correo</label>
+        <input class="campo" id="ctaCorreo" type="text" inputmode="email" autocomplete="username"
+               autocapitalize="none" spellcheck="false" placeholder="tu usuario o tu@correo.com">
+        <label class="lbl" for="ctaPwd">Contraseña</label>
+        <input class="campo" id="ctaPwd" type="password" autocomplete="current-password" placeholder="••••••••">
+        <div class="nip-msg" id="ctaMsg" style="text-align:left"></div>
+        <button class="btn btn-ok" id="ctaBtn" onclick="entrarCuenta()" style="margin-top:8px">Entrar</button>
+        <div class="avisos">Es la misma cuenta con la que entras al sistema desde la computadora: el dueño con su
+            correo, y los colaboradores con acceso con su usuario.</div>
+    </div>
 </section>
 
 <!-- ══ 0c · EL CANDADO DE ESTE TELÉFONO ══════════════════════════════════════ -->
@@ -106,49 +119,32 @@
     <div class="teclado" id="pinTeclado"></div>
 </section>
 
-<!-- ══ 0d · EL MENÚ DE LA CUENTA ═════════════════════════════════════════════
-     Los módulos llegan por fases. Lo que todavía no está se enseña APAGADO y
-     diciendo dónde sí se hace: esconderlo haría pensar que la app está rota o
-     incompleta, y eso es justo lo que hace que nadie la vuelva a abrir. -->
+<!-- ══ 0d · EL INICIO CON LA CUENTA ═════════════════════════════════════════
+     El mismo diseño que con la clave: un botón por módulo del plan, con lo que
+     se podrá hacer ahí. Lo que todavía no está se enseña APAGADO («pronto») y no
+     escondido: esconderlo haría pensar que la app está rota. -->
 <section class="pant" id="pHome" hidden>
-    <div class="quien" id="homeQuien"></div>
-    <div class="menu" id="homeMenu"></div>
+    <div class="saludo" id="homeQuien"></div>
+    <div id="homeMenu"></div>
     <button class="salir" onclick="salirCuenta()">Cerrar sesión</button>
 </section>
 
-<!-- ══ 1 · ENTRAR CON EL NIP ═════════════════════════════════════════════════
-     Teclado propio, no el del sistema: con dedos mojados y en media luz, cinco
-     botones grandes se aciertan y un campo de texto no. -->
-<section class="pant" id="pLogin">
-    <div class="marca"><img src="icons/icono-192.png" alt="" width="54" height="54"><div>
-        <div class="marca-n">ETAAX</div><div class="marca-s">Registro de barra y cocina</div></div></div>
-
-    <div class="nip-wrap">
-        <div class="nip-lbl">Tu NIP de 5 dígitos</div>
-        <div class="nip-puntos" id="nipPuntos" aria-live="polite"></div>
-        <div class="nip-msg" id="nipMsg"></div>
-    </div>
-
-    <div class="teclado" id="teclado"></div>
-    <div class="avisos" id="loginAviso"></div>
+<!-- ══ 2 · EL INICIO CON LA CLAVE: LOS MÓDULOS ═══════════════════════════════
+     Como en el sistema: un botón por módulo, con su nombre ·ax en la isla azul
+     y lo que se hace ahí. Lo arma pintarPortal(); lo no contratado no se ve
+     (portal_apps, v91). -->
+<section class="pant" id="pMenu" hidden>
+    <div class="saludo" id="quienCard"></div>
+    <div id="menuPortal"></div>
+    <button class="salir" onclick="salir()">Cerrar sesión</button>
 </section>
 
-<!-- ══ 2 · LO QUE SE VE CON LA CLAVE, POR MÓDULO ═════════════════════════════
-     Cada vista va con el módulo de ETAAX al que pertenece —el mismo nombre que ve
-     el dueño en la computadora—:
-       · Cost·ax:  entradas, mermas, cortesías, conteo, recetario y lo registrado
-       · Equip·ax: mis horarios, mis check lists y evaluaciones
-       · Learn·ax: las guías de uso
-     Lo arma pintarPortal(): lo que la sucursal no contrató no se ve (portal_apps,
-     v91) y el recetario solo sale a quien cocina o prepara. -->
-<section class="pant" id="pMenu" hidden>
-    <div class="quien" id="quienCard"></div>
-    <div id="menuPortal"></div>
-    <!-- La tarjeta se arma por plataforma: en Android hay un botón que de verdad
-         instala; en iPhone no existe tal cosa —Apple solo permite «Agregar a
-         inicio»— así que ahí van los pasos, no un botón que promete y explica. -->
-    <div class="instalar" id="instalar" hidden></div>
-    <button class="salir" onclick="salir()">Cerrar sesión</button>
+<!-- ══ 2b · DENTRO DE UN MÓDULO ═══════════════════════════════════════════════
+     Cost·ax: dos desplegables, Inventarios y Recetas, con sus opciones en
+     rectángulos de dos columnas. Equip·ax: mis horarios, check list y, si hay,
+     evaluaciones. Lo arma pintarModulo(). -->
+<section class="pant" id="pModulo" hidden>
+    <div id="modCuerpo"></div>
 </section>
 
 <!-- ══ 3 · CAPTURA (los cuatro flujos comparten esta pantalla) ════════════════
@@ -252,11 +248,6 @@
 </section>
 <section class="pant" id="pReceta" hidden>
     <div id="recFicha"></div>
-</section>
-
-<!-- ══ 7 · GUÍAS DE USO ══════════════════════════════════════════════════════ -->
-<section class="pant" id="pGuias" hidden>
-    <div id="guiasLista"></div>
 </section>
 
 <!-- ══ 4 · LO REGISTRADO ═════════════════════════════════════════════════════ -->
