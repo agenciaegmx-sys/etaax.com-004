@@ -122,8 +122,6 @@ body.etx-insumos-page #mainContent .brand-title {font:700 30px/1.2 'DM Sans',san
   .etx-insumos-page #insumosCatalogCard {margin:0 12px!important;}
   .etx-insumos-page #insumosCatalogCard > .card-header {padding:16px;}
   .etx-insumos-page .filtros-grid {grid-template-columns:minmax(0,1fr);}
-  .etx-insumos-page .hdr-acts > button {flex:1 1 140px;}
-  .etx-insumos-page #btnAgregarInsumo {flex-basis:100%;}
   .etx-insumos-page :is(#modalOverlay,#modalFicha,#modalCategoria,#modalImportar) {padding:8px;}
   .etx-insumos-page :is(#modalOverlay,#modalFicha,#modalCategoria,#modalImportar) > .modal {max-height:calc(100dvh - 16px)!important;border-radius:14px;}
   .etx-insumos-page :is(.modal-header,.modal-body,.modal-footer) {padding:16px;}
@@ -211,3 +209,96 @@ body.etx-insumos-page #mainContent .brand-title {font:700 30px/1.2 'DM Sans',san
 .i-areas-pie {display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:14px 22px 18px;border-top:1px solid var(--i-line,var(--border));margin-top:10px;}
 .i-areas-msg {margin-right:auto;font-size:12.5px;color:#e05a3a;}
 @media (max-width:640px){ .i-areas-fila {grid-template-columns:1fr;} .i-areas-n,.i-areas-acc {justify-content:flex-start;text-align:left;} }
+
+/* ══ (26-nov) EL ENCABEZADO FIJO DEL CATÁLOGO (Edwin) ═══════════════════════════
+   Buscador, filtros, vistas y acciones en un solo encabezado fijo y bajito, como
+   la barra del inventario; al bajar solo se mueve la lista. Renglón 1: buscador
+   y filtros (y a la derecha, si caben, cámara · cambios · agregar). Renglón 2:
+   «Catálogo N» con las vistas y herramientas. Donde no caben juntos, las
+   acciones bajan al renglón 2, a la derecha. */
+body.etx-insumos-page #mainContent > #insCab {
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:8px;
+  padding:10px 16px;margin-bottom:14px;z-index:60;
+}
+/* Sin brinco al bajar (como el inventario): arrancaba 24 px abajo de la isla y,
+   al empezar a bajar, se recorría hasta pegarse. Ahora arranca ya en su sitio. */
+body.etx-modulos-ui.etx-insumos-page #mainContent > #insCab {margin-top:-24px;}
+#insCab .i-cab-filtros {display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex:1 1 auto;min-width:0;order:1;}
+#insCab .hdr-acts {display:flex;flex-wrap:nowrap;align-items:center;gap:8px;margin-left:auto;order:2;width:auto;}
+#insCab .i-cab-vistas {display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;flex:1 1 100%;min-width:0;order:3;
+  padding-top:8px;border-top:1px solid var(--i-line);}
+#insCab .i-cab-cat {display:inline-flex;align-items:center;gap:8px;font:600 13px/1 'DM Sans',sans-serif;color:var(--text);white-space:nowrap;}
+#insCab .i-cab-cat .pill {font-size:9.5px;padding:4px 8px;}
+/* «Catálogo» queda para lectores de pantalla: la isla ya dice INSUMOS y el contador habla solo. */
+#insCab .i-sr {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+/* Todo a 34 px de alto: el encabezado completo mide ~100 px en vez de ~400. */
+body.etx-insumos-page #insCab .search-wrap {flex:1 1 200px;max-width:300px;min-width:160px;}
+body.etx-insumos-page #insCab .search-wrap input {min-height:34px;height:34px;padding:6px 30px 6px 34px;font-size:13px;border-radius:9px;}
+body.etx-insumos-page #insCab .search-icon {left:10px;}
+body.etx-insumos-page #insCab .search-icon .etx-ic {width:16px;height:16px;}
+body.etx-insumos-page #insCab :is(.filtro-select,#ordenModoIns) {min-height:34px;height:34px;padding:0 24px 0 10px;font-size:12.5px;width:auto;max-width:150px;border-radius:9px;}
+body.etx-insumos-page #insCab .ems-btn.filtro-select {padding:0 10px;}
+body.etx-insumos-page #insCab #filtroEstadoIns {max-width:112px;}
+body.etx-insumos-page #insCab :is(.btn-vista,.btn-primary) {min-height:34px;height:34px;padding:0 11px;font-size:12.5px;gap:6px;border-radius:9px;white-space:nowrap;}
+body.etx-insumos-page #insCab .i-ui-icon .etx-ic {width:16px;height:16px;}
+body.etx-insumos-page #insCab .i-catalog-tools {display:flex;flex-wrap:wrap;align-items:center;gap:6px;}
+body.etx-insumos-page #insCab .i-catalog-tools button {min-height:32px!important;height:32px;padding:0 8px!important;font-size:12px!important;gap:4px;white-space:nowrap;
+  display:inline-flex;align-items:center;border:1px solid var(--i-line);border-radius:8px;cursor:pointer;font-family:inherit;}
+body.etx-insumos-page #insCab #ordenModoIns {min-height:32px;height:32px;font-size:12px;width:118px;}
+/* Lista · Galería · Costeo: un solo control partido, como en el inventario. */
+#insCab .i-seg {display:inline-flex;border:1px solid var(--i-line);border-radius:9px;overflow:hidden;flex-shrink:0;}
+body.etx-insumos-page #insCab .i-seg button {border:0!important;border-radius:0!important;border-right:1px solid var(--i-line)!important;min-height:30px!important;height:30px;}
+body.etx-insumos-page #insCab .i-seg button:last-child {border-right:0!important;}
+/* La cámara: chica y siempre del mismo tamaño (si creciera, empujaría las
+   acciones a otro renglón y el encabezado brincaría); al tocarla se abre su
+   ventanita con el nombre y para qué sirve. */
+#insCab .i-pop-wrap {position:relative;flex-shrink:0;}
+body.etx-insumos-page #insCab .i-btn-cam {width:34px;padding:0;gap:0;justify-content:center;}
+#insCab .i-btn-cam .i-cam-txt {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+body.etx-insumos-page #insCab .i-btn-cam[aria-expanded="true"] {border-color:var(--i-cyan);color:var(--i-cyan);background:var(--i-selected);}
+/* «Agregar insumo ▾» */
+#insCab .i-agregar-btn::after {content:'';width:6px;height:6px;margin-left:2px;border:solid currentColor;border-width:0 1.6px 1.6px 0;transform:translateY(-2px) rotate(45deg);}
+#insCab .i-agregar-btn[aria-expanded="true"]::after {transform:translateY(1px) rotate(-135deg);}
+/* Las ventanitas */
+#insCab .i-pop {position:absolute;top:calc(100% + 6px);right:0;z-index:90;background:var(--i-panel);border:1px solid var(--i-line);
+  border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.35);box-sizing:border-box;}
+#insCab .i-pop[hidden] {display:none;}
+#insCab .i-agregar-pop {width:290px;padding:6px;display:grid;gap:2px;}
+body.etx-insumos-page #insCab .i-menu-it {display:flex;align-items:center;justify-content:flex-start;gap:11px;width:100%;min-height:0;height:auto;
+  padding:9px 10px;border:0;border-radius:8px;background:transparent;color:var(--text);text-align:left;cursor:pointer;}
+body.etx-insumos-page #insCab .i-menu-it:hover {background:var(--i-input);}
+#insCab .i-menu-it .i-ui-icon {width:30px;height:30px;border-radius:8px;background:var(--i-selected);color:var(--i-cyan);}
+#insCab .i-menu-txt {display:flex;flex-direction:column;gap:2px;min-width:0;}
+#insCab .i-menu-txt b {font:600 13px/1.3 'DM Sans',sans-serif;}
+#insCab .i-menu-txt small {font-size:11.5px;color:var(--i-muted);line-height:1.35;}
+#insCab .i-opt-pop {width:290px;padding:14px;}
+#insCab .i-pop-tit {font:600 13.5px/1.3 'DM Sans',sans-serif;color:var(--text);}
+#insCab .i-pop-txt {font-size:12.5px;line-height:1.55;color:var(--i-muted);margin:6px 0 12px;}
+body.etx-insumos-page #insCab .i-pop-ok {width:100%;}
+/* Donde el renglón 1 no alcanza (tablet): las acciones bajan al renglón 2. */
+@media (max-width:1360px) {
+  #insCab .i-cab-filtros {flex-basis:100%;}
+  #insCab .i-cab-vistas {order:2;flex:1 1 auto;padding-top:0;border-top:0;}
+  #insCab .hdr-acts {order:3;}
+  body.etx-insumos-page #mainContent > #insCab {row-gap:8px;}
+}
+/* La cabecera de la tabla se queda pegada debajo del encabezado: solo bajan
+   los insumos. (La tarjeta recorta con clip, no con hidden: hidden la volvería
+   su propia caja de scroll y la cabecera ya no se pegaría.) */
+@media (min-width:1000px) {
+  html:not(.embed) body.etx-insumos-page #insumosCatalogCard {overflow:clip;}
+  html:not(.embed) body.etx-insumos-page :is(#insumosCatalogCard > .card-body,#contenedorLista .tabla-wrap) {overflow:visible;}
+  html:not(.embed) body.etx-insumos-page #contenedorLista thead th {position:sticky;top:calc(var(--etx-shell-top,96px) + var(--i-cab-h,0px));z-index:5;}
+}
+@media (max-width:600px) {
+  /* En el teléfono el encabezado completo se comería la pantalla: se queda arriba. */
+  body.etx-insumos-page #mainContent > #insCab {position:static;padding:10px 12px;}
+  body.etx-modulos-ui.etx-insumos-page #mainContent > #insCab {margin-top:0;}
+  body.etx-insumos-page #insCab .search-wrap {max-width:none;flex-basis:100%;}
+  body.etx-insumos-page #insCab :is(.filtro-select) {flex:1 1 140px;max-width:none;}
+  #insCab .hdr-acts {margin-left:0;width:100%;flex-wrap:wrap;justify-content:flex-start;}
+  #insCab .i-agregar-wrap {flex:1 1 100%;}
+  body.etx-insumos-page #insCab .i-agregar-btn {width:100%;}
+  #insCab .i-opt-pop {left:0;right:auto;width:min(290px,calc(100vw - 48px));}
+  #insCab .i-agregar-pop {width:100%;}
+}

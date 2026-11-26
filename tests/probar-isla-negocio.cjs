@@ -301,6 +301,17 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             await p.keyboard.press('Escape');
             assert.equal(await p.evaluate(() => document.getElementById('btnCambiarSucursal').classList.contains('abierto')), false);
         });
+        /* (26-nov) Al abrir el hub, la media luna arranca en el módulo de EN MEDIO. */
+        await caso('hub: al abrir, la media luna arranca en el módulo del CENTRO (con 5, Fin·ax)', async () =>
+            assert.equal(await p.evaluate(() => document.querySelector('#hubModuloDock [aria-selected="true"]').dataset.modulo), 'financiero'));
+        await caso('…y el «centro» se busca para cualquier cantidad: 1→1º, 2→1º, 5→3º, 7→4º, 10→5º', async () => {
+            const src = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8').match(/function delCentro\(lista\) \{[^\n]*\}/);
+            assert.ok(src, 'no encontré delCentro en hub-modulos.js');
+            const delCentro = new Function(src[0] + '; return delCentro;')();
+            const lugar = (n) => delCentro(Array.from({ length: n }, (_, i) => i + 1));
+            assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(lugar), [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+            assert.equal(delCentro([]), null);
+        });
         /* (24-nov) La rueda de módulos: el elegido siempre al centro. */
         const rueda = () => p.evaluate(() => {
             const dock = document.getElementById('hubModuloDock').getBoundingClientRect(), sel = document.querySelector('#hubModuloDock [aria-selected="true"]');
@@ -337,6 +348,11 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             const c = await p.evaluate(() => { const r = document.getElementById('hubModuloDock').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
             await p.mouse.move(c.x, c.y); await p.mouse.down(); await p.mouse.move(c.x - 170, c.y, { steps: 8 }); await p.mouse.up(); await p.waitForTimeout(700);
             assert.deepEqual(await rueda(), { id: 'equipo', centro: true, irCentrado: true, irDebajo: true });
+        });
+        await caso('…y al volver a abrir el hub arranca otra vez en el del centro (no en el último que se eligió)', async () => {
+            await p.evaluate(() => sessionStorage.setItem('etaax_hub_modulo', 'recetas'));
+            await ir(p, '/hub.html'); await p.waitForTimeout(700);
+            assert.deepEqual(await rueda(), { id: 'financiero', centro: true, irCentrado: true, irDebajo: true });
         });
         /* (24-nov) Las portadas de módulo: tarjetas bajitas en dos columnas, con su grupo adentro. */
         await ir(p, '/equipo/index.html');

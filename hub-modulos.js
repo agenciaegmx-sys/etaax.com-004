@@ -38,6 +38,13 @@
         ]}
     ];
     var estado = null, seleccionado = '', CLAVE = 'etaax_hub_modulo', ultimoAcceso = '';
+    /* AL ABRIR, EL DEL CENTRO (Edwin, 26-nov): la media luna arranca con el
+       módulo de en medio de los que se ven —con 5, Fin·ax; con 10, el quinto—
+       para que se vean módulos a los dos lados. Se vuelve a centrar mientras
+       nadie haya elegido otro (al llegar el plan o los permisos cambia cuántos
+       se ven) y al cambiar de negocio o sucursal. */
+    var elegidoAMano = false, ctxRueda = '';
+    function delCentro(lista) { return lista.length ? lista[Math.floor((lista.length - 1) / 2)] : null; }
     var marcoDock = document.getElementById('hubModuloSelector') || dock;
     var acciones = document.getElementById('hubModuloAcciones');
     var panel = document.getElementById('hubHerramientas');
@@ -293,14 +300,14 @@
     window.addEventListener('resize', function () { colocarRueda(0); });
     function pintar() {
         cerrarCaptura(false);
-        var activo = buscar(seleccionado);
-        if (!activo || !disponible(activo)) activo = MODULOS.find(disponible);
-        seleccionado = activo ? activo.id : '';
         /* LO QUE NO SE PUEDE, NO SE ENSEÑA (Edwin, 23-nov): ni las apps que la
            sucursal no contrató ni lo que su rol no tiene. Antes salían apagados;
            ahora el dock solo trae lo suyo, y las columnas se acomodan a cuántos
            quedan. El número de módulo es el de su lugar en lo que se ve. */
         var visibles = MODULOS.filter(disponible);
+        var activo = elegidoAMano ? buscar(seleccionado) : null;
+        if (!activo || !disponible(activo)) activo = delCentro(visibles);
+        seleccionado = activo ? activo.id : '';
         dock.querySelectorAll('[data-modulo]').forEach(function (tab) {
             var m = buscar(tab.dataset.modulo), ok = disponible(m);
             tab.disabled = !ok;
@@ -383,12 +390,14 @@
         var m = buscar(id);
         if (!m || !disponible(m)) return false;
         seleccionado = id;
+        elegidoAMano = true;
         pintar();
         return true;
     };
     window.etaaxPintarModulos = function (ctx) {
         estado = ctx;
-        if (!seleccionado) { try { seleccionado = sessionStorage.getItem(CLAVE) || ''; } catch (e) {} }
+        var clave = ctx ? (ctx.negId || '') + '|' + (ctx.sucId || '') : '';
+        if (clave !== ctxRueda) { ctxRueda = clave; elegidoAMano = false; }
         pintar();
     };
     dock.addEventListener('click', function (e) {

@@ -36,7 +36,7 @@
     function pintar(){
         pendiente=false;if(typeof window.etaaxIcono!=='function')return;
         var controles={
-            '#btnOptFotosNeg':'optimizar','#btnInsumosNegGlobal':'negocio','#btnNovedadesIns':'novedades','#btnCatalogoEtaax':'global','#btnAgregarInsumo':'agregar',
+            '#btnOptFotosNeg':'foto','#btnInsumosNegGlobal':'negocio','#btnNovedadesIns':'novedades','#btnCatalogoEtaax':'global','#btnAgregarInsumo':'agregar','#btnAgregarMenu':'agregar',
             '#btnVistaGrid':'galeria','#btnVistaLista':'lista','#btnVistaCosteo':'costeo','#btnModoSeleccion':'seleccionar','#btnModoOrden':'ordenar','#btnImprimirIns':'imprimir',
             '#modalOverlay [onclick="guardarInsumo()"]':'guardar','#btnAgregarCosteo':'agregar','#modalOverlay [onclick^="agregarConceptoCampo"]':'agregar',
             '#btnQrInsumo':'celular',
@@ -56,7 +56,6 @@
         titulo(document.querySelector('#modalImportar .modal-header h2'),'global');
         titulo(document.getElementById('cgTitulo'),'global');titulo(document.getElementById('ignTitulo'),'negocio');
         cada('#modalCatalogoGlobal [onclick="cerrarCatalogoGlobal()"],#modalInsumosNeg [onclick="cerrarInsumosNeg()"]',function(e){icono(e,'cerrar');});
-        icono(document.querySelector('#insumosCatalogCard > .card-header h2'),'catalogo');
         var vista=typeof vistaInsumos==='string'?vistaInsumos:'lista';
         [['btnVistaGrid','grid'],['btnVistaLista','lista'],['btnVistaCosteo','costeo']].forEach(function(p){var e=document.getElementById(p[0]);if(e)e.classList.toggle('i-selected',vista===p[1]);});
         var seleccion=document.getElementById('btnModoSeleccion');if(seleccion)seleccion.classList.toggle('i-selected',typeof _modoSeleccion!=='undefined'&&!!_modoSeleccion);

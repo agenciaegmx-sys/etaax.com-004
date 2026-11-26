@@ -15,7 +15,7 @@
     <link rel="preload" as="script" href="/etaax-header.js?v=a0ec334a">
     <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=0c952fe9">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
-    <link rel="preload" as="script" href="/recetas/insumos-ui.js?v=cfdd0a1e">
+    <link rel="preload" as="script" href="/recetas/insumos-ui.js?v=e12628d7">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=8adeb658">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/recetas/insumos-ui.css?v=3a9fe84a">
+<link rel="stylesheet" href="/recetas/insumos-ui.css?v=78cea0cd">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -118,106 +118,95 @@ document.addEventListener('DOMContentLoaded', function(){
 
     <main class="main-content expandido" id="mainContent">
 
-        <div class="header">
+        <!-- ══ (26-nov) EL ENCABEZADO FIJO DEL CATÁLOGO (Edwin) ══════════════════
+             Buscador, filtros, vistas y acciones en UN encabezado fijo, compacto,
+             al estilo del inventario: al bajar solo se mueve la lista. «Agregar
+             insumo» despliega de dónde (nuevo, catálogo ETAAX o catálogo del
+             negocio) y «Optimizar fotos» es un botón chico de cámara que se
+             abre para decir para qué sirve. Los ids de siempre se quedan: los
+             permisos (_aplicarPermisosIns) y el modo global los siguen usando. -->
+        <div class="header i-cab" id="insCab">
             <div class="brand">
                 <span class="brand-label">Catálogo de productos</span>
                 <span class="brand-title">Insumos</span>
             </div>
+            <div class="i-cab-filtros">
+                <div class="search-wrap" style="position:relative">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" placeholder="Buscar insumo..." oninput="filtrar();toggleClearBtn()">
+                    <button id="clearSearch" onclick="clearSearchInput()"
+                        style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);
+                        background:none;border:none;color:var(--text-dim);cursor:pointer;
+                        font-size:14px;padding:2px 4px;line-height:1;font-family:inherit"
+                        title="Limpiar búsqueda">✕</button>
+                </div>
+                <select class="filtro-select" id="filtroFamilia" onchange="filtrar()"><option value="">Todas las familias</option></select>
+                <select class="filtro-select" id="filtroCategoria" onchange="filtrar()"><option value="">Todas las categorías</option></select>
+                <!-- Estado: en sucursal "Inactivos" = pausados AQUÍ; en global = inactivos del negocio -->
+                <select class="filtro-select" id="filtroEstadoIns" onchange="filtrar()" aria-label="Estado">
+                    <option value="activos">✅ Activos</option>
+                    <option value="inactivos">⏸ Inactivos</option>
+                </select>
+                <!-- Por área de almacenamiento, y desde aquí se editan las áreas -->
+                <select class="filtro-select" id="filtroAreaIns" onchange="filtrarArea(this.value)" aria-label="Área"><option value="">Todas las áreas</option></select>
+                <button type="button" class="btn-vista i-areas-abrir" id="btnAreasIns" onclick="abrirAreasIns()">Editar áreas</button>
+            </div>
             <div class="hdr-acts">
-                <button class="btn-vista" id="btnOptFotosNeg" onclick="migrarFotosNegocio()" title="Mueve las fotos base64 de este negocio a Storage (carga más fluida)">🗜️ Optimizar fotos</button>
-                <button class="btn-vista" id="btnInsumosNegGlobal" onclick="abrirInsumosGlobalNeg()" title="Insumos de todas las sucursales de este negocio — cópialos a esta sucursal">🏢 <span id="lblInsumosNeg">Insumos Globales</span></button>
+                <div class="i-pop-wrap i-opt-wrap">
+                    <button type="button" class="btn-vista i-btn-cam" id="btnOptFotosNeg" onclick="_insPop('insOptFotosPop', this, event)"
+                        aria-expanded="false" aria-controls="insOptFotosPop" title="Optimizar fotos"><span class="i-cam-txt">Optimizar fotos</span></button>
+                    <div class="i-pop i-opt-pop" id="insOptFotosPop" hidden>
+                        <div class="i-pop-tit">Optimizar fotos</div>
+                        <p class="i-pop-txt">Pasa las fotos pesadas de los insumos de este negocio al almacenamiento ligero de ETAAX. Las fotos se ven igual, pero el catálogo carga más rápido.</p>
+                        <button type="button" class="btn-primary i-pop-ok" id="btnOptFotosIr" onclick="_insPopCerrar();migrarFotosNegocio()">Optimizar ahora</button>
+                    </div>
+                </div>
                 <button class="btn-vista" id="btnNovedadesIns" style="display:none;color:var(--accent);border-color:var(--accent)" onclick="abrirNovedadesIns()" title="Cambios recientes de insumos por sucursal: decide si suben al catálogo global o se quedan en su sucursal">🔔 Novedades</button>
                 <!-- Independizar sucursales: retirado de la vista. Con el modelo
                      maestro + copia por sucursal ya no hace falta correrlo a mano;
                      la función sigue existiendo (abrirIndependizarSucIns) por si
                      algún catálogo viejo lo necesita. -->
                 <button class="btn-vista" id="btnIndepSucIns" style="display:none;color:var(--blue);border-color:var(--blue)" onclick="abrirIndependizarSucIns()" title="Detecta insumos compartidos entre sucursales y crea una copia independiente por sucursal (con respaldo previo). Tus datos capturados no se tocan.">🔗 Independizar sucursales</button>
-                <button class="btn-vista" id="btnCatalogoEtaax" onclick="abrirCatalogoGlobal()" title="Importar del catálogo maestro de ETAAX">🌐 Insumos ETAAX</button>
-                <button class="btn-primary" id="btnAgregarInsumo" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
-            </div>
-        </div>
-
-        <div class="wrap">
-
-            <!-- FILTROS -->
-            <div class="card">
-                <div class="card-body" style="padding:14px 20px">
-                    <div class="filtros-grid">
-                        <div class="search-wrap" style="position:relative">
-                            <span class="search-icon">🔍</span>
-                            <input type="text" id="searchInput" placeholder="Buscar insumo..." oninput="filtrar();toggleClearBtn()">
-                            <button id="clearSearch" onclick="clearSearchInput()"
-                                style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);
-                                background:none;border:none;color:var(--text-dim);cursor:pointer;
-                                font-size:14px;padding:2px 4px;line-height:1;font-family:inherit"
-                                title="Limpiar búsqueda">✕</button>
-                        </div>
-                        <select class="filtro-select" id="filtroFamilia" onchange="filtrar()"><option value="">Todas las familias</option></select>
-                        <select class="filtro-select" id="filtroCategoria" onchange="filtrar()"><option value="">Todas las categorías</option></select>
-                        <!-- Estado: en sucursal "Inactivos" = pausados AQUÍ; en global = inactivos del negocio -->
-                        <select class="filtro-select" id="filtroEstadoIns" onchange="filtrar()">
-                            <option value="activos">✅ Activos</option>
-                            <option value="inactivos">⏸ Inactivos</option>
-                        </select>
-                        <!-- (26-nov) Por área de almacenamiento, y desde aquí se editan las áreas -->
-                        <select class="filtro-select" id="filtroAreaIns" onchange="filtrarArea(this.value)" aria-label="Área"><option value="">Todas las áreas</option></select>
-                        <button type="button" class="btn-vista i-areas-abrir" id="btnAreasIns" onclick="abrirAreasIns()">Editar áreas</button>
+                <div class="i-pop-wrap i-agregar-wrap" id="insAgregarWrap">
+                    <button type="button" class="btn-primary i-agregar-btn" id="btnAgregarMenu" onclick="_insPop('insAgregarPop', this, event)"
+                        aria-haspopup="menu" aria-expanded="false" aria-controls="insAgregarPop">Agregar insumo</button>
+                    <div class="i-pop i-agregar-pop" id="insAgregarPop" role="menu" hidden>
+                        <button type="button" role="menuitem" class="i-menu-it" id="btnAgregarInsumo" onclick="_insPopCerrar();abrirSelectorCategoria()"><span class="i-menu-txt"><b>Nuevo insumo</b><small>Lo das de alta desde cero</small></span></button>
+                        <button type="button" role="menuitem" class="i-menu-it" id="btnCatalogoEtaax" onclick="_insPopCerrar();abrirCatalogoGlobal()"><span class="i-menu-txt"><b>Del catálogo ETAAX</b><small>Del catálogo maestro, con su ficha lista</small></span></button>
+                        <button type="button" role="menuitem" class="i-menu-it" id="btnInsumosNegGlobal" onclick="_insPopCerrar();abrirInsumosGlobalNeg()"><span class="i-menu-txt"><b>Del catálogo de <span id="lblInsumosNeg">tu negocio</span></b><small>Cópialo de otra de tus sucursales</small></span></button>
                     </div>
                 </div>
             </div>
-
-        </div><!-- /.wrap -->
+            <div class="i-cab-vistas">
+                <span class="i-cab-cat"><span class="i-sr">Catálogo</span><span class="pill pill-amber" id="countLabel">0 insumos</span></span>
+                <div class="i-catalog-tools">
+                    <div class="i-seg" role="group" aria-label="Vista">
+                        <button id="btnVistaLista" onclick="setVistaInsumos('lista')" title="Vista lista">Lista</button>
+                        <button id="btnVistaGrid" onclick="setVistaInsumos('grid')" title="Vista galería">Galería</button>
+                        <button id="btnVistaCosteo" onclick="setVistaInsumos('costeo')" title="Costeo de bebidas">🍸 Costeo</button>
+                    </div>
+                    <button id="btnModoSeleccion" onclick="toggleModoSeleccion()" title="Selección múltiple">☐ Seleccionar</button>
+                    <select id="ordenModoIns" onchange="setOrdenModoIns(this.value)" title="Cómo se acomoda el catálogo">
+                        <option value="libre">↕ A mano</option>
+                        <option value="alfa">A–Z</option>
+                        <option value="grupo">Por familia</option>
+                        <option value="nuevo">Más recientes</option>
+                    </select>
+                    <button id="btnModoOrden" onclick="toggleModoOrden()"
+                        title="Arrastra las filas para dejar el catálogo en el orden en el que trabajas">↕ Ordenar</button>
+                    <button id="btnImprimirIns" onclick="imprimirInsumos()"
+                        title="Imprime lo que estás viendo: el catálogo en filas o la carátula de costeo, con los filtros y la selección actuales">🖨️ Imprimir</button>
+                    <!-- Solo en la vista de costeo: en el catálogo no habría qué costear.
+                         Lo esconde setVistaInsumos, no el CSS. -->
+                    <button id="btnExcelIns" onclick="exportarCosteoExcel()" style="display:none"
+                        title="Baja el costeo en filas y columnas para Excel: un dato por celda, con los filtros y la selección actuales">📊 Excel</button>
+                </div>
+            </div>
+        </div>
 
         <!-- TABLA — ancho completo sin max-width -->
         <div style="padding:0 0 32px">
             <div class="card" id="insumosCatalogCard" style="max-width:none;margin:0 16px">
-                <div class="card-header">
-                    <h2>Catálogo</h2>
-                    <div class="i-catalog-tools" style="display:flex;align-items:center;gap:8px">
-                        <span class="pill pill-amber" id="countLabel">0 insumos</span>
-                        <button id="btnVistaLista" onclick="setVistaInsumos('lista')"
-                            style="background:var(--accent);color:#0f0e0c;border:1px solid var(--accent);
-                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s" title="Vista lista">Lista</button>
-                        <button id="btnVistaGrid" onclick="setVistaInsumos('grid')"
-                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
-                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s" title="Vista galería">Galería</button>
-                        <button id="btnVistaCosteo" onclick="setVistaInsumos('costeo')"
-                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
-                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s" title="Costeo de bebidas">🍸 Costeo</button>
-                        <button id="btnModoSeleccion" onclick="toggleModoSeleccion()"
-                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
-                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s" title="Selección múltiple">☐ Seleccionar</button>
-                        <select id="ordenModoIns" onchange="setOrdenModoIns(this.value)" title="Cómo se acomoda el catálogo"
-                            style="background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);
-                            border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;font-family:inherit;outline:none">
-                            <option value="libre">↕ A mano</option>
-                            <option value="alfa">A–Z</option>
-                            <option value="grupo">Por familia</option>
-                            <option value="nuevo">Más recientes</option>
-                        </select>
-                        <button id="btnModoOrden" onclick="toggleModoOrden()"
-                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
-                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s"
-                            title="Arrastra las filas para dejar el catálogo en el orden en el que trabajas">↕ Ordenar</button>
-                        <button id="btnImprimirIns" onclick="imprimirInsumos()"
-                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
-                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s"
-                            title="Imprime lo que estás viendo: el catálogo en filas o la carátula de costeo, con los filtros y la selección actuales">🖨️ Imprimir</button>
-                        <!-- Solo en la vista de costeo: en el catálogo no habría qué costear.
-                             Lo esconde setVistaInsumos, no el CSS. -->
-                        <button id="btnExcelIns" onclick="exportarCosteoExcel()" style="display:none;
-                            background:transparent;color:var(--text-muted);border:1px solid var(--border);
-                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s"
-                            title="Baja el costeo en filas y columnas para Excel: un dato por celda, con los filtros y la selección actuales">📊 Excel</button>
-                    </div>
-                </div>
                 <div class="card-body" style="padding:0">
                     <div id="ordenAviso" style="display:none;padding:9px 16px;background:rgba(245,200,66,.08);
                         border-bottom:1px solid var(--border);font-size:12px;color:var(--accent)">
@@ -578,18 +567,72 @@ async function migrarFotosNegocio() {
     var pend = lista.filter(function(x){ return x && x.foto && x.foto.indexOf('data:') === 0; });
     if (!pend.length) { alert('✓ No hay fotos por optimizar. Este negocio ya usa Storage.'); return; }
     if (!confirm('Se moverán ' + pend.length + ' fotos a Storage (URLs ligeras). Puede tardar. ¿Continuar?')) return;
-    var btn = document.getElementById('btnOptFotosNeg');
+    /* El avance va en el botón de la ventanita: el de la cámara es solo ícono. */
+    var btn = document.getElementById('btnOptFotosIr');
     var ok = 0;
     for (var i = 0; i < pend.length; i++) {
-        if (btn) btn.textContent = '🗜️ ' + (i + 1) + '/' + pend.length + '…';
+        if (btn) btn.textContent = 'Optimizando ' + (i + 1) + '/' + pend.length + '…';
         try { if (await sbAligerarRecord(pend[i], 'insumos', negId)) ok++; } catch(e) {}
     }
     // Persistir: los objetos ya tienen URL → setInsumos sincroniza ligero a Supabase
     if (typeof setInsumos === 'function') setInsumos(lista);
-    if (btn) btn.textContent = '🗜️ Optimizar fotos';
+    if (btn) btn.textContent = 'Optimizar ahora';
     alert('Listo. ' + ok + ' fotos optimizadas a Storage. La carga será más fluida.');
     if (typeof init === 'function') init();
 }
+
+/* ══ (26-nov) LAS VENTANITAS DEL ENCABEZADO ════════════════════════════════
+   «Agregar insumo ▾» y la cámara de «Optimizar fotos» abren su ventanita
+   debajo; una a la vez, y se cierran al elegir, al tocar fuera o con Esc. */
+function _insPopCerrar(salvo) {
+    document.querySelectorAll('#insCab .i-pop').forEach(function (p) {
+        if (p.id === salvo) return;
+        p.hidden = true;
+        var b = document.querySelector('[aria-controls="' + p.id + '"]');
+        if (b) b.setAttribute('aria-expanded', 'false');
+    });
+}
+function _insPop(id, btn, ev) {
+    if (ev) ev.stopPropagation();
+    var p = document.getElementById(id); if (!p) return;
+    var abrir = p.hidden;
+    _insPopCerrar(abrir ? id : null);
+    p.hidden = !abrir;
+    if (btn) btn.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+    if (abrir) { var f = p.querySelector('button:not([hidden]):not([style*="display: none"])'); if (f) try { f.focus({ preventScroll: true }); } catch (e) {} }
+}
+document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('#insCab .i-pop-wrap')) return;
+    _insPopCerrar();
+});
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var abierta = document.querySelector('#insCab .i-pop:not([hidden])');
+    if (!abierta) return;
+    var b = document.querySelector('[aria-controls="' + abierta.id + '"]');
+    _insPopCerrar(); if (b) b.focus();
+});
+/* «Agregar insumo» se esconde solo si quien entra no puede NINGUNA de sus
+   tres opciones (los permisos esconden cada opción por su lado). */
+function _insAgregarSync() {
+    var algo = ['btnAgregarInsumo', 'btnCatalogoEtaax', 'btnInsumosNegGlobal'].some(function (id) {
+        var el = document.getElementById(id); return el && el.style.display !== 'none';
+    });
+    var w = document.getElementById('insAgregarWrap'); if (w) w.style.display = algo ? '' : 'none';
+}
+/* La cabecera de la tabla se pega debajo del encabezado fijo: su alto cambia
+   con el ancho (los filtros pueden partirse en dos renglones). */
+function _insMedirCab() {
+    var c = document.getElementById('insCab'); if (!c) return;
+    document.documentElement.style.setProperty('--i-cab-h', c.offsetHeight + 'px');
+}
+document.addEventListener('DOMContentLoaded', function () {
+    _insAgregarSync(); _insMedirCab();
+    window.addEventListener('etaax:permisos', _insAgregarSync);
+    var c = document.getElementById('insCab');
+    if (c && typeof ResizeObserver === 'function') new ResizeObserver(_insMedirCab).observe(c);
+    else window.addEventListener('resize', _insMedirCab);
+});
 </script>
 
 <!-- MODAL SELECTOR DE CATEGORÍA -->
@@ -1019,7 +1062,8 @@ function ignAgregar(id) {
 }
 document.addEventListener('DOMContentLoaded', function(){
     var lbl = document.getElementById('lblInsumosNeg');
-    if (lbl) lbl.textContent = 'Insumos ' + _negNombreActual();
+    /* «Agregar insumo ▾ → Del catálogo de GRUPO JP» (26-nov). */
+    if (lbl) { var _nn = _negNombreActual(); lbl.textContent = (_nn && _nn !== 'Negocio') ? _nn : 'tu negocio'; }
 });
 </script>
 
@@ -1494,6 +1538,6 @@ async function cgAgregar(id) {
 <script src="/etaax-header.js?v=a0ec334a"></script>
 <script src="/etaax-modulos-ui.js?v=0c952fe9"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
-<script src="/recetas/insumos-ui.js?v=cfdd0a1e"></script>
+<script src="/recetas/insumos-ui.js?v=e12628d7"></script>
 </body>
 </html>
