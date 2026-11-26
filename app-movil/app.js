@@ -503,7 +503,7 @@ async function entrar() {
         /* El catálogo y los checklists se piden EN PARALELO: en serie son dos
            viajes a Supabase con la señal de una cocina, y el colaborador los
            espera mirando la pantalla de entrar. */
-        await Promise.all([cargarInsumos(), cargarPlantillas(), cargarApps(), cargarEvals()]);
+        await Promise.all([cargarInsumos(), cargarPlantillas(), cargarApps(), cargarEvals(), cargarGuiasMovil()]);
         ULT_MOD = '';
         irInicio();
     } catch (e) {
@@ -734,12 +734,58 @@ function pintarPortal() {
     if (!m) return;
     var ids = ['costax', 'equipax'].filter(_tieneApp), h;
     h = ids.length
-        ? '<div class="mods' + (ids.length === 1 ? ' uno' : '') + '">' + ids.map(function (id, k) { return _botonModulo(id, k + 1); }).join('') + '</div>'
+        ? '<div class="mods' + (ids.length === 1 ? ' uno' : '') + '">' + ids.map(function (id, k) { return _botonModulo(id, k + 1); }).join('') + '</div>' +
+          _guiasPortalHTML(ids)
         : '<div class="avisos" style="text-align:left">Tu sucursal todavía no tiene apps para el equipo en el ' +
           'teléfono. Pregúntale a tu encargado.</div>';
     m.innerHTML = h;
     m.hidden = false;
 }
+
+/* ══ GUÍAS DE USO, DEBAJO DE CADA MÓDULO (Edwin, 26-nov) ════════════════════
+   Los tutoriales en video y PDF que ETAAX sube desde el panel admin. Llegan con
+   la clave por portal_guias_movil (v96): solo las activas de Cost·ax y Equip·ax.
+   Sin la v96 corrida (o sin red), simplemente no hay sección. El video se ve
+   aquí mismo (archivo o YouTube sin cookies); el PDF abre en otra pestaña. */
+var GUIAS = [];
+async function cargarGuiasMovil() {
+    GUIAS = [];
+    try {
+        var r = await _supabase.rpc('portal_guias_movil', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+        if (r && !r.error && Array.isArray(r.data)) GUIAS = r.data;
+    } catch (e) { /* v96 sin correr: sin guías */ }
+}
+function _ytId(u) { var m = String(u || '').match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,})/); return m ? m[1] : ''; }
+function _guiasPortalHTML(ids) {
+    var bloques = ids.map(function (id) {
+        var gs = GUIAS.filter(function (g) { return g && g.modulo === 'movil_' + id; });
+        if (!gs.length) return '';
+        return '<div class="guias-mod"><div class="guias-cab">' + _ic('rec-tutorial', '') + '<span>Guías de uso · ' + etx(MODS_INFO[id].nom) + '</span></div>' +
+            gs.map(function (g) {
+                var pdf = g.tipo === 'pdf';
+                return '<button class="guia-btn" onclick="abrirGuiaMovil(\'' + etx(g.id) + '\')">' +
+                    '<span class="guia-ic">' + _ic(pdf ? 'ins-ficha' : 'rec-tutorial', '') + '</span>' +
+                    '<span class="guia-tx"><b>' + etx(g.titulo) + '</b><small>' + (pdf ? 'PDF' : 'Video') + (g.descripcion ? ' · ' + etx(g.descripcion) : '') + '</small></span>' +
+                    _ic('flecha', '→') + '</button>';
+            }).join('') + '</div>';
+    }).join('');
+    return bloques ? '<div class="guias-portal">' + bloques + '</div>' : '';
+}
+function abrirGuiaMovil(id) {
+    var g = GUIAS.find(function (x) { return x && x.id === id; }); if (!g) return;
+    if (g.tipo === 'pdf') { window.open(g.url, '_blank', 'noopener'); return; }
+    var yt = _ytId(g.url);
+    var ov = document.createElement('div');
+    ov.className = 'guia-ov'; ov.id = 'guiaOv';
+    ov.innerHTML = '<div class="guia-caja"><div class="guia-ov-cab"><b>' + etx(g.titulo) + '</b>' +
+        '<button class="guia-cerrar" onclick="cerrarGuiaMovil()" aria-label="Cerrar">' + _ic('rec-cerrar', '✕') + '</button></div>' +
+        (yt ? '<iframe class="guia-video" src="https://www.youtube-nocookie.com/embed/' + etx(yt) + '?rel=0" title="' + etx(g.titulo) + '" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>'
+            : '<video class="guia-video" src="' + etx(g.url) + '" controls playsinline preload="metadata"></video>') +
+        '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) cerrarGuiaMovil(); });
+    document.body.appendChild(ov);
+}
+function cerrarGuiaMovil() { var ov = $('guiaOv'); if (ov) ov.remove(); }
 /* (Edwin, 25-nov) Como los módulos del sistema: la tarjeta cuadrada con su
    ícono, «Módulo N» y su isla; debajo su título, y «Ver» en terracota. */
 function _botonModulo(id, n) {
@@ -2455,6 +2501,8 @@ window.irMenu = irMenu;
 window.irInicio = irInicio;
 window.volver = volver;
 window.abrirModulo = abrirModulo;
+window.abrirGuiaMovil = abrirGuiaMovil;   // (26-nov) guías de uso
+window.cerrarGuiaMovil = cerrarGuiaMovil;
 window.toggleDespl = toggleDespl;
 window.buscarRecetaRejilla = buscarRecetaRejilla;
 window.toggleUsuario = toggleUsuario;

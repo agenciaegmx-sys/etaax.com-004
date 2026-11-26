@@ -84,14 +84,17 @@ if (!window.etaaxQrLogo) window.etaaxQrLogo = function (cont) {
                 _ctx.el.innerHTML = '<div style="font-size:11px;color:var(--text-dim)">No se pudo generar el QR</div>';
                 return;
             }
+            /* (26-nov) La misma cara que la app móvil: placa blanca redondeada y
+               una instrucción clara con el ícono de la cámara. */
             var box = document.createElement('div');
-            box.style.cssText = 'background:#fff;padding:8px;border-radius:8px;display:inline-block';
+            box.style.cssText = 'background:#fff;padding:10px;border-radius:14px;display:inline-block;box-shadow:0 6px 18px rgba(0,0,0,.18)';
             _ctx.el.appendChild(box);
-            new QRCode(box, { text: url, width: 116, height: 116, colorDark: '#0a0908', colorLight: '#ffffff' });
+            new QRCode(box, { text: url, width: 120, height: 120, colorDark: '#0a0908', colorLight: '#ffffff' });
             if (window.etaaxQrLogo) window.etaaxQrLogo(box);
             var hint = document.createElement('div');
-            hint.style.cssText = 'font-size:10px;color:var(--text-dim);text-align:center;margin-top:6px;max-width:140px';
-            hint.textContent = 'Escanea para subir foto · el código se renueva solo';
+            hint.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:6px;font:500 11px/1.4 "DM Sans",sans-serif;color:var(--text-dim);text-align:center;margin-top:8px;max-width:160px';
+            var ic = (typeof window.etaaxIcono === 'function') ? (window.etaaxIcono('ins-foto', { tam: 14 }) || '') : '';
+            hint.innerHTML = ic + '<span>Escanea con el celular para subir la foto · se renueva solo</span>';
             _ctx.el.appendChild(hint);
         });
     }

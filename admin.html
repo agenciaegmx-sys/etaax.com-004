@@ -547,6 +547,9 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
   <!-- TAB: STAFF ETAAX (lo pinta admin-staff-etaax.js; la puerta es la v88) -->
   <div id="tab-auditores" class="tab-panel"></div>
 
+  <!-- TAB: GUÍAS DE LA APP MÓVIL (lo pinta admin-guias-movil.js; la app las lee por la v96) -->
+  <div id="tab-guias-movil" class="tab-panel"></div>
+
   <!-- TAB: SOLICITUDES DE PLAN (nueva sucursal vía asesor) -->
   <!-- TAB: INVITACIONES
        El registro público está cerrado a propósito. Aquí se genera el único
@@ -752,6 +755,7 @@ async function betaAppCopiar() {
 <script src="/page-guard.js?v=aacf90ce"></script><!-- solo los catálogos de permisos (el guard no aplica en el admin) -->
 <script src="/staff-etaax.js?v=cf3b415f"></script><!-- Staff ETAAX: reglas compartidas -->
 <script src="/admin-staff-etaax.js?v=2b941941"></script><!-- Staff ETAAX: la pantalla del panel (v88) -->
+<script src="/admin-guias-movil.js"></script><!-- (26-nov) guías en video y PDF de la app móvil (v96) -->
 <script src="/etaax-apps-ui.js?v=58f96d85"></script><!-- el selector de apps (Cost·ax, Fin·ax, Equip·ax) -->
 <script src="/admin-planes.js?v=f6b6a16c"></script><!-- planes por apps: editar, invitar, solicitudes (v89) -->
 <script>
@@ -2993,6 +2997,7 @@ var ADM_BLOQUES = [
     { id:'documentos', tipo:'panel', ic:'nom-recibo', tit:'Historial de recibos', desc:'Recibos y presupuestos emitidos, pagos pendientes y reimpresiones.' },
     { id:'auditar', tipo:'accion', ic:'adm-buscar', tit:'Auditar cruces', desc:'Busca recetas que quedaron en el negocio equivocado. Solo lectura.', cta:'Revisar →' },
     { id:'app', tipo:'panel', ic:'adm-celular', tit:'App móvil (beta)', desc:'El enlace único de la app de registro, para probarla en una barra real.' },
+    { id:'guias-movil', tipo:'panel', ic:'rec-tutorial', tit:'Guías de la app móvil', desc:'Sube los tutoriales en video y PDF que salen debajo de Cost·ax y Equip·ax en la app, para quien entra con su clave.' },
     { id:'papelera', tipo:'pagina', ic:'mov-eliminar', tit:'Papelera', desc:'Lo que se eliminó en la plataforma, para revisarlo o recuperarlo.' },
     { id:'migrar', tipo:'panel', ic:'adm-sucursal', tit:'Migrar sucursal', desc:'Copiar una sucursal a otro negocio, revisarla y eliminarla del original. Lo eliminado se puede restaurar.' },
     { id:'auditores', tipo:'panel', ic:'stf-admin', tit:'Staff ETAAX', desc:'El equipo de ETAAX entra con su usuario a los negocios, sucursales y módulos que le des aquí.' }
@@ -3115,6 +3120,7 @@ function switchTab(tab, sinHistorial) {
     if (tab === 'documentos' && window.AdminDocs) AdminDocs.montar();
     if (tab === 'migrar') renderMigrar();
     if (tab === 'auditores' && window.AdmEtx) AdmEtx.abrir();
+    if (tab === 'guias-movil' && window.AdmGuiasMovil) AdmGuiasMovil.montar();
     document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.toggle('active', p === panel); });
     document.getElementById('admPanelBloque').textContent = t.bloque.tit;
     document.getElementById('admPanelTit').textContent = t.card.tit;

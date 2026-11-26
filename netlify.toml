@@ -47,6 +47,7 @@
       connect-src 'self' https://byjuocnkyuxxudondciz.supabase.co wss://byjuocnkyuxxudondciz.supabase.co;
       img-src 'self' data: blob: https://byjuocnkyuxxudondciz.supabase.co https://i.ytimg.com;
       object-src 'none';
+      media-src 'self' blob: https://byjuocnkyuxxudondciz.supabase.co;
       frame-src 'self' blob: https://byjuocnkyuxxudondciz.supabase.co https://www.youtube-nocookie.com;
       frame-ancestors 'self';
       base-uri 'self';

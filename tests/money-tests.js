@@ -5916,7 +5916,7 @@ console.log('\n══ AP · Que la página arranque (todas las pantallas) ══
        alcanzan a registrarse en el arnés; un bloque que revienta antes de llegar
        a su addEventListener queda fuera de esta red. */
     [
-        ['administrativo/diario.html',        4],   /* +1: los rótulos del tope de archivos */
+        ['administrativo/diario.html',        5],   /* +1: los rótulos del tope de archivos; +1 (26-nov): la puerta de la caja fuerte */
         ['financiero/previsiones.html',       2],
         ['financiero/gastos-globales.html',   2],
         ['financiero/kpis.html',              2],
@@ -19082,8 +19082,9 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const todos = [].concat.apply([], NAVS.equipo.map(e => e.g ? e.hijos : [e]));
         return eq(todos.map(e => e.pronto ? 'pronto' : e.sub).join(','), 'verCatalogo,horarios,checklists,evaluaciones,organigrama,perfiles,pronto');
     });
-    test('Admin·ax: Ingresos, Egresos, Gestión, Configuración y Clientes', () =>
-        eq(plano(NAVS.administrativo), 'Ingresos · Egresos · Gestión · Configuración[Cuentas bancarias,Previsiones] · Clientes'));
+    /* (26-nov, Edwin) Cuentas bancarias y Previsiones se gestionan DENTRO de la caja fuerte. */
+    test('Admin·ax: Ingresos, Egresos, Caja fuerte y Clientes', () =>
+        eq(plano(NAVS.administrativo), 'Ingresos · Egresos · Caja fuerte · Clientes'));
     test('…Ingresos, Egresos y Gestión son vistas de Ventas y Gastos Diarios', () =>
         eq(NAVS.administrativo.slice(0, 3).map(e => e.h).join(','), '/administrativo/diario.html?vista=ingresos,/administrativo/diario.html?vista=egresos,/administrativo/diario.html?vista=gestion'));
     test('…y cada vista enseña SUS tarjetas, en el orden que se pidió', () => {
@@ -19096,14 +19097,16 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const d = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
         return eq(/\.dx-fuera-de-vista \{ display:none !important; \}/.test(d) && /b\.classList\.add\('dx-fuera-de-vista'\)/.test(d), true);
     });
-    test('Cuentas bancarias y Previsiones: viven en /financiero/ pero son de Admin·ax (barra, hub y portadas)', () => {
-        const hubm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8'), fin = fs.readFileSync(path.join(RAIZ, 'financiero/index.html'), 'utf8');
+    /* (26-nov, Edwin) Siguen viviendo en /financiero/ y siendo de Admin·ax, pero ya no
+       tienen tarjeta propia: se abren DENTRO de la caja fuerte (ventana con ?embed=1). */
+    test('Cuentas bancarias y Previsiones: de Admin·ax y gestionadas desde la caja fuerte', () => {
+        const fin = fs.readFileSync(path.join(RAIZ, 'financiero/index.html'), 'utf8');
         const adm = fs.readFileSync(path.join(RAIZ, 'administrativo/index.html'), 'utf8');
-        const bloque = (id, sig) => hubm.slice(hubm.indexOf("{ id: '" + id + "'"), hubm.indexOf("{ id: '" + sig + "'"));
+        const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
         return eq(/financiero\\\/\(cuentas-bancarias\|previsiones\)\(\\\.html\)\?\\\/\?\$\/\.test\(p\)\) id = 'administrativo'/.test(muN) &&
-                  /clave: 'cuentas'/.test(bloque('administrativo', 'financiero')) && /clave: 'previsiones'/.test(bloque('administrativo', 'financiero')) &&
-                  !/clave: 'cuentas'|clave: 'previsiones'/.test(bloque('financiero', 'equipo')) &&
-                  !/href="(previsiones|cuentas-bancarias)\.html"/.test(fin) && /href="\.\.\/financiero\/cuentas-bancarias\.html"/.test(adm) && /href="\.\.\/financiero\/previsiones\.html"/.test(adm), true);
+                  !/href="(previsiones|cuentas-bancarias)\.html"/.test(fin) &&
+                  !/href="\.\.\/financiero\/(cuentas-bancarias|previsiones)\.html"/.test(adm) &&
+                  /\/financiero\/cuentas-bancarias\.html' : '\/financiero\/previsiones\.html'\) \+ '\?embed=1'/.test(dia), true);
     });
     test('Proveedores se mudó a Cost·ax (barra, hub, portada, roles) sin quitárselo a quien lo tenía con Fin·ax', () => {
         const hubm = fs.readFileSync(path.join(RAIZ, 'hub-modulos.js'), 'utf8'), pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
@@ -20007,7 +20010,7 @@ console.log('\n══ BH18 · La app móvil ══');
         vm.runInContext('function $(id){return document.getElementById(id);}' +
             am.match(/var MODS_INFO = \{[\s\S]*?\n\};/)[0] + am.match(/var FLECHA = '[^\n]*';/)[0] +
             dEx('pintarPortal') + dEx('_botonModulo') + dEx('_rect') + dEx('_tieneApp') + dEx('_ic') + dEx('_islaHTML') +
-            dEx('pintarModulo') + dEx('_despl'), c, { filename:'app-movil/app.js' });
+            dEx('pintarModulo') + dEx('_despl') + 'var GUIAS = [];' + dEx('_guiasPortalHTML') + dEx('_ytId'), c, { filename:'app-movil/app.js' });   // (26-nov) las guías debajo de los módulos
         c.pintarPortal();
         return { inicio: el('menuPortal').innerHTML, cost: c.pintarModulo('costax'), equip: c.pintarModulo('equipax') };
     };
@@ -27576,10 +27579,11 @@ console.log('\n══ BE11 · El freno de los NIP (v78) ══');
        portal_horarios y portal_evaluaciones, las tres con su guardia. */
     /* (25-nov) Y las dos de la nota / factura desde la app (v94): agrupar y
        desagrupar, cada una con su guardia. */
-    test('la revisión mira de verdad las once que comprueban el NIP', () => {
+    /* (26-nov) Doce: portal_guias_movil (v96) también pasa por el guardia. */
+    test('la revisión mira de verdad las doce que comprueban el NIP', () => {
         const conGuardia = puertas.filter(n => ahora[n].texto.indexOf('_nip_guardia') > -1).sort();
         return eq(conGuardia.join(','),
-            'entrada_catalogo,entrada_editar,entrada_historial,entrada_nota_agrupar,entrada_nota_desagrupar,entrada_sucursal_de_nip,entrada_validar_nip,portal_apps,portal_evaluaciones,portal_horarios,portal_perfil',
+            'entrada_catalogo,entrada_editar,entrada_historial,entrada_nota_agrupar,entrada_nota_desagrupar,entrada_sucursal_de_nip,entrada_validar_nip,portal_apps,portal_evaluaciones,portal_guias_movil,portal_horarios,portal_perfil',
             conGuardia.join(','));
     });
 
@@ -33777,6 +33781,34 @@ console.log('\n══ BH101 · La caja fuerte: total y disponible ══');
         eq(/var _pcCF = _ctasDebCF\.length \? _debitoPorCuenta\(/.test(dia) && dia.indexOf('if (_ctasDebCF.length > 1) {') === -1, true, 'una cuenta'));
     test('Previsiones (configuración) no enseña los otros apartados como metas', () =>
         eq(/esApartadoLibre\(p\)\) return false/.test(fs.readFileSync(path.join(RAIZ, 'financiero/previsiones.html'), 'utf8')), true, 'fuera'));
+})();
+
+/* ═══════ BH102 · GUÍAS DE LA APP MÓVIL Y LA PUERTA DE LA CAJA FUERTE (26-nov) ═══════ */
+console.log('\n══ BH102 · Guías de la app móvil; la puerta de la caja fuerte ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    const sql = leer('supabase-migration-v96.sql'), app = leer('app-movil/app.js'), adm = leer('admin.html'), csp = leer('netlify.toml');
+    test('v96: portal_guias_movil con el candado de la clave (_nip_guardia + _portal_quien) y solo las guías de la app', () =>
+        eq(/_nip_guardia\(p_neg, p_niphash\)/.test(sql) && /_portal_quien\(p_neg, p_token, p_niphash\)/.test(sql) &&
+           /modulo IN \('movil_costax', 'movil_equipax'\)/.test(sql) && /GRANT EXECUTE ON FUNCTION portal_guias_movil\(TEXT, TEXT, TEXT\) TO anon, authenticated/.test(sql), true));
+    test('la app las pide con su clave y las pinta debajo de los módulos', () =>
+        eq(/rpc\('portal_guias_movil'/.test(app) && /_guiasPortalHTML\(ids\)/.test(app) && /window\.abrirGuiaMovil = abrirGuiaMovil/.test(app), true));
+    test('el video de las guías puede reproducirse desde el Storage (CSP media-src)', () =>
+        eq(/media-src 'self' blob: https:\/\/byjuocnkyuxxudondciz\.supabase\.co;/.test(csp), true));
+    test('el panel admin tiene su tarjeta y su pantalla de guías', () =>
+        eq(/id:'guias-movil'/.test(adm) && /id="tab-guias-movil"/.test(adm) && /AdmGuiasMovil\.montar\(\)/.test(adm) && /admin-guias-movil\.js/.test(adm), true));
+    test('Learn·ax no enseña las guías de la app (viven debajo de su módulo)', () =>
+        eq(/movil_/.test(leer('consultoria/guias.js')), true));
+    test('la caché de la app subió (cambió su código)', () => eq(/etaax-movil-v17/.test(leer('app-movil/sw.js')), true));
+    const dia = leer('administrativo/diario.html');
+    test('la caja fuerte pide la contraseña UNA vez, al entrar a su vista; adentro sus tarjetas ya no', () =>
+        eq(/candado: true/.test(dia) && /function _cjPedirEntrada\(\)/.test(dia) && /if\(_cjAutorizado\)\{ abrir\(\); return; \}/.test(dia), true));
+    test('se llama «Caja fuerte · Gestión de saldos» y gestiona cuentas y previsiones desde adentro', () =>
+        eq(/Caja Fuerte · Gestión de saldos/.test(dia) && /abrirCjCfg\('cuentas',1\)/.test(dia) && /abrirCjCfg\('previsiones',1\)/.test(dia), true));
+    test('la página del celular para subir foto tiene la cara de la app (sin emojis en sus botones)', () => {
+        const c = leer('captura.html');
+        return eq(/captura-movil\.css/.test(c) && /class="cap-movil"/.test(c) && !/📷 Tomar foto|🖼️ Galería/.test(c), true);
+    });
 })();
 
 

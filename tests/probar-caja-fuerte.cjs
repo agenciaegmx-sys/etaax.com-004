@@ -89,7 +89,17 @@ const filas = (p, raiz) => p.evaluate((r) => [...document.querySelectorAll((r ||
         await p.goto(ORIGEN + '/administrativo/diario.html?vista=gestion');
         await p.waitForFunction(() => typeof abrirCajaFuerte === 'function' && (window._cacheDeps || []).length >= 6 && (window._cachePrevs || []).length >= 2 && (window._cuentasBancarias || []).length >= 1, null, { timeout: 30000 });
         await p.waitForTimeout(800);
-        await p.evaluate(() => { window._pedirClaveAdmin = (a, cb) => cb(); });
+
+        console.log('\n══ La puerta: contraseña una vez, al entrar ══');
+        await foto(p, 'k0a-candado');
+        await caso('al entrar a «Caja fuerte · Gestión de saldos» pide la contraseña y las tarjetas quedan ocultas', async () => {
+            const r = await p.evaluate(() => [document.getElementById('modalAdminGuard') && getComputedStyle(document.getElementById('modalAdminGuard')).display !== 'none',
+                document.body.classList.contains('cj-cerrada'), [...document.querySelectorAll('.dx-card[data-fn]')].some(b => b.offsetParent), document.getElementById('etxCtxTitulo').textContent]);
+            assert.deepEqual(r, [true, true, false, 'Caja fuerte']);
+        });
+        await p.evaluate(() => { window.__claves = 0; window._pedirClaveAdmin = (a, cb) => { __claves++; cb(); }; _cerrarAdminGuard(); _cjPedirEntrada(); });
+        await caso('…con la contraseña se abre', async () =>
+            assert.deepEqual(await p.evaluate(() => [document.body.classList.contains('cj-cerrada'), __claves]), [false, 1]));
 
         console.log('\n══ Gestión · una tarjeta por vista ══');
         await foto(p, 'k0-gestion');
@@ -131,8 +141,8 @@ const filas = (p, raiz) => p.evaluate((r) => [...document.querySelectorAll((r ||
             const r = await p.evaluate(() => [...document.querySelectorAll('#cajBody .cjv-tabla tbody tr')].map(tr => tr.cells[0].querySelector('b').textContent + ' ' + tr.cells[1].textContent + ' ' + tr.cells[4].textContent));
             assert.deepEqual(r, ['Aguinaldo $6,000.00 $1,000.00']);
         });
-        await caso('…y no trae el botón al panel de Fin·ax (sí «Administrar previsiones»)', async () =>
-            assert.deepEqual(await p.evaluate(() => [!!document.querySelector('#cajBody a[href*="financiero/index"]'), !!document.querySelector('#cajBody a[href="/financiero/previsiones.html"]')]), [false, true]));
+        await caso('…y sus metas se gestionan desde aquí (sin ir a otra página ni a Fin·ax)', async () =>
+            assert.deepEqual(await p.evaluate(() => [!!document.querySelector('#cajBody a[href*="financiero/"]'), !!document.querySelector('#cajBody [onclick="abrirCjCfg(\'previsiones\',1)"]'), !!document.querySelector('#cajBody [onclick="abrirCjCfg(\'previsiones\')"]')]), [false, true, true]));
         await p.click('#cajBody .cjv-tab[data-vista="anticipos"]'); await p.waitForTimeout(200);
         await foto(p, 'k4-anticipos');
         await caso('Anticipos: los dos con su saldo, dónde está cada uno, y el vencido marcado', async () => {
@@ -184,11 +194,31 @@ const filas = (p, raiz) => p.evaluate((r) => [...document.querySelectorAll((r ||
         });
         await foto(p, 'k6-apartados');
 
-        console.log('\n══ Cada tarjeta abre su vista ══');
+        console.log('\n══ Cada tarjeta abre su vista (ya sin contraseña) ══');
         await p.evaluate(() => cerrarCajaFuerte());
         await p.click('.dx-card[data-fn="caja_ant"]'); await p.waitForSelector('#cajOverlay.open');
         await caso('«Anticipos» abre la caja directo en Anticipos', async () =>
             assert.equal(await p.evaluate(() => document.querySelector('#cajBody .cjv-tab.on').dataset.vista), 'anticipos'));
+        await caso('…y ninguna tarjeta volvió a pedir la contraseña (solo la puerta)', async () => assert.equal(await p.evaluate(() => __claves), 1));
+
+        console.log('\n══ Cuentas bancarias y previsiones se gestionan DESDE la caja ══');
+        await p.click('#cajBody .cjv-tab[data-vista="bancos"]'); await p.waitForTimeout(200);
+        await p.click('#cajBody [onclick="abrirCjCfg(\'cuentas\',1)"]');
+        await p.waitForFunction(() => { const f = document.getElementById('cjCfgFrame'); try { return f.contentWindow.document.querySelector('.cb-modal.open'); } catch (e) { return false; } }, null, { timeout: 20000 });
+        await foto(p, 'k8-agregar-cuenta');
+        await caso('«Agregar cuenta» abre la página de cuentas encima de la caja, con su formulario de alta ya abierto', async () => {
+            const r = await p.evaluate(() => { const ov = document.getElementById('cjCfgOv'), f = document.getElementById('cjCfgFrame');
+                return [ov.classList.contains('open'), f.getAttribute('src'), getComputedStyle(ov).zIndex > getComputedStyle(document.getElementById('cajOverlay')).zIndex]; });
+            assert.deepEqual(r, [true, '/financiero/cuentas-bancarias.html?embed=1&nueva=1', true]);
+        });
+        await caso('…embebida: sin la barra de módulos y con su botón naranja de letra blanca', async () => {
+            const r = await p.evaluate(() => { const d = document.getElementById('cjCfgFrame').contentWindow.document, b = d.querySelector('.cb-save');
+                return [!!(d.getElementById('etaax-header') && d.getElementById('etaax-header').offsetParent), getComputedStyle(b).color]; });
+            assert.deepEqual(r, [false, 'rgb(255, 255, 255)']);
+        });
+        await p.evaluate(() => cerrarCjCfg()); await p.waitForTimeout(300);
+        await caso('cerrar la ventana vuelve a la caja y relee los saldos', async () =>
+            assert.deepEqual(await p.evaluate(() => [document.getElementById('cjCfgOv').classList.contains('open'), document.getElementById('cajOverlay').classList.contains('open')]), [false, true]));
         await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(300);
         await foto(p, 'k7-telefono');
         await caso('en el teléfono la caja no se sale de la pantalla', async () =>

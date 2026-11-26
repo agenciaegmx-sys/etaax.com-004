@@ -325,6 +325,42 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         await pa.click(filaDoc('ARCH-1') + ' button:has-text("Editar")'); await pa.waitForTimeout(300);
         await caso('un PDF recuperado (no se puede rearmar) sigue con su ventanita de estado, también con «Eliminar»', async () =>
             assert.deepEqual(await pa.evaluate(() => [!!document.getElementById('adoc-guardar'), !!document.getElementById('adoc-eliminar'), !!document.getElementById('docOv')]), [true, true, false]));
+
+        /* (26-nov, v96) Guías de la app móvil: se suben desde el panel admin. */
+        console.log('\n══ Panel admin · guías de la app móvil ══');
+        await pa.evaluate(() => { const db = window.__nube.leer(); db.guias = [
+            { id: 'gx1', titulo: 'Manual Cost·ax', tipo: 'pdf', url: 'https://x/evidencias/_guias/pdf/a.pdf', modulo: 'movil_costax', orden: 0, activa: true, categoria: 'App móvil' },
+            { id: 'gx9', titulo: 'Guía de Learn·ax', tipo: 'pdf', url: 'https://x/b.pdf', modulo: 'recetas', orden: 0, activa: true }]; window.__nube.escribir(db);
+            window.confirm = () => true;
+            /* La ventanita del PDF recuperado (caso anterior) se cierra antes de seguir. */
+            document.querySelectorAll('#adocModal, .adoc-overlay').forEach(m => { m.style.display = 'none'; m.classList.remove('open'); }); });
+        await pa.evaluate(() => admInicio()); await pa.waitForTimeout(200);
+        await caso('el panel admin tiene la tarjeta «Guías de la app móvil»', async () =>
+            assert.equal(await pa.evaluate(() => !!document.querySelector('.adm-card[data-card="guias-movil"]')), true));
+        await pa.click('.adm-card[data-card="guias-movil"]'); await pa.waitForTimeout(500);
+        await caso('…abre con Cost·ax y Equip·ax, cada uno con SUS guías (las de Learn·ax no salen)', async () => {
+            const r = await pa.evaluate(() => [...document.querySelectorAll('#tab-guias-movil .agm-mod')].map(m => m.querySelector('.agm-mod-nom').textContent + ': ' +
+                [...m.querySelectorAll('.agm-it b')].map(b => b.textContent).join(',')));
+            assert.deepEqual(r, ['Cost·ax: Manual Cost·ax', 'Equip·ax: ']);
+        });
+        await pa.selectOption('#agmModulo', 'movil_equipax'); await pa.fill('#agmTitulo', 'Tu turno en la app');
+        await pa.click('.agm-tipo[data-tipo="link"]'); await pa.fill('#agmUrl', 'https://youtu.be/abcDEF12345');
+        await pa.click('#agmGuardar'); await pa.waitForTimeout(500);
+        await caso('…agregar un video de YouTube a Equip·ax lo guarda en `guias` con su módulo y ya se ve en la lista', async () => {
+            const g = await pa.evaluate(() => window.__nube.leer().guias.find(x => x.titulo === 'Tu turno en la app'));
+            assert.deepEqual([g && g.modulo, g && g.tipo, g && g.url, g && g.activa, g && g.categoria], ['movil_equipax', 'video', 'https://youtu.be/abcDEF12345', true, 'App móvil']);
+            assert.match(await pa.evaluate(() => document.querySelectorAll('#tab-guias-movil .agm-mod')[1].textContent), /Tu turno en la app/);
+        });
+        await caso('…un enlace que no es de YouTube no se guarda', async () => {
+            await pa.fill('#agmTitulo', 'Otro'); await pa.fill('#agmUrl', 'https://vimeo.com/123'); await pa.click('#agmGuardar'); await pa.waitForTimeout(200);
+            assert.match(await pa.evaluate(() => document.getElementById('agmMsg').textContent), /no parece de YouTube/);
+        });
+        await pa.click('#tab-guias-movil .agm-it:has-text("Manual Cost·ax") button:has-text("Ocultar")'); await pa.waitForTimeout(400);
+        await caso('«Ocultar» la deja fuera de la app sin borrarla; «Eliminar» la quita', async () => {
+            assert.equal(await pa.evaluate(() => window.__nube.leer().guias.find(x => x.id === 'gx1').activa), false);
+            await pa.click('#tab-guias-movil .agm-it:has-text("Tu turno en la app") button:has-text("Eliminar")'); await pa.waitForTimeout(400);
+            assert.equal(await pa.evaluate(() => !!window.__nube.leer().guias.find(x => x.titulo === 'Tu turno en la app')), false);
+        });
     } finally {
         await browser.close();
     }

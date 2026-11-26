@@ -41,6 +41,8 @@
         if (typeof _supabase === 'undefined') { cont.innerHTML = vacio('Sin conexión con el servidor.'); return; }
 
         var rg = await _supabase.from('guias').select('*').order('orden').order('created_at');
+        /* (26-nov) Las guías de la app móvil (modulo 'movil_*', v96) viven en la app, debajo de su módulo. */
+        if (rg && rg.data) rg.data = rg.data.filter(function (g) { return !/^movil_/.test(String(g.modulo || '')); });
         if (rg.error) {
             // 42P01 = la tabla no existe → falta correr v45. Se dice con todas sus
             // letras: un "error" genérico no lleva a ningún lado.

@@ -71,10 +71,8 @@
         administrativo: [
             { t:'Ingresos', d:'Cortes, ventas extras y anticipos', h:'/administrativo/diario.html?vista=ingresos', perm:['ventas'], ic:'fin-ventas' },
             { t:'Egresos', d:'Gastos, movimientos, fijos y nóminas', h:'/administrativo/diario.html?vista=egresos', perm:['gastos','ventas'], ic:'fin-gastos' },
-            { t:'Gestión', d:'Caja fuerte', h:'/administrativo/diario.html?vista=gestion', perm:['ventas'], ic:'ev-caja-fuerte' },
-            { g:'Configuración', hijos:[
-                { t:'Cuentas bancarias', d:'Cuentas y comisiones', h:'/financiero/cuentas-bancarias.html', perm:['financiero'], ic:'fin-cuentas-bancarias' },
-                { t:'Previsiones', d:'Compromisos futuros', h:'/financiero/previsiones.html', perm:['financiero'], ic:'fin-previsiones' } ] },
+            /* (26-nov) Cuentas bancarias y Previsiones se gestionan DENTRO de la caja fuerte. */
+            { t:'Caja fuerte', d:'Gestión de saldos', h:'/administrativo/diario.html?vista=gestion', perm:['ventas'], ic:'ev-caja-fuerte' },
             { t:'Clientes', d:'Directorio de clientes', h:'/administrativo/clientes.html', perm:['clientes'], ic:'cat-clientes' }
         ],
         /* Cost·ax: sus páginas de /recetas/ ya traen su barra; Proveedores (que se
@@ -205,8 +203,11 @@
                 '.modal-pv .modal-header h2, .cb-modal-title, .cj-title, .cjv-tit';
 
     var cromoIntentos = 0;
+    /* (26-nov) Embebidas, solo si la página lo pide: <body data-etx-iconos="1">
+       (Cuentas bancarias y Previsiones se abren dentro de la caja fuerte). */
+    var iconosEmbebido = function () { return document.body && document.body.dataset.etxIconos === '1'; };
     function iconosEnCromo(raiz) {
-        if (embebido) return;
+        if (embebido && !iconosEmbebido()) return;
         if (typeof window.etaaxIcono === 'function')
             (raiz || document).querySelectorAll('[data-etx-ico]:empty').forEach(function (el) { el.innerHTML = window.etaaxIcono(el.getAttribute('data-etx-ico'), { tam: 28 }); });
         /* Mismo cuidado que en el menú: si el sprite todavía no llegó, se vuelve
@@ -240,7 +241,7 @@
        cambia. Se agrupa en un cuadro de animación: sin eso, pintar una tabla de
        doscientos renglones dispararía doscientas pasadas. */
     function vigilarCromo() {
-        if (embebido || typeof MutationObserver !== 'function') return;
+        if ((embebido && !iconosEmbebido()) || typeof MutationObserver !== 'function') return;
         var pendiente = false;
         new MutationObserver(function () {
             if (pendiente) return;
@@ -670,7 +671,7 @@
         try { portadaCompacta(); } catch (e) {}
         pintarTarjetas();
         try { medirCtas(); } catch (e) {}
-        if (embebido) return;
+        if (embebido) { if (iconosEmbebido()) { iconosEnCromo(); vigilarCromo(); } return; }
         document.querySelectorAll('.theme-toggle').forEach(function(b){b.remove();});
         var nav = document.getElementById('nav');
         var mod = moduloActual();

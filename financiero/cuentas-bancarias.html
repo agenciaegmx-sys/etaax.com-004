@@ -12,7 +12,7 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=7a651810">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=b1bccada">
     <link rel="preload" as="script" href="/etaax-header.js?v=a0ec334a">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=59bd8179">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=3d1b38de">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -78,7 +78,7 @@
 <link rel="stylesheet" href="/etaax-modulos-ui.css?v=ab7ca42a">
 <link rel="stylesheet" href="/financiero/config-ui.css"><!-- (26-nov) la cara del sistema para la configuración de Admin·ax -->
 </head>
-<body>
+<body data-etx-iconos="1">
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
 
 <header class="top-bar">
@@ -407,6 +407,8 @@ document.addEventListener('DOMContentLoaded', function(){
     if(window._ctxBarInit) try{ _ctxBarInit(); }catch(e){}
     render();
     _sbInit();
+    /* (26-nov) Desde la caja fuerte: «Agregar cuenta» llega con ?nueva=1. */
+    try { if(new URLSearchParams(location.search).get('nueva')==='1') setTimeout(function(){ abrirCb(); }, 250); } catch(e){}
 });
 </script>
 <script src="nav.js?v=resumen-2"></script><!-- la barra lateral, una sola para todo el módulo -->
@@ -418,6 +420,6 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/etaax-sidebar.js?v=b1bccada"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=a0ec334a"></script>
-<script src="/etaax-modulos-ui.js?v=59bd8179"></script>
+<script src="/etaax-modulos-ui.js?v=3d1b38de"></script>
 </body>
 </html>

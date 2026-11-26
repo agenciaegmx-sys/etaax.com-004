@@ -20,6 +20,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=89654af5">
 <link rel="stylesheet" href="/portal-operativo.css?v=59ef4715">
+<link rel="stylesheet" href="/captura-movil.css"><!-- (26-nov) la cara de la app móvil -->
 <style>
 body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:28px 18px 40px;box-sizing:border-box}
 .cap-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:420px;padding:24px 22px;text-align:center}
@@ -41,14 +42,15 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 .cap-msg.ok{color:var(--green)} .cap-msg.err{color:var(--red)}
 </style>
 </head>
-<body>
+<body class="cap-movil">
 <div class="cap-card">
     <div class="cap-logo">
         <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:29px;width:auto;display:block">
     </div>
+    <div class="cap-ico" data-cap-ico="ins-foto" aria-hidden="true"></div>
     <div class="cap-title" id="capTitle">Subir foto</div>
     <div class="cap-sub" id="capSub">Evidencia visual</div>
-    <div id="capCount" style="display:none;font-size:12px;color:var(--text-dim);margin:-10px 0 16px">⏱️ Expira en <b id="capCountVal" style="color:var(--text)">1:00</b></div>
+    <div id="capCount" style="display:none;font-size:12px;color:var(--text-dim);margin:-10px 0 16px"><span data-cap-ico="rec-tiempo" aria-hidden="true"></span>Expira en <b id="capCountVal" style="color:var(--text)">1:00</b></div>
 
     <div id="capForm">
         <!-- Sin campo de fecha, a propósito. El QR trae un token ÚNICO del corte o
@@ -65,14 +67,14 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
         <input type="file" id="capInputCam" accept="image/*" capture="environment" style="display:none" onchange="onPick(this)">
         <input type="file" id="capInput" accept="image/*" multiple style="display:none" onchange="onPick(this)">
         <div class="cap-par">
-            <button class="cap-btn" onclick="document.getElementById('capInputCam').click()">📷 Tomar foto</button>
-            <button class="cap-btn" onclick="document.getElementById('capInput').click()">🖼️ Galería</button>
+            <button class="cap-btn" onclick="document.getElementById('capInputCam').click()"><span data-cap-ico="ins-foto" aria-hidden="true"></span>Tomar foto</button>
+            <button class="cap-btn" onclick="document.getElementById('capInput').click()"><span data-cap-ico="rec-galeria" aria-hidden="true"></span>Galería</button>
         </div>
         <div class="cap-msg" id="capMsg"></div>
     </div>
 
     <div id="capInvalid" style="display:none">
-        <div style="font-size:36px;margin:10px 0">🔒</div>
+        <div class="cap-ico" data-cap-ico="candado" aria-hidden="true"></div>
         <div style="font-size:13px;color:var(--text-dim);line-height:1.6">Este enlace no es válido o ya expiró.<br>Pide a la computadora que genere un QR nuevo.</div>
     </div>
 </div>
@@ -98,7 +100,7 @@ function mostrarMuerto(expirado){
     document.getElementById('capCount').style.display='none';
     var inv=document.getElementById('capInvalid');
     inv.style.display='block';
-    inv.innerHTML='<div style="font-size:36px;margin:10px 0">'+(expirado?'⏱️':'🔒')+'</div>'+
+    inv.innerHTML='<div class="cap-ico" data-cap-ico="'+(expirado?'rec-tiempo':'candado')+'" aria-hidden="true"></div>'+
         '<div style="font-size:13px;color:var(--text-dim);line-height:1.6">'+
         (expirado
             ? 'Este código expiró (dura 5&nbsp;minutos).<br>Vuelve a escanear el QR en la computadora.'
@@ -177,6 +179,17 @@ document.addEventListener('DOMContentLoaded',function(){
         _countTimer=setInterval(_tick,1000);
     }
 });
+</script>
+<script>
+/* (26-nov) Los íconos de la marca en esta pantalla (sin emojis). */
+(function(){
+    function pintar(){
+        if(typeof window.etaaxIcono!=='function') return;
+        document.querySelectorAll('[data-cap-ico]:empty').forEach(function(el){ el.innerHTML = window.etaaxIcono(el.getAttribute('data-cap-ico'), { tam: 20 }) || ''; });
+    }
+    pintar();
+    if(typeof MutationObserver==='function') new MutationObserver(pintar).observe(document.body, { childList:true, subtree:true });
+})();
 </script>
 </body>
 </html>

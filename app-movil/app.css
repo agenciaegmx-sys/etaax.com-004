@@ -693,3 +693,26 @@ body.con-barra { padding-bottom:calc(var(--safe-b) + 108px); }
 .cuenta-aviso:empty { display:none; }
 .cuenta-aviso { font-size:12.5px; line-height:1.55; color:var(--txt2); background:color-mix(in srgb, var(--marca) 9%, transparent);
     border-radius:10px; padding:10px 12px; margin:-8px 0 16px; }
+
+/* ══ (26-nov) GUÍAS DE USO DEBAJO DE CADA MÓDULO ══════════════════════════════ */
+.guias-portal { display:flex; flex-direction:column; gap:14px; margin-top:18px; }
+.guias-mod { display:flex; flex-direction:column; gap:8px; }
+.guias-cab { display:flex; align-items:center; gap:8px; font-size:12px; letter-spacing:1.4px; text-transform:uppercase; color:var(--txt2); }
+.guias-cab .etx-ic { width:17px; height:17px; }
+.guia-btn { display:flex; align-items:center; gap:12px; width:100%; min-height:58px; padding:10px 14px; text-align:left;
+    background:var(--sup); border:1px solid var(--borde-ui); border-radius:var(--r); color:var(--txt); }
+.guia-btn:active { transform:scale(.985); }
+.guia-ic { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:11px; flex-shrink:0;
+    background:color-mix(in srgb, var(--marca) 14%, transparent); color:var(--marca); }
+.guia-ic .etx-ic { width:20px; height:20px; }
+.guia-tx { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.guia-tx b { font-size:14.5px; font-weight:600; }
+.guia-tx small { font-size:12px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.guia-btn > .etx-ic:last-child { width:18px; height:18px; color:var(--dim); flex-shrink:0; }
+.guia-ov { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.82); display:flex; align-items:center; justify-content:center;
+    padding:calc(var(--safe-t) + 14px) 12px calc(var(--safe-b) + 14px); }
+.guia-caja { width:100%; max-width:720px; background:var(--sup); border:1px solid var(--borde-ui); border-radius:18px; overflow:hidden; display:flex; flex-direction:column; }
+.guia-ov-cab { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; }
+.guia-ov-cab b { font-size:15px; }
+.guia-cerrar { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:12px; border:1px solid var(--borde-ui); color:var(--txt); background:transparent; }
+.guia-video { width:100%; aspect-ratio:16/9; border:0; background:#000; display:block; }

@@ -222,9 +222,10 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             ((x.querySelector('.nav-text') || x).textContent.trim() + (x.classList.contains('active') ? '*' : '') + (x.classList.contains('etx-nav-pronto') ? '(pronto)' : ''))).join(' · '));
         const EQUIPO = (act) => ['Catálogo', '[Operativo]', 'Horarios', 'Checklists', 'Evaluaciones', '[Estructura de staff]', 'Organigrama', 'Perfiles de puesto', 'Reglamento(pronto)']
             .map(x => x === act ? x + '*' : x).join(' · ');
-        const ADMIN = (act) => ['Ingresos', 'Egresos', 'Gestión', '[Configuración]', 'Cuentas bancarias', 'Previsiones', 'Clientes'].map(x => x === act ? x + '*' : x).join(' · ');
+        /* (26-nov) Cuentas bancarias y Previsiones viven DENTRO de la caja fuerte («Caja fuerte · Gestión de saldos»). */
+        const ADMIN = (act) => ['Ingresos', 'Egresos', 'Caja fuerte', 'Clientes'].map(x => x === act ? x + '*' : x).join(' · ');
         for (const [ruta, esperado] of [['/administrativo/horarios.html', EQUIPO('Horarios')], ['/administrativo/checklists.html', EQUIPO('Checklists')],
-                                        ['/administrativo/diario.html?vista=egresos', ADMIN('Egresos')], ['/financiero/cuentas-bancarias.html', ADMIN('Cuentas bancarias')],
+                                        ['/administrativo/diario.html?vista=egresos', ADMIN('Egresos')], ['/administrativo/diario.html?vista=gestion', ADMIN('Caja fuerte')],
                                         ['/administrativo/proveedores.html', 'Escandallos · Insumos · Inventarios · Requisiciones · Proveedores*']]) {
             await ir(p, ruta);
             await caso('«Sub módulos» en ' + ruta + ': ' + esperado, async () => assert.equal(await barra(), esperado));
@@ -234,15 +235,17 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             const b = await barra();
             assert.ok(/Insumos\*/.test(b) && / · Proveedores$/.test(b), b);
         });
-        for (const [vista, titulo, fns] of [['ingresos', 'Ingresos', ['cortes', 'extras']], ['egresos', 'Egresos', ['gastos', 'depositos', 'fijos', 'nominas', 'mayores']], ['gestion', 'Gestión', ['caja', 'caja_bancos', 'caja_prev', 'caja_ant', 'caja_apt']]]) {
+        for (const [vista, titulo, fns] of [['ingresos', 'Ingresos', ['cortes', 'extras']], ['egresos', 'Egresos', ['gastos', 'depositos', 'fijos', 'nominas', 'mayores']], ['gestion', 'Caja fuerte', ['caja', 'caja_bancos', 'caja_prev', 'caja_ant', 'caja_apt']]]) {
             await ir(p, '/administrativo/diario.html?vista=' + vista);
+            /* La caja fuerte pide la contraseña al entrar (26-nov): aquí se da por puesta. */
+            if (vista === 'gestion') await p.evaluate(() => { if (window._cerrarAdminGuard) _cerrarAdminGuard(); if (window._cjDesbloquear) _cjDesbloquear(); });
             await caso('Admin·ax, ' + titulo + ': su título en la isla y SOLO sus tarjetas, en su orden', async () => {
                 const r = await p.evaluate(() => ({ t: document.getElementById('etxCtxTitulo').textContent,
                     fns: [...document.querySelectorAll('.dx-card[data-fn]')].filter(b => b.offsetParent).sort((a, b) => (+getComputedStyle(a).order) - (+getComputedStyle(b).order)).map(b => b.dataset.fn),
                     reporte: !!document.querySelector('.dx-toolbar').offsetParent }));
                 assert.deepEqual(r, { t: titulo, fns, reporte: vista === 'gestion' });
                 /* Una sola palabra: toda en terracota. */
-                assert.equal(await p.evaluate(() => { const t = document.getElementById('etxCtxTitulo'); return t.children.length === 1 && t.firstElementChild.classList.contains('g') && t.firstElementChild.textContent === t.textContent; }), true, 'una palabra, no toda en terracota');
+                if (!/ /.test(titulo)) assert.equal(await p.evaluate(() => { const t = document.getElementById('etxCtxTitulo'); return t.children.length === 1 && t.firstElementChild.classList.contains('g') && t.firstElementChild.textContent === t.textContent; }), true, 'una palabra, no toda en terracota');
             });
         }
         await ir(p, '/administrativo/horarios.html');

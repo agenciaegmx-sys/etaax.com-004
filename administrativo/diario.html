@@ -12,7 +12,7 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=7a651810">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=b1bccada">
     <link rel="preload" as="script" href="/etaax-header.js?v=a0ec334a">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=59bd8179">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=3d1b38de">
     <link rel="preload" as="script" href="/administrativo/gastos-ui.js?v=93b54efc">
     <link rel="preload" as="script" href="/administrativo/cortes-ui.js?v=585bb93b">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
@@ -540,7 +540,7 @@
 <link rel="stylesheet" href="/administrativo/nominas-ui.css?v=04874ea2">
 <link rel="stylesheet" href="/administrativo/fijos-ui.css?v=50ec7f3b">
 <link rel="stylesheet" href="/administrativo/movimientos-ui.css?v=a23840a7">
-<link rel="stylesheet" href="/administrativo/operaciones-ui.css?v=bd5f369f">
+<link rel="stylesheet" href="/administrativo/operaciones-ui.css?v=59069423">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -595,6 +595,14 @@
             </div>
 
             <!-- MENÚ DE FUNCIONES -->
+            <!-- (26-nov) La caja fuerte está cerrada hasta poner la contraseña (una vez por entrada). -->
+            <div class="cj-candado" id="cjCandado">
+                <div class="cj-candado-ic" data-etx-ico="cjf-caja-fuerte" aria-hidden="true"></div>
+                <div class="cj-candado-tit">Caja fuerte · Gestión de saldos</div>
+                <div class="cj-candado-txt">Aquí están los saldos del negocio. Confirma tu contraseña para entrar.</div>
+                <div class="cj-candado-acc"><button type="button" class="btn-primary" onclick="_cjPedirEntrada()">Ingresar contraseña</button>
+                    <a class="btn-ghost" href="index.html">Volver a Admin·ax</a></div>
+            </div>
             <div class="dx-grid">
                 <button class="dx-card" data-fn="gastos" onclick="dxAbrir('gastos')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">📤</div><span class="dx-badge">Activo</span></div>
@@ -683,7 +691,8 @@
             var VISTAS = {
                 ingresos: { titulo: 'Ingresos', fns: ['cortes', 'extras'] },
                 egresos:  { titulo: 'Egresos', fns: ['gastos', 'depositos', 'fijos', 'nominas', 'mayores'], recordatorio: true },
-                gestion:  { titulo: 'Gestión', fns: ['caja', 'caja_bancos', 'caja_prev', 'caja_ant', 'caja_apt'], reporte: true }
+                /* (26-nov, Edwin) «Caja fuerte · Gestión de saldos»: la contraseña se pide UNA vez, al entrar. */
+                gestion:  { titulo: 'Caja fuerte', fns: ['caja', 'caja_bancos', 'caja_prev', 'caja_ant', 'caja_apt'], reporte: true, candado: true }
             };
             var v = null;
             try { v = VISTAS[new URLSearchParams(location.search).get('vista')] || null; } catch (e) {}
@@ -695,6 +704,7 @@
             });
             if (!v.reporte) { var tb = document.querySelector('.dx-toolbar'); if (tb) tb.classList.add('dx-fuera-de-vista'); }
             if (!v.recordatorio) { var rc = document.getElementById('dxRecordatorio'); if (rc) rc.classList.add('dx-fuera-de-vista'); }
+            if (v.candado) document.body.classList.add('cj-cerrada');
             var t = document.querySelector('.dx-hero-title'); if (t) t.textContent = v.titulo;
             document.title = 'ETAAX - ' + v.titulo;
         })();
@@ -1576,13 +1586,20 @@
 <div class="cj-overlay" id="cajOverlay" onclick="if(event.target===this)cerrarCajaFuerte()">
     <div class="cj-panel">
         <div class="cj-header">
-            <span class="cj-title">🔒 Caja Fuerte</span>
+            <span class="cj-title">🔒 Caja Fuerte · Gestión de saldos</span>
             <button class="modal-close" onclick="cerrarCajaFuerte()">✕</button>
         </div>
         <div class="cj-body" id="cajBody"></div>
     </div>
 </div>
 
+<!-- ══ (26-nov) CUENTAS BANCARIAS / PREVISIONES, DESDE LA CAJA FUERTE ══ -->
+<div class="cj-overlay" id="cjCfgOv" style="z-index:9250" onclick="if(event.target===this)cerrarCjCfg()">
+    <div class="cj-panel cjcfg-panel">
+        <div class="cj-header"><span class="cj-title cjcfg-tit" id="cjCfgTit">Cuentas bancarias</span><button class="modal-close" onclick="cerrarCjCfg()">✕ Cerrar</button></div>
+        <iframe id="cjCfgFrame" title="Gestión de la caja fuerte" class="cjcfg-frame"></iframe>
+    </div>
+</div>
 <!-- ══ OVERLAY DEPÓSITOS ══ -->
 <!-- ══ MODAL 📜 HISTORIAL DE CONCILIACIONES ══ -->
 <div class="cj-overlay" id="concHistOverlay" style="z-index:9350" onclick="if(event.target===this)cerrarHistConciliaciones()">
@@ -4128,13 +4145,42 @@ function quitarAptLibre(id){
 /* (26-nov) La caja fuerte tiene cinco vistas; cada tarjeta de Gestión abre la
    suya. La contraseña se pide al entrar; cambiar de vista adentro ya no. */
 var _cjVista = 'disponible';
+/* (26-nov, Edwin) La contraseña va en la PUERTA de la caja fuerte: se pide una
+   vez al entrar a «Caja fuerte · Gestión de saldos» y, ya adentro, sus tarjetas
+   abren sin volver a pedirla. Fuera de esa vista, cada apertura la pide. */
+var _cjAutorizado = false;
+function _cjDesbloquear(){ _cjAutorizado = true; document.body.classList.remove('cj-cerrada'); }
+function _cjPedirEntrada(){
+    if(_cjAutorizado){ _cjDesbloquear(); return; }
+    if(!_puede('ventas.cajaFuerte')) return;
+    _pedirClaveAdmin('Entrar a la caja fuerte · Gestión de saldos', _cjDesbloquear, 'Entrar', { onCancel:function(){} });
+}
+document.addEventListener('DOMContentLoaded', function(){
+    if(document.body && document.body.classList && document.body.classList.contains('cj-cerrada')) setTimeout(_cjPedirEntrada, 250);
+});
 function abrirCajaFuerte(vista){
     if(!_puede('ventas.cajaFuerte')) return;
+    var abrir = function(){ _cjAutorizado = true; _cjVista = vista || 'disponible'; _abrirCajaFuerteContenido(); };
+    if(_cjAutorizado){ abrir(); return; }
     // Gate de seguridad: verifica contraseña del usuario activo (owner o admin)
-    _pedirClaveAdmin('Ver Caja Fuerte — Efectivo acumulado', function(){
-        _cjVista = vista || 'disponible';
-        _abrirCajaFuerteContenido();
-    }, '🔒 Acceder');
+    _pedirClaveAdmin('Ver Caja Fuerte — Gestión de saldos', abrir, '🔒 Acceder');
+}
+/* (26-nov) Cuentas bancarias y Previsiones se gestionan DESDE la caja fuerte:
+   sus páginas de siempre, en una ventana encima de la caja. Al cerrar, los
+   saldos se vuelven a leer de la nube. */
+function abrirCjCfg(que, nueva){
+    var ov=document.getElementById('cjCfgOv'), fr=document.getElementById('cjCfgFrame');
+    if(!ov||!fr) return;
+    var url = (que==='cuentas' ? '/financiero/cuentas-bancarias.html' : '/financiero/previsiones.html') + '?embed=1' + (nueva?'&nueva=1':'');
+    document.getElementById('cjCfgTit').textContent = que==='cuentas' ? 'Cuentas bancarias' : 'Previsiones';
+    fr.src = url;
+    ov.classList.add('open');
+}
+function cerrarCjCfg(){
+    var ov=document.getElementById('cjCfgOv'), fr=document.getElementById('cjCfgFrame');
+    if(ov) ov.classList.remove('open');
+    if(fr) fr.src='about:blank';
+    _refrescarCajaFuerte();
 }
 function cjVista(v){
     _cjVista = v || 'disponible';
@@ -4221,11 +4267,13 @@ async function _refrescarCajaFuerte(){
             _supabase.from('depositos').select('datos').eq('negocio_id',negId),
             _supabase.from('gastos').select('datos').eq('negocio_id',negId),
             _supabase.from('tarjetas_credito').select('datos').eq('negocio_id',negId).order('created_at',{ascending:true}),
+            _supabase.from('previsiones').select('datos').eq('negocio_id',negId),
         ]);
         if(!r[0].error) _cacheCortes=_sinDelPend('cortes',(r[0].data||[]).map(function(x){return x.datos;}));
         if(!r[1].error) _cacheDeps=_sinDelPend('depositos',(r[1].data||[]).map(function(x){return x.datos;}));
         if(!r[2].error) _cacheGastosExt=(r[2].data||[]).map(function(x){return x.datos;});
         if(!r[3].error) _cuentasBancarias=(r[3].data||[]).map(function(x){return x.datos;});
+        if(r[4] && !r[4].error) _cachePrevs=(r[4].data||[]).map(function(x){return x.datos;});
         var cajEl=document.getElementById('cajOverlay');
         if(cajEl&&cajEl.classList.contains('open')) _abrirCajaFuerteContenido(true); // repintar con lo fresco
     }catch(e){} finally{ _cajRefrescando=false; }
@@ -4532,6 +4580,8 @@ function _abrirCajaFuerteContenido(_yaFresco){
                 {previsiones:_clases.prevision.enBanco, apartados:_clases.apartado.enBanco, anticipos:_antBanco}, '', '', false);
         vistaHTML =
             cab('Saldos en cuentas bancarias',
+                btnS('Agregar cuenta',"abrirCjCfg('cuentas',1)",'adm-agregar',true)+
+                btnS('Gestionar cuentas',"abrirCjCfg('cuentas')",'fin-cuentas-bancarias')+
                 (_ctasDebCF.length ? btnS('Historial de conciliaciones','abrirHistConciliaciones()','cjf-historial') : '')+
                 (_ctasDebCF.length>1 ? btnS('Congelar historial','congelarHistorialCuentas()','cjf-congelar') : ''))+
             '<div class="cjv-tres">'+
@@ -4548,7 +4598,8 @@ function _abrirCajaFuerteContenido(_yaFresco){
         }).sort(function(a,b){ return b.saldo-a.saldo; });
         vistaHTML =
             cab('Previsiones', btnS('Apartar dinero','abrirModalApartar()','cjf-prevision',true)+
-                '<a class="cjv-btn" href="/financiero/previsiones.html">'+ic('fin-previsiones',15)+'<span>Administrar previsiones</span></a>')+
+                btnS('Nueva previsión',"abrirCjCfg('previsiones',1)",'adm-agregar')+
+                btnS('Gestionar previsiones',"abrirCjCfg('previsiones')",'fin-previsiones'))+
             '<div class="cjv-tres">'+
                 tile('Apartado en previsiones', 'Sigue ahí, pero ya no cuenta como disponible.', _clases.prevision.saldo, 'cjv-prev')+
                 tile('En caja fuerte', 'De lo apartado, lo que está en efectivo.', _clases.prevision.enCaja, '')+
@@ -4568,7 +4619,7 @@ function _abrirCajaFuerteContenido(_yaFresco){
                         '<td class="cjv-mini">'+(donde.join(' · ')||'—')+'</td></tr>';
                 }).join('')+
                 '</tbody><tfoot><tr><td>Total</td><td></td><td></td><td></td><td style="text-align:right">'+fmtM(_clases.prevision.saldo)+'</td><td></td></tr></tfoot></table></div>'
-              : '<div class="cjv-vacio">'+ic('fin-previsiones',28)+'<div>Sin dinero apartado en previsiones. Aparta desde «Apartar dinero» o crea tus metas en «Administrar previsiones».</div></div>');
+              : '<div class="cjv-vacio">'+ic('fin-previsiones',28)+'<div>Sin dinero apartado en previsiones. Crea tus metas con «Nueva previsión» y aparta con «Apartar dinero».</div></div>');
     } else if (v === 'anticipos') {
         /* ── 4. ANTICIPOS: dinero de clientes que todavía se debe en producto ── */
         var D = EtaaxCore.anticiposDelDia(_anSal, todayStr()), vivos = D.delDia.concat(D.otros), hoyA = todayStr();
@@ -10659,7 +10710,7 @@ function renderFijosPanel(){
 <script src="/etaax-sidebar.js?v=b1bccada"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=a0ec334a"></script>
-<script src="/etaax-modulos-ui.js?v=59bd8179"></script>
+<script src="/etaax-modulos-ui.js?v=3d1b38de"></script>
 <script src="/administrativo/gastos-ui.js?v=93b54efc"></script>
 <script src="/administrativo/cortes-ui.js?v=585bb93b"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>

@@ -1,0 +1,40 @@
+/* ══ SUBIR FOTO POR QR, CON LA CARA DE LA APP MÓVIL (Edwin, 26-nov) ════════════
+   Es la pantalla que abre el celular al escanear el QR de cortes, gastos,
+   insumos y recetas. Antes traía el estilo viejo (título en Bebas, botones
+   verdes y emojis); ahora es la app: fondo y tarjeta de la app, título en DM
+   Sans, botones grandes en terracota con letra blanca y los íconos de la marca.
+   Solo presentación: el token, la subida y el emparejado no cambian.        */
+body.cap-movil {
+  --cm-bg:#13120f; --cm-sup:#232019; --cm-borde:#403d37; --cm-txt:#f0ece4; --cm-txt2:#b8b2a6; --cm-dim:#827c70;
+  --cm-terra:#c45f37; --cm-terra-ink:#fff; --cm-marca:#8ce4ee; --cm-marca-t:rgba(140,228,238,.1); --cm-campo:#1a1916;
+  background:var(--cm-bg)!important; color:var(--cm-txt); font-family:'DM Sans',system-ui,sans-serif;
+  padding:calc(env(safe-area-inset-top,0px) + 28px) 18px calc(env(safe-area-inset-bottom,0px) + 40px)!important;
+}
+[data-theme="light"] body.cap-movil {
+  --cm-bg:#f3f1ec; --cm-sup:#fff; --cm-borde:#dddad5; --cm-txt:#1a1916; --cm-txt2:#55504a; --cm-dim:#8a8378;
+  --cm-terra:#ad4b27; --cm-terra-ink:#fff; --cm-marca:#247681; --cm-marca-t:rgba(36,118,129,.08); --cm-campo:#f0eeea;
+}
+body.cap-movil .cap-card {background:var(--cm-sup); border:1px solid var(--cm-borde); border-radius:22px; padding:26px 22px 24px; max-width:440px;
+  box-shadow:0 14px 40px rgba(0,0,0,.18);}
+body.cap-movil .cap-logo {display:flex; justify-content:center; margin-bottom:18px;}
+body.cap-movil .cap-logo img {height:30px!important;}
+body.cap-movil .cap-ico {display:inline-flex; align-items:center; justify-content:center; width:58px; height:58px; border-radius:16px;
+  background:var(--cm-marca-t); color:var(--cm-marca); margin:0 auto 12px;}
+body.cap-movil .cap-ico .etx-ic {width:28px; height:28px; --green:var(--cm-marca); --etx-color:currentColor;}
+body.cap-movil .cap-title {font:700 22px/1.3 'DM Sans',sans-serif; letter-spacing:-.4px; text-transform:none; color:var(--cm-txt);}
+body.cap-movil .cap-sub {font-size:14px; line-height:1.5; color:var(--cm-txt2); margin:6px 0 16px;}
+body.cap-movil #capCount {display:inline-flex!important; align-items:center; gap:6px; margin:0 0 18px!important; padding:6px 12px; border-radius:999px;
+  border:1px solid var(--cm-borde); background:var(--cm-campo); color:var(--cm-txt2)!important; font-size:12.5px!important;}
+body.cap-movil #capCount[style*="display: none"], body.cap-movil #capCount[style*="display:none"] {display:none!important;}
+body.cap-movil #capCount .etx-ic {width:15px; height:15px;}
+body.cap-movil .cap-par {gap:10px;}
+body.cap-movil .cap-btn {display:flex!important; align-items:center; justify-content:center; gap:9px; min-height:58px!important; border-radius:14px!important;
+  background:var(--cm-terra)!important; color:var(--cm-terra-ink)!important; border:0!important; font:600 16px 'DM Sans',sans-serif!important;}
+body.cap-movil .cap-btn:active {transform:scale(.985);}
+body.cap-movil .cap-btn .etx-ic {width:20px; height:20px; --green:var(--cm-terra-ink); --etx-color:currentColor;}
+body.cap-movil .cap-btn.ghost {background:transparent!important; border:1px solid var(--cm-borde)!important; color:var(--cm-txt)!important;}
+body.cap-movil .cap-thumbs img {width:68px; height:68px; border-radius:12px; border-color:var(--cm-borde);}
+body.cap-movil .cap-msg {font-size:14px;}
+body.cap-movil .cap-msg.ok {color:#3dbe7a;}
+body.cap-movil #capInvalid .cap-ico {background:color-mix(in srgb,#e05a3a 12%,transparent); color:#e05a3a;}
+body.cap-movil #capInvalid .cap-ico .etx-ic {--green:#e05a3a;}

@@ -63,6 +63,8 @@ function rpcs(opc) {
             entrada_nota_desagrupar: (p) => ok(p) ? ((window.__desag = p), { ok: true, n: 2 }) : null,
             checklist_plantillas: (p) => [{ id: 'c1', nombre: 'Apertura de barra', tipo: 'apertura', tareas: [{ texto: 'Hielo' }, { texto: 'Limones' }] }],
             portal_apps: (p) => ok(p) ? { sucursalId: 'suc_dos', apps: ${JSON.stringify(opc.apps === undefined ? null : opc.apps)} } : null,
+            /* (v96) Las guías de uso de la app, por módulo. */
+            portal_guias_movil: (p) => ok(p) ? ${JSON.stringify(opc.guias || null)} : null,
             portal_horarios: (p) => ok(p) ? { hoy: iso(hoy), semanas: [
                 { semana: '2026-W48', lunes: iso(lunes), turnos: [{ sucursalId: 'suc_dos', sucursal: 'Polanco', dias: { d0: { in: '09:00', out: '17:00' }, d1: { desc: 1 }, d4: { in: '18:00', out: '02:00' } } }] },
                 { semana: '2026-W49', lunes: iso(lunes2), turnos: [] }] } : null,
@@ -425,6 +427,39 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
             assert.equal(await d.page.evaluate(() => document.getElementById('horariosLista').textContent.trim()), 'Esta parte de la app todavía no está activada en tu negocio.');
         });
         await d.ctx.close();
+
+        console.log('\n══ App móvil · guías de uso debajo de cada módulo (v96) ══');
+        const G = await abrir(browser, { guias: [
+            { id: 'g1', titulo: 'Cómo registrar entradas', tipo: 'video', url: 'https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/video/a.mp4', modulo: 'movil_costax', orden: 0 },
+            { id: 'g2', titulo: 'Manual de Cost·ax', tipo: 'pdf', url: 'https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/pdf/b.pdf', modulo: 'movil_costax', orden: 1 },
+            { id: 'g3', titulo: 'Tu turno en la app', tipo: 'video', url: 'https://www.youtube.com/watch?v=abcDEF12345', modulo: 'movil_equipax', orden: 0, descripcion: 'Horarios y check lists' }] });
+        const gp = G.page;
+        await gp.evaluate(() => { window.__abiertos = []; window.open = (u) => { __abiertos.push(u); return null; }; });
+        await nip(gp, '12345');
+        await foto(gp, 'm9-guias');
+        await caso('debajo de los módulos: «Guías de uso» de Cost·ax y de Equip·ax, cada una con las suyas', async () => {
+            const r = await gp.evaluate(() => [...document.querySelectorAll('#menuPortal .guias-mod')].map(m => m.querySelector('.guias-cab').textContent.trim() + ' → ' +
+                [...m.querySelectorAll('.guia-btn b')].map(b => b.textContent).join(' | ')));
+            assert.deepEqual(r, ['Guías de uso · Cost·ax → Cómo registrar entradas | Manual de Cost·ax', 'Guías de uso · Equip·ax → Tu turno en la app']);
+            const orden = await gp.evaluate(() => document.querySelector('#menuPortal .mods').getBoundingClientRect().bottom <= document.querySelector('#menuPortal .guias-portal').getBoundingClientRect().top);
+            assert.equal(orden, true, 'las guías van ABAJO de los módulos');
+        });
+        await gp.click('.guia-btn:has-text("Cómo registrar entradas")'); await gp.waitForTimeout(200);
+        await caso('el video (archivo) se ve aquí mismo, en su visor, y se cierra', async () => {
+            assert.equal(await gp.evaluate(() => { const v = document.querySelector('#guiaOv video'); return v && v.getAttribute('src'); }), 'https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/video/a.mp4');
+            await gp.click('#guiaOv .guia-cerrar');
+            assert.equal(await gp.evaluate(() => !!document.getElementById('guiaOv')), false);
+        });
+        await gp.click('.guia-btn:has-text("Tu turno en la app")'); await gp.waitForTimeout(200);
+        await caso('…el de YouTube con el reproductor sin cookies (youtube-nocookie)', async () => {
+            assert.equal(await gp.evaluate(() => document.querySelector('#guiaOv iframe').getAttribute('src')), 'https://www.youtube-nocookie.com/embed/abcDEF12345?rel=0');
+            await gp.click('#guiaOv .guia-cerrar');
+        });
+        await gp.click('.guia-btn:has-text("Manual de Cost·ax")'); await gp.waitForTimeout(150);
+        await caso('…y el PDF abre en otra pestaña', async () =>
+            assert.deepEqual(await gp.evaluate(() => __abiertos), ['https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/pdf/b.pdf']));
+        await caso('…sin desbordarse a lo ancho', async () => assert.equal(await sinAncho(gp), true));
+        await G.ctx.close();
 
         console.log('\n══ App móvil · sin negocio ligado ══');
         const e = await abrir(browser, { ligado: false });
