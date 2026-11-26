@@ -41,8 +41,8 @@ var CASCARA = [
        encontró Codex — pantalla nueva con ayudante viejo de la caché, y una
        captura rechazada anunciada como guardada. Con la versión atada al
        contenido, esa pareja no puede existir. */
-    '../staff-area.js?v=f7366b4c',
-    '../insumo-label.js?v=789551ec',
+    '../staff-area.js?v=c06b1fe0',
+    '../insumo-label.js?v=40991fbf',
     '../etaax-iconos.js?v=7a651810',
     '../favicon.svg'
 ];

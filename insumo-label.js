@@ -18,7 +18,9 @@
 (function () {
     var UM = { ML:'ml', L:'L', LT:'L', LTS:'L', GR:'g', G:'g', KG:'kg', PZA:'pza', PZ:'pza', PIEZA:'pza', OZ:'oz' };
 
-    // Solo el contenido: "750 ml" / "4 L" / "350 g".
+    // Solo el contenido: "750 ml" / "1 L" / "350 g" / "1 kg".
+    // (26-nov) 1000 ml se lee «1 L» y 1000 g «1 kg»: así se dicen las botellas
+    // y los kilos en la barra y en la cocina.
     function _soloContenido(ins) {
         if (!ins) return '';
         if (ins.contenido) return ins.contenido; // ya normalizado en la fila
@@ -27,16 +29,30 @@
         var cn = parseFloat(p.contNeto) || 0;
         if (!cn) return '';
         var um = (p.umContenido || '').toString().toUpperCase();
+        if ((um === 'ML' || um === 'G' || um === 'GR') && cn >= 1000 && cn % 10 === 0)
+            return String(+(cn / 1000).toFixed(3)) + (um === 'ML' ? ' L' : ' kg');
         var uml = UM[um] || (p.umContenido || '').toLowerCase();
         return (cn % 1 ? cn.toFixed(1) : cn) + (uml ? ' ' + uml : '');
     }
-    // Empaque + contenido juntos para leer rápido: "Botella 750 ml" / "Garrafa 4 L".
+    /* (26-nov, Edwin) LA INFO DEL INSUMO ES SOLO SU IDENTIDAD: nombre, variedad,
+       marca y contenido. El EMPAQUE («Granel», «Botella», «Costal») es la forma
+       de compra y ya no se pega al contenido: es un metadato. */
     function _contenido(ins) {
         if (!ins) return '';
-        var emp  = (ins.empaque || '').toString().trim();
-        var cont = _soloContenido(ins);
-        return [emp, cont].filter(Boolean).join(' ');
+        return _soloContenido(ins);
     }
+    /* La «maduración» cambia de significado según el tipo: en destilados y
+       licores es la variedad de verdad (Reposado, 12 años), pero en proteínas
+       es el ESTADO DE COMPRA (Fresco, Congelado -18°C) y en frutas el TIPO DE
+       COMPRA (A granel, Por pieza). Esas no son identidad: no van en el nombre. */
+    var NO_ES_VARIEDAD = /congelad|refrigerad|fresco|iqf|granel|por pieza|por manojo|por caja|por bolsa|por charola|cubeta|peso variable|peso aprox/i;
+    function _variedad(o) {
+        if (o.variedad) return o.variedad;
+        var m = String(o.maduracion || '').trim();
+        if (!m || o.tipoInsumo === 'carne' || o.tipoInsumo === 'fruta' || NO_ES_VARIEDAD.test(m)) return '';
+        return m;
+    }
+    function _mismo(a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); }
 
     // Devuelve el insumo del catálogo si `o` es una fila/ingrediente con insumoId.
     function _canon(o) {
@@ -50,12 +66,15 @@
 
     function _partes(o) {
         o = _canon(o) || {};
+        var nombre = o.nombreBase || o.nombre || '', variedad = _variedad(o), marca = o.marca || '';
+        // Una marca igual al nombre (o a la variedad) no dice nada nuevo: no se repite.
+        if (_mismo(marca, nombre) || _mismo(marca, variedad)) marca = '';
         return {
             sub:       o.subcategoria || o.categoria || '',
-            nombre:    o.nombreBase || o.nombre || '',
-            variedad:  o.variedad || o.maduracion || '',
+            nombre:    nombre,
+            variedad:  variedad,
             contenido: _contenido(o),
-            marca:     o.marca || ''
+            marca:     marca
         };
     }
 

@@ -1262,6 +1262,8 @@ function _refCompraHTML(ins, pres, ref) {
 /* El stock TAL COMO SE DEFINIÓ en el editor (12 piezas, 1 caja…) y, si la
    requisición lo cuenta en otra unidad, su equivalente para el pedido. */
 function _uniDef(ref, um, n) {
+    var M = (typeof EtaaxCore !== 'undefined' && EtaaxCore.STOCK_UM_MEDIDA) || {};
+    if (M[um]) return M[um].lbl;            // (26-nov) g / kg / ml / L, tal como se definió
     if (ref.piezasPorCompra > 1) {
         if (um === 'compra') return n === 1 ? String(ref.compra).toLowerCase() : _plur(String(ref.compra).toLowerCase());
         return ref.porPieza ? (n === 1 ? 'botella' : 'botellas') : (n === 1 ? 'pieza' : 'piezas');
@@ -2599,8 +2601,8 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
 <script src="/reporte-marca.js?v=90a9c06c"></script>
-<script src="/insumo-label.js?v=789551ec"></script>
-<script src="/etaax-core.js?v=63c1dea0"></script>
+<script src="/insumo-label.js?v=40991fbf"></script>
+<script src="/etaax-core.js?v=31fe6dc0"></script>
 <script src="/etaax-store.js?v=3bbcc75c"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="../security.js?v=c188734e"></script>

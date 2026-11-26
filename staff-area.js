@@ -114,9 +114,25 @@
         if (a.indexOf('cocina') >= 0 || a.indexOf('coc') === 0) return 'cocina';
         return '';
     }
+    /* (26-nov) EL NOMBRE QUE EL NEGOCIO LE PUSO. Las áreas se renombran en
+       Insumos → «Editar áreas» (inv_ajustes.areas, copia local
+       etaax_<neg>_areas_cfg). La CLAVE no cambia —es la que entienden el
+       inventario y los permisos—: solo el nombre que se lee. Sin esa copia
+       (la app, o un negocio que no las renombró) queda el de siempre. */
+    function _nombresNegocio() {
+        try {
+            var neg = (typeof window.getNegocioActivo === 'function' && window.getNegocioActivo()) || localStorage.getItem('etaax_negocio_activo') || '';
+            if (!neg) return null;
+            var c = JSON.parse(localStorage.getItem('etaax_' + neg + '_areas_cfg') || 'null');
+            return (c && c.nombres) || null;
+        } catch (e) { return null; }
+    }
     function nomIns(k) {
-        var n2 = normIns(k);
-        for (var i = 0; i < AREAS_INSUMO.length; i++) if (AREAS_INSUMO[i].k === n2) return AREAS_INSUMO[i].nom;
+        var n2 = normIns(k), nb = _nombresNegocio();
+        for (var i = 0; i < AREAS_INSUMO.length; i++) if (AREAS_INSUMO[i].k === n2) {
+            var propio = nb && String(nb[n2] || '').trim();
+            return propio ? AREAS_INSUMO[i].ico + ' ' + propio : AREAS_INSUMO[i].nom;
+        }
         return k ? String(k) : '';
     }
 

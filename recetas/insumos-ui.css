@@ -177,3 +177,37 @@ body.etx-insumos-page #mainContent .brand-title {font:700 30px/1.2 'DM Sans',san
 .etx-insumos-page #convertirTipoGrid button .i-ui-icon {flex-shrink:0;}
 .etx-insumos-page #convertirTipoGrid button .etx-emoji-slot {display:none;}
 .etx-insumos-page #convertirTipoGrid button span:last-child {overflow:hidden;text-overflow:ellipsis;}
+
+/* ══ (26-nov) Las áreas de almacenamiento: el filtro y su administrador ══ */
+.i-areas-abrir {white-space:nowrap;}
+.i-areas-ov {position:fixed;inset:0;z-index:100000;display:none;align-items:flex-start;justify-content:center;padding:32px 16px;overflow:auto;background:rgba(0,0,0,.58);}
+.i-areas-caja {width:100%;max-width:720px;background:var(--i-panel,var(--surface,#1b1a16));border:1px solid var(--i-line,var(--border,#33312b));border-radius:16px;color:var(--text);box-shadow:0 24px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;}
+.i-areas-cab {display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:20px 22px 14px;border-bottom:1px solid var(--i-line,var(--border));}
+.i-areas-tit {font:600 19px/1.3 'DM Sans',sans-serif;}
+.i-areas-sub {font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-top:4px;max-width:560px;}
+.i-areas-x {width:36px;height:36px;border:1px solid var(--i-line,var(--border));border-radius:9px;background:transparent;color:var(--text);cursor:pointer;flex-shrink:0;}
+.i-areas-cuerpo {padding:12px 22px 4px;display:flex;flex-direction:column;gap:8px;}
+.i-areas-fila {display:grid;grid-template-columns:minmax(0,1.6fr) 90px minmax(0,1.2fr);align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--i-line,var(--border));border-radius:11px;background:var(--surface2,rgba(255,255,255,.03));}
+.i-areas-fila.borrando {border-color:rgba(224,90,58,.55);background:rgba(224,90,58,.06);}
+.i-areas-nom {display:flex;flex-direction:column;gap:4px;min-width:0;}
+.i-areas-nom small {font-size:11px;color:var(--text-dim);}
+.i-areas-inp {width:100%;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid var(--i-line,var(--border));background:var(--i-input,var(--surface2));color:var(--text);font:13.5px 'DM Sans',sans-serif;}
+.i-areas-inp.sub {margin-left:14px;width:calc(100% - 14px);}
+.i-areas-n {font-size:12px;color:var(--text-dim);text-align:right;white-space:nowrap;}
+.i-areas-acc {display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-dim);}
+.i-areas-sel {padding:7px 9px;border-radius:8px;border:1px solid var(--i-line,var(--border));background:var(--i-input,var(--surface2));color:var(--text);font:12.5px 'DM Sans',sans-serif;max-width:220px;}
+.i-areas-btn {padding:8px 12px;border-radius:8px;border:1px solid var(--i-line,var(--border));background:transparent;color:var(--text);font:600 12.5px 'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;}
+.i-areas-btn:hover {border-color:var(--i-cyan,var(--accent));}
+.i-areas-btn.rojo {color:#e05a3a;border-color:rgba(224,90,58,.45);}
+.i-areas-btn.ok {background:var(--i-terra,#ad4b27);border-color:var(--i-terra,#ad4b27);color:var(--i-ink,#fff);}
+.i-areas-ocultas {display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 2px;font-size:12px;color:var(--text-dim);}
+.i-areas-ocultas b {font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;}
+.i-areas-ocultas span {display:inline-flex;align-items:center;gap:8px;}
+.i-areas-nueva {display:flex;flex-direction:column;gap:7px;padding:12px;margin-top:4px;border:1px dashed var(--i-line,var(--border));border-radius:11px;}
+.i-areas-nueva b {font-size:12.5px;}
+.i-areas-nueva small {font-size:11px;color:var(--text-dim);}
+.i-areas-nueva-fila {display:flex;gap:8px;flex-wrap:wrap;}
+.i-areas-nueva-fila .i-areas-inp {flex:1 1 200px;width:auto;}
+.i-areas-pie {display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:14px 22px 18px;border-top:1px solid var(--i-line,var(--border));margin-top:10px;}
+.i-areas-msg {margin-right:auto;font-size:12.5px;color:#e05a3a;}
+@media (max-width:640px){ .i-areas-fila {grid-template-columns:1fr;} .i-areas-n,.i-areas-acc {justify-content:flex-start;text-align:left;} }

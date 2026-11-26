@@ -336,7 +336,8 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
         });
         await caso('…cada producto como en el sistema: «Nombre · Variedad» y su CONTENIDO (750 ml no se confunde con 1 L)', async () => {
             const r = await ep.evaluate(() => [...document.querySelectorAll('#sugs .cat-it')].map(b => b.querySelector('b').textContent + ' | ' + (b.querySelector('small') || {}).textContent));
-            assert.deepEqual(r.sort(), ['Refresco Cola | Botella 600 ml', 'Tequila · Blanco | Botella 1000 ml · Casa', 'Tequila · Blanco | Botella 750 ml · Casa']);
+            /* (26-nov) Sin el empaque («Botella»): es la forma de compra, no la identidad. 1000 ml = «1 L». */
+            assert.deepEqual(r.sort(), ['Refresco Cola | 600 ml', 'Tequila · Blanco | 1 L · Casa', 'Tequila · Blanco | 750 ml · Casa']);
         });
         await ep.click('#sugs .cat-it:has-text("750 ml")'); await ep.waitForTimeout(150);
         await foto(ep, 'm8b-tarjeta');

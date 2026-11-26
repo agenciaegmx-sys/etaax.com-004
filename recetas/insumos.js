@@ -1030,6 +1030,277 @@
        }
    }
 
+
+   /* ══ LAS ÁREAS DE ALMACENAMIENTO (Edwin, 26-nov) ═══════════════════════════
+      Filtro del catálogo por área y, desde ahí mismo, editarlas: renombrarlas,
+      agregar áreas propias y eliminarlas.
+
+      Las cinco BASE (barra, cocina, almacén barra, almacén cocina, almacén
+      general) son las que entienden el inventario (qué insumos cuenta cada
+      uno: _AREAS_DE_INV), quién ve qué (StaffArea) y la app. Sus claves no
+      cambian: se les cambia el NOMBRE. Un área PROPIA («Cava», «Cuarto frío»)
+      vive DENTRO de una base: el insumo guarda `area` = la base (así todo lo de
+      arriba sigue funcionando igual) y `areaSub` = el área propia. Eliminar un
+      área mueve antes sus insumos a otra; una base eliminada solo se oculta
+      (sus insumos ya se movieron) y se puede volver a usar.
+
+      La configuración es del negocio: inv_ajustes.areas (read-modify-write,
+      como las subcategorías propias) y su copia local etaax_<neg>_areas_cfg,
+      que StaffArea lee para los nombres. */
+   var AREAS_BASE_INS = [
+       { k: 'barra', label: 'Barra', inv: 'Barra' },
+       { k: 'cocina', label: 'Cocina', inv: 'Cocina' },
+       { k: 'almacen_barra', label: 'Almacén barra', inv: 'Barra y Bodega' },
+       { k: 'almacen_cocina', label: 'Almacén cocina', inv: 'Cocina y Bodega' },
+       { k: 'almacen_general', label: 'Almacén general', inv: 'Bodega' }
+   ];
+   function _areasCfg() {
+       var c = null;
+       try { c = JSON.parse(_skGet('areas_cfg') || 'null'); } catch (e) {}
+       c = c && typeof c === 'object' ? c : {};
+       return { nombres: c.nombres || {}, extra: Array.isArray(c.extra) ? c.extra : [], ocultas: Array.isArray(c.ocultas) ? c.ocultas : [] };
+   }
+   function _areasCfgLocal(cfg) { try { _skPut(_sk('areas_cfg'), JSON.stringify(cfg)); } catch (e) {} }
+   async function _areasCfgGuardar(cfg) {
+       _areasCfgLocal(cfg);
+       var negId = (typeof getNegocioActivo === 'function' && getNegocioActivo()) || '';
+       if (!negId || typeof _supabase === 'undefined' || typeof sbUpsertDoc !== 'function') return;
+       try {
+           var r = await _supabase.from('inv_ajustes').select('datos').eq('negocio_id', negId).maybeSingle();
+           var d = (r && r.data && r.data.datos) || {};
+           d.areas = cfg;
+           sbUpsertDoc('inv_ajustes', d, negId);
+       } catch (e) {}
+   }
+   function _areaBase(k) { for (var i = 0; i < AREAS_BASE_INS.length; i++) if (AREAS_BASE_INS[i].k === k) return AREAS_BASE_INS[i]; return null; }
+   function _areaNombre(k, cfg) {
+       cfg = cfg || _areasCfg();
+       var b = _areaBase(k);
+       return String(cfg.nombres[k] || '').trim() || (b ? b.label : String(k || ''));
+   }
+   function _areaExtra(k, cfg) { return (cfg || _areasCfg()).extra.filter(function (e) { return e.k === k; })[0] || null; }
+   /* Dónde está un insumo: «sub:<k>» si tiene un área propia viva; si no, su
+      base normalizada («bodega» de antes = almacén general). */
+   function _areaDeIns(x, cfg) {
+       if (!x) return '';
+       cfg = cfg || _areasCfg();
+       if (x.areaSub && _areaExtra(x.areaSub, cfg)) return 'sub:' + x.areaSub;
+       return (window.StaffArea && StaffArea.normIns) ? (StaffArea.normIns(x.area) || '') : String(x.area || '');
+   }
+   function _areaBaseDeIns(x, cfg) {
+       var k = _areaDeIns(x, cfg);
+       if (k.indexOf('sub:') === 0) { var e = _areaExtra(k.slice(4), cfg); return e ? e.base : ''; }
+       return k;
+   }
+   /* Valor del select → lo que se guarda en el insumo. */
+   function _areaDeSelect(v, cfg) {
+       v = String(v || '');
+       if (v.indexOf('sub:') === 0) { var e = _areaExtra(v.slice(4), cfg); return e ? { area: e.base, sub: e.k } : { area: '', sub: '' }; }
+       return { area: v, sub: '' };
+   }
+   /* Las opciones del editor del insumo: las bases a la vista y, dentro de
+      cada una, sus áreas propias. */
+   function _areasOpcionesHTML(sel, cfg) {
+       cfg = cfg || _areasCfg();
+       var h = '<option value="">Sin área</option>';
+       AREAS_BASE_INS.forEach(function (b) {
+           if (cfg.ocultas.indexOf(b.k) >= 0 && sel !== b.k) return;
+           h += '<option value="' + b.k + '"' + (sel === b.k ? ' selected' : '') + '>' + etx(_areaNombre(b.k, cfg)) + '</option>';
+           cfg.extra.filter(function (e) { return e.base === b.k; }).forEach(function (e) {
+               h += '<option value="sub:' + etx(e.k) + '"' + (sel === 'sub:' + e.k ? ' selected' : '') + '>   ' + etx(e.label) + ' · dentro de ' + etx(_areaNombre(b.k, cfg)) + '</option>';
+           });
+       });
+       return h;
+   }
+   /* El filtro del catálogo, con cuántos hay de cada una en lo que se ve. */
+   var _areaFiltro = '';
+   function _pintarFiltroArea(lista) {
+       var el = document.getElementById('filtroAreaIns'); if (!el) return;
+       var cfg = _areasCfg(), cuenta = {}, cuentaBase = {}, sin = 0;
+       (lista || []).forEach(function (x) {
+           var k = _areaDeIns(x, cfg), b = _areaBaseDeIns(x, cfg);
+           if (!k) { sin++; return; }
+           cuenta[k] = (cuenta[k] || 0) + 1;
+           if (b) cuentaBase[b] = (cuentaBase[b] || 0) + 1;
+       });
+       var op = function (v, t, n) { return '<option value="' + etx(v) + '"' + (_areaFiltro === v ? ' selected' : '') + '>' + etx(t) + (n != null ? ' (' + n + ')' : '') + '</option>'; };
+       var h = op('', 'Todas las áreas', null);
+       AREAS_BASE_INS.forEach(function (b) {
+           if (cfg.ocultas.indexOf(b.k) >= 0 && !cuentaBase[b.k]) return;
+           h += op(b.k, _areaNombre(b.k, cfg), cuentaBase[b.k] || 0);
+           cfg.extra.filter(function (e) { return e.base === b.k; }).forEach(function (e) {
+               h += op('sub:' + e.k, '   ' + e.label, cuenta['sub:' + e.k] || 0);
+           });
+       });
+       h += op('__sin', 'Sin área', sin);
+       el.innerHTML = h;
+   }
+   function _filtrarPorArea(lista) {
+       var v = _areaFiltro; if (!v) return lista;
+       var cfg = _areasCfg();
+       return lista.filter(function (x) {
+           if (v === '__sin') return !_areaDeIns(x, cfg);
+           if (v.indexOf('sub:') === 0) return _areaDeIns(x, cfg) === v;
+           return _areaBaseDeIns(x, cfg) === v;      // la base incluye sus áreas propias
+       });
+   }
+   function filtrarArea(v) { _areaFiltro = String(v || ''); filtrar(); }
+
+   /* ── El administrador de áreas ── */
+   var _areasEd = null;     // borrador: { cfg, mover: { <clave>: <destino> }, nuevaBase }
+   function abrirAreasIns() {
+       _areasEd = { cfg: JSON.parse(JSON.stringify(_areasCfg())), mover: {}, nuevaBase: 'almacen_barra' };
+       var ov = document.getElementById('areasInsOv');
+       if (!ov) {
+           ov = document.createElement('div'); ov.id = 'areasInsOv'; ov.className = 'i-areas-ov';
+           ov.addEventListener('click', function (e) { if (e.target === ov) cerrarAreasIns(); });
+           document.body.appendChild(ov);
+       }
+       _pintarAreasIns();
+       ov.style.display = 'flex';
+   }
+   function cerrarAreasIns() { var ov = document.getElementById('areasInsOv'); if (ov) ov.style.display = 'none'; _areasEd = null; }
+   /* Cuántos insumos tiene cada área (del negocio entero: la configuración es del negocio). */
+   function _contarAreas(cfg) {
+       var c = {};
+       getInsumos().forEach(function (x) {
+           var k = _areaDeIns(x, cfg); if (!k) return;
+           c[k] = (c[k] || 0) + 1;
+           if (k.indexOf('sub:') === 0) { var e = _areaExtra(k.slice(4), cfg); if (e) c[e.base] = (c[e.base] || 0) + 1; }
+       });
+       return c;
+   }
+   function _pintarAreasIns() {
+       var ov = document.getElementById('areasInsOv'); if (!ov || !_areasEd) return;
+       var cfg = _areasEd.cfg, cnt = _contarAreas(_areasCfg());
+       var destinos = function (excepto) {
+           var l = [];
+           AREAS_BASE_INS.forEach(function (b) {
+               if (cfg.ocultas.indexOf(b.k) >= 0 || _areasEd.mover[b.k] !== undefined) return;
+               if (b.k !== excepto) l.push([b.k, _areaNombre(b.k, cfg)]);
+               cfg.extra.forEach(function (e) {
+                   if (e.base === b.k && 'sub:' + e.k !== excepto && _areasEd.mover['sub:' + e.k] === undefined) l.push(['sub:' + e.k, '   ' + e.label]);
+               });
+           });
+           l.push(['', 'Sin área']);
+           return l;
+       };
+       var selMover = function (clave) {
+           var cur = _areasEd.mover[clave];
+           return '<select class="i-areas-sel" onchange="_areasEdMover(\'' + etx(clave) + '\', this.value)" aria-label="Mover a">' +
+               destinos(clave).map(function (d) { return '<option value="' + etx(d[0]) + '"' + (cur === d[0] ? ' selected' : '') + '>' + etx(d[1]) + '</option>'; }).join('') + '</select>';
+       };
+       var fila = function (clave, nombreHTML, extraHTML, n, accion) {
+           var borrando = _areasEd.mover[clave] !== undefined;
+           return '<div class="i-areas-fila' + (borrando ? ' borrando' : '') + '" data-area="' + etx(clave) + '">' +
+               '<div class="i-areas-nom">' + nombreHTML + extraHTML + '</div>' +
+               '<div class="i-areas-n">' + n + ' insumo' + (n !== 1 ? 's' : '') + '</div>' +
+               '<div class="i-areas-acc">' + (borrando
+                   ? (n ? '<span>Mover sus ' + n + ' a</span>' + selMover(clave) : '<span>Se elimina</span>') +
+                     '<button type="button" class="i-areas-btn" onclick="_areasEdBorrar(\'' + etx(clave) + '\', false)">Deshacer</button>'
+                   : accion) + '</div></div>';
+       };
+       var h = '<div class="i-areas-caja" role="dialog" aria-modal="true" aria-labelledby="iAreasTit">' +
+           '<div class="i-areas-cab"><div><div class="i-areas-tit" id="iAreasTit">Áreas de almacenamiento</div>' +
+           '<div class="i-areas-sub">Dicen dónde se guarda cada insumo y en qué inventario entra. Cámbiales el nombre, agrega áreas propias dentro de una de ellas o elimínalas (sus insumos se mueven a otra).</div></div>' +
+           '<button type="button" class="i-areas-x" onclick="cerrarAreasIns()" aria-label="Cerrar">✕</button></div><div class="i-areas-cuerpo">';
+       AREAS_BASE_INS.forEach(function (b) {
+           if (cfg.ocultas.indexOf(b.k) >= 0) return;
+           h += fila(b.k, '<input class="i-areas-inp" value="' + etx(_areaNombre(b.k, cfg)) + '" oninput="_areasEdNombre(\'' + b.k + '\', this.value)" aria-label="Nombre del área">',
+               '<small>Entra en el inventario de ' + b.inv + '</small>', cnt[b.k] || 0,
+               '<button type="button" class="i-areas-btn rojo" onclick="_areasEdBorrar(\'' + b.k + '\', true)">Eliminar</button>');
+           cfg.extra.filter(function (e) { return e.base === b.k; }).forEach(function (e) {
+               h += fila('sub:' + e.k, '<input class="i-areas-inp sub" value="' + etx(e.label) + '" oninput="_areasEdExtraNombre(\'' + etx(e.k) + '\', this.value)" aria-label="Nombre del área propia">',
+                   '<small>Área propia dentro de ' + etx(_areaNombre(b.k, cfg)) + '</small>', cnt['sub:' + e.k] || 0,
+                   '<button type="button" class="i-areas-btn rojo" onclick="_areasEdBorrar(\'sub:' + etx(e.k) + '\', true)">Eliminar</button>');
+           });
+       });
+       var ocultas = AREAS_BASE_INS.filter(function (b) { return cfg.ocultas.indexOf(b.k) >= 0; });
+       if (ocultas.length) h += '<div class="i-areas-ocultas"><b>Eliminadas</b>' + ocultas.map(function (b) {
+           return '<span>' + etx(_areaNombre(b.k, cfg)) + ' <button type="button" class="i-areas-btn" onclick="_areasEdVolver(\'' + b.k + '\')">Volver a usar</button></span>';
+       }).join('') + '</div>';
+       h += '<div class="i-areas-nueva"><b>Agregar un área</b><div class="i-areas-nueva-fila">' +
+           '<input class="i-areas-inp" id="iAreasNueva" placeholder="Ej. Cava, Cuarto frío, Congelador" maxlength="40">' +
+           '<select class="i-areas-sel" id="iAreasNuevaBase" aria-label="Dentro de">' + AREAS_BASE_INS.filter(function (b) { return cfg.ocultas.indexOf(b.k) < 0; }).map(function (b) {
+               return '<option value="' + b.k + '"' + (_areasEd.nuevaBase === b.k ? ' selected' : '') + '>dentro de ' + etx(_areaNombre(b.k, cfg)) + '</option>';
+           }).join('') + '</select>' +
+           '<button type="button" class="i-areas-btn" onclick="_areasEdAgregar()">Agregar</button></div>' +
+           '<small>Un área propia entra en los mismos inventarios que el área donde vive.</small></div>';
+       h += '</div><div class="i-areas-pie"><span class="i-areas-msg" id="iAreasMsg"></span>' +
+           '<button type="button" class="i-areas-btn" onclick="cerrarAreasIns()">Cancelar</button>' +
+           '<button type="button" class="i-areas-btn ok" onclick="guardarAreasIns()">Guardar</button></div></div>';
+       ov.innerHTML = h;
+   }
+   function _areasEdNombre(k, v) { if (_areasEd) _areasEd.cfg.nombres[k] = String(v || '').trim(); }
+   function _areasEdExtraNombre(k, v) { var e = _areasEd && _areaExtra(k, _areasEd.cfg); if (e) e.label = String(v || '').trim(); }
+   function _areasEdMover(clave, v) { if (_areasEd) _areasEd.mover[clave] = v; }
+   function _areasEdBorrar(clave, si) {
+       if (!_areasEd) return;
+       if (!si) { delete _areasEd.mover[clave]; _pintarAreasIns(); return; }
+       // Destino por omisión: un área propia regresa a su base; una base, al primer destino que quede.
+       var def = '';
+       if (clave.indexOf('sub:') === 0) { var e = _areaExtra(clave.slice(4), _areasEd.cfg); def = e ? e.base : ''; }
+       _areasEd.mover[clave] = def;
+       _pintarAreasIns();
+       var sel = document.querySelector('#areasInsOv [data-area="' + clave + '"] select');
+       if (sel && !def) { _areasEd.mover[clave] = sel.value; }
+   }
+   function _areasEdVolver(k) { if (!_areasEd) return; _areasEd.cfg.ocultas = _areasEd.cfg.ocultas.filter(function (x) { return x !== k; }); _pintarAreasIns(); }
+   function _areasEdAgregar() {
+       if (!_areasEd) return;
+       var inp = document.getElementById('iAreasNueva'), base = (document.getElementById('iAreasNuevaBase') || {}).value || 'almacen_barra';
+       var label = String((inp && inp.value) || '').trim(), m = document.getElementById('iAreasMsg');
+       if (!label) { if (inp) inp.focus(); return; }
+       var ya = _areasEd.cfg.extra.some(function (e) { return e.label.toLowerCase() === label.toLowerCase(); }) ||
+                AREAS_BASE_INS.some(function (b) { return _areaNombre(b.k, _areasEd.cfg).toLowerCase() === label.toLowerCase(); });
+       if (ya) { if (m) m.textContent = 'Ya hay un área con ese nombre.'; return; }
+       _areasEd.cfg.extra.push({ k: 'a' + genId(), label: label, base: base });
+       _areasEd.nuevaBase = base;
+       _pintarAreasIns();
+   }
+   async function guardarAreasIns() {
+       if (!_areasEd) return;
+       var cfg = _areasEd.cfg, mover = _areasEd.mover, viejo = _areasCfg(), m = document.getElementById('iAreasMsg');
+       if (cfg.extra.some(function (e) { return !e.label; })) { if (m) m.textContent = 'Toda área necesita nombre.'; return; }
+       var claves = Object.keys(mover), movidos = 0;
+       if (claves.length) {
+           var n = _contarAreas(viejo), total = claves.reduce(function (s, c) { return s + (n[c] || 0); }, 0);
+           if (!confirm('Se eliminan ' + claves.length + ' área' + (claves.length !== 1 ? 's' : '') + (total ? ' y se mueven ' + total + ' insumo' + (total !== 1 ? 's' : '') : '') + '. ¿Seguimos?')) return;
+           // Primero se mueven los insumos (con la configuración que todavía los nombra)…
+           var lista = getInsumos(), cambio = false;
+           lista.forEach(function (x) {
+               var k = _areaDeIns(x, viejo); if (!k) return;
+               var dest = mover[k];
+               if (dest === undefined && k.indexOf('sub:') === 0) {
+                   // Su base se elimina: los de sus áreas propias se van con ella.
+                   var e = _areaExtra(k.slice(4), viejo);
+                   if (e && mover[e.base] !== undefined) dest = mover[e.base];
+               }
+               if (dest === undefined) return;
+               var d = _areaDeSelect(dest, cfg);
+               x.area = d.area; x.areaSub = d.sub; cambio = true; movidos++;
+           });
+           // …y luego se quitan las áreas: las propias se borran; las base se ocultan.
+           claves.forEach(function (c) {
+               if (c.indexOf('sub:') === 0) cfg.extra = cfg.extra.filter(function (e) { return e.k !== c.slice(4); });
+               else if (cfg.ocultas.indexOf(c) < 0) {
+                   cfg.ocultas.push(c);
+                   // Sus áreas propias se van con ella a donde se movieron sus insumos.
+                   cfg.extra = cfg.extra.filter(function (e) { return e.base !== c; });
+               }
+           });
+           if (cambio) setInsumos(lista);
+       }
+       await _areasCfgGuardar(cfg);
+       cerrarAreasIns();
+       if (_areaFiltro && (_areaFiltro.indexOf('sub:') === 0 ? !_areaExtra(_areaFiltro.slice(4), cfg) : cfg.ocultas.indexOf(_areaFiltro) >= 0)) _areaFiltro = '';
+       cargarFiltros(); filtrar();
+       return movidos;
+   }
+   window.abrirAreasIns = abrirAreasIns; window.cerrarAreasIns = cerrarAreasIns; window.guardarAreasIns = guardarAreasIns;
+   window.filtrarArea = filtrarArea; window._areasEdNombre = _areasEdNombre; window._areasEdExtraNombre = _areasEdExtraNombre;
+   window._areasEdMover = _areasEdMover; window._areasEdBorrar = _areasEdBorrar; window._areasEdVolver = _areasEdVolver; window._areasEdAgregar = _areasEdAgregar;
+
    function filtrar() {
        /* El conteo de novedades se recalcula en cada repintado: si se quedara
           cacheado, atender una novedad dejaría su marca puesta hasta recargar
@@ -1101,12 +1372,15 @@
        // nombre/marca (identidad = id: productos distintos pueden llamarse igual;
        // el dedup por texto colapsaba productos legítimos e invertía contadores).
 
+       // (26-nov) El área: el selector cuenta lo que se ve y luego filtra.
+       _pintarFiltroArea(lista);
+       lista = _filtrarPorArea(lista);
        _listaFiltrada = lista;
        _yaFiltrado = true;
        // La página se resetea SOLO cuando cambia algún filtro/búsqueda. En los
        // demás re-renders (guardar un insumo, pausar, eliminar, realtime) se
        // CONSERVA la página actual — antes editar en la página 2 te regresaba a la 1.
-       var _firmaF = [q, fam, cat, fams.join(','), cats2.join(','), sucFil, sucActiva, catGlobal, estadoIns, vistaInsumos, _ordenModoIns].join('|');
+       var _firmaF = [q, fam, cat, fams.join(','), cats2.join(','), sucFil, sucActiva, catGlobal, estadoIns, vistaInsumos, _ordenModoIns, _areaFiltro].join('|');
        if (_firmaF !== _filtroFirmaAnt) { _paginaActual = 0; _filtroFirmaAnt = _firmaF; }
        _renderPagina();
        renderStats(); // stats por sucursal (se actualiza al cambiar el filtro de sucursal)
@@ -2617,6 +2891,8 @@
        try {
            var r = await _supabase.from('inv_ajustes').select('datos').eq('negocio_id', negId).maybeSingle();
            if (r.error || !r.data) return;
+           var _ar = (r.data.datos || {}).areas;
+           if (_ar && typeof _ar === 'object') { _areasCfgLocal(_ar); try { filtrar(); } catch (e) {} }
            var sc = (r.data.datos || {}).subcats;
            if (sc && typeof sc === 'object') {
                _subcatsCustom = sc;
@@ -3305,6 +3581,11 @@
        (function(){
            var elA = document.getElementById('ins-area'); if (!elA) return;
            var v = (ins && ins.area) || '';
+           /* (26-nov) Las opciones salen de las áreas del negocio: las base con
+              su nombre y, dentro de cada una, sus áreas propias. */
+           var _cfgA = _areasCfg();
+           if (ins && ins.areaSub && _areaExtra(ins.areaSub, _cfgA)) v = 'sub:' + ins.areaSub;
+           elA.innerHTML = _areasOpcionesHTML(v, _cfgA);
            /* UN ÁREA QUE YA NO ESTÁ EN LA LISTA. «Bodega» se partió en almacén
               de barra, de cocina y general; los cientos de insumos que dicen
               «bodega» siguen diciéndolo, a propósito —reescribirles el campo en
@@ -5328,17 +5609,26 @@
        var plural = function (t) { t = String(t || ''); return /s$/i.test(t) ? t : (/[aeiouáéíóú]$/i.test(t) ? t + 's' : t + 'es'); };
        return { varias: ref.piezasPorCompra > 1, compra: plural(compra || 'Cajas'), pieza: plural(pieza), factor: ref.piezasPorCompra };
    }
+   /* (26-nov, Edwin) Además de la pieza y la compra, las medidas estándar
+      (g / kg o ml / L, según el contenido de la presentación): el núcleo las
+      pasa a piezas (EtaaxCore.stockDefinido). */
+   function _stockMedidas(p) { return (window.EtaaxCore && EtaaxCore.stockUnidadesMedida) ? EtaaxCore.stockUnidadesMedida(p) : []; }
    function _stockUmTxt(p, campo) {
+       var M = (window.EtaaxCore && EtaaxCore.STOCK_UM_MEDIDA) || {};
+       if (M[p[campo]] && _stockMedidas(p).some(function (m) { return m.v === p[campo]; })) return M[p[campo]].lbl;
        var u = _stockUnidades(p);
        if (!u.varias) return String(p.presentacionCompra || p.umPresCompra || 'piezas').toLowerCase();
        return (p[campo] === 'compra' ? u.compra : u.pieza).toLowerCase();
    }
    function _stockUmSel(p, i, campo) {
-       var u = _stockUnidades(p), val = p[campo] === 'compra' ? 'compra' : 'pieza';
-       if (!u.varias) return '<span class="i-stock-um">' + etx(String(p.presentacionCompra || p.umPresCompra || 'piezas').toLowerCase()) + '</span>';
+       var u = _stockUnidades(p), med = _stockMedidas(p);
+       var val = med.some(function (m) { return m.v === p[campo]; }) ? p[campo] : (u.varias && p[campo] === 'compra' ? 'compra' : 'pieza');
+       var piezaTxt = u.varias ? u.pieza : String(p.presentacionCompra || p.umPresCompra || 'piezas').toLowerCase();
+       if (!u.varias && !med.length) return '<span class="i-stock-um">' + etx(piezaTxt) + '</span>';
+       var op = function (v, t) { return '<option value="' + v + '"' + (val === v ? ' selected' : '') + '>' + etx(t) + '</option>'; };
        return '<select class="i-stock-um" onchange="updPres(' + i + ',\'' + campo + '\',this.value)" aria-label="Unidad">' +
-           '<option value="pieza"' + (val === 'pieza' ? ' selected' : '') + '>' + etx(u.pieza) + '</option>' +
-           '<option value="compra"' + (val === 'compra' ? ' selected' : '') + '>' + etx(u.compra) + ' de ' + u.factor + '</option></select>';
+           op('pieza', piezaTxt) + (u.varias ? op('compra', u.compra + ' de ' + u.factor) : '') +
+           med.map(function (m) { return op(m.v, m.lbl); }).join('') + '</select>';
    }
    function _renderStockBlock(p, i, tieneCopa) {
        var u = _stockUnidades(p);
@@ -5363,7 +5653,7 @@
                </div>
            </div>
            <div style="font-size:10.5px;color:var(--text-dim);margin-top:7px;line-height:1.5">
-               ${u.varias ? 'Elige en qué va cada uno: ' + etx(u.pieza.toLowerCase()) + ' o ' + etx(u.compra.toLowerCase()) + ' de ' + u.factor + '. ' : ''}El mínimo dispara la alerta de "hay que pedir"; el máximo es hasta dónde surtir.
+               ${(u.varias || _stockMedidas(p).length) ? 'Elige en qué va cada uno' + (_stockMedidas(p).length ? ' (también ' + _stockMedidas(p).map(function (m) { return m.lbl; }).join(' o ') + ': se convierten con el contenido de la presentación)' : '') + '. ' : ''}El mínimo dispara la alerta de "hay que pedir"; el máximo es hasta dónde surtir.
            </div>
        </div>`;
    }
@@ -6076,9 +6366,11 @@
            activo:       document.getElementById('ins-activo').value || '1',
            foto:         fotoInsumoBase64 || fotoAnterior,
            presentaciones: presentacionesTemp,
-           area:         (function(){ var el = document.getElementById('ins-area'); return el ? el.value : ''; })(),
+           area:         (function(){ var el = document.getElementById('ins-area'); return el ? _areaDeSelect(el.value).area : ''; })(),
            sucursalId:   '' // ya no se elige aquí; se define por membresía abajo
        };
+       // El área propia (Cava, Cuarto frío…) vive DENTRO de su base: area = la base, areaSub = la propia.
+       (function(){ var el = document.getElementById('ins-area'); if (el) insumo.areaSub = _areaDeSelect(el.value).sub; })();
 
        // Membresía por sucursal. NUEVO → nace como MAESTRO global (sin sucursal) y, si se
        // crea DENTRO de una sucursal, se genera además su COPIA vinculada ahí (abajo, en

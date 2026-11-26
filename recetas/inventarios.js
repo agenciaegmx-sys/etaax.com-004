@@ -3643,6 +3643,9 @@ function _pushInvAjustes() {
     if (!_invAjustesCache) _invAjustesCache = { compuestos:{}, bateo:{} };
     try { _invAjustesCache.compuestos[suc] = JSON.parse(localStorage.getItem(_compuestosKey()) || '[]'); } catch(e){}
     try { _invAjustesCache.bateo[suc]      = JSON.parse(localStorage.getItem(_bateoKey()) || '[]'); } catch(e){}
+    /* (26-nov) Las áreas se editan en Insumos: se manda la copia local más
+       nueva para no regresar la configuración que tenía este documento. */
+    try { var _ar = JSON.parse(localStorage.getItem('etaax_' + negId + '_areas_cfg') || 'null'); if (_ar) _invAjustesCache.areas = _ar; } catch(e){}
     sbUpsertDoc('inv_ajustes', _invAjustesCache, negId);
 }
 
@@ -15019,17 +15022,22 @@ function _stockUnidadesInv(p) {
     var pieza = String(p.umPresCompra || '').trim(); if (!pieza || /^(kg|g|lt|ml)$/i.test(pieza)) pieza = 'Piezas';
     return { varias: ref.piezasPorCompra > 1, compra: pl(String(p.presentacionCompra || 'Cajas')), pieza: pl(pieza), factor: ref.piezasPorCompra };
 }
+function _stockMedidasInv(p) { return (window.EtaaxCore && EtaaxCore.stockUnidadesMedida) ? EtaaxCore.stockUnidadesMedida(p) : []; }
 function _stockUmTxtInv(p, campo) {
+    var M = (window.EtaaxCore && EtaaxCore.STOCK_UM_MEDIDA) || {};
+    if (M[p[campo]] && _stockMedidasInv(p).some(function (m) { return m.v === p[campo]; })) return M[p[campo]].lbl;
     var u = _stockUnidadesInv(p);
     if (!u.varias) return String(p.presentacionCompra || p.umPresCompra || 'piezas').toLowerCase();
     return (p[campo] === 'compra' ? u.compra : u.pieza).toLowerCase();
 }
 function _stockUmSelInv(p, id, campo) {
-    var u = _stockUnidadesInv(p); if (!u.varias) return '';
-    var v = p[campo] === 'compra' ? 'compra' : 'pieza';
+    var u = _stockUnidadesInv(p), med = _stockMedidasInv(p);
+    if (!u.varias && !med.length) return '';
+    var v = med.some(function (m) { return m.v === p[campo]; }) ? p[campo] : (u.varias && p[campo] === 'compra' ? 'compra' : 'pieza');
+    var op = function (k, t) { return '<option value="' + k + '"' + (v === k ? ' selected' : '') + '>' + etx(t) + '</option>'; };
     return '<select id="' + id + '" class="ft-input" style="width:auto;flex:0 0 auto">' +
-        '<option value="pieza"' + (v === 'pieza' ? ' selected' : '') + '>' + etx(u.pieza) + '</option>' +
-        '<option value="compra"' + (v === 'compra' ? ' selected' : '') + '>' + etx(u.compra) + ' de ' + u.factor + '</option></select>';
+        op('pieza', u.varias ? u.pieza : String(p.presentacionCompra || p.umPresCompra || 'piezas').toLowerCase()) +
+        (u.varias ? op('compra', u.compra + ' de ' + u.factor) : '') + med.map(function (m) { return op(m.v, m.lbl); }).join('') + '</select>';
 }
 function _ftRenderVer(ins) {
     document.getElementById('ftNombre').textContent = insumoTitulo(ins);

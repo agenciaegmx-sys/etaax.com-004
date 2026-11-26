@@ -2168,13 +2168,48 @@
        12 / 24 eran piezas, y requisiciones lo enseñaba como 12 / 24 cajas).
        Con una sola unidad (se compra por pieza, botella o a granel) no hay
        nada que convertir. */
+    /* (26-nov, Edwin) ADEMÁS DE LA PIEZA Y LA COMPRA, LAS MEDIDAS ESTÁNDAR: el
+       mínimo de un pescado a granel se piensa en kilos y el de un destilado
+       puede pensarse en litros. g / kg / ml / L se pasan a piezas con el
+       CONTENIDO de cada pieza (contNeto + umContenido de la presentación): 5 kg
+       de un granel de 1000 g = 5; 3 L de una botella de 750 ml = 4. Solo las
+       del mismo tipo (peso con peso, volumen con volumen) y solo si el
+       contenido está capturado: sin eso no hay con qué convertir y se lee como
+       pieza, igual que antes. */
+    var STOCK_UM_MEDIDA = {
+        g:  { dim: 'masa', f: 1,    lbl: 'g' },
+        kg: { dim: 'masa', f: 1000, lbl: 'kg' },
+        ml: { dim: 'vol',  f: 1,    lbl: 'ml' },
+        l:  { dim: 'vol',  f: 1000, lbl: 'L' }
+    };
+    function contenidoPieza(pres) {
+        pres = pres || {};
+        var u = String(pres.umContenido || '').toUpperCase(), c = n(pres.contNeto);
+        var m = { G: ['masa', 1], GR: ['masa', 1], KG: ['masa', 1000], ML: ['vol', 1], L: ['vol', 1000], LT: ['vol', 1000], LTS: ['vol', 1000] }[u];
+        return (m && c > 0) ? { dim: m[0], base: c * m[1] } : null;
+    }
+    /* Las unidades de medida que tienen sentido para esta presentación. */
+    function stockUnidadesMedida(pres) {
+        var c = contenidoPieza(pres);
+        if (!c) return [];
+        return Object.keys(STOCK_UM_MEDIDA).filter(function (k) { return STOCK_UM_MEDIDA[k].dim === c.dim; })
+            .map(function (k) { return { v: k, lbl: STOCK_UM_MEDIDA[k].lbl }; });
+    }
+    function esUmMedida(u) { return !!STOCK_UM_MEDIDA[u]; }
     function stockDefinido(pres) {
         pres = pres || {};
-        var ppc = referenciaCompra({}, pres).piezasPorCompra;
-        var um = function (u) { return (ppc > 1 && u === 'compra') ? 'compra' : 'pieza'; };
+        var ppc = referenciaCompra({}, pres).piezasPorCompra, cont = contenidoPieza(pres);
+        var um = function (u) {
+            if (STOCK_UM_MEDIDA[u] && cont && STOCK_UM_MEDIDA[u].dim === cont.dim) return u;
+            return (ppc > 1 && u === 'compra') ? 'compra' : 'pieza';
+        };
         var uMin = um(pres.stockMinUm), uMax = um(pres.stockMaxUm);
         var vacio = function (v) { return v == null || String(v).trim() === ''; };
-        var aPiezas = function (v, u) { return vacio(v) ? v : (u === 'compra' ? n(v) * ppc : n(v)); };
+        var aPiezas = function (v, u) {
+            if (vacio(v)) return v;
+            if (STOCK_UM_MEDIDA[u]) return Math.round(n(v) * STOCK_UM_MEDIDA[u].f / cont.base * 10000) / 10000;
+            return u === 'compra' ? n(v) * ppc : n(v);
+        };
         return { min: pres.stockMin, max: pres.stockMax, umMin: uMin, umMax: uMax, piezasPorCompra: ppc,
                  minPiezas: aPiezas(pres.stockMin, uMin), maxPiezas: aPiezas(pres.stockMax, uMax) };
     }
@@ -2189,7 +2224,8 @@
             return porCompra ? Math.round(n(v) / ref.piezasPorCompra * 10000) / 10000 : n(v);
         };
         return { min: enStock(d.minPiezas), max: enStock(d.maxPiezas), definido: d, ref: ref,
-                 convierte: ref.piezasPorCompra > 1 && (porCompra ? (d.umMin === 'pieza' || d.umMax === 'pieza') : (d.umMin === 'compra' || d.umMax === 'compra')) };
+                 convierte: esUmMedida(d.umMin) || esUmMedida(d.umMax) ||
+                            (ref.piezasPorCompra > 1 && (porCompra ? (d.umMin === 'pieza' || d.umMax === 'pieza') : (d.umMin === 'compra' || d.umMax === 'compra'))) };
     }
     /* La regla del pedido (Edwin): existencia IGUAL O MENOR al mínimo → se pide
        lo que falta para llegar al MÁXIMO; mayor al mínimo → no se pide. Sin
@@ -2466,6 +2502,7 @@
         factorImpuestoPresentacion: factorImpuestoPresentacion,
         referenciaCompra: referenciaCompra, pedidoRequisicion: pedidoRequisicion,
         stockDefinido: stockDefinido, stockRequisicion: stockRequisicion,
+        STOCK_UM_MEDIDA: STOCK_UM_MEDIDA, contenidoPieza: contenidoPieza, stockUnidadesMedida: stockUnidadesMedida, esUmMedida: esUmMedida,
         costosAbarrote: costosAbarrote,
         costosPresentacion: costosAbarrote,
         contenidoCompraPresentacion: contenidoCompraPresentacion,

@@ -17406,10 +17406,12 @@ console.log('\n══ BH80 · Entradas: tarjeta que se cierra, registro de afuer
             return eq([ok, B._cacheEL.length, g.insumoId, g.cantidad, g.origen, !!g.sucursalId, g.foto_url, g.importadoEnInv === undefined].join('|'),
                       'true|1|jmx1|12|manual|true|f1.jpg|true');
         });
-        test('cada renglón dice el insumo COMPLETO: «Jumex · Mango» con su lata y marca, no «Jumex» a secas', () => {
+        /* (26-nov, Edwin) La info es solo la identidad: el empaque («lata») ya no
+           se pega al contenido, y una marca igual al nombre («Jumex») no se repite. */
+        test('cada renglón dice el insumo COMPLETO: «Jumex · Mango» con su contenido, no «Jumex» a secas', () => {
             const e = { insumoId: 'jmx1', nombre: 'Jumex' };
             const meta = B._entMetaHTML(e).replace(/<[^>]*>/g, '');
-            return eq(B._entTituloTxt(e) + ' | ' + /335/.test(meta) + ' | ' + /Jumex/.test(meta), 'Jumex · Mango | true | true');
+            return eq(B._entTituloTxt(e) + ' | ' + /335/.test(meta) + ' | ' + /Jumex/.test(meta), 'Jumex · Mango | true | false');
         });
         test('…y dos Jumex distintos ya no se ven iguales', () =>
             eq(B._entTituloTxt({ insumoId: 'jmx1', nombre: 'Jumex' }) !== B._entTituloTxt({ insumoId: 'jmx2', nombre: 'Jumex' }), true));
@@ -18697,6 +18699,85 @@ console.log('\n══ BH98 · Recibos: editar con el generador y eliminar; tipo 
            docs.indexOf("(estado==='eliminado'?!vivo(d):(vivo(d)&&(!estado||d.estado===estado)))") > -1, true));
     test('«Cambiar tipo de insumo»: el emoji va en su ranura, para que quede UN ícono (el de la marca)', () =>
         eq(/<span class="etx-emoji-slot" style="font-size:15px">\$\{icon\}<\/span><span>\$\{label\}<\/span>/.test(ins), true));
+})();
+
+/* ═══════ BH99 · INSUMOS: ÁREAS EDITABLES, LA INFO ES SOLO IDENTIDAD, Y EL STOCK EN g/kg/ml/L (26-nov) ═══════
+   Edwin: «filtros por área… y que se puedan editar o eliminar áreas»; «en la
+   info de cada insumo se cuela la forma de compra y la forma de almacenarlo»;
+   «en el stock, el selector de unidad debe tener gramos, mililitros, litros,
+   kilos y los definidos». La prueba de pantalla: tests/probar-insumos-areas.cjs. */
+console.log('\n══ BH99 · Insumos: áreas editables, identidad y stock en medidas ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    /* ── El stock en medidas (núcleo) ── */
+    const granel = { presentacionCompra: 'Granel', umPresCompra: 'KG', contNeto: '1000', umContenido: 'G' };
+    const caja = { presentacionCompra: 'Caja', cantPresCompra: '12', umPresCompra: 'Botellas', contNeto: '750', umContenido: 'ML' };
+    test('stock en kg de un granel de 1000 g: 5 kg = 5 piezas; 2500 g = 2.5', () => {
+        const d = Core.stockDefinido(Object.assign({}, granel, { stockMin: '5', stockMax: '2500', stockMinUm: 'kg', stockMaxUm: 'g' }));
+        return eq([d.umMin, d.minPiezas, d.umMax, d.maxPiezas].join('|'), 'kg|5|g|2.5');
+    });
+    test('stock en litros de botellas de 750 ml: 3 L = 4 botellas (y la caja de 12 sigue igual)', () => {
+        const d = Core.stockDefinido(Object.assign({}, caja, { stockMin: '3', stockMax: '2', stockMinUm: 'l', stockMaxUm: 'compra' }));
+        return eq([d.minPiezas, d.maxPiezas].join('|'), '4|24');
+    });
+    test('una medida que no corresponde (kg para una botella) o sin contenido se lee como pieza, como antes', () => {
+        const a = Core.stockDefinido(Object.assign({}, caja, { stockMin: '2', stockMinUm: 'kg' }));
+        const b = Core.stockDefinido({ presentacionCompra: 'Pieza', stockMin: '3', stockMinUm: 'g' });
+        return eq([a.umMin, a.minPiezas, b.umMin, b.minPiezas].join('|'), 'pieza|2|pieza|3');
+    });
+    test('solo se ofrecen las medidas del mismo tipo que el contenido (peso o volumen)', () =>
+        eq(JSON.stringify([Core.stockUnidadesMedida(granel).map(x => x.lbl), Core.stockUnidadesMedida(caja).map(x => x.lbl), Core.stockUnidadesMedida({})]),
+           '[["g","kg"],["ml","L"],[]]'));
+    test('requisiciones lo convierte para el pedido cuando el stock se definió en una medida', () =>
+        eq(Core.stockRequisicion({ tipoInsumo: 'carne' }, Object.assign({}, granel, { stockMin: '3', stockMax: '8', stockMinUm: 'kg', stockMaxUm: 'kg' })).convierte, true));
+    test('el editor ofrece pieza, la compra y las medidas; inventarios y requisiciones las leen', () => {
+        const ins = leer('recetas/insumos.js'), inv = leer('recetas/inventarios.js'), rq = leer('recetas/requisiciones.html');
+        return eq(/function _stockUmSel\(p, i, campo\) \{[\s\S]*?med\.map\(function \(m\) \{ return op\(m\.v, m\.lbl\); \}\)/.test(ins) &&
+                  /function _stockUmSelInv\(p, id, campo\) \{[\s\S]*?med\.map\(function \(m\) \{ return op\(m\.v, m\.lbl\); \}\)/.test(inv) &&
+                  rq.indexOf("if (M[um]) return M[um].lbl;") > -1, true);
+    });
+
+    /* ── La info del insumo: solo identidad ── */
+    const L = { window: {} }; vm.createContext(L); L.window = L; vm.runInContext(leer('insumo-label.js'), L);
+    const et = (o) => L.insumoTitulo(o) + ' | ' + L.insumoMeta(o);
+    test('ni el estado de compra de una proteína («Congelado -18°C») ni el empaque («Granel») van en la info', () =>
+        eq(et({ nombre: 'Pescado Tilapia', marca: 'Pescado Tilapia', maduracion: 'Congelado (-18°C o menos)', tipoInsumo: 'carne', empaque: 'Granel',
+                presentaciones: [{ contNeto: '1000', umContenido: 'G' }] }), 'Pescado Tilapia | 1 kg'));
+    test('ni el tipo de compra de una fruta («A granel — por kg»)', () =>
+        eq(et({ nombre: 'Limón', maduracion: 'A granel — por kg (peso exacto)', tipoInsumo: 'fruta', presentaciones: [{ contNeto: '1', umContenido: 'KG' }] }), 'Limón | 1 kg'));
+    test('pero en un destilado la maduración SÍ es su variedad (Reposado), y 1000 ml se lee «1 L»', () =>
+        eq(et({ nombre: 'Tequila Don Julio', maduracion: 'Reposado', marca: 'Don Julio', tipoInsumo: 'destilado', empaque: 'Botella',
+                presentaciones: [{ contNeto: '1000', umContenido: 'ML' }] }), 'Tequila Don Julio · Reposado | 1 L · Don Julio'));
+    test('la identidad del insumo (_keyInsumo) no cambia: sigue con los campos crudos', () =>
+        eq(L._keyInsumo({ nombre: 'Pescado', marca: 'X', maduracion: 'Congelado' }), 'pescado|x|congelado'));
+
+    /* ── Áreas ── */
+    test('StaffArea dice el NOMBRE que el negocio le puso al área (la clave no cambia)', () => {
+        const almacen = { etaax_negocio_activo: 'n1', etaax_n1_areas_cfg: JSON.stringify({ nombres: { almacen_barra: 'Bodega de barra' } }) };
+        const c = { localStorage: { getItem: (k) => almacen[k] == null ? null : almacen[k] } }; c.window = c; vm.createContext(c);
+        vm.runInContext(leer('staff-area.js'), c);
+        return eq([c.StaffArea.nomIns('almacen_barra'), c.StaffArea.nomIns('barra'), c.StaffArea.normIns('almacen barra')].join(' | '), '📦 Bodega de barra | 🍸 Barra | almacen_barra');
+    });
+    const ins = leer('recetas/insumos.js');
+    const cuerpo = (n) => { const i = ins.indexOf('function ' + n + '('); return i < 0 ? '' : ins.slice(i, ins.indexOf('\n   }', i) + 5); };
+    const A = { console, JSON, Object, Array, String, window: {}, etx: (x) => String(x),
+        localStorage: { getItem: (k) => A.__al[k] == null ? null : A.__al[k], setItem: (k, v) => { A.__al[k] = String(v); } }, __al: {},
+        getNegocioActivo: () => 'n1' };
+    A.window = A; vm.createContext(A);
+    vm.runInContext(leer('staff-area.js'), A);
+    vm.runInContext(ins.slice(ins.indexOf('var AREAS_BASE_INS = ['), ins.indexOf('];', ins.indexOf('var AREAS_BASE_INS = [')) + 2) + ';' +
+        ['_sk', '_skGet', '_areasCfg', '_areaBase', '_areaNombre', '_areaExtra', '_areaDeIns', '_areaBaseDeIns', '_areaDeSelect', '_filtrarPorArea'].map(cuerpo).join('\n') + '; var _areaFiltro = "";', A);
+    A.__al.etaax_n1_areas_cfg = JSON.stringify({ extra: [{ k: 'cava', label: 'Cava', base: 'almacen_barra' }] });
+    test('un área propia vive DENTRO de su base: guarda area = la base (la del inventario) y areaSub = la propia', () =>
+        eq(JSON.stringify([A._areaDeSelect('sub:cava'), A._areaDeSelect('cocina')]), '[{"area":"almacen_barra","sub":"cava"},{"area":"cocina","sub":""}]'));
+    test('filtrar por la base incluye sus áreas propias; por el área propia, solo la suya; «bodega» de antes = almacén general', () => {
+        const l = [{ id: 'a', area: 'almacen_barra', areaSub: 'cava' }, { id: 'b', area: 'almacen_barra' }, { id: 'c', area: 'bodega' }, { id: 'd' }];
+        const f = (v) => { A._areaFiltro = v; vm.runInContext('_areaFiltro = ' + JSON.stringify(v), A); return A._filtrarPorArea(l).map(x => x.id).join(''); };
+        return eq([f('almacen_barra'), f('sub:cava'), f('almacen_general'), f('__sin')].join(' | '), 'ab | a | c | d');
+    });
+    test('las áreas se guardan en inv_ajustes.areas leyendo y escribiendo el documento entero (no pisa lo demás)', () =>
+        eq(/var r = await _supabase\.from\('inv_ajustes'\)\.select\('datos'\)[\s\S]{0,120}d\.areas = cfg;\s*sbUpsertDoc\('inv_ajustes', d, negId\);/.test(cuerpo('_areasCfgGuardar')) &&
+           leer('recetas/inventarios.js').indexOf("if (_ar) _invAjustesCache.areas = _ar;") > -1, true));
 })();
 
 /* ═══════════ SUITE BH92 · INSUMOS SUBE SOLO LO QUE CAMBIÓ (CPU de Supabase) ═════
@@ -23143,8 +23224,8 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
         const carga = idx.indexOf('insumo-label.js') > -1 && idx.indexOf('insumo-label.js') < idx.indexOf('src="app.js"');
         const c = { window: {} }; vm.createContext(c); c.window = c;
         vm.runInContext(fs.readFileSync(path.join(RAIZ, 'insumo-label.js'), 'utf8'), c);
-        const meta = c.insumoMeta({ nombre: 'Absolut', variedad: 'Azul', marca: 'Absolut', empaque: 'Botella', presentaciones: [{ contNeto: '750', umContenido: 'ML' }] });
-        return eq(usa + ' ' + carga + ' ' + meta, 'true true Botella 750 ml · Absolut', 'misma redacción');
+        const meta = c.insumoMeta({ nombre: 'Absolut', variedad: 'Azul', marca: 'Pernod Ricard', empaque: 'Botella', presentaciones: [{ contNeto: '750', umContenido: 'ML' }] });
+        return eq(usa + ' ' + carga + ' ' + meta, 'true true 750 ml · Pernod Ricard', 'misma redacción');
     });
 }
 
@@ -30222,6 +30303,8 @@ console.log('\n══ BE21 · Insumos: cada sucursal, su ficha ══');
         c.window = c; vm.createContext(c);
         vm.runInContext(leer('insumo-label.js'), c, { filename: 'insumo-label.js' });
         c.cargar = (file, ...nombres) => nombres.forEach(nm => vm.runInContext(fn(file, nm), c, { filename: file + ':' + nm }));
+        // (26-nov) guardarInsumo guarda área + área propia con estas piezas.
+        c.cargar('recetas/insumos.js', '_sk', '_skGet', '_skPut', '_areasCfg', '_areaExtra', '_areaDeSelect');
         return c;
     };
     const maestro = { id: 'm', nombre: 'Tónica', tipo: 'licor', sucursalId: '', sucursales: [], createdAt: '2026-01-01', presentaciones: [] };

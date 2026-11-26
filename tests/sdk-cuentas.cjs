@@ -42,7 +42,8 @@ function sdkEtx() {
             var pasa = function (r) { return f.every(function (c) { return c[2] === 'in' ? c[1].indexOf(val(r, c[0])) > -1 : val(r, c[0]) === c[1]; }); };
             if (modo === 'upsert') {
                 (Array.isArray(valor) ? valor : [valor]).forEach(function (v) {
-                    var claves = (opc.onConflict || (v.id !== undefined ? 'id' : 'negocio_id')).split(',');
+                    /* Como la llave primaria de verdad: negocio_insumos es (negocio_id, insumo_id). */
+                    var claves = (opc.onConflict || (v.id !== undefined ? 'id' : (v.insumo_id !== undefined ? 'negocio_id,insumo_id' : 'negocio_id'))).split(',');
                     var i = filas.findIndex(function (r) { return claves.every(function (k) { return r[k] === v[k]; }); });
                     var fila = JSON.parse(JSON.stringify(v));
                     if (i > -1) filas[i] = Object.assign(filas[i], fila); else filas.push(fila);
