@@ -1322,7 +1322,7 @@ function _rotularFotos() {
 function _notaHTML() {
     var k = LOTE.length;
     var items = k ? LOTE.map(function (it) {
-        return '<div class="nota-it"><span class="nota-it-nom">' + etx(it.nombre) + (it.meta ? '<small>' + etx(it.meta) + '</small>' : '') + '</span>' +
+        return '<div class="nota-it"><span class="nota-it-nom">' + etx(it.titulo || it.nombre) + (it.meta ? '<small>' + etx(it.meta) + '</small>' : '') + '</span>' +
             '<input class="nota-cant" type="text" inputmode="decimal" value="' + etx(String(it.cantidad)) + '" aria-label="Cantidad" ' +
                 'onchange="notaCant(\'' + it.id + '\', this.value)">' +
             '<span class="nota-u">' + etx(it.unidad || '') + '</span>' +
@@ -1378,6 +1378,7 @@ function _regVisibles() {
         return true;
     });
 }
+function _insDe(m) { return m && m.insumoId ? (INSUMOS || []).filter(function (x) { return x.id === m.insumoId; })[0] : null; }
 function _cantTxt(m) { var c = m.cantidad; return (c != null && c !== '' ? c : '—') + (m.unidad ? ' ' + m.unidad : ''); }
 function _filaReg(m) {
     var sel = !!_REG.sel, on = sel && !!_REG.sel.ids[m.id];
@@ -1447,7 +1448,8 @@ function pintarRegistradas() {
     h += '<div class="reg-sec">Por producto</div>' + ordenP.map(function (k) {
         var es = prods[k], tot = 0, u = es[0].unidad || '';
         es.forEach(function (m) { tot += n(m.cantidad); });
-        return _grupoReg('p|' + k, etx(es[0].nombre || '—'), es.length + ' entrada' + (es.length !== 1 ? 's' : ''),
+        var ins = _insDe(es[0]), meta = ins ? metaIns(ins) : '';
+        return _grupoReg('p|' + k, etx(ins ? tituloIns(ins) : (es[0].nombre || '—')), (meta ? etx(meta) + ' · ' : '') + es.length + ' entrada' + (es.length !== 1 ? 's' : ''),
             '<b class="reg-tot">+' + (Math.round(tot * 100) / 100) + (u ? ' ' + etx(u) : '') + '</b>', es.map(_filaReg).join(''));
     }).join('');
     c.innerHTML = h;
@@ -1555,14 +1557,22 @@ async function _buscar(q) {
    marca. Misma redacción que el QR del navegador (_insMetaParts en
    entrada.html): si las dos pantallas rotularan distinto, el mismo conteo se
    leería de dos maneras según por dónde se mire. */
+/* (26-nov) LA MISMA REDACCIÓN DEL SISTEMA (insumo-label.js, que la app ya
+   carga): título «Nombre · Variedad» y debajo «Botella 750 ml · Marca». Antes
+   se buscaba el contenido arriba (x.contNeto) y el catálogo lo manda dentro de
+   la presentación (presentaciones[0].contNeto): no salía, y dos botellas del
+   mismo producto —750 ml y 1 L— se veían iguales. */
+function tituloIns(x) {
+    if (!x) return '—';
+    return (typeof window.insumoTitulo === 'function' ? window.insumoTitulo(x) : '') || x.nombre || '—';
+}
 function metaIns(x) {
     if (!x) return '';
-    var partes = [];
-    var cont = x.contNeto ? (x.contNeto + ' ' + String(x.umContenido || 'ML').toLowerCase()) : '';
-    if (cont) partes.push('📦 ' + cont);
-    var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');
-    if (sub) partes.push(sub);
-    return partes.join(' · ');
+    if (typeof window.insumoMeta === 'function') return window.insumoMeta(x);
+    var p = (x.presentaciones && x.presentaciones[0]) || {};
+    var cn = x.contNeto || p.contNeto, um = x.umContenido || p.umContenido;
+    var cont = cn ? (cn + ' ' + String(um || 'ML').toLowerCase()) : '';
+    return [[x.empaque || p.empaque, cont].filter(Boolean).join(' '), x.marca].filter(Boolean).join(' · ');
 }
 
 async function cargarRecetas() {
@@ -1577,7 +1587,7 @@ function pintarSugs(lista, q, total) {
         /* Como la lista del sistema: el producto, lo que lo distingue y «+ registrar». */
         c.innerHTML = '<div class="cat-lista">' + lista.map(function (x, i) {
             var meta = metaIns(x);
-            return '<button class="cat-it" data-i="' + i + '"><span class="cat-txt"><b>' + etx(x.nombre || '—') + '</b>' +
+            return '<button class="cat-it" data-i="' + i + '"><span class="cat-txt"><b>' + etx(tituloIns(x)) + '</b>' +
                 (meta ? '<small>' + etx(meta) + '</small>' : '') + '</span><span class="cat-reg">+ registrar</span></button>';
         }).join('') + '</div>' +
             (total && total > lista.length ? '<div class="cat-mas">Se ven ' + lista.length + ' de ' + total + '. Escribe arriba para encontrar los demás.</div>' : '');
@@ -1593,8 +1603,8 @@ function pintarSugs(lista, q, total) {
         return;
     }
     c.innerHTML = lista.map(function (x, i) {
-        var meta = [x.marca, x.categoria, x.subcategoria].filter(Boolean).join(' · ');
-        return '<button class="sug" data-i="' + i + '"><b>' + etx(x.nombre || '—') + '</b>' +
+        var meta = metaIns(x) || [x.marca, x.categoria, x.subcategoria].filter(Boolean).join(' · ');
+        return '<button class="sug" data-i="' + i + '"><b>' + etx(tituloIns(x)) + '</b>' +
                (meta ? '<small>' + etx(meta) + '</small>' : '') + '</button>';
     }).join('');
     c.onclick = function (e) {
@@ -1606,7 +1616,7 @@ function pintarSugs(lista, q, total) {
 function elegir(x) {
     SEL = x;
     $('elegido').hidden = false;
-    $('elegidoNom').textContent = x.nombre || '—';
+    $('elegidoNom').textContent = tituloIns(x);
     var _em = $('elegidoMeta'); if (_em) _em.textContent = metaIns(x);
     $('sugs').innerHTML = '';
     $('buscar').value = '';
@@ -1677,7 +1687,7 @@ function agregarAlLote() {
     if (!(cant > 0)) { toast('Pon la cantidad.', 'err'); return; }
     if (LOTE.length >= MAX_ITEMS) { toast('Van ' + MAX_ITEMS + ' en la lista. Manda esta y sigues con otra.', 'err'); return; }
     var it = {
-        id: genId(), insumoId: SEL.id, nombre: SEL.nombre || '—',
+        id: genId(), insumoId: SEL.id, nombre: SEL.nombre || '—', titulo: tituloIns(SEL),
         familia: SEL.familia || '', cantidad: cant,
         /* Se guarda al AGREGAR, no al mandar: cuando el lote sale, SEL ya es
            otro producto y la identidad del primero se habría perdido. */
@@ -1724,7 +1734,7 @@ function pintarLote() {
             /* El meta primero: en una lista de ocho renglones es lo que
                distingue las tres Bohemias que se acaban de agregar. */
             var det = [it.meta, it.tipo ? tipoEntLbl(it.tipo) : '', it.fecha && it.fecha !== hoyStr() ? it.fecha : '', it.motivo, it.salidaTipo].filter(Boolean).join(' · ');
-            return '<div class="lote-it"><span>' + etx(it.nombre) +
+            return '<div class="lote-it"><span>' + etx(it.titulo || it.nombre) +
                 (det ? '<small>' + etx(det) + '</small>' : '') + '</span>' +
                 '<b>' + it.cantidad + ' ' + etx(it.unidad) + '</b>' +
                 '<button data-del="' + it.id + '" aria-label="Quitar">✕</button></div>';

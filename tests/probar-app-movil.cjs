@@ -45,8 +45,12 @@ function rpcs(opc) {
         window.__rpcExtra = {
             entrada_validar_nip: (p) => ok(p) ? 'Ana López' : null,
             portal_perfil: (p) => ok(p) ? { nombre: 'Ana López', puesto: 'Bartender', rol: 'barra', areaReal: 'barra', area: 'barra', sucursalId: 'suc_dos', estado: 'Activo' } : null,
-            entrada_catalogo: (p) => ok(p) ? { ok: true, sucursal: 'suc_dos', insumos: [{ id: 'i1', nombre: 'Tequila Blanco', activo: '1', sucursales: ['suc_dos'] },
-                                                                                       { id: 'i2', nombre: 'Refresco Cola', activo: '1', sucursales: ['suc_dos'], contNeto: 600, umContenido: 'ML' }] } : null,
+            /* Como el servidor real (_insumo_qr_campos, v80): el contenido viene
+               DENTRO de la presentación, no arriba. */
+            entrada_catalogo: (p) => ok(p) ? { ok: true, sucursal: 'suc_dos', insumos: [
+                { id: 'i1', nombre: 'Tequila', variedad: 'Blanco', marca: 'Casa', empaque: 'Botella', activo: '1', sucursales: ['suc_dos'], presentaciones: [{ contNeto: '750', umContenido: 'ML' }] },
+                { id: 'i4', nombre: 'Tequila', variedad: 'Blanco', marca: 'Casa', empaque: 'Botella', activo: '1', sucursales: ['suc_dos'], presentaciones: [{ contNeto: '1000', umContenido: 'ML' }] },
+                { id: 'i2', nombre: 'Refresco Cola', activo: '1', sucursales: ['suc_dos'], empaque: 'Botella', presentaciones: [{ contNeto: '600', umContenido: 'ML' }] }] } : null,
             /* Lo que la app manda queda en window.__regs (para revisar la nota). */
             entrada_registrar: (p) => ok(p) ? ((window.__regs = (window.__regs || []).concat([p.p_datos])), 'id-' + window.__regs.length) : null,
             entrada_historial: (p) => ok(p) ? { ok: true, desde: null, inventario: null, conteos: [], movimientos: [
@@ -327,10 +331,14 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
         await caso('entradas: dos vistas arriba (Catálogo y Entradas registradas) y el catálogo a la vista con «+ registrar»', async () => {
             const r = await ep.evaluate(() => [!document.getElementById('entVistas').hidden,
                 [...document.querySelectorAll('#entVistas .ent-vista')].map(b => b.textContent.trim() + ':' + b.classList.contains('on')),
-                [...document.querySelectorAll('#sugs .cat-it')].map(b => b.querySelector('b').textContent + '|' + b.querySelector('.cat-reg').textContent)]);
-            assert.deepEqual(r, [true, ['Catálogo:true', 'Entradas registradas:false'], ['Refresco Cola|+ registrar', 'Tequila Blanco|+ registrar']], JSON.stringify(r));
+                [...document.querySelectorAll('#sugs .cat-it')].map(b => b.querySelector('.cat-reg').textContent)]);
+            assert.deepEqual(r, [true, ['Catálogo:true', 'Entradas registradas:false'], ['+ registrar', '+ registrar', '+ registrar']], JSON.stringify(r));
         });
-        await ep.click('#sugs .cat-it:has-text("Tequila Blanco")'); await ep.waitForTimeout(150);
+        await caso('…cada producto como en el sistema: «Nombre · Variedad» y su CONTENIDO (750 ml no se confunde con 1 L)', async () => {
+            const r = await ep.evaluate(() => [...document.querySelectorAll('#sugs .cat-it')].map(b => b.querySelector('b').textContent + ' | ' + (b.querySelector('small') || {}).textContent));
+            assert.deepEqual(r.sort(), ['Refresco Cola | Botella 600 ml', 'Tequila · Blanco | Botella 1000 ml · Casa', 'Tequila · Blanco | Botella 750 ml · Casa']);
+        });
+        await ep.click('#sugs .cat-it:has-text("750 ml")'); await ep.waitForTimeout(150);
         await foto(ep, 'm8b-tarjeta');
         await caso('…la tarjeta del producto: los cuatro tipos del sistema en botones (Compra elegido), fecha y «+ Agregar» en verde', async () => {
             const r = await ep.evaluate(() => [[...document.querySelectorAll('#elegidoTipos .ent-tipo')].map(b => b.textContent + (b.classList.contains('on') ? '*' : '')),
@@ -344,10 +352,11 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
         await caso('…«Préstamo pagado» viaja como lo nombra el sistema (prestamo_pagado), sin nota', async () => {
             const r = await ep.evaluate(() => window.__regs.map(x => [x.concepto, x.insumoId, x.cantidad, x.tipo, x.notaId || '']));
             assert.deepEqual(r, [['entrada', 'i1', 3, 'prestamo_pagado', '']]);
+            assert.equal(await ep.evaluate(() => document.getElementById('elegidoNom') && document.getElementById('elegidoNom').textContent), 'Tequila · Blanco');
         });
         await ep.click('.btn-nota'); await ep.waitForTimeout(150);
         await ep.fill('#notaProv', 'Refrescos del Norte'); await ep.fill('#notaFolio', 'A-77');
-        for (const [prod, cant] of [['Refresco Cola', '6'], ['Refresco Cola', '4'], ['Tequila Blanco', '2']]) {
+        for (const [prod, cant] of [['Refresco Cola', '6'], ['Refresco Cola', '4'], ['750 ml', '2']]) {
             await ep.click('#sugs .cat-it:has-text("' + prod + '")'); await ep.waitForTimeout(100);
             await ep.fill('#cant', cant); await ep.click('#btnAgregar'); await ep.waitForTimeout(150);
         }
@@ -356,7 +365,7 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
             const r = await ep.evaluate(() => [!!document.querySelector('.nota-card'),
                 [...document.querySelectorAll('.nota-it')].map(x => x.querySelector('.nota-it-nom').firstChild.textContent + ':' + x.querySelector('.nota-cant').value),
                 document.getElementById('btnEnviar').textContent, document.getElementById('fotosLbl').textContent.indexOf('Evidencia de la nota') === 0]);
-            assert.deepEqual(r, [true, ['Refresco Cola:10', 'Tequila Blanco:2'], 'Registrar nota · 2 productos', true]);
+            assert.deepEqual(r, [true, ['Refresco Cola:10', 'Tequila · Blanco:2'], 'Registrar nota · 2 productos', true]);
         });
         await ep.click('#btnEnviar'); await ep.waitForTimeout(600);
         await caso('…al registrarla, cada entrada lleva el MISMO notaId, folio y proveedor (los campos del sistema), y la nota se cierra', async () => {
@@ -371,7 +380,7 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
                 [...document.querySelectorAll('#vistaRegistradas .reg-sec')].map(x => x.textContent),
                 [...document.querySelectorAll('#vistaRegistradas .reg-grupo summary .reg-g-txt b')].map(x => x.textContent),
                 document.getElementById('vistaRegistradas').textContent.indexOf('Limón')]);
-            assert.deepEqual(r, [true, ['Notas / facturas', 'Por producto'], ['Coca-Cola FEMSA · Folio F-1', 'Refresco Cola', 'Agua mineral', 'Tequila Blanco'], -1]);
+            assert.deepEqual(r, [true, ['Notas / facturas', 'Por producto'], ['Coca-Cola FEMSA · Folio F-1', 'Refresco Cola', 'Agua mineral', 'Tequila · Blanco'], -1]);
         });
         await caso('…cada producto con su total (+5 BOT de Tequila: 2 + 3)', async () =>
             assert.match(await ep.evaluate(() => [...document.querySelectorAll('.reg-grupo')].find(g => /Tequila/.test(g.textContent)).querySelector('.reg-g-tot').textContent), /\+5 BOT/));

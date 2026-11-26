@@ -3738,6 +3738,9 @@
        const pop  = document.getElementById('convertirTipoPop');
        const grid = document.getElementById('convertirTipoGrid');
        if (pop.style.display !== 'none') { pop.style.display = 'none'; return; }
+       /* (26-nov) El emoji va en su ranura (etx-emoji-slot): la capa de íconos
+          (insumos-ui.js) lo CAMBIA por el ícono de la marca. Antes se quedaba al
+          lado y cada opción salía con dos dibujos. */
        grid.innerHTML = _TIPOS_ORDEN.map(([tipo, icon, label]) => {
            const activo = tipo === tipoInsumoActual;
            return `<button onclick="_aplicarConversionTipo('${tipo}')"
@@ -3745,7 +3748,7 @@
                border:1px solid ${activo ? 'var(--accent)' : 'var(--border)'};border-radius:7px;
                padding:6px 9px;cursor:pointer;font-family:inherit;font-size:11px;color:${activo ? 'var(--accent)' : 'var(--text)'};
                text-align:left;width:100%">
-               <span style="font-size:15px">${icon}</span><span>${label}</span>
+               <span class="etx-emoji-slot" style="font-size:15px">${icon}</span><span>${label}</span>
            </button>`;
        }).join('');
        pop.style.display = 'block';

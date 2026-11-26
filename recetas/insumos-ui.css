@@ -168,3 +168,12 @@ body.etx-insumos-page #mainContent .brand-title {font:700 30px/1.2 'DM Sans',san
 }
 
 .etx-insumos-page .i-ficha-section {display:flex;align-items:center;gap:8px;font:600 14px/1.5 'DM Sans',sans-serif!important;letter-spacing:0!important;text-transform:none!important;color:var(--text)!important;}
+
+/* (26-nov) «Cambiar tipo de insumo»: un ícono por opción (el de la marca), el
+   nombre completo en una línea y más aire. */
+.etx-insumos-page #convertirTipoPop {width:300px!important;padding:12px!important;}
+.etx-insumos-page #convertirTipoGrid {gap:6px!important;}
+.etx-insumos-page #convertirTipoGrid button {gap:9px!important;padding:9px 11px!important;font-size:12.5px!important;white-space:nowrap;}
+.etx-insumos-page #convertirTipoGrid button .i-ui-icon {flex-shrink:0;}
+.etx-insumos-page #convertirTipoGrid button .etx-emoji-slot {display:none;}
+.etx-insumos-page #convertirTipoGrid button span:last-child {overflow:hidden;text-overflow:ellipsis;}

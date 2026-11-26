@@ -245,6 +245,86 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
             assert.deepEqual([inv.plan.ciclo, inv.plan.base], ['anual', ['costax']]);
             assert.match(await texto(pa, '#invPlanResumen'), /Paquete completo/);   // el formulario vuelve al paquete
         });
+
+        /* ══ 3) Recibos: editar con el MISMO generador, eliminar y restaurar (v95) ══ */
+        console.log('\n══ Recibos y presupuestos · editar y eliminar ══');
+        await pa.evaluate(() => {
+            const db = window.__nube.leer();
+            const cfg = { tipo: 'recibo', negocioId: 'A', estado: 'pagado', meses: 1, periodoDesde: '2026-11-01', recurrenteMonto: 1799, negocio: 'EGMx',
+                sucursal: 'Matriz', sucs: [{ id: 'suc_principal', nombre: 'Matriz', logo: '' }], cliente: '', susOn: true, modo: 'paquete', nSucs: 1, indice: 1,
+                susMonto: 1799, extras: [{ concepto: 'Consultoría', monto: 900 }], total: 2699, totalManual: false, fecha: '2026-11-23', iva: true, notas: '',
+                folio: 'REC-20261125-29BD7408', periodo: 'Noviembre 2026', metodo: 'Transferencia', fpago: '2026-11-25', ref: '', razonRec: 'EL MIAMI', vig: 30, anual: true };
+            const hoy = new Date(), mes = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0');
+            db.admin_documentos = [
+                { id: 'd1', folio: cfg.folio, tipo: 'recibo', estado: 'pagado', cliente_negocio_id: 'A', cliente: 'EL MIAMI', fecha: mes + '-02', total: 2699, moneda: 'MXN',
+                  suscripcion_monto: 1799, meses: 1, periodo_desde: mes + '-01', fecha_pago: mes + '-03', metodo: 'Transferencia', referencia: '', origen: 'generado',
+                  presupuesto_id: null, version: 1, created_at: mes + '-02', datos: cfg, html: '<html>viejo</html>', cambios: [{ fecha: '2026-11-25T00:00:00Z', accion: 'creado' }] },
+                { id: 'd2', folio: 'ARCH-1', tipo: 'recibo', estado: 'pagado', cliente_negocio_id: null, cliente: 'Recibo viejo', fecha: '2026-10-01', total: 900, moneda: 'MXN',
+                  suscripcion_monto: null, meses: 1, periodo_desde: null, fecha_pago: '2026-10-02', metodo: '', referencia: '', origen: 'pdf_recuperado', version: 1,
+                  created_at: '2026-10-01', datos: { archivo: 'x.pdf' }, html: '', pdf_base64: 'JVBERi0=', cambios: [] }];
+            window.__nube.escribir(db);
+            const fila = (id) => { const db = window.__nube.leer(); return [db, db.admin_documentos.find(x => x.id === id)]; };
+            window.__rpcExtra = Object.assign(window.__rpcExtra || {}, {
+                admin_documento_reemitir: (p) => { const [db, r] = fila(p.p_id); if (r.version !== p.p_version) throw new Error('El documento cambió en otra ventana');
+                    window.__reemitir = p; Object.assign(r, p.p_documento, { version: r.version + 1 }); delete r.nota; window.__nube.escribir(db); return r; },
+                admin_documento_eliminar: (p) => { const [db, r] = fila(p.p_id); window.__eliminar = p;
+                    Object.assign(r, { eliminado_at: '2026-11-26T00:00:00Z', eliminado_motivo: p.p_motivo, version: r.version + 1 }); window.__nube.escribir(db); return r; },
+                admin_documento_restaurar: (p) => { const [db, r] = fila(p.p_id);
+                    Object.assign(r, { eliminado_at: null, eliminado_motivo: '', version: r.version + 1 }); window.__nube.escribir(db); return r; }
+            });
+            window.__impresos = []; window.etaaxAbrirReporte = (h) => { window.__impresos.push(h); return true; };
+        });
+        await pa.evaluate(() => switchTab('documentos')); await pa.waitForTimeout(400);
+        await pa.evaluate(() => AdminDocs.cargar()); await pa.waitForTimeout(500);
+        const filaDoc = (folio) => '#admDocsTabla tr:has-text("' + folio + '")';
+        await caso('cada recibo con «Editar», «Reimprimir» y «Eliminar»', async () =>
+            assert.deepEqual(await pa.locator(filaDoc('REC-20261125') + ' .adoc-actions button').allTextContents(), ['Editar', 'Reimprimir', 'Eliminar']));
+        await pa.click(filaDoc('REC-20261125') + ' button:has-text("Editar")'); await pa.waitForSelector('#docOv'); await pa.waitForTimeout(250);
+        await foto(pa, 'p4-editar-recibo');
+        await caso('«Editar» abre el MISMO generador, lleno con lo guardado, con su folio fijo y sin cambiar de tipo', async () => {
+            const r = await pa.evaluate(() => ({
+                tit: document.getElementById('doc_titulo').textContent, folio: document.getElementById('doc_folio').value, fijo: document.getElementById('doc_folio').readOnly,
+                tipos: getComputedStyle(document.getElementById('doc_tipos')).display, neg: document.getElementById('doc_neg').value,
+                sucs: [...document.querySelectorAll('.doc-suc')].map(c => c.getAttribute('data-id') + ':' + c.checked),
+                razon: document.getElementById('doc_razonRec').value, extra: [...document.querySelectorAll('#doc_extras input')].map(i => i.value),
+                total: document.getElementById('doc_total').value, estado: document.getElementById('doc_estado').value, metodo: document.getElementById('doc_metodo').value,
+                boton: document.getElementById('doc_btnGen').textContent }));
+            assert.deepEqual(r, { tit: 'Editar recibo · REC-20261125-29BD7408', folio: 'REC-20261125-29BD7408', fijo: true, tipos: 'none', neg: 'A',
+                sucs: ['suc_principal:true', 'suc_tul:false'], razon: 'EL MIAMI', extra: ['Consultoría', '900'], total: '2699.00', estado: 'pagado',
+                metodo: 'Transferencia', boton: 'Guardar cambios' });
+        });
+        await pa.fill('#doc_extras input[data-f="monto"]', '1000'); await pa.waitForTimeout(100);
+        await pa.click('#docOv [data-act="gen"]'); await pa.waitForTimeout(500);
+        await caso('…«Guardar cambios» reemite EL MISMO documento (su versión), con el total nuevo y el documento rearmado', async () => {
+            const r = await pa.evaluate(() => ({ abierto: !!document.getElementById('docOv'), v: window.__reemitir.p_version, total: window.__reemitir.p_documento.total,
+                folio: 'folio' in window.__reemitir.p_documento, html: window.__nube.leer().admin_documentos[0].html.indexOf('viejo') === -1,
+                sus: window.__reemitir.p_documento.suscripcion_monto, fila: document.querySelector('#admDocsTabla').innerText.indexOf('$2,799.00') > -1 }));
+            assert.deepEqual(r, { abierto: false, v: 1, total: 2799, folio: false, html: true, sus: 1799, fila: true });
+        });
+        await pa.click(filaDoc('REC-20261125') + ' button:has-text("Eliminar")'); await pa.waitForSelector('#adocModal');
+        await pa.click('#adoc-confirmar'); await pa.waitForTimeout(150);
+        await caso('«Eliminar» pide el motivo antes de hacer nada', async () => {
+            assert.match(await texto(pa, '#adocModal .adoc-error'), /por qué se elimina/);
+            assert.equal(await pa.evaluate(() => !!window.__eliminar), false);
+        });
+        await pa.fill('#adoc-motivo', 'Duplicado'); await pa.click('#adoc-confirmar'); await pa.waitForTimeout(400);
+        await caso('…con motivo, sale del historial y de los totales del mes', async () => {
+            const r = await pa.evaluate(() => ({ p: window.__eliminar && window.__eliminar.p_motivo, fila: document.getElementById('admDocsTabla').innerText.indexOf('REC-20261125') > -1,
+                emitido: document.querySelector('#admDocsMetricas > div strong').textContent }));
+            assert.deepEqual(r, { p: 'Duplicado', fila: false, emitido: '$0.00' });
+        });
+        await pa.evaluate(() => AdminDocs.filtro('estado', 'eliminado')); await pa.waitForTimeout(150);
+        await caso('…en el filtro «Eliminados» aparece con su motivo y «Restaurar»', async () =>
+            assert.match((await pa.locator(filaDoc('REC-20261125')).innerText()).replace(/\s+/g, ' '), /Eliminado: Duplicado\s*Restaurar/));
+        await pa.click(filaDoc('REC-20261125') + ' button:has-text("Restaurar")'); await pa.waitForTimeout(300);
+        await pa.evaluate(() => AdminDocs.filtro('estado', '')); await pa.waitForTimeout(150);
+        await caso('…y «Restaurar» lo regresa, con sus totales', async () => {
+            assert.equal(await pa.evaluate(() => document.getElementById('admDocsTabla').innerText.indexOf('REC-20261125') > -1), true);
+            assert.equal(await pa.evaluate(() => document.querySelector('#admDocsMetricas > div strong').textContent), '$2,799.00');
+        });
+        await pa.click(filaDoc('ARCH-1') + ' button:has-text("Editar")'); await pa.waitForTimeout(300);
+        await caso('un PDF recuperado (no se puede rearmar) sigue con su ventanita de estado, también con «Eliminar»', async () =>
+            assert.deepEqual(await pa.evaluate(() => [!!document.getElementById('adoc-guardar'), !!document.getElementById('adoc-eliminar'), !!document.getElementById('docOv')]), [true, true, false]));
     } finally {
         await browser.close();
     }

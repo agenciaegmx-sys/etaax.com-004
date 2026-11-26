@@ -348,7 +348,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
   .admin-table th:nth-child(n+4),.admin-table td:nth-child(n+4){display:none;}
 }
 </style>
-<link rel="stylesheet" href="/admin-documentos.css?v=110cf3f7">
+<link rel="stylesheet" href="/admin-documentos.css?v=24d8f16f">
 </head>
 <body>
 
@@ -744,7 +744,7 @@ async function betaAppCopiar() {
 <script src="/password.js"></script><!-- medidor y generador: la misma regla que el alta -->
 <script src="/reporte-marca.js?v=90a9c06c"></script>
 <script src="/precios.js?v=c0cc0bbf"></script><!-- tabla de precios por sucursal (una sola verdad) -->
-<script src="/admin-documentos.js?v=ca9a7db8"></script>
+<script src="/admin-documentos.js?v=c1d16ede"></script>
 <script src="/etaax-core.js?v=63c1dea0"></script><!-- importeLetra para recibos y presupuestos -->
 <script src="/etaax-iconos.js?v=7a651810"></script><!-- los iconos de la app (SVG) -->
 <script src="/etaax-header.js?v=a0ec334a"></script><!-- la barra de arriba, la misma de todo el sistema -->
@@ -1594,7 +1594,10 @@ function _emisorGuardado(){
 }
 function _guardarEmisor(o){ try { localStorage.setItem('etaax_admin_emisor', JSON.stringify(o||{})); } catch(e){} }
 
-function abrirDocumentoModal(tipoIni, negIdIni) {
+/* (26-nov) EDITAR UN DOCUMENTO = ESTE MISMO GENERADOR, lleno con lo guardado
+   (docEdit = la fila de admin_documentos). Conserva el folio; guardar lo
+   reemite (v95: misma identidad, versión nueva, bitácora con el «antes»). */
+function abrirDocumentoModal(tipoIni, negIdIni, docEdit) {
     if (typeof EtaaxPrecios === 'undefined' || typeof etaaxReporteDoc !== 'function') {
         admAlert('No se pudieron cargar los precios o el formato de reporte. Recarga la página.');
         return;
@@ -1604,9 +1607,12 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
     var _viejo = document.getElementById('docOv'); if (_viejo) { try { _viejo.remove(); } catch(e){} }
     var P = EtaaxPrecios, TOPE = P.TOPE;
     var hoy = AdminDocs.hoy();
-    var documentoId = crypto.randomUUID();
+    var EDIT = (docEdit && docEdit.id) ? docEdit : null, C = (EDIT && EDIT.datos) || {};
+    var documentoId = EDIT ? EDIT.id : crypto.randomUUID();
     var _EM = _emisorGuardado();
-    _docExtras = [];
+    if (EDIT) _EM = { razon: C.emRazon || _EM.razon, rfc: C.rfcEmisor || _EM.rfc, web: C.emWeb || _EM.web, correo: C.emCorreo || _EM.correo,
+                      tel: C.emTel || _EM.tel, consultor: C.consultor || _EM.consultor, conTel: C.conTel || _EM.conTel, conCorreo: C.conCorreo || _EM.conCorreo };
+    _docExtras = EDIT ? (C.extras || []).map(function(x){ return { concepto: x.concepto || '', monto: x.monto == null ? '' : String(x.monto) }; }) : [];
 
     var _in = 'width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--text);padding:10px 12px;border-radius:9px;font-family:inherit;font-size:13px;box-sizing:border-box';
     var _lb = 'display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600';
@@ -1639,7 +1645,8 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             '</div>' +
 
             // Tipo: cambia el tiempo verbal del documento y qué campos se piden.
-            '<div style="display:flex;gap:8px;margin-bottom:18px">' +
+            // Al editar no se ofrece: un documento no cambia de tipo.
+            '<div id="doc_tipos" style="display:' + (EDIT ? 'none' : 'flex') + ';gap:8px;margin-bottom:18px">' +
                 '<button type="button" data-tipo="recibo" class="doc-tipo" style="flex:1;padding:11px;border-radius:9px;border:1px solid var(--b1);background:var(--s2);color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer">🧾 Recibo de pago</button>' +
                 '<button type="button" data-tipo="presupuesto" class="doc-tipo" style="flex:1;padding:11px;border-radius:9px;border:1px solid var(--b1);background:var(--s2);color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer">📋 Presupuesto</button>' +
             '</div>' +
@@ -1724,7 +1731,8 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             '</div>'+
             _campo('Importe de suscripción incluido (para MRR)', '<input id="doc_recurrente" type="number" min="0" step="0.01" style="'+_in+'">')+
             '<div id="doc_soloRecibo">' +
-                _campo('Estado de cobro','<select id="doc_estado" style="'+_in+'"><option value="pendiente">Pendiente de pago</option><option value="pagado">Pagado</option></select>') +
+                _campo('Estado de cobro','<select id="doc_estado" style="'+_in+'"><option value="pendiente">Pendiente de pago</option><option value="pagado">Pagado</option>' + (EDIT ? '<option value="anulado">Anulado</option>' : '') + '</select>') +
+                '<div id="doc_wrapNota" style="display:none">' + _campo('Motivo de anulación', '<input id="doc_nota" style="'+_in+'" placeholder="Por qué se anula">') + '</div>' +
                 // La razón social del receptor se escribe, no se hereda: lo que importa en un
                 // recibo es el nombre fiscal del cliente, que rara vez coincide con el
                 // nombre del negocio en el sistema.
@@ -1753,10 +1761,15 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             '</div>' +
             _campo('Notas (opcional)', '<textarea id="doc_notas" rows="2" style="'+_in+';resize:vertical" placeholder="Condiciones, alcance, agradecimiento…"></textarea>') +
 
-            '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">' +
+            '<div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px">' +
+                (EDIT ? '<button data-act="del" style="margin-right:auto;background:transparent;border:1px solid rgba(224,90,58,.5);color:#e05a3a;padding:11px 16px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer">Eliminar</button>' : '') +
+                (EDIT && EDIT.tipo === 'presupuesto' && EDIT.estado !== 'anulado' ? '<button data-act="conv" style="background:var(--s2);border:1px solid var(--b1);color:var(--text);padding:11px 16px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer">Generar recibo</button>' : '') +
                 '<button data-act="no" style="background:var(--s2);border:1px solid var(--b1);color:var(--muted);padding:11px 20px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer">Cancelar</button>' +
+                (EDIT ? '<button data-act="genPrint" style="background:var(--s2);border:1px solid var(--green);color:var(--green);padding:11px 16px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Guardar y reimprimir</button>' : '') +
                 '<button data-act="gen" style="background:var(--green);border:none;color:#0a0908;padding:11px 22px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer" id="doc_btnGen">🖨️ Generar</button>' +
             '</div>' +
+            (EDIT ? '<details style="margin-top:14px;font-size:12px;color:var(--muted)"><summary style="cursor:pointer">Historial de cambios</summary>' +
+                ((window.AdminDocs && AdminDocs.bitacoraHTML) ? AdminDocs.bitacoraHTML(EDIT) : '') + '</details>' : '') +
         '</div>';
     document.body.appendChild(ov);
 
@@ -1774,11 +1787,12 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             b.style.color = on ? 'var(--green)' : 'var(--muted)';
             b.style.fontWeight = on ? '700' : '400';
         });
-        document.getElementById('doc_titulo').textContent = _tipo === 'recibo' ? 'Recibo de pago' : 'Presupuesto';
+        document.getElementById('doc_titulo').textContent = EDIT ? ('Editar ' + (_tipo === 'recibo' ? 'recibo' : 'presupuesto') + ' · ' + EDIT.folio)
+                                                                 : (_tipo === 'recibo' ? 'Recibo de pago' : 'Presupuesto');
         document.getElementById('doc_soloRecibo').style.display = _tipo === 'recibo' ? '' : 'none';
         document.getElementById('doc_soloPresu').style.display  = _tipo === 'recibo' ? 'none' : '';
-        document.getElementById('doc_btnGen').textContent = _tipo === 'recibo' ? '🖨️ Generar recibo' : '🖨️ Generar presupuesto';
-        var f = document.getElementById('doc_folio'); if (f) f.value = _folioNuevo();
+        document.getElementById('doc_btnGen').textContent = EDIT ? 'Guardar cambios' : (_tipo === 'recibo' ? '🖨️ Generar recibo' : '🖨️ Generar presupuesto');
+        var f = document.getElementById('doc_folio'); if (f) { f.value = EDIT ? EDIT.folio : _folioNuevo(); f.readOnly = !!EDIT; }
     }
     function _pintarModo(){
         ov.querySelectorAll('.doc-modo').forEach(function(b){
@@ -1873,6 +1887,50 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
     }
 
     _pintarTipo(); _pintarModo(); _renderExtras(); _pintarSucs();
+    /* Al editar, todo sale de lo guardado: la fila manda en lo que se pudo
+       corregir después (estado, pago, método, suscripción, meses) y `datos`
+       —el mismo cfg con el que se generó— en lo demás. */
+    function _pintarNota(){
+        var w = document.getElementById('doc_wrapNota'), st = document.getElementById('doc_estado');
+        if (w) w.style.display = (EDIT && st && st.value === 'anulado' && EDIT.estado !== 'anulado') ? '' : 'none';
+    }
+    function _prellenar(){
+        var set = function(id, v){ var el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = v; };
+        var chk = function(id, v){ var el = document.getElementById(id); if (el) el.checked = !!v; };
+        set('doc_neg', EDIT.cliente_negocio_id || C.negocioId || '');
+        _pintarSucs();
+        var ids = (C.sucs || []).map(function(x){ return x.id; });
+        Array.prototype.forEach.call(ov.querySelectorAll('.doc-suc'), function(c){ c.checked = ids.indexOf(c.getAttribute('data-id')) > -1; });
+        set('doc_cliente', C.cliente || '');
+        chk('doc_susOn', C.susOn !== false);
+        document.getElementById('doc_susBox').style.display = document.getElementById('doc_susOn').checked ? '' : 'none';
+        _modo = C.modo === 'individual' ? 'individual' : 'paquete'; _pintarModo();
+        set('doc_paq', C.nSucs || 1); set('doc_ind', C.indice || 1);
+        set('doc_meses', EDIT.meses || C.meses || 1);
+        set('doc_desde', String(EDIT.periodo_desde || C.periodoDesde || '').slice(0, 7));
+        set('doc_estado', EDIT.estado || C.estado || 'pendiente');
+        set('doc_razonRec', C.razonRec || ''); set('doc_rfcReceptor', C.rfcReceptor || '');
+        set('doc_periodo', C.periodo || '');
+        set('doc_metodo', EDIT.metodo || C.metodo || 'Transferencia');
+        set('doc_fpago', EDIT.fecha_pago || C.fpago || hoy);
+        set('doc_ref', EDIT.referencia || C.ref || '');
+        set('doc_vig', C.vig || 30); chk('doc_anual', C.anual !== false);
+        set('doc_fecha', EDIT.fecha || C.fecha || hoy);
+        chk('doc_iva', C.iva !== false);
+        set('doc_notas', C.notas || '');
+        _sincSucs();
+        if (C.totalManual) _totalManual = String(EDIT.total);
+        _recalc();
+        /* Si los precios de lista cambiaron desde que se hizo, el total guardado
+           se respeta (sale como «ajustado a mano», con su «volver al automático»). */
+        if (_totalManual === null && Math.abs(Number(document.getElementById('doc_total').value) - Number(EDIT.total)) > 0.005) { _totalManual = String(EDIT.total); _recalc(); }
+        var rec = EDIT.suscripcion_monto;
+        if (rec !== null && rec !== undefined && Math.abs(Number(document.getElementById('doc_recurrente').value) - Number(rec)) > 0.005) {
+            _recurrenteManual = String(rec); document.getElementById('doc_recurrente').value = Number(rec).toFixed(2);
+        }
+        _pintarNota();
+    }
+    if (EDIT) _prellenar();
 
     ov.addEventListener('input', function(e){
         var ex = e.target.getAttribute && e.target.getAttribute('data-ex');
@@ -1884,6 +1942,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
     });
     ov.addEventListener('input',function(e){if(e.target.id==='doc_recurrente')_recurrenteManual=e.target.value;if(e.target.id==='doc_meses')_recalc();});
     ov.addEventListener('change', function(e){
+        if (e.target.id === 'doc_estado') { _pintarNota(); return; }
         if (e.target.id === 'doc_neg') { _pintarSucs(); return; }
         if (e.target.id === 'doc_sucTodas') {
             var on = e.target.checked;
@@ -1905,7 +1964,14 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         if (act === 'addExtra') { _docExtras.push({ concepto:'', monto:'' }); _renderExtras(); return; }
         if (act === 'delExtra') { _docExtras.splice(+t.getAttribute('data-i'),1); _renderExtras(); return; }
         if (act === 'totalAuto') { _totalManual = null; _recalc(); return; }
-        if (act !== 'gen' || t.disabled) return;
+        if (act === 'del' && EDIT) { AdminDocs.eliminar(EDIT.id); return; }
+        if (act === 'conv' && EDIT) {
+            t.disabled = true;
+            try { var rec = await AdminDocs.convertir(EDIT); cerrar(); AdminDocs.ver(rec.id); }
+            catch (err) { t.disabled = false; admAlert('No se pudo generar el recibo:\n' + (err && err.message || err)); }
+            return;
+        }
+        if ((act !== 'gen' && act !== 'genPrint') || t.disabled) return;
 
         var negId = document.getElementById('doc_neg').value;
         var neg = negId ? (_data.negocios||[]).find(function(x){ return x.id===negId; }) : null;
@@ -1952,22 +2018,31 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             conTel:   ((document.getElementById('doc_conTel')||{}).value   || '').trim(),
             conCorreo:((document.getElementById('doc_conCorreo')||{}).value|| '').trim(),
             vig: parseInt((document.getElementById('doc_vig')||{}).value,10) || 30,
-            anual: !!(document.getElementById('doc_anual')||{}).checked
+            anual: !!(document.getElementById('doc_anual')||{}).checked,
+            nota: ((document.getElementById('doc_nota')||{}).value || '').trim()
         };
+        if (EDIT) cfg.folio = EDIT.folio;      // el folio no cambia al editar
         if (!(cfg.total > 0)) { admAlert('El total no puede ser cero. Agrega la suscripción o un servicio.'); return; }
         if (!(cfg.razonRec||cfg.cliente||cfg.negocio)) { admAlert('Escribe el nombre del cliente.'); return; }
         if (!Number.isInteger(cfg.meses)||cfg.meses<1||cfg.meses>120) { admAlert('Indica de 1 a 120 meses cubiertos.'); return; }
         if (cfg.recurrenteMonto!==null && (cfg.recurrenteMonto<0||cfg.recurrenteMonto>cfg.total)) { admAlert('La suscripción debe estar entre 0 y el total del documento.'); return; }
         if (cfg.estado==='pagado'&&!cfg.fpago) { admAlert('Indica la fecha del pago.'); return; }
+        if (EDIT && cfg.estado==='anulado' && EDIT.estado!=='anulado' && !cfg.nota) { admAlert('Indica el motivo de anulación.'); return; }
         // Se recuerdan para el siguiente documento (sin volver a teclearlos).
         _guardarEmisor({ razon:cfg.emRazon, rfc:cfg.rfcEmisor, web:cfg.emWeb, correo:cfg.emCorreo,
                          tel:cfg.emTel, consultor:cfg.consultor, conTel:cfg.conTel, conCorreo:cfg.conCorreo });
+        var _txt = t.textContent;
         t.disabled=true;t.textContent='Guardando documento…';
         try {
             var html=construirDocumentoHTML(cfg);
+            if (EDIT) {
+                var editado = await AdminDocs.reemitir(EDIT, cfg, html);
+                cerrar(); if (act === 'genPrint') AdminDocs.imprimirArchivo(editado);
+                return;
+            }
             var guardado=await AdminDocs.crear(cfg,html,documentoId);
             cerrar();AdminDocs.imprimirArchivo(guardado);
-        } catch (err) { t.disabled=false; t.textContent='Guardar y generar'; admAlert('No se pudo completar la operación:\n' + (err && err.message || err)); }
+        } catch (err) { t.disabled=false; t.textContent=_txt; admAlert('No se pudo completar la operación:\n' + (err && err.message || err)); }
     });
     setTimeout(function(){ var f=document.getElementById('doc_neg'); if(f) f.focus(); }, 60);
 }
@@ -3677,7 +3752,7 @@ window.onload = init;
 </script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
-<script src="/novedades.js?v=300c0a63"></script><!-- aviso de actualizaciones del sistema -->
+<script src="/novedades.js?v=b4287645"></script><!-- aviso de actualizaciones del sistema -->
 
 <!-- ══ CORREO Y CONTRASEÑA DEL DUEÑO (solo admin de plataforma) ══
      El cambio NO ocurre aquí: ocurre en la Edge Function admin-credenciales,

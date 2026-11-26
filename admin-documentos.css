@@ -2,3 +2,5 @@
 
 /* Los accesos del admin permanecen alcanzables también en teléfono. */
 .admin-top{flex-wrap:wrap;gap:16px}.admin-user{flex-wrap:wrap;justify-content:flex-end}.admin-user>button,.admin-user>a{white-space:nowrap}@media(max-width:700px){.admin-user{width:100%;justify-content:flex-start}.admin-user>#adminNombre{width:100%}.admin-shell .tabs{overflow-x:auto}.adoc-head{scroll-margin-top:16px}}
+/* (26-nov) Eliminar y lo eliminado */
+.adoc-actions button.adoc-eliminar,.adoc-modal button.adoc-eliminar{color:var(--salmon,#e05a3a);border-color:rgba(224,90,58,.45)}.adoc-actions button.adoc-eliminar:hover,.adoc-modal button.adoc-eliminar:hover{border-color:var(--salmon,#e05a3a)}.adoc-motivo{display:block;max-width:240px;color:var(--muted);font-size:11px;line-height:1.4}

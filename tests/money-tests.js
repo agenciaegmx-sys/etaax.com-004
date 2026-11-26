@@ -18661,6 +18661,44 @@ console.log('\n══ BH97 · Entradas en la app: catálogo, registradas, notas 
         eq(!/(^|[^A-Za-z])irHistorial\(/.test(app) && /if \(_PANT === 'pFlujo' && ENT_VISTA === 'registradas'\) await cargarRegistradas\(\); else await abrirHistorial\(\);/.test(app), true));
 })();
 
+/* ═══════ BH98 · RECIBOS: EDITAR CON EL GENERADOR Y ELIMINAR (v95); TIPO DE INSUMO; CONTENIDO EN LA APP (26-nov) ═══════
+   Edwin: «en los recibos del panel admin hay que agregar la opción de eliminar
+   recibo y el modal de editar debe ser el mismo de generar recibo o
+   presupuesto»; «el botón de convertir tipo de insumo se ve raro»; «en la app
+   para registrar entradas no se ve el contenido (1 lt o 750 ml)». Las pruebas
+   de verdad: tests/probar-sql-v95.mjs (Postgres) y probar-planes-apps.cjs /
+   probar-app-movil.cjs (navegador).                                         */
+console.log('\n══ BH98 · Recibos: editar con el generador y eliminar; tipo de insumo; contenido en la app ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    const v95 = leer('supabase-migration-v95.sql'), docs = leer('admin-documentos.js'), adm = leer('admin.html'), ins = leer('recetas/insumos.js');
+    test('v95: reemitir conserva el folio y la identidad, sube la versión y guarda el «antes»', () => {
+        const i = v95.indexOf('FUNCTION public.admin_documento_reemitir('), f = v95.slice(i, v95.indexOf('END $$;', i));
+        return eq(f.indexOf('folio') === -1 && /version = version \+ 1/.test(f) && /'accion','reemitido',\s*'antes',anterior/.test(f) &&
+                  f.indexOf("d.origen <> 'generado'") > -1 && f.indexOf('no cambia de tipo') > -1, true);
+    });
+    test('v95: eliminar MARCA (no borra), pide motivo y suelta el vínculo con su presupuesto', () => {
+        const i = v95.indexOf('FUNCTION public.admin_documento_eliminar('), f = v95.slice(i, v95.indexOf('END $$;', i));
+        return eq(f.indexOf('DELETE') === -1 && f.indexOf('eliminado_at = now()') > -1 && f.indexOf('Indica por qué se elimina') > -1 &&
+                  f.indexOf('presupuesto_id_previo = presupuesto_id, presupuesto_id = NULL') > -1, true);
+    });
+    test('v95: las tres solo para sesiones del admin maestro (anon fuera)', () =>
+        eq(['admin_documento_reemitir(text,integer,jsonb)', 'admin_documento_eliminar(text,integer,text)', 'admin_documento_restaurar(text,integer)']
+            .every(x => v95.indexOf('REVOKE ALL ON FUNCTION public.' + x) > -1 && v95.indexOf('GRANT EXECUTE ON FUNCTION public.' + x) > -1) &&
+           (v95.match(/IF NOT coalesce\(public\.is_platform_admin\(\),false\) THEN RAISE EXCEPTION/g) || []).length === 3, true));
+    test('«Editar» un documento generado abre el MISMO generador; un PDF recuperado, su ventanita', () =>
+        eq(docs.indexOf("if(editable(d)){window.abrirDocumentoModal(d.tipo,d.cliente_negocio_id||'',d);return;}") > -1 &&
+           /function editable\(d\)\{return !!\(d&&d\.origen==='generado'&&d\.datos&&d\.datos\.tipo&&vivo\(d\)/.test(docs), true));
+    test('…el generador, al editar, conserva el folio y guarda con reemitir (no crea otro documento)', () =>
+        eq(adm.indexOf('function abrirDocumentoModal(tipoIni, negIdIni, docEdit) {') > -1 && adm.indexOf('if (EDIT) cfg.folio = EDIT.folio;') > -1 &&
+           adm.indexOf('var editado = await AdminDocs.reemitir(EDIT, cfg, html);') > -1 && adm.indexOf("var documentoId = EDIT ? EDIT.id : crypto.randomUUID();") > -1, true));
+    test('lo eliminado no cuenta en los totales del mes y solo se ve con su filtro', () =>
+        eq(docs.indexOf('EtaaxCore.resumenDocumentosAdmin(filas.filter(vivo),mes)') > -1 &&
+           docs.indexOf("(estado==='eliminado'?!vivo(d):(vivo(d)&&(!estado||d.estado===estado)))") > -1, true));
+    test('«Cambiar tipo de insumo»: el emoji va en su ranura, para que quede UN ícono (el de la marca)', () =>
+        eq(/<span class="etx-emoji-slot" style="font-size:15px">\$\{icon\}<\/span><span>\$\{label\}<\/span>/.test(ins), true));
+})();
+
 /* ═══════════ SUITE BH92 · INSUMOS SUBE SOLO LO QUE CAMBIÓ (CPU de Supabase) ═════
    24-nov: Supabase avisó que el proyecto pasaba del 80 % de CPU. setInsumos()
    subía el catálogo ENTERO 1.2 s después de cualquier cambio (pausar, activar,
@@ -23093,10 +23131,20 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
     /* Las dos pantallas tienen que rotular IGUAL: si el QR dice «📦 355 ml ·
        Viena Obscura» y la app otra cosa, el mismo conteo se lee de dos maneras
        según por dónde se mire. */
-    test('las dos pantallas rotulan el producto igual', () => {
-        const qr  = ent.indexOf("var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');") > -1;
-        const app = amv.indexOf("var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');") > -1;
-        return eq(qr && app, true, 'misma redacción');
+    /* (26-nov) La regla ahora es la del SISTEMA: la app rotula con
+       insumo-label.js (insumoTitulo «Nombre · Variedad» e insumoMeta «Botella
+       750 ml · Marca»), que lee el contenido de la presentación. entrada.html
+       ya solo manda a la app. Antes la app buscaba x.contNeto, que el catálogo
+       no trae arriba: el 750 ml y el 1 L se veían iguales. */
+    test('la app rotula el producto como el sistema (insumo-label.js), con su contenido', () => {
+        const idx = fs.readFileSync(path.join(RAIZ, 'app-movil/index.html'), 'utf8');
+        const usa = /function metaIns\(x\) \{[\s\S]*?if \(typeof window\.insumoMeta === 'function'\) return window\.insumoMeta\(x\);/.test(amv) &&
+                    /function tituloIns\(x\) \{[\s\S]*?window\.insumoTitulo\(x\)/.test(amv);
+        const carga = idx.indexOf('insumo-label.js') > -1 && idx.indexOf('insumo-label.js') < idx.indexOf('src="app.js"');
+        const c = { window: {} }; vm.createContext(c); c.window = c;
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'insumo-label.js'), 'utf8'), c);
+        const meta = c.insumoMeta({ nombre: 'Absolut', variedad: 'Azul', marca: 'Absolut', empaque: 'Botella', presentaciones: [{ contNeto: '750', umContenido: 'ML' }] });
+        return eq(usa + ' ' + carga + ' ' + meta, 'true true Botella 750 ml · Absolut', 'misma redacción');
     });
 }
 
