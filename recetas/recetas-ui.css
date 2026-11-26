@@ -374,3 +374,20 @@ body.etx-recetas-page {
 .car-dlg .pf-tabs button {border:0;background:transparent;color:var(--text-muted);font:600 12.5px 'DM Sans',sans-serif;padding:7px 14px;border-radius:8px;cursor:pointer;}
 .car-dlg .pf-tabs button.activo {background:var(--r-panel,var(--surface));color:var(--text);box-shadow:0 1px 0 var(--r-line,var(--border));}
 .car-dlg .pf-rango {display:block;font-weight:700;color:var(--text-muted);margin-bottom:1px;}
+
+/* ══ (26-nov) LAS OPCIONES DE «CREAR RECETA» SON BOTONES PARA ELEGIR ══════════
+   En la portada (Crear receta ▾) y en el catálogo (Nueva receta ▾): cada tipo
+   es un botón con borde, su ícono de la app en una placa naranja, el nombre y
+   para qué es. */
+button.rec-opc,.rec-menu-pop button.rec-opc {display:grid;grid-template-columns:38px minmax(0,1fr);align-items:center;gap:11px;width:100%;box-sizing:border-box;padding:11px 12px;
+  border:1px solid var(--r-line,var(--etx-ui-line,var(--border)));border-radius:12px;background:var(--r-input,var(--surface2));color:var(--text);
+  text-align:left;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s;}
+button.rec-opc:hover,button.rec-opc:focus-visible,.rec-menu-pop button.rec-opc:hover,.rec-menu-pop button.rec-opc:focus-visible {color:var(--text);border-color:var(--etx-ui-terra,#ad4b27);background:color-mix(in srgb,var(--etx-ui-terra,#ad4b27) 9%,var(--r-input,var(--surface2)));outline:none;}
+.rec-opc-ic {width:38px;height:38px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--etx-ui-terra,#ad4b27) 14%,transparent);color:var(--etx-ui-terra,#ad4b27);}
+.rec-opc-ic .etx-ic {width:20px;height:20px;--green:var(--etx-ui-terra,#ad4b27);--etx-color:currentColor;}
+.rec-opc-tx {display:flex;flex-direction:column;gap:2px;min-width:0;}
+.rec-opc-tx b {font:600 13.5px/1.3 'DM Sans',sans-serif;}
+.rec-opc-tx small {font-size:11.5px;line-height:1.4;color:var(--r-muted,var(--etx-ui-muted,var(--text-dim)));}
+.etx-recetas-page .rec-menu-pop.rec-nueva-pop {display:grid;gap:6px;padding:8px;box-sizing:border-box;}
+.etx-recetas-page .rec-menu-pop.rec-nueva-pop .rec-opc {min-height:0;padding:10px 11px;}

@@ -18915,8 +18915,8 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
        «Receta simple», sin enlace en barras laterales ni en el hub. */
     test('el Menú de la sucursal es una tarjeta dentro de Escandallos (junto a «Receta simple»)', () => {
         const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
-        const i = rec.indexOf('id="btnEscSimple"'), j = rec.indexOf('id="btnMenuSucursal"');
-        return eq(i > -1 && j > i && j - i < 1200 && /onclick="abrirMenuSucursal\(\)"/.test(rec) &&
+        const i = rec.indexOf('id="btnEscCrear"'), j = rec.indexOf('id="btnMenuSucursal"');   // (26-nov) «Receta simple» → «Crear receta ▾»
+        return eq(i > -1 && j > i && !/etx-recetas-grid|etx-recetas-label/.test(rec.slice(i, j)) && /onclick="abrirMenuSucursal\(\)"/.test(rec) &&
                   /abrirEditorEnModal\('\.\.\/administrativo\/menu\.html\?solo=1'/.test(rec), true);   // ventana flotante: se queda en Escandallos
     });
     test('…la página del Menú sabe abrirse en ventana (embed.js, sin su barra ni encabezado)', () => {
@@ -21312,7 +21312,7 @@ console.log('\n══ BH25 · Dar de alta sin salir del catálogo ══');
                       style:{}, set innerHTML(v) { hechos.push(v); }, get innerHTML() { return ''; } };
         const c = { console, String, Math, Array,
             _recMenuEl: null,
-            _recMenuCerrar(){}, _puedeRec: puede,
+            _recMenuCerrar(){}, _puedeRec: puede, _recOpcIconos(){}, _encajarPop(){},
             _exigeRec(){ hechos.push('EXIGE'); return false; },
             document: { createElement: () => pop, body: { appendChild(){} } },
             window: { innerWidth: 1200, innerHeight: 800 } };
@@ -21326,11 +21326,12 @@ console.log('\n══ BH25 · Dar de alta sin salir del catálogo ══');
     };
 
     const TODO = () => true;
-    test('ofrece los CUATRO tipos, no solo recetas', () => {
+    /* (26-nov) Los mismos cinco de «Crear receta» en la portada (con la simple). */
+    test('ofrece los CINCO tipos (con la receta simple), no solo recetas', () => {
         const h = menu(TODO);
-        return eq(['Receta · Alimentos', 'Receta · Bebidas',
-                   'Sub Receta · Alimentos', 'Sub Receta · Bebidas']
-                  .every(t => h.indexOf(t) > -1), true, 'los cuatro');
+        return eq(['Receta simple', 'Receta de alimentos', 'Receta de bebidas',
+                   'Sub-receta de alimentos', 'Sub-receta de bebidas']
+                  .every(t => h.indexOf(t) > -1), true, 'los cinco');
     });
     /* Cada opción abre la ventana flotante. Llamar a crearReceta() directo
        mandaría al editor de página completa y el catálogo desaparecería — que
@@ -21344,7 +21345,7 @@ console.log('\n══ BH25 · Dar de alta sin salir del catálogo ══');
        después salte el aviso de permiso es prometer y no cumplir. */
     test('un rol que solo crea recetas no ve las sub-recetas', () => {
         const h = menu((p) => p === 'crear');
-        return eq(h.indexOf('Receta · Bebidas') > -1 && h.indexOf('Sub Receta') === -1,
+        return eq(h.indexOf('Receta de bebidas') > -1 && h.indexOf('Sub-receta') === -1,
                   true, 'solo lo suyo');
     });
     test('…y quien no puede dar de alta nada recibe el aviso, no un menú vacío', () =>
@@ -33666,6 +33667,58 @@ console.log('\n══ BH91 · El tipo de platillo manda en el costeo ══');
     test('la migración v90 crea costeo_config con sus tres puertas', () => {
         const sql = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v90.sql'), 'utf8');
         return eq(/CREATE TABLE IF NOT EXISTS costeo_config/.test(sql) && /"own"/.test(sql) && /es_staff_de/.test(sql) && /is_platform_admin/.test(sql), true, 'v90');
+    });
+})();
+
+/* ═══════ BH100 · EL MARGEN DE ERROR DEL COSTEO (26-nov) ═══════
+   Edwin: «agregar un concepto nuevo que se llame margen de error por temas de
+   cambios de precios brutos de insumos… es algo que manejan varios chefs…
+   opcional, no fijo como los otros porcentajes». Es el «margen de error» de
+   la receta estándar: costo de ingredientes + X% = costo total, y el precio
+   sale de ese costo total. Vive DENTRO del food/bar cost meta (ingredientes +
+   margen = la meta), así que la utilidad objetivo no cambia: sube el precio.
+   Solo toca el sugerido; el aplicado mide la carta contra el costo de hoy. */
+console.log('\n══ BH100 · El margen de error del costeo ══');
+(function () {
+    const r2 = (x) => Math.round(x * 100) / 100;
+    test('sin margen (vacío, 0 o basura) el costeo sale IGUAL que antes', () => {
+        const base = JSON.stringify(Core.costeoReceta(27.05, 100 / 22, 33));
+        return eq([undefined, '', 0, '0', 'abc', -5].every(v => JSON.stringify(Core.costeoReceta(27.05, 100 / 22, 33, v)) === base.replace(/}$/, '') + '}'), true, 'cambió sin margen');
+    });
+    test('con 5%: el costo total es ingredientes + 5% y el precio sale de ese costo (27.05 × 1.05 ÷ 22%)', () => {
+        const s = Core.costeoReceta(27.05, 100 / 22, 33, 5);
+        return eq(JSON.stringify([r2(s.margen), r2(s.costoTotal), r2(s.platillo)]), JSON.stringify([1.35, 28.4, 129.1]), 'margen');
+    });
+    test('…ingredientes + margen = la meta (22%), y la utilidad objetivo NO cambia (45%)', () => {
+        const s = Core.costeoReceta(27.05, 100 / 22, 33, 5);
+        return eq(JSON.stringify([r2(s.brutoPct + s.margenPct), r2(s.utilidadPct), r2(s.brutoPct), s.margenErrorPct]), JSON.stringify([22, 45, 20.95, 5]), 'reparto');
+    });
+    test('…y los montos cuadran: ingredientes + margen + operativo + utilidad = precio de platillo', () => {
+        const s = Core.costeoReceta(27.05, 100 / 22, 33, 5);
+        return eq(r2(s.costoBruto + s.margen + s.gastoOp + s.utilidad), r2(s.platillo), 'no cuadra');
+    });
+    test('un margen absurdo (más de 50%) no se aplica', () =>
+        eq(Core.costeoReceta(100, 100 / 30, 40, 80).margen, 0, 'aplicó 80%'));
+    test('la receta lo trae como margenErrorPct y el núcleo lo usa en el sugerido', () => {
+        const r = { tipo: 'alimentos', grupo: 'Entradas', margenErrorPct: 5, precioEnCarta: 110 };
+        const k = Core.costeoConPerfil(27.05, r, {});
+        return eq(JSON.stringify([k.perfil.margenError, r2(k.sugerido.platillo)]), JSON.stringify([5, 129.1]), 'sin margen');
+    });
+    test('…pero NO toca el aplicado: la carta se mide contra el costo de hoy', () => {
+        const con = Core.costeoConPerfil(27.05, { tipo: 'alimentos', grupo: 'Entradas', margenErrorPct: 5, precioEnCarta: 110 }, {});
+        const sin = Core.costeoConPerfil(27.05, { tipo: 'alimentos', grupo: 'Entradas', precioEnCarta: 110 }, {});
+        return eq(JSON.stringify([JSON.stringify(con.aplicado) === JSON.stringify(sin.aplicado), con.diagnostico.clave === sin.diagnostico.clave]), JSON.stringify([true, true]), 'tocó el aplicado');
+    });
+    test('es opcional y de la receta: no viene del tipo ni del negocio', () =>
+        eq(Core.perfilCosteo({ tipo: 'alimentos', grupo: 'Entradas' }, { perfiles: { entrada: { food: 20, op: 30 } } }).margenError, 0, 'vino de algún lado'));
+    test('el escandallo lo guarda, lo carga y lo pasa al núcleo', () => {
+        const js = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
+        return eq(JSON.stringify([/margenErrorPct:\s*_margenDelEditor\(\)/.test(js), /getElementById\('s-margen'\)/.test(js),
+                   /costeoReceta\(costoTotal, _pf\.multiplo, _pf\.op, _pf\.margenError\)/.test(js), /k:'margenErrorPct'/.test(js)]), JSON.stringify([true, true, true, true]), 'escandallo');
+    });
+    test('la ficha impresa y la ventanita de costeo enseñan su renglón', () => {
+        const js = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8'), html = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+        return eq(JSON.stringify([/Margen de error \+'\+_p1\(_sug\.margenErrorPct\)/.test(js), /_sugF\.margen > 0/.test(html), /id="s-margen-fila"/.test(html)]), JSON.stringify([true, true, true]), 'renglón');
     });
 })();
 

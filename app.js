@@ -479,6 +479,8 @@ async function guardarReceta() {
         // propio ('' = el del tipo). Ver EtaaxCore.perfilCosteo.
         perfilCosteo: _perfilDelEditor(),
         gastoOpPct:   _opDelEditor(),
+        // Margen de error OPCIONAL sobre el costo bruto ('' = sin margen). Ver EtaaxCore.costeoReceta.
+        margenErrorPct: _margenDelEditor(),
         ingredientes: JSON.parse(JSON.stringify(ingredientes)),
         fotos:        JSON.parse(JSON.stringify(fotosReceta)),
         foto:         fotosReceta[0] || '',  // compatibilidad plantillas
@@ -1252,6 +1254,7 @@ function buildPlantillaAdministrativa(recetas) {
                     R += '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#8a6400;margin-bottom:5px">📐 Costeo Sugerido · '+_cp.perfil.nombre+'</div>';
                     var _p1 = function(v){ return (Math.round(v*10)/10).toFixed(1).replace(/\.0$/,''); };
                     R += cr('Costo Bruto '+_p1(_sug.brutoPct)+'%','$'+costo.toFixed(2),true,'#7a5500');
+                    if (_sug.margen > 0) R += cr('Margen de error +'+_p1(_sug.margenErrorPct)+'% del costo','$'+_sug.margen.toFixed(2),false,'#7a5500');
                     R += cr('Gasto Operativo '+_p1(_sug.gastoOpPct)+'%','$'+_sug.gastoOp.toFixed(2),false);
                     R += cr('Utilidad Neta '+_p1(_sug.utilidadPct)+'%','$'+_sug.utilidad.toFixed(2),false);
                     R += cr('Precio platillo','$'+sPlatillo.toFixed(2),false,'#3f3b33');
@@ -2334,7 +2337,7 @@ function calcularCosteos() {
     // operativo; la receta puede traer los suyos. La fórmula vive en el núcleo
     // — aquí solo se pinta.
     var _pf  = EtaaxCore.perfilCosteo(_recetaDelEditor(), _costeoCfg());
-    var _sug = EtaaxCore.costeoReceta(costoTotal, _pf.multiplo, _pf.op);
+    var _sug = EtaaxCore.costeoReceta(costoTotal, _pf.multiplo, _pf.op, _pf.margenError);
     _pintarPerfilEditor(_pf);
     setVal('s-costobruto', costoTotal);
     setVal('s-gasto',      _sug.gastoOp);
@@ -2410,6 +2413,7 @@ var _REC_HIST_CAMPOS = [
     { k:'multiploCosteo',lbl:'Múltiplo de costeo' },
     { k:'perfilCosteo',  lbl:'Tipo de platillo' },
     { k:'gastoOpPct',    lbl:'Gasto operativo %' },
+    { k:'margenErrorPct',lbl:'Margen de error %' },
     { k:'status',        lbl:'Estatus' }
 ];
 function _rvTxt(v) { return (v === undefined || v === null || v === '') ? '—' : String(v); }
@@ -2507,11 +2511,19 @@ function _perfilDelEditor() {
     var el = document.getElementById('s-perfil');
     return el ? el.value : '';
 }
+/* (26-nov) El margen de error de ESTA receta: opcional, no viene del tipo. */
+function _margenDelEditor() {
+    var el = document.getElementById('s-margen');
+    if (!el || el.value === '') return '';
+    var v = parseFloat(el.value);
+    return (isFinite(v) && v > 0 && v <= 50) ? v : '';
+}
 /* La receta tal como está en el editor, para preguntarle al núcleo su tipo. */
 function _recetaDelEditor() {
     var v = function (id) { var e = document.getElementById(id); return e ? e.value : ''; };
     return { tipo: recetaTipoActual || 'alimentos', grupo: v('grupo'), categoria: v('categoria'),
-             perfilCosteo: _perfilDelEditor(), multiploCosteo: _multiploDelEditor(), gastoOpPct: _opDelEditor() };
+             perfilCosteo: _perfilDelEditor(), multiploCosteo: _multiploDelEditor(), gastoOpPct: _opDelEditor(),
+             margenErrorPct: _margenDelEditor() };
 }
 function _fmtPctCosteo(v) { return (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, ''); }
 function _cargarCosteoEditor(r) {
@@ -2520,6 +2532,8 @@ function _cargarCosteoEditor(r) {
     var f = document.getElementById('s-food'), o = document.getElementById('s-op'), t = document.getElementById('s-perfil');
     if (f) f.value = m > 0 ? String(Math.round(100 / m * 100) / 100) : '';   // vacío = el del tipo
     if (o) o.value = (r.gastoOpPct === '' || r.gastoOpPct == null) ? '' : r.gastoOpPct;
+    var me = document.getElementById('s-margen');
+    if (me) me.value = (parseFloat(r.margenErrorPct) > 0) ? r.margenErrorPct : '';
     if (t) { _opcionesPerfilEditor(); t.value = r.perfilCosteo || ''; }
 }
 /* Los tipos que se ofrecen son los del ÁREA de la receta (cocina o barra) y
@@ -2553,7 +2567,8 @@ function _pintarPerfilEditor(pf) {
     if (nota) {
         var propio = pf.foodPropio || pf.opPropio, cn = pf.costoNombre.toLowerCase();
         nota.textContent = (pf.foodMin != null ? pf.nombre + ': ' + cn + ' sano ' + pf.foodMin + '–' + pf.foodMax + '% · gasto operativo ' + pf.opMin + '–' + pf.opMax + '%. ' : '') + pf.por +
-            (propio ? ' Esta receta trae su propio ' + (pf.foodPropio && pf.opPropio ? cn + ' y gasto operativo' : pf.foodPropio ? cn : 'gasto operativo') + '.' : '');
+            (propio ? ' Esta receta trae su propio ' + (pf.foodPropio && pf.opPropio ? cn + ' y gasto operativo' : pf.foodPropio ? cn : 'gasto operativo') + '.' : '') +
+            (pf.margenError > 0 ? ' Con ' + _fmtPctCosteo(pf.margenError) + '% de margen de error sobre el costo: el ' + cn + ' meta lo incluye y el precio sugerido sube.' : '');
     }
     var ag = document.getElementById('a-pct-gasto');
     if (ag) ag.textContent = _fmtPctCosteo(pf.op) + '%';
@@ -2571,9 +2586,16 @@ function _pintarPctSugerido(sug) {
     _txt('s-pct-gasto',    _pct(sug.gastoOpPct));
     _txt('s-pct-utilidad', _pct(sug.utilidadPct),
          sug.utilidadPct < 0 ? 'costeo-pct val-red' : sug.utilidadPct < 15 ? 'costeo-pct val-amber' : 'costeo-pct');
+    /* El margen de error: su renglón solo cuando la receta lo trae. */
+    var mf = document.getElementById('s-margen-fila');
+    if (mf) mf.style.display = sug.margenErrorPct > 0 ? '' : 'none';
+    _txt('s-pct-margen', '+' + _pct(sug.margenErrorPct || 0) + ' del costo');
+    var mm = document.getElementById('s-margen-monto');
+    if (mm) mm.textContent = '$' + (sug.margen || 0).toFixed(2);
     var hint = document.getElementById('s-mult-hint');
     if (hint) {
-        hint.textContent = '× ' + sug.multiplo.toFixed(2) + ' sobre el costo' +
+        /* Sobre el costo de los ingredientes: con margen, el múltiplo efectivo es mayor. */
+        hint.textContent = '× ' + (sug.multiplo * (1 + (sug.margenErrorPct || 0) / 100)).toFixed(2) + ' sobre el costo' +
             (sug.utilidadPct < 0 ? ' · no cubre el gasto operativo' : '');
         hint.style.color = sug.utilidadPct < 0 ? 'var(--red)' : '';
     }

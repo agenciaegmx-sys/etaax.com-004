@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles.css?v=fb5e89be">
+    <link rel="stylesheet" href="../styles.css?v=89654af5">
     <style>
         /* Modo embebido (?embed=1: escandallo abierto en modal dentro de otro
            escandallo): solo el escandallo — sin acciones que naveguen a otro lado. */
@@ -32,9 +32,9 @@
         html.embed .header button[onclick*="eliminarRecetaActual"] { display:none !important; }
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=8adeb658">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1f66fb4f">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/recetas/recetas-ui.css?v=868760cf">
+<link rel="stylesheet" href="/recetas/recetas-ui.css?v=00295a27">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -341,6 +341,12 @@
                                 <span class="cp-in"><input type="number" id="s-op" step="0.5" min="0" max="99" placeholder="40"
                                     title="Lo que se lleva la operación (personal, energía, renta, equipo). Vacío = el del tipo de platillo."
                                     oninput="calcularCosteos()"><i>%</i></span></label>
+                            <!-- (26-nov) Opcional, no viene del tipo: un colchón sobre el costo
+                                 bruto por si suben los insumos. Ver EtaaxCore.costeoReceta. -->
+                            <label class="cp-campo cp-margen"><span>Margen de error <em>opcional</em></span>
+                                <span class="cp-in"><input type="number" id="s-margen" step="0.5" min="0" max="50" placeholder="0"
+                                    title="Colchón sobre el costo bruto por cambios de precio de los insumos (y lo que no se pesa: sal, aceite, condimentos). Sube el precio sugerido; vacío = sin margen."
+                                    oninput="calcularCosteos()"><i>%</i></span></label>
                             <div class="cp-campo cp-util"><span>Utilidad neta objetivo</span><b id="s-util-obj">30%</b></div>
                             <button type="button" class="cp-reset" onclick="resetMultiploReceta()" title="Volver a los porcentajes del tipo de platillo">Usar los del tipo</button>
                             <div class="cp-nota" id="s-perfil-nota"></div>
@@ -349,6 +355,7 @@
                             <div class="costeo-col col-sugerido">
                                 <div class="costeo-col-title">📐 Costeo Sugerido <span class="costeo-mult-hint" id="s-mult-hint"></span></div>
                                 <div class="costeo-row"><span class="costeo-label">Costo Bruto <span class="costeo-pct" id="s-pct-bruto">30%</span></span><span class="costeo-val val-amber" id="s-costobruto">$0.00</span></div>
+                                <div class="costeo-row" id="s-margen-fila" style="display:none"><span class="costeo-label">Margen de error <span class="costeo-pct" id="s-pct-margen">+0% del costo</span></span><span class="costeo-val val-amber" id="s-margen-monto">$0.00</span></div>
                                 <div class="costeo-row"><span class="costeo-label">Gasto Operativo <span class="costeo-pct" id="s-pct-gasto">40%</span></span><span class="costeo-val val-white" id="s-gasto">$0.00</span></div>
                                 <div class="costeo-row"><span class="costeo-label">Utilidad Neta <span class="costeo-pct" id="s-pct-utilidad">30%</span></span><span class="costeo-val val-white" id="s-utilidad">$0.00</span></div>
                                 <div class="divider">precio</div>
@@ -537,7 +544,7 @@
             <div class="etx-recetas-grid">
                 <button id="btnVerRecetas" onclick="verRecetas()" class="cat-btn">
                     <span class="etx-tool-icon" aria-hidden="true"></span>
-                    <span class="cat-btn-title">Ver recetas</span>
+                    <span class="cat-btn-title">Catálogo de recetas</span>
                     <span class="cat-btn-desc">Consultar el recetario completo</span>
                     <span class="etx-tool-cta">Abrir recetario →</span>
                 </button>
@@ -550,45 +557,32 @@
             </div>
             <p class="etx-recetas-label">Crear preparación</p>
             <div class="etx-recetas-grid">
-                <button id="btnEscSimple" onclick="abrirEscModal('simple')" class="cat-btn">
-                    <span class="etx-tool-icon" aria-hidden="true"></span>
-                    <span class="cat-btn-title">Receta simple</span>
-                    <span class="cat-btn-desc">Empieza con nombre, grupo e ingredientes; elige el tipo después.</span>
-                    <span class="etx-tool-cta">Crear preparación →</span>
-                </button>
+                <!-- (26-nov, Edwin) «Receta simple» se volvió «Crear receta»: la misma
+                     tarjeta, en naranja, que despliega los cinco tipos. Las tarjetas
+                     sueltas de cada tipo se quitaron; sus ids viven en las opciones
+                     (los permisos las siguen escondiendo una por una). -->
+                <div class="etx-esc-crear" id="escCrearWrap">
+                    <button id="btnEscCrear" type="button" class="cat-btn etx-esc-crear-btn" data-icono="mod-escandallos"
+                        onclick="_escCrearMenu(event)" aria-haspopup="menu" aria-expanded="false" aria-controls="escCrearMenu">
+                        <span class="etx-tool-icon" aria-hidden="true"></span>
+                        <span class="cat-btn-title">Crear receta</span>
+                        <span class="cat-btn-desc">Simple, de alimentos o de bebidas, o una sub-receta: elige qué vas a preparar.</span>
+                        <span class="etx-tool-cta">Elegir tipo <span class="etx-esc-car" aria-hidden="true"></span></span>
+                    </button>
+                    <div class="etx-esc-menu" id="escCrearMenu" role="menu" hidden>
+                        <button type="button" role="menuitem" class="rec-opc" id="btnEscSimple" onclick="_escCrearIr('simple')"><span class="rec-opc-ic" data-ico="rec-simple"></span><span class="rec-opc-tx"><b>Receta simple</b><small>Nombre, grupo e ingredientes; el tipo, después.</small></span></button>
+                        <button type="button" role="menuitem" class="rec-opc" id="btnEscAlimentos" onclick="_escCrearIr('alimentos')"><span class="rec-opc-ic" data-ico="rec-alimentos"></span><span class="rec-opc-tx"><b>Receta de alimentos</b><small>Platillos, entradas, postres y guarniciones.</small></span></button>
+                        <button type="button" role="menuitem" class="rec-opc" id="btnEscBebidas" onclick="_escCrearIr('bebidas')"><span class="rec-opc-ic" data-ico="rec-bebidas"></span><span class="rec-opc-tx"><b>Receta de bebidas</b><small>Cócteles, mocktails y bebidas de la carta.</small></span></button>
+                        <button type="button" role="menuitem" class="rec-opc" id="btnEscSubAlimentos" onclick="_escCrearIr('sub-alimentos')"><span class="rec-opc-ic" data-ico="rec-sub-alimentos"></span><span class="rec-opc-tx"><b>Sub-receta de alimentos</b><small>Salsas, fondos, masas, bases y rellenos.</small></span></button>
+                        <button type="button" role="menuitem" class="rec-opc" id="btnEscSubBebidas" onclick="_escCrearIr('sub-bebidas')"><span class="rec-opc-ic" data-ico="rec-sub-bebidas"></span><span class="rec-opc-tx"><b>Sub-receta de bebidas</b><small>Jarabes, shrubs, purés, mixes e infusiones.</small></span></button>
+                    </div>
+                </div>
                 <!-- (24-nov) El Menú de la sucursal se mudó aquí desde Control administrativo. -->
                 <button id="btnMenuSucursal" onclick="abrirMenuSucursal()" class="cat-btn">
                     <span class="etx-tool-icon" aria-hidden="true"></span>
                     <span class="cat-btn-title">Menú de la sucursal</span>
                     <span class="cat-btn-desc">La carta activa: platillos, bebidas, precios y el QR de las mesas.</span>
                     <span class="etx-tool-cta">Gestionar menú →</span>
-                </button>
-            </div>
-            <p class="etx-recetas-label">O elige el tipo de preparación</p>
-            <div class="etx-recetas-grid">
-                <button id="btnEscAlimentos" onclick="abrirEscModal('alimentos')" class="cat-btn">
-                    <span class="etx-tool-icon" aria-hidden="true"></span>
-                    <span class="cat-btn-title">Receta de alimentos</span>
-                    <span class="cat-btn-desc">Platillos, entradas, postres y guarniciones.</span>
-                    <span class="etx-tool-cta">Crear preparación →</span>
-                </button>
-                <button id="btnEscBebidas" onclick="abrirEscModal('bebidas')" class="cat-btn">
-                    <span class="etx-tool-icon" aria-hidden="true"></span>
-                    <span class="cat-btn-title">Receta de bebidas</span>
-                    <span class="cat-btn-desc">Cócteles, mocktails y bebidas de la carta.</span>
-                    <span class="etx-tool-cta">Crear preparación →</span>
-                </button>
-                <button id="btnEscSubAlimentos" onclick="abrirEscModal('sub-alimentos')" class="cat-btn">
-                    <span class="etx-tool-icon" aria-hidden="true"></span>
-                    <span class="cat-btn-title">Sub-receta de alimentos</span>
-                    <span class="cat-btn-desc">Salsas, fondos, masas, bases y rellenos.</span>
-                    <span class="etx-tool-cta">Crear preparación →</span>
-                </button>
-                <button id="btnEscSubBebidas" onclick="abrirEscModal('sub-bebidas')" class="cat-btn">
-                    <span class="etx-tool-icon" aria-hidden="true"></span>
-                    <span class="cat-btn-title">Sub-receta de bebidas</span>
-                    <span class="cat-btn-desc">Jarabes, shrubs, purés, mixes e infusiones.</span>
-                    <span class="etx-tool-cta">Crear preparación →</span>
                 </button>
             </div>
         </div>
@@ -1031,7 +1025,7 @@
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="/etaax-store.js?v=3bbcc75c"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
-<script src="/etaax-core.js?v=31fe6dc0"></script><!-- fórmulas de dinero: antes de app.js -->
+<script src="/etaax-core.js?v=66b6078c"></script><!-- fórmulas de dinero: antes de app.js -->
 <script src="/insumo-label.js?v=40991fbf"></script>
 <script src="/multi-select.js"></script><!-- filtros de grupo/categoría con palomitas -->
 <script src="/reordenar.js?v=977fee61"></script><!-- orden manual del catálogo (arrastrar filas) -->
@@ -1039,7 +1033,7 @@
 <script src="/etaax-nav.js"></script>
 <script src="/qr-pairing.js"></script>
 <script src="../security.js?v=c188734e"></script>
-<script src="../app.js?v=c7112bc0"></script>
+<script src="../app.js?v=158543bc"></script>
 <script src="/recetas/subreceta-rendimientos.js?v=201d53b1"></script>
 <script>
 function toggleNav() {
@@ -2885,6 +2879,7 @@ function _aplicarPermisosRec(){
     if(!_puedeRec('imprimir')) ['btnImprimirHeader','btnImprimirSeleccion','btnFichaImprimir']
                                   .forEach(_recOcultar);
     if(!_puedeRec('cambios')) _recOcultar('btnNovedadesRec');
+    if(typeof _escCrearSync==='function') _escCrearSync();
 }
 /* El nombre viejo sigue vivo: app.js lo llama en cada pintado de la tabla. */
 function _aplicarPermisoCostos(){ _aplicarPermisosRec(); }
@@ -3027,6 +3022,82 @@ function abrirEscModal(tipo) {
         abrirEditorEnModal('index.html?embed=1&nuevo=' + encodeURIComponent(tipo), '🧾 ' + lbl);
     else if (tipo === 'simple') crearRecetaSimple(); else crearReceta(tipo); // fallback en página
 }
+/* ══ «CREAR RECETA ▾» (26-nov) ══════════════════════════════════════════════
+   La tarjeta despliega los cinco tipos; se cierra al elegir, al tocar fuera y
+   con Esc. Si el rol no puede ninguno, la tarjeta entera se va. */
+/* LAS VENTANITAS SE ACOMODAN A LA PANTALLA (Edwin, 26-nov): abren hacia
+   abajo si caben; si no, hacia arriba; y si no caben de ningún lado,
+   encima del botón, completas; solo si ni así caben, con su propio scroll.
+   Nunca empujan la página. `rc` es el
+   rectángulo del botón; `lim` el espacio en el que deben quedar. */
+function _encajarPop(pop, rc, o) {
+    o = o || {};
+    var M = 6, top0 = o.top != null ? o.top : 8, bot0 = o.bottom != null ? o.bottom : window.innerHeight - 8;
+    pop.style.position = 'fixed'; pop.style.maxHeight = ''; pop.style.overflowY = '';
+    if (o.ancho) pop.style.width = Math.min(o.ancho, window.innerWidth - 16) + 'px';
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    var abajo = bot0 - rc.bottom - M, arriba = rc.top - M - top0, total = bot0 - top0, y, lado;
+    if (h <= abajo) { y = rc.bottom + M; lado = 'abajo'; }
+    else if (h <= arriba) { y = rc.top - M - h; lado = 'arriba'; }
+    else if (h <= total) { y = Math.min(Math.max(top0, rc.top + rc.height / 2 - h / 2), bot0 - h); lado = 'encima'; }   // completa, encima del botón
+    else { y = top0; pop.style.maxHeight = total + 'px'; pop.style.overflowY = 'auto'; lado = 'encima'; }   // ni así: su propio scroll
+    var x = o.alinear === 'der' ? rc.right - w : rc.left;
+    x = Math.min(Math.max(8, x), window.innerWidth - w - 8);
+    pop.style.left = Math.round(x) + 'px'; pop.style.top = Math.round(y) + 'px';
+    pop.setAttribute('data-lado', lado);
+}
+/* Los íconos de la marca en las opciones de «crear» (nada de emojis). */
+function _recOpcIconos(raiz) {
+    if (!raiz || typeof window.etaaxIcono !== 'function') return;
+    raiz.querySelectorAll('.rec-opc-ic[data-ico]').forEach(function (sl) {
+        if (!sl.firstChild) sl.innerHTML = window.etaaxIcono(sl.getAttribute('data-ico'), { tam: 20 });
+    });
+}
+function _escCrearColocar() {
+    var m = document.getElementById('escCrearMenu'), b = document.getElementById('btnEscCrear');
+    if (!m || m.hidden || !b) return;
+    var v = document.getElementById('vistaMenuReceta'), lim = v ? v.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+    /* Del ancho de la fila de tarjetas (Crear receta + Menú): así los cinco
+       caben en dos renglones y la ventanita queda bajita. */
+    var rc = b.getBoundingClientRect(), g = b.closest('.etx-recetas-grid'), rg = g ? g.getBoundingClientRect() : rc;
+    var caja = { top: rc.top, bottom: rc.bottom, left: rg.left, right: rg.right, width: rg.width };
+    _encajarPop(m, caja, { ancho: Math.max(rg.width, 320), top: Math.max(8, lim.top + 8), bottom: Math.min(window.innerHeight, lim.bottom) - 8 });
+}
+function _escCrearMenu(ev) {
+    if (ev) ev.stopPropagation();
+    var m = document.getElementById('escCrearMenu'), b = document.getElementById('btnEscCrear');
+    if (!m) return;
+    var abrir = m.hidden;
+    m.hidden = !abrir;
+    if (b) b.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+    if (abrir) {
+        _recOpcIconos(m); _escCrearColocar();
+        var f = m.querySelector('button:not([style*="display: none"])'); if (f) try { f.focus({ preventScroll: true }); } catch (e) {}
+    }
+}
+window.addEventListener('resize', _escCrearColocar);
+document.addEventListener('scroll', _escCrearColocar, true);
+function _escCrearCerrar() {
+    var m = document.getElementById('escCrearMenu'), b = document.getElementById('btnEscCrear');
+    if (m) m.hidden = true;
+    if (b) b.setAttribute('aria-expanded', 'false');
+}
+function _escCrearIr(tipo) { _escCrearCerrar(); abrirEscModal(tipo); }
+function _escCrearSync() {
+    var algo = ['btnEscSimple','btnEscAlimentos','btnEscBebidas','btnEscSubAlimentos','btnEscSubBebidas'].some(function (id) {
+        var e = document.getElementById(id); return e && e.style.display !== 'none';
+    });
+    var w = document.getElementById('escCrearWrap'); if (w) w.style.display = algo ? '' : 'none';
+}
+document.addEventListener('click', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#escCrearWrap')) return;
+    _escCrearCerrar();
+});
+document.addEventListener('keydown', function (e) {
+    var m = document.getElementById('escCrearMenu');
+    if (e.key !== 'Escape' || !m || m.hidden) return;
+    _escCrearCerrar(); var b = document.getElementById('btnEscCrear'); if (b) b.focus();
+});
 function abrirCaratulaModal() {
     if (!_exigeRec('caratula', 'No puedes ver la carátula de costos.')) return;
     if (typeof abrirEditorEnModal === 'function')
@@ -4512,6 +4583,7 @@ function abrirFichaCosteo() {
                     color:var(--accent);margin-bottom:12px">📐 Costeo Sugerido · ${etx(_cpF.perfil.nombre)}</div>
                 ${[
                     ['Costo Bruto',_pctSug(_sugF.brutoPct), '$'+costo.toFixed(2), 'var(--accent)'],
+                    ..._sugF.margen > 0 ? [['Margen de error','+'+_pctSug(_sugF.margenErrorPct)+' del costo', '$'+_sugF.margen.toFixed(2), 'var(--accent)']] : [],
                     ['Gasto Operativo',_pctSug(_sugF.gastoOpPct), '$'+_sugF.gastoOp.toFixed(2), ''],
                     ['Utilidad Neta',_pctSug(_sugF.utilidadPct), '$'+_sugF.utilidad.toFixed(2),
                         _sugF.utilidadPct < 0 ? 'var(--red)' : ''],
@@ -4922,7 +4994,12 @@ document.addEventListener('click', function (e) {
     if (e.target.closest('.rec-menu-pop') || e.target.closest('.rec-mas-btn')) return;
     _recMenuCerrar();
 });
-window.addEventListener('scroll', _recMenuCerrar, true);
+/* Al desplazar la página se cierra; pero no cuando lo que se desplaza es la
+   propia ventanita (si no cabe completa, trae su scroll). */
+window.addEventListener('scroll', function (e) {
+    if (_recMenuEl && e.target && e.target.nodeType === 1 && _recMenuEl.contains(e.target)) return;
+    _recMenuCerrar();
+}, true);
 window.addEventListener('resize', _recMenuCerrar);
 
 function _recMenuItem(icono, texto, accion, clase) {
@@ -4995,25 +5072,28 @@ function _nuevaRecCatMenu(ev) {
 
     /* Solo los tipos que este rol puede dar de alta. Ofrecer uno para que
        después salte el aviso de permiso es prometer y no cumplir. */
+    /* (26-nov) Los mismos cinco de «Crear receta» en la portada, con los
+       íconos de la app y como botones para elegir. */
     var TIPOS = [
-        { t:'alimentos',     ico:'🍽️', lbl:'Receta · Alimentos' },
-        { t:'bebidas',       ico:'🥃', lbl:'Receta · Bebidas' },
-        { t:'sub-alimentos', ico:'🥣', lbl:'Sub Receta · Alimentos' },
-        { t:'sub-bebidas',   ico:'🧃', lbl:'Sub Receta · Bebidas' }
+        { t:'simple',        ico:'rec-simple',        lbl:'Receta simple',           d:'Nombre, grupo e ingredientes; el tipo, después.' },
+        { t:'alimentos',     ico:'rec-alimentos',     lbl:'Receta de alimentos',     d:'Platillos, entradas, postres y guarniciones.' },
+        { t:'bebidas',       ico:'rec-bebidas',       lbl:'Receta de bebidas',       d:'Cócteles, mocktails y bebidas de la carta.' },
+        { t:'sub-alimentos', ico:'rec-sub-alimentos', lbl:'Sub-receta de alimentos', d:'Salsas, fondos, masas, bases y rellenos.' },
+        { t:'sub-bebidas',   ico:'rec-sub-bebidas',   lbl:'Sub-receta de bebidas',   d:'Jarabes, shrubs, purés, mixes e infusiones.' }
     ].filter(function (x) { return _puedeRec(_permDeTipo(x.t)); });
     if (!TIPOS.length) { _exigeRec('crear', 'No puedes dar de alta recetas nuevas.'); return; }
 
     var pop = document.createElement('div');
-    pop.className = 'rec-menu-pop';
+    pop.className = 'rec-menu-pop rec-nueva-pop';
     pop.setAttribute('data-id', '__nuevaRec');
+    pop.setAttribute('role', 'menu');
     pop.innerHTML = TIPOS.map(function (x) {
-        return _recMenuItem(x.ico, x.lbl, "abrirEscModal('" + x.t + "')");
+        return '<button type="button" role="menuitem" class="rec-opc" data-tipo="' + x.t + '" onclick="_recMenuCerrar();abrirEscModal(\'' + x.t + '\')">' +
+            '<span class="rec-opc-ic" data-ico="' + x.ico + '"></span><span class="rec-opc-tx"><b>' + x.lbl + '</b><small>' + x.d + '</small></span></button>';
     }).join('');
     document.body.appendChild(pop);
-    var rc = ev.currentTarget.getBoundingClientRect();
-    var w = pop.offsetWidth, h = pop.offsetHeight;
-    pop.style.left = Math.min(Math.max(8, rc.right - w), window.innerWidth - w - 8) + 'px';
-    pop.style.top  = (rc.bottom + h + 8 > window.innerHeight ? Math.max(8, rc.top - h - 6) : rc.bottom + 6) + 'px';
+    _recOpcIconos(pop);
+    _encajarPop(pop, ev.currentTarget.getBoundingClientRect(), { alinear: 'der', ancho: 330 });
     _recMenuEl = pop;
 }
 

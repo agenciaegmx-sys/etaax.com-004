@@ -1642,13 +1642,32 @@
         var x = parseFloat(v);
         return (isFinite(x) && x >= 0 && x < 100) ? x : COSTEO_GASTO_OP_PCT;
     }
-    function costeoReceta(costo, multiplo, gastoOpPct) {
-        var c = n(costo), m = multiploReceta(multiplo), op = _gastoOp(gastoOpPct);
-        var platillo = c > 0 ? c * m : 0;
-        var brutoPct = 100 / m;                                    // el múltiplo ES el inverso del % de costo
-        var utilPct  = 100 - brutoPct - op;                        // puede salir negativa: es el aviso de que el múltiplo no da
+    /* EL MARGEN DE ERROR (Edwin, 26-nov): un colchón OPCIONAL sobre el costo
+       bruto para los cambios de precio de los insumos (y lo que no se pesa:
+       sal, aceite, condimentos). Es el «margen de error» de los formatos de
+       receta estándar: costo de ingredientes + X% = costo total, y el precio
+       sale de ese costo total. Por eso vive dentro del food/bar cost meta: con
+       22% de meta y 5% de margen, ingredientes + margen = 22% del precio, y la
+       utilidad objetivo no cambia — sube el precio sugerido.
+       Solo toca el SUGERIDO (poner precio). El aplicado mide lo que de verdad
+       deja el precio de la carta con el costo de hoy: ahí un colchón que no se
+       ha gastado no se cuenta. Vacío o 0 = sin margen, como siempre. */
+    function _margenError(v) {
+        if (v === '' || v === null || v === undefined) return 0;
+        var x = parseFloat(v);
+        return (isFinite(x) && x > 0 && x <= 50) ? x : 0;
+    }
+    function costeoReceta(costo, multiplo, gastoOpPct, margenErrorPct) {
+        var c = n(costo), m = multiploReceta(multiplo), op = _gastoOp(gastoOpPct), me = _margenError(margenErrorPct);
+        var margen   = c * me / 100;
+        var costoTot = c + margen;
+        var platillo = c > 0 ? costoTot * m : 0;
+        var metaPct  = 100 / m;                                    // el múltiplo ES el inverso del % de costo (con su margen)
+        var brutoPct = metaPct / (1 + me / 100);                   // lo que pesan los ingredientes solos en el precio
+        var utilPct  = 100 - metaPct - op;                         // puede salir negativa: es el aviso de que el múltiplo no da
         return {
             multiplo: m, costoBruto: c, platillo: platillo,
+            margenErrorPct: me, margen: margen, margenPct: metaPct - brutoPct, costoTotal: costoTot,
             brutoPct: brutoPct, gastoOpPct: op, utilidadPct: utilPct,
             gastoOp:  platillo * (op / 100),
             utilidad: platillo * (utilPct / 100),
@@ -1798,6 +1817,7 @@
         return { id: t.id, nombre: t.nombre, area: area, auto: !elegido,
                  costoNombre: area === 'barra' ? 'Bar cost' : 'Food cost',
                  food: food, op: op, util: 100 - food - op, multiplo: 100 / food,
+                 margenError: _margenError(r.margenErrorPct),
                  foodTipo: t.food, opTipo: t.op, foodPropio: m > 0, opPropio: opR !== null,
                  foodMin: t.foodMin, foodMax: t.foodMax, opMin: t.opMin, opMax: t.opMax, por: t.por };
     }
@@ -1815,7 +1835,7 @@
        aplicado (lo que de verdad deja el precio de la carta). */
     function costeoConPerfil(costo, r, cfg) {
         var pf = perfilCosteo(r, cfg);
-        var sug = costeoReceta(costo, pf.multiplo, pf.op);
+        var sug = costeoReceta(costo, pf.multiplo, pf.op, pf.margenError);
         var apl = costeoAplicado(r && r.precioEnCarta, costo, pf.op);
         return { perfil: pf, sugerido: sug, aplicado: apl, diagnostico: diagnosticoCosteo(apl, pf) };
     }

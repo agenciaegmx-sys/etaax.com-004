@@ -265,12 +265,113 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
             const r = await p.evaluate(() => { const x = getRecetas().find(r => r.id === 'r4'); return [x.perfilCosteo, Math.round(100 / x.multiploCosteo * 100) / 100, x.gastoOpPct]; });
             assert.deepEqual(r, ['entrada', 28, '']);
         });
+        /* (26-nov) El margen de error: opcional, sube el precio sugerido y no toca el aplicado. */
+        await p.evaluate(() => { if (typeof _showEscForm === 'function') _showEscForm(); cargarReceta('r3'); }); await p.waitForTimeout(500);
+        await p.evaluate(() => document.getElementById('seccionCostos').scrollIntoView({ block: 'center' }));
+        const aplAntes = await p.evaluate(() => ['a-costobruto-pct', 'a-utilidad-pct', 'a-utilidad-monto'].map(id => document.getElementById(id).textContent));
+        await caso('el margen de error es opcional: vacío, sin su renglón y el precio como siempre (38 ÷ 22% = $172.73)', async () =>
+            assert.deepEqual(await p.evaluate(() => [document.getElementById('s-margen').value, document.getElementById('s-margen-fila').style.display, document.getElementById('s-platillo').textContent]), ['', 'none', '$172.73']));
+        await p.evaluate(() => document.querySelectorAll('.etaax-ui-ov button').forEach(b => { if (/Aceptar/.test(b.textContent)) b.click(); }));
+        await p.fill('#s-margen', '5'); await p.waitForTimeout(200);
+        await p.evaluate(() => document.getElementById('costeoPerfil').scrollIntoView({ block: 'start' }));
+        await foto(p, 'c5b-margen');
+        await caso('…con 5%: su renglón (+5% del costo, $1.90) y el precio sube a $181.36; la utilidad objetivo sigue en 45%', async () =>
+            assert.deepEqual(await p.evaluate(() => [document.getElementById('s-margen-fila').style.display, document.getElementById('s-pct-margen').textContent, document.getElementById('s-margen-monto').textContent,
+                document.getElementById('s-platillo').textContent, document.getElementById('s-util-obj').textContent]), ['', '+5% del costo', '$1.90', '$181.36', '45%']));
+        await caso('…el aplicado (lo que deja la carta hoy) no cambia', async () =>
+            assert.deepEqual(await p.evaluate(() => ['a-costobruto-pct', 'a-utilidad-pct', 'a-utilidad-monto'].map(id => document.getElementById(id).textContent)), aplAntes));
+        await p.evaluate(() => guardarReceta()); await p.waitForTimeout(500);
+        await caso('…y se guarda en la receta (margenErrorPct)', async () =>
+            assert.equal(await p.evaluate(() => getRecetas().find(r => r.id === 'r3').margenErrorPct), 5));
+        await caso('los % del tipo se leen como números (no como placeholder gris)', async () => {
+            const r = await p.evaluate(() => { const f = document.getElementById('s-food'); return [getComputedStyle(f, '::placeholder').color, getComputedStyle(f).color, getComputedStyle(f, '::placeholder').opacity]; });
+            assert.equal(r[0], r[1]); assert.equal(r[2], '1');
+        });
         await p.evaluate(() => cargarReceta('r7')); await p.waitForTimeout(500);
         await caso('una bebida en el escandallo: «Bar cost meta» y solo tipos de barra', async () => {
             const r = await p.evaluate(() => [document.getElementById('s-food-lbl').textContent, [...document.getElementById('s-perfil').options].map(o => o.textContent), document.getElementById('s-food').placeholder]);
             assert.deepEqual(r, ['Bar cost meta', ['Automático · Destilados y tragos largos', 'Coctelería de autor', 'Destilados y tragos largos', 'Cerveza, refrescos y aguas', 'General'], '22']);   // el Negroni es «Clásicos»
         });
         await ctx.close();
+
+        console.log('\n══ Escandallos · Catálogo de recetas y «Crear receta ▾» ══');
+        {
+            const e = await abrir(browser, 1280);
+            const q = e.page;
+            await abrirRecetas(q);
+            await q.evaluate(() => { if (typeof entrarEscandallos === 'function') entrarEscandallos(); if (typeof _showEscMenu === 'function') _showEscMenu(); }); await q.waitForTimeout(500);
+            await caso('«Ver recetas» ahora es «Catálogo de recetas» y ya no están las tarjetas sueltas de cada tipo', async () => {
+                const t = await q.evaluate(() => document.getElementById('vistaMenuReceta').innerText);
+                assert.ok(/Catálogo de recetas/.test(t) && !/Ver recetas/.test(t) && !/O elige el tipo/i.test(t), t.slice(0, 300));
+                assert.equal(await q.evaluate(() => document.querySelectorAll('#vistaMenuReceta .etx-recetas-grid > button.cat-btn[id^="btnEsc"]').length), 0);
+            });
+            await caso('«Crear receta» es la misma tarjeta, en naranja', async () => {
+                const r = await q.evaluate(() => { const b = document.getElementById('btnEscCrear'); const cs = getComputedStyle(b); return [b.classList.contains('etx-tool-card'), cs.borderTopColor, getComputedStyle(b.querySelector('.etx-tool-cta')).color, !!b.querySelector('.etx-tool-icon svg')]; });
+                assert.equal(r[0], true); assert.equal(r[3], true, 'sin ícono');
+                const rgb = (c) => c.match(/\d+(\.\d+)?/g).map(Number);
+                const [rr, gg, bb] = rgb(r[2]); assert.ok(rr > gg && rr > bb, 'el «Elegir tipo» no es naranja: ' + r[2]);
+            });
+            await q.click('#btnEscCrear'); await q.waitForTimeout(250);
+            await foto(q, 'e1-crear');
+            const dentro = () => q.evaluate(() => { const m = document.getElementById('escCrearMenu').getBoundingClientRect(), v = document.getElementById('vistaMenuReceta').getBoundingClientRect();
+                return { lado: document.getElementById('escCrearMenu').getAttribute('data-lado'), dentro: m.top >= v.top - 1 && m.bottom <= Math.min(innerHeight, v.bottom) + 1 && m.left >= 0 && m.right <= innerWidth }; });
+            await caso('despliega los cinco tipos como BOTONES con su ícono de la app', async () => {
+                const r = await q.evaluate(() => [...document.querySelectorAll('#escCrearMenu .rec-opc')].map(b => [b.querySelector('b').textContent, !!b.querySelector('.rec-opc-ic svg'), getComputedStyle(b).borderTopStyle]));
+                assert.deepEqual(r.map(x => x[0]), ['Receta simple', 'Receta de alimentos', 'Receta de bebidas', 'Sub-receta de alimentos', 'Sub-receta de bebidas']);
+                assert.ok(r.every(x => x[1] && x[2] === 'solid'), JSON.stringify(r));
+            });
+            await caso('…y la ventanita cabe en la pantalla (aquí, hacia abajo)', async () => assert.deepEqual(await dentro(), { lado: 'abajo', dentro: true }));
+            await q.evaluate(() => { window.__tipo = []; window.abrirEscModal = (t) => __tipo.push(t); });
+            await q.click('#btnEscSubBebidas');
+            await caso('elegir «Sub-receta de bebidas» la crea y cierra el menú', async () => {
+                assert.deepEqual(await q.evaluate(() => __tipo), ['sub-bebidas']);
+                assert.equal(await q.evaluate(() => document.getElementById('escCrearMenu').hidden), true);
+            });
+            const alFondo = async (alto) => { await q.setViewportSize({ width: 1280, height: alto }); await q.waitForTimeout(300);
+                await q.evaluate(() => { const c = document.querySelector('#vistaMenuReceta > div'); c.scrollTop = c.scrollHeight; }); await q.waitForTimeout(200);
+                await q.click('#btnEscCrear'); await q.waitForTimeout(250); };
+            await alFondo(700);
+            await foto(q, 'e2-crear-arriba');
+            await caso('con poco espacio abajo se abre hacia ARRIBA y sigue cabiendo', async () => assert.deepEqual(await dentro(), { lado: 'arriba', dentro: true }));
+            await q.keyboard.press('Escape');
+            await alFondo(520);
+            await foto(q, 'e2b-crear-encima');
+            await caso('…y si no cabe ni arriba ni abajo, se pone ENCIMA de la tarjeta, completa y sin scroll', async () => {
+                assert.deepEqual(await dentro(), { lado: 'encima', dentro: true });
+                assert.equal(await q.evaluate(() => { const m = document.getElementById('escCrearMenu'); return m.scrollHeight <= m.clientHeight + 1; }), true);
+            });
+            await q.keyboard.press('Escape');
+            await q.setViewportSize({ width: 1280, height: 900 });
+            await q.evaluate(() => { verRecetas(); }); await q.waitForTimeout(500);
+            await q.click('#btnNuevaRecCat'); await q.waitForTimeout(250);
+            await foto(q, 'e3-nueva-catalogo');
+            await caso('en el catálogo, «Nueva receta ▾» trae los mismos cinco, con íconos de la app y sin emojis', async () => {
+                const r = await q.evaluate(() => { const pop = document.querySelector('.rec-nueva-pop'); return { n: pop.querySelectorAll('.rec-opc').length, svg: pop.querySelectorAll('.rec-opc-ic svg').length, emoji: /[\u{1F300}-\u{1FAFF}]/u.test(pop.textContent), borde: getComputedStyle(pop.querySelector('.rec-opc')).borderTopStyle }; });
+                assert.deepEqual(r, { n: 5, svg: 5, emoji: false, borde: 'solid' });
+            });
+            await caso('…y su ventanita cabe en la pantalla', async () => {
+                const m = await q.evaluate(() => { const b = document.querySelector('.rec-nueva-pop').getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight && b.left >= 0 && b.right <= innerWidth; });
+                assert.equal(m, true);
+            });
+            await e.ctx.close();
+        }
+
+        console.log('\n══ Escandallo dentro del inventario (Paso 3) ══');
+        {
+            const css = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8').match(/\.inv-editor-caja \{ width: min\((\d+)px/);
+            await caso('la ventana del inventario ya no se topa en 980 px (del tamaño de la de Recetas)', async () => assert.ok(css && Number(css[1]) >= 1280, css && css[1]));
+            /* Lo que de verdad ve: a 1280 la ventana mide 1280 − 28 de margen. */
+            const v = await abrir(browser, 1252);
+            await v.page.goto(ORIGEN + '/recetas/index.html?embed=1&r=r3');
+            await v.page.waitForFunction(() => document.querySelector('#tbodyIngredientes tr'), null, { timeout: 20000 }); await v.page.waitForTimeout(600);
+            await foto(v.page, 'e4-escandallo-inventario');
+            await caso('…y ahí el escandallo pinta sus ingredientes en su TABLA de siempre, no en tarjetas', async () =>
+                assert.equal(await v.page.evaluate(() => getComputedStyle(document.getElementById('tablaIngredientes')).display), 'table'));
+            await v.page.setViewportSize({ width: 950, height: 900 }); await v.page.waitForTimeout(300);
+            await caso('(con la ventana vieja de 980 px salían en tarjetas: esa era la causa)', async () =>
+                assert.equal(await v.page.evaluate(() => getComputedStyle(document.getElementById('tablaIngredientes')).display), 'block'));
+            await v.ctx.close();
+        }
 
         console.log('\n══ Carátula · sin la migración v90 corrida ══');
         const b = await abrir(browser, 1280, { __sinTabla: ['costeo_config'] });
