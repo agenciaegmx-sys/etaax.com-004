@@ -122,6 +122,12 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             }));
             assert.deepEqual([r.isla, r.g, r.subido, r.alto <= 1, r.rotulo, r.parrafo, r.hero], ['Ventas y Gastos Diarios', 'Diarios', true, true, 'none', 'none', 0]);
         });
+        /* (26-nov, Edwin) Una palabra: toda en terracota; varias: las primeras en el color del texto y la última en terracota. */
+        await caso('título de varias palabras: «Ventas y Gastos» en el color del texto y «Diarios» en terracota', async () => {
+            const r = await p.evaluate(() => { const t = document.getElementById('etxCtxTitulo'), g = t.querySelector('.g');
+                return [t.firstChild.nodeType === 3 ? t.firstChild.textContent : '', getComputedStyle(g).color !== getComputedStyle(t).color]; });
+            assert.deepEqual(r, ['Ventas y Gastos ', true]);
+        });
         await caso('…y si la pantalla cambia su título, la isla lo sigue', async () => {
             await p.evaluate(() => { document.querySelector('.dx-hero-title').firstChild.textContent = 'Caja y Gastos '; });
             await p.waitForFunction(() => document.getElementById('etxCtxTitulo').textContent === 'Caja y Gastos Diarios');
@@ -235,6 +241,8 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
                     fns: [...document.querySelectorAll('.dx-card[data-fn]')].filter(b => b.offsetParent).sort((a, b) => (+getComputedStyle(a).order) - (+getComputedStyle(b).order)).map(b => b.dataset.fn),
                     reporte: !!document.querySelector('.dx-toolbar').offsetParent }));
                 assert.deepEqual(r, { t: titulo, fns, reporte: vista === 'gestion' });
+                /* Una sola palabra: toda en terracota. */
+                assert.equal(await p.evaluate(() => { const t = document.getElementById('etxCtxTitulo'); return t.children.length === 1 && t.firstElementChild.classList.contains('g') && t.firstElementChild.textContent === t.textContent; }), true, 'una palabra, no toda en terracota');
             });
         }
         await ir(p, '/administrativo/horarios.html');

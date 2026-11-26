@@ -581,10 +581,18 @@
         if (firma === tituloFirma) return;
         tituloFirma = firma;
         slot.textContent = '';
-        partes.forEach(function (p) {
-            if (p.g) { var sp = document.createElement('span'); sp.className = 'g'; sp.textContent = p.t; slot.appendChild(sp); }
-            else slot.appendChild(document.createTextNode(p.t));
-        });
+        /* EL COLOR DEL TÍTULO (Edwin, 26-nov), igual en todos los módulos: una
+           sola palabra va toda en terracota («ESCANDALLOS»); con dos o más, las
+           primeras en el color del texto (blanco en el tema oscuro) y la última
+           en terracota («CUENTAS BANCARIAS», como «TU ESPACIO DE TRABAJO» del
+           hub). Se decide sobre el texto, no sobre el marcado de cada página.
+           Siempre TEXTO (textContent), nunca HTML. */
+        var palabras = partes.map(function (p) { return p.t; }).join('').trim().split(/\s+/).filter(Boolean);
+        if (palabras.length) {
+            var ult = document.createElement('span'); ult.className = 'g'; ult.textContent = palabras[palabras.length - 1];
+            if (palabras.length > 1) slot.appendChild(document.createTextNode(palabras.slice(0, -1).join(' ') + ' '));
+            slot.appendChild(ult);
+        }
         slot.hidden = !partes.length;
         if (typeof window.etaaxRecentrar === 'function') window.etaaxRecentrar();   // el título cambió de largo
     }
@@ -632,10 +640,24 @@
             });
         });
     }
+    /* (26-nov) El óvalo de «Abrir» va a la derecha de cada tarjeta: el título y
+       la descripción dejan libre su ancho, medido de verdad (cambia con el
+       texto y cuando llega la tipografía). */
+    function medirCtas() {
+        var ro = typeof ResizeObserver === 'function' ? new ResizeObserver(function (es) {
+            es.forEach(function (e) { var c = e.target.closest('.etx-tool-card'); if (c && e.target.offsetWidth) c.style.setProperty('--etx-cta-w', (e.target.offsetWidth + 14) + 'px'); });
+        }) : null;
+        document.querySelectorAll('.etx-tool-card').forEach(function (card) {
+            var cta = card.querySelector('.cf-card-cta,.dx-card-cta,.etx-tool-cta'); if (!cta) return;
+            if (cta.offsetWidth) card.style.setProperty('--etx-cta-w', (cta.offsetWidth + 14) + 'px');
+            if (ro) ro.observe(cta);
+        });
+    }
     function iniciar() {
         try { vigilarIsla(); } catch (e) {}
         try { portadaCompacta(); } catch (e) {}
         pintarTarjetas();
+        try { medirCtas(); } catch (e) {}
         if (embebido) return;
         document.querySelectorAll('.theme-toggle').forEach(function(b){b.remove();});
         var nav = document.getElementById('nav');

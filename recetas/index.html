@@ -13,7 +13,7 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=7a651810">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=b1bccada">
     <link rel="preload" as="script" href="/etaax-header.js?v=a0ec334a">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=0c952fe9">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=ed06c1f0">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
     <link rel="preload" as="script" href="/recetas/recetas-ui.js?v=91eddf64">
 
@@ -32,9 +32,9 @@
         html.embed .header button[onclick*="eliminarRecetaActual"] { display:none !important; }
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=1f66fb4f">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=6934b62d">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
-<link rel="stylesheet" href="/recetas/recetas-ui.css?v=00295a27">
+<link rel="stylesheet" href="/recetas/recetas-ui.css?v=a6f67ad6">
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -570,11 +570,11 @@
                         <span class="etx-tool-cta">Elegir tipo <span class="etx-esc-car" aria-hidden="true"></span></span>
                     </button>
                     <div class="etx-esc-menu" id="escCrearMenu" role="menu" hidden>
-                        <button type="button" role="menuitem" class="rec-opc" id="btnEscSimple" onclick="_escCrearIr('simple')"><span class="rec-opc-ic" data-ico="rec-simple"></span><span class="rec-opc-tx"><b>Receta simple</b><small>Nombre, grupo e ingredientes; el tipo, después.</small></span></button>
                         <button type="button" role="menuitem" class="rec-opc" id="btnEscAlimentos" onclick="_escCrearIr('alimentos')"><span class="rec-opc-ic" data-ico="rec-alimentos"></span><span class="rec-opc-tx"><b>Receta de alimentos</b><small>Platillos, entradas, postres y guarniciones.</small></span></button>
-                        <button type="button" role="menuitem" class="rec-opc" id="btnEscBebidas" onclick="_escCrearIr('bebidas')"><span class="rec-opc-ic" data-ico="rec-bebidas"></span><span class="rec-opc-tx"><b>Receta de bebidas</b><small>Cócteles, mocktails y bebidas de la carta.</small></span></button>
                         <button type="button" role="menuitem" class="rec-opc" id="btnEscSubAlimentos" onclick="_escCrearIr('sub-alimentos')"><span class="rec-opc-ic" data-ico="rec-sub-alimentos"></span><span class="rec-opc-tx"><b>Sub-receta de alimentos</b><small>Salsas, fondos, masas, bases y rellenos.</small></span></button>
+                        <button type="button" role="menuitem" class="rec-opc" id="btnEscBebidas" onclick="_escCrearIr('bebidas')"><span class="rec-opc-ic" data-ico="rec-bebidas"></span><span class="rec-opc-tx"><b>Receta de bebidas</b><small>Cócteles, mocktails y bebidas de la carta.</small></span></button>
                         <button type="button" role="menuitem" class="rec-opc" id="btnEscSubBebidas" onclick="_escCrearIr('sub-bebidas')"><span class="rec-opc-ic" data-ico="rec-sub-bebidas"></span><span class="rec-opc-tx"><b>Sub-receta de bebidas</b><small>Jarabes, shrubs, purés, mixes e infusiones.</small></span></button>
+                        <button type="button" role="menuitem" class="rec-opc rec-opc-ancha" id="btnEscSimple" onclick="_escCrearIr('simple')"><span class="rec-opc-ic" data-ico="rec-simple"></span><span class="rec-opc-tx"><b>Receta simple</b><small>Nombre, grupo e ingredientes; el tipo, después.</small></span></button>
                     </div>
                 </div>
                 <!-- (24-nov) El Menú de la sucursal se mudó aquí desde Control administrativo. -->
@@ -5075,11 +5075,12 @@ function _nuevaRecCatMenu(ev) {
     /* (26-nov) Los mismos cinco de «Crear receta» en la portada, con los
        íconos de la app y como botones para elegir. */
     var TIPOS = [
-        { t:'simple',        ico:'rec-simple',        lbl:'Receta simple',           d:'Nombre, grupo e ingredientes; el tipo, después.' },
+        /* Orden de Edwin: 2×2 (alimentos | su sub-receta; bebidas | su sub-receta) y la simple hasta abajo, a lo ancho. */
         { t:'alimentos',     ico:'rec-alimentos',     lbl:'Receta de alimentos',     d:'Platillos, entradas, postres y guarniciones.' },
-        { t:'bebidas',       ico:'rec-bebidas',       lbl:'Receta de bebidas',       d:'Cócteles, mocktails y bebidas de la carta.' },
         { t:'sub-alimentos', ico:'rec-sub-alimentos', lbl:'Sub-receta de alimentos', d:'Salsas, fondos, masas, bases y rellenos.' },
-        { t:'sub-bebidas',   ico:'rec-sub-bebidas',   lbl:'Sub-receta de bebidas',   d:'Jarabes, shrubs, purés, mixes e infusiones.' }
+        { t:'bebidas',       ico:'rec-bebidas',       lbl:'Receta de bebidas',       d:'Cócteles, mocktails y bebidas de la carta.' },
+        { t:'sub-bebidas',   ico:'rec-sub-bebidas',   lbl:'Sub-receta de bebidas',   d:'Jarabes, shrubs, purés, mixes e infusiones.' },
+        { t:'simple',        ico:'rec-simple',        lbl:'Receta simple',           d:'Nombre, grupo e ingredientes; el tipo, después.' }
     ].filter(function (x) { return _puedeRec(_permDeTipo(x.t)); });
     if (!TIPOS.length) { _exigeRec('crear', 'No puedes dar de alta recetas nuevas.'); return; }
 
@@ -5088,12 +5089,12 @@ function _nuevaRecCatMenu(ev) {
     pop.setAttribute('data-id', '__nuevaRec');
     pop.setAttribute('role', 'menu');
     pop.innerHTML = TIPOS.map(function (x) {
-        return '<button type="button" role="menuitem" class="rec-opc" data-tipo="' + x.t + '" onclick="_recMenuCerrar();abrirEscModal(\'' + x.t + '\')">' +
+        return '<button type="button" role="menuitem" class="rec-opc' + (x.t === 'simple' ? ' rec-opc-ancha' : '') + '" data-tipo="' + x.t + '" onclick="_recMenuCerrar();abrirEscModal(\'' + x.t + '\')">' +
             '<span class="rec-opc-ic" data-ico="' + x.ico + '"></span><span class="rec-opc-tx"><b>' + x.lbl + '</b><small>' + x.d + '</small></span></button>';
     }).join('');
     document.body.appendChild(pop);
     _recOpcIconos(pop);
-    _encajarPop(pop, ev.currentTarget.getBoundingClientRect(), { alinear: 'der', ancho: 330 });
+    _encajarPop(pop, ev.currentTarget.getBoundingClientRect(), { alinear: 'der', ancho: 560 });
     _recMenuEl = pop;
 }
 
@@ -5351,7 +5352,7 @@ window.addEventListener('load', function() {
 <script src="/etaax-sidebar.js?v=b1bccada"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=a0ec334a"></script>
-<script src="/etaax-modulos-ui.js?v=0c952fe9"></script>
+<script src="/etaax-modulos-ui.js?v=ed06c1f0"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 <script src="/recetas/recetas-ui.js?v=91eddf64"></script>
 </body>

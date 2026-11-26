@@ -19007,7 +19007,8 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
     test('…el título sube a la isla copiando TEXTO (nunca marcado de la página)', () => {
         const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8');
         const i = mu.indexOf('function pintarTitulo()'), f = mu.slice(i, mu.indexOf('\n    function ', i + 10));
-        return eq(/sp\.textContent = p\.t/.test(f) && /document\.createTextNode\(p\.t\)/.test(f) && !/innerHTML/.test(f), true);
+        /* (26-nov) Ahora decide el color por palabras (una: terracota; varias: la última), pero sigue siendo solo TEXTO. */
+        return eq(/ult\.textContent = palabras\[palabras\.length - 1\]/.test(f) && /document\.createTextNode\(palabras\.slice\(0, -1\)/.test(f) && !/innerHTML/.test(f), true);
     });
     test('…la barra lateral ya no le quita ancho al contenido: es el desplegable «Sub módulos»', () => {
         const mu = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.js'), 'utf8'), css = fs.readFileSync(path.join(RAIZ, 'etaax-modulos-ui.css'), 'utf8');

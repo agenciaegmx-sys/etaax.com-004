@@ -305,11 +305,26 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
                 assert.ok(/Catálogo de recetas/.test(t) && !/Ver recetas/.test(t) && !/O elige el tipo/i.test(t), t.slice(0, 300));
                 assert.equal(await q.evaluate(() => document.querySelectorAll('#vistaMenuReceta .etx-recetas-grid > button.cat-btn[id^="btnEsc"]').length), 0);
             });
+            await caso('el título de la isla, de una palabra, va todo en terracota', async () =>
+                assert.equal(await q.evaluate(() => { const t = document.getElementById('etxCtxTitulo'); return t.children.length === 1 && t.firstElementChild.classList.contains('g') && /escandallos/i.test(t.textContent); }), true));
+            /* (26-nov, Edwin) El «Abrir» de cada tarjeta: óvalo a la derecha, centrado en el alto; terracota, y azul en «Crear receta». */
+            const ovalo = (id) => q.evaluate((id) => { const c = document.getElementById(id), o = c.querySelector('.etx-tool-cta'), t = c.querySelector('.cat-btn-title'), d = c.querySelector('.cat-btn-desc');
+                const rc = c.getBoundingClientRect(), ro = o.getBoundingClientRect(), rgb = getComputedStyle(o).backgroundColor.match(/\d+/g).map(Number);
+                const ancho = (el) => { const r = document.createRange(); r.selectNodeContents(el); return Math.max(...[...r.getClientRects()].map(x => x.right)); };
+                return { derecha: rc.right - ro.right < 30, centrado: Math.abs((ro.top + ro.bottom) / 2 - (rc.top + rc.bottom) / 2) < 3, redondo: parseFloat(getComputedStyle(o).borderTopLeftRadius) >= ro.height / 2 - 1,
+                         libre: ancho(t) <= ro.left && ancho(d) <= ro.left, color: rgb[0] > rgb[2] ? 'terracota' : 'azul' }; }, id);
+            await caso('«Abrir recetario» es un óvalo terracota a la derecha, centrado en el alto, y el texto no pasa por debajo', async () =>
+                assert.deepEqual(await ovalo('btnVerRecetas'), { derecha: true, centrado: true, redondo: true, libre: true, color: 'terracota' }));
+            await caso('…igual «Consultar costos» y «Gestionar menú»', async () => {
+                assert.equal((await ovalo('btnCaratula')).color, 'terracota'); assert.equal((await ovalo('btnMenuSucursal')).centrado, true);
+            });
+            await caso('…y en «Crear receta» el óvalo va en azul', async () =>
+                assert.deepEqual(await ovalo('btnEscCrear'), { derecha: true, centrado: true, redondo: true, libre: true, color: 'azul' }));
             await caso('«Crear receta» es la misma tarjeta, en naranja', async () => {
                 const r = await q.evaluate(() => { const b = document.getElementById('btnEscCrear'); const cs = getComputedStyle(b); return [b.classList.contains('etx-tool-card'), cs.borderTopColor, getComputedStyle(b.querySelector('.etx-tool-cta')).color, !!b.querySelector('.etx-tool-icon svg')]; });
                 assert.equal(r[0], true); assert.equal(r[3], true, 'sin ícono');
                 const rgb = (c) => c.match(/\d+(\.\d+)?/g).map(Number);
-                const [rr, gg, bb] = rgb(r[2]); assert.ok(rr > gg && rr > bb, 'el «Elegir tipo» no es naranja: ' + r[2]);
+                const [rr, gg, bb] = rgb(r[1]); assert.ok(rr > bb, 'el borde de la tarjeta no es naranja: ' + r[1]);
             });
             await q.click('#btnEscCrear'); await q.waitForTimeout(250);
             await foto(q, 'e1-crear');
@@ -317,9 +332,16 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
                 return { lado: document.getElementById('escCrearMenu').getAttribute('data-lado'), dentro: m.top >= v.top - 1 && m.bottom <= Math.min(innerHeight, v.bottom) + 1 && m.left >= 0 && m.right <= innerWidth }; });
             await caso('despliega los cinco tipos como BOTONES con su ícono de la app', async () => {
                 const r = await q.evaluate(() => [...document.querySelectorAll('#escCrearMenu .rec-opc')].map(b => [b.querySelector('b').textContent, !!b.querySelector('.rec-opc-ic svg'), getComputedStyle(b).borderTopStyle]));
-                assert.deepEqual(r.map(x => x[0]), ['Receta simple', 'Receta de alimentos', 'Receta de bebidas', 'Sub-receta de alimentos', 'Sub-receta de bebidas']);
+                assert.deepEqual(r.map(x => x[0]), ['Receta de alimentos', 'Sub-receta de alimentos', 'Receta de bebidas', 'Sub-receta de bebidas', 'Receta simple']);
                 assert.ok(r.every(x => x[1] && x[2] === 'solid'), JSON.stringify(r));
             });
+            /* (26-nov, Edwin) 2×2: alimentos | su sub-receta, bebidas | su sub-receta; la simple hasta abajo, a lo ancho. */
+            const cuadricula = (sel) => q.evaluate((sel) => { const bs = [...document.querySelectorAll(sel + ' .rec-opc')].map(b => b.getBoundingClientRect());
+                const fila = (a, b) => Math.abs(a.top - b.top) < 2;
+                return { fila1: fila(bs[0], bs[1]) && bs[0].left < bs[1].left, fila2: fila(bs[2], bs[3]) && bs[2].left < bs[3].left && bs[2].top > bs[0].top,
+                         simpleAbajo: bs[4].top > bs[2].top + 2, simpleAncha: Math.abs(bs[4].left - bs[0].left) < 2 && Math.abs(bs[4].right - bs[1].right) < 2 }; }, sel);
+            await caso('…en cuadrícula de 2×2 y la receta simple hasta abajo, a lo ancho', async () =>
+                assert.deepEqual(await cuadricula('#escCrearMenu'), { fila1: true, fila2: true, simpleAbajo: true, simpleAncha: true }));
             await caso('…y la ventanita cabe en la pantalla (aquí, hacia abajo)', async () => assert.deepEqual(await dentro(), { lado: 'abajo', dentro: true }));
             await q.evaluate(() => { window.__tipo = []; window.abrirEscModal = (t) => __tipo.push(t); });
             await q.click('#btnEscSubBebidas');
@@ -349,6 +371,8 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
                 const r = await q.evaluate(() => { const pop = document.querySelector('.rec-nueva-pop'); return { n: pop.querySelectorAll('.rec-opc').length, svg: pop.querySelectorAll('.rec-opc-ic svg').length, emoji: /[\u{1F300}-\u{1FAFF}]/u.test(pop.textContent), borde: getComputedStyle(pop.querySelector('.rec-opc')).borderTopStyle }; });
                 assert.deepEqual(r, { n: 5, svg: 5, emoji: false, borde: 'solid' });
             });
+            await caso('…en el mismo orden: 2×2 y la simple hasta abajo', async () =>
+                assert.deepEqual(await cuadricula('.rec-nueva-pop'), { fila1: true, fila2: true, simpleAbajo: true, simpleAncha: true }));
             await caso('…y su ventanita cabe en la pantalla', async () => {
                 const m = await q.evaluate(() => { const b = document.querySelector('.rec-nueva-pop').getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight && b.left >= 0 && b.right <= innerWidth; });
                 assert.equal(m, true);

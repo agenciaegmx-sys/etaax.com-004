@@ -445,10 +445,27 @@ body.etx-module-cards .etx-recetas-menu .etx-esc-crear-btn :is(.etx-tool-cta,.et
 .etx-recetas-menu .etx-esc-crear-btn[aria-expanded="true"] .etx-esc-car {transform:translateY(1px) rotate(-135deg);}
 /* La ventanita la coloca _encajarPop (fija, abajo o arriba según quepa): aquí solo su cara.
    Las opciones son botones para elegir (.rec-opc), en dos columnas. */
-.etx-recetas-menu .etx-esc-menu {position:fixed;z-index:60;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;padding:10px;box-sizing:border-box;
+.etx-recetas-menu .etx-esc-menu {position:fixed;z-index:60;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;box-sizing:border-box;
   background:var(--etx-ui-panel);border:1px solid var(--etx-ui-terra-line);border-radius:14px;box-shadow:0 18px 44px rgba(0,0,0,.32);}
 .etx-recetas-menu .etx-esc-menu[hidden] {display:none;}
 @media (max-width:600px) { .etx-recetas-menu .etx-esc-menu {grid-template-columns:1fr;} }
+/* ══ (26-nov, Edwin) EL «ABRIR» DE CADA TARJETA ES UN BOTÓN REDONDO ════════════
+   A la derecha y centrado en el alto de la tarjeta, en terracota: la tarjeta
+   entera sigue siendo el botón, pero ese óvalo es el que dice «toca aquí». En
+   «Crear receta» (la tarjeta naranja) va en azul. El texto de la tarjeta deja
+   libre el ancho del botón (--etx-cta-w, lo mide etaax-modulos-ui.js). */
+body.etx-module-cards .etx-tool-card {position:relative;}
+body.etx-module-cards .etx-tool-card :is(.cf-card-cta,.dx-card-cta,.etx-tool-cta) {
+  position:absolute;right:20px;top:50%;transform:translateY(-50%);margin:0!important;padding:9px 16px!important;
+  display:inline-flex;align-items:center;gap:7px;white-space:nowrap;border-radius:999px;
+  background:var(--etx-ui-terra)!important;color:var(--etx-ui-panel)!important;font-size:12.5px!important;font-weight:600;line-height:1.2;
+  box-shadow:0 4px 14px color-mix(in srgb,var(--etx-ui-terra) 32%,transparent);transition:filter .15s,box-shadow .15s;}
+body.etx-module-cards .etx-tool-card:hover :is(.cf-card-cta,.dx-card-cta,.etx-tool-cta) {filter:brightness(1.07);box-shadow:0 6px 18px color-mix(in srgb,var(--etx-ui-terra) 42%,transparent);}
+body.etx-module-cards .etx-tool-card :is(.cf-card-title,.dx-card-title,.cat-btn-title,.cf-card-desc,.dx-card-desc,.cat-btn-desc) {padding-right:var(--etx-cta-w,150px);box-sizing:border-box;}
+body.etx-module-cards .etx-recetas-menu .etx-esc-crear-btn .etx-tool-cta {background:var(--etx-ui-cyan)!important;box-shadow:0 4px 14px color-mix(in srgb,var(--etx-ui-cyan) 32%,transparent);}
+body.etx-module-cards .etx-recetas-menu .etx-esc-crear-btn:hover .etx-tool-cta {box-shadow:0 6px 18px color-mix(in srgb,var(--etx-ui-cyan) 42%,transparent);}
+/* En las portadas compactas, alto suficiente para que el óvalo no toque el grupo de arriba. */
+body.etx-module-cards .etx-portada-modulos .etx-tool-card {min-height:118px!important;}
 .etx-module-dialog {
   position:fixed;inset:0;margin:auto;width:min(600px,calc(100% - 32px));max-height:calc(100dvh - 40px);
   padding:24px;border:1px solid var(--etx-ui-cyan);border-radius:18px;
