@@ -680,6 +680,64 @@
         return { porId: porId, total: tot };
     }
 
+    /* ══ LA CAJA FUERTE EN VISTAS: TOTAL Y DISPONIBLE (Edwin, 26-nov) ════════
+       Dos números, siempre juntos:
+         · TOTAL      = todo el dinero que existe: el efectivo de la caja fuerte,
+                        lo que ya está en el banco (conciliado) y la venta con
+                        tarjeta que ya se cobró pero todavía no cae (sin conciliar).
+         · DISPONIBLE = lo que se puede usar hoy: lo conciliado MENOS lo que ya
+                        tiene dueño — previsiones, anticipos y otros apartados.
+       Lo sin conciliar cuenta en el total pero no en el disponible: todavía no
+       está en la cuenta.
+       CAMBIO DE REGLA (Edwin, 26-nov): los ANTICIPOS ya NO cuentan en el
+       disponible. Antes sí («ese billete ya entró»); ahora se apartan como lo
+       que son: dinero que se debe en producto.                               */
+    function cajaDisponible(o) {
+        o = o || {};
+        var caja = n(o.caja), banco = n(o.banco), transito = Math.max(0, n(o.transito));
+        var prev = Math.max(0, n(o.previsiones)), apt = Math.max(0, n(o.apartados)), ant = Math.max(0, n(o.anticipos));
+        var conciliado = caja + banco, comprometido = prev + apt + ant;
+        return { caja: caja, banco: banco, transito: transito, conciliado: conciliado, total: conciliado + transito,
+                 previsiones: prev, apartados: apt, anticipos: ant, comprometido: comprometido,
+                 disponible: conciliado - comprometido };
+    }
+    /* «OTROS APARTADOS»: dinero que el negocio separa con un concepto propio
+       (fondo de emergencia, aguinaldos, un remodelado…) sin meta ni fecha. Viven
+       en el mismo catálogo que las previsiones (`clase: 'apartado'`) y se apartan,
+       usan y liberan con los mismos movimientos —así su saldo sale de la misma
+       cuenta, previsionSaldos— pero se ven y se suman aparte. */
+    function esApartadoLibre(p) { return !!p && p.clase === 'apartado'; }
+    function previsionSaldosPorClase(sal) {
+        var r = { prevision: { saldo: 0, enCaja: 0, enBanco: 0, lista: [] },
+                  apartado:  { saldo: 0, enCaja: 0, enBanco: 0, lista: [] } };
+        var porId = (sal && sal.porId) || {};
+        Object.keys(porId).forEach(function (k) {
+            var x = porId[k], c = esApartadoLibre(x.prevision) ? r.apartado : r.prevision;
+            c.saldo += x.saldo; c.enCaja += x.enCaja; c.enBanco += x.enBanco; c.lista.push(x);
+        });
+        return r;
+    }
+    /* Lo comprometido DENTRO de cada cuenta bancaria, para su desglose:
+       previsiones y otros apartados (cada movimiento con la proporción que le
+       queda a su previsión, la misma regla de previsionSaldos) y los anticipos
+       por aplicar que entraron a esa cuenta. Clave '' = sin cuenta (la base). */
+    function comprometidoPorCuenta(prevs, deps, gastos, antSaldos) {
+        var sal = previsionSaldos(prevs, deps, gastos), out = {};
+        function slot(id) { id = id || ''; if (!out[id]) out[id] = { previsiones: 0, apartados: 0, anticipos: 0 }; return out[id]; }
+        (deps || []).forEach(function (d) {
+            if (!esApartado(d) || apartadoFondo(d) !== 'banco') return;
+            var x = sal.porId[d.previsionId || PREV_GENERAL]; if (!x || !(x.apartado > 0)) return;
+            var m = n(d.monto) * (x.saldo / x.apartado);
+            slot(d.fondoCuentaId)[esApartadoLibre(x.prevision) ? 'apartados' : 'previsiones'] += m;
+        });
+        var pa = (antSaldos && antSaldos.porId) || {};
+        Object.keys(pa).forEach(function (k) {
+            var a = pa[k]; if (!a || !a.anticipo || !(a.saldo > 0) || anticipoFondo(a.anticipo) !== 'banco') return;
+            slot(a.anticipo.cuentaId || a.anticipo.destinoCuentaId).anticipos += a.saldo;
+        });
+        return out;
+    }
+
     /* ¿Cuáles TOCAN hoy? Si al capturar el anticipo se puso la fecha del evento,
        el corte de ese día lo propone solo. Sin eso, el cajero tendría que
        acordarse de que hace tres semanas alguien dejó dinero a cuenta — y un
@@ -1846,7 +1904,7 @@
         var s = semaforoCosto(apl.brutoPct, pf);
         if (s === 'ok')  return { clave: 'optimo',  texto: 'Óptimo' };
         if (s === 'vig') return { clave: 'vigilar', texto: 'Vigilar' };
-        return { clave: 'ajustar', texto: 'Ajustar merma o precio' };
+        return { clave: 'ajustar', texto: 'Ajustar precio' };
     }
     /* VENTA DIRECTA DE BARRA (Insumos → Costeo): la copa de un destilado y la
        pieza de una cerveza o un refresco. Ahí el «factor» se aplica al costo
@@ -2570,6 +2628,7 @@
         previsionPeriodos: previsionPeriodos, previsionPlan: previsionPlan,
         previsionApartadoRango: previsionApartadoRango, previsionUsadoRango: previsionUsadoRango,
         importeLetra: importeLetra,
+        cajaDisponible: cajaDisponible, esApartadoLibre: esApartadoLibre, previsionSaldosPorClase: previsionSaldosPorClase, comprometidoPorCuenta: comprometidoPorCuenta,
         multiploReceta: multiploReceta, costeoReceta: costeoReceta, costeoAplicado: costeoAplicado,
         COSTEO_PERFILES: COSTEO_PERFILES, perfilAdivinado: perfilAdivinado, perfilTipo: perfilTipo,
         perfilCosteo: perfilCosteo, costeoConPerfil: costeoConPerfil, diagnosticoCosteo: diagnosticoCosteo,

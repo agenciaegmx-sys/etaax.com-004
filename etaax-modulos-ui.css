@@ -19,12 +19,15 @@ body.etx-module-cards {
   --etx-ui-line:#3a3830;--etx-ui-muted:#b5afa3;--etx-ui-tint:rgba(251,155,111,.09);
   --etx-ui-terra-line:rgba(251,155,111,.52);--etx-ui-cyan-line:rgba(140,228,238,.5);--etx-ui-cyan-soft:rgba(140,228,238,.24);--etx-ui-rojo:#e05a3a;--etx-ui-hondo:#8ce4ee;
   --etx-ui-cyan-tint:rgba(140,228,238,.08);
+  /* (26-nov, Edwin) Botones naranjas con letra BLANCA: el relleno es un terracota más hondo para que el blanco se lea. */
+  --etx-ui-terra-solido:#c45f37;--etx-ui-terra-tinta:#fff;
 }
 [data-theme="light"] body.etx-module-cards {
   --etx-ui-cyan:#247681;--etx-ui-terra:#ad4b27;--etx-ui-panel:#fff;
   --etx-ui-line:#d3cfc7;--etx-ui-muted:#666157;--etx-ui-tint:rgba(173,75,39,.06);
   --etx-ui-terra-line:rgba(173,75,39,.46);--etx-ui-cyan-line:rgba(36,118,129,.46);--etx-ui-cyan-soft:rgba(36,118,129,.22);--etx-ui-rojo:#c0442a;--etx-ui-hondo:#247681;
   --etx-ui-cyan-tint:rgba(36,118,129,.07);
+  --etx-ui-terra-solido:#ad4b27;--etx-ui-terra-tinta:#fff;
 }
 body.etx-modulos-ui {padding:var(--etx-header-h,70px) 0 0;--etx-shell-top:calc(var(--etx-header-h,70px) + var(--etx-context-h,128px));}
 body.etx-modulos-ui .top-bar,body.etx-modulos-ui .theme-toggle,
@@ -206,7 +209,7 @@ body.etx-modulos-ui .pp-eyebrow {font-size:9px;letter-spacing:3px;text-transform
    botón que significa lo mismo no puede cambiar de color según en qué renglón
    de la página esté. */
 body.etx-modulos-ui :is(.btn-primary,.btn-save) {
-  background:var(--etx-ui-terra);border:1px solid var(--etx-ui-terra);color:#0f0e0c;font-weight:600;
+  background:var(--etx-ui-terra-solido,var(--etx-ui-terra));border:1px solid var(--etx-ui-terra-solido,var(--etx-ui-terra));color:var(--etx-ui-terra-tinta,#fff);font-weight:600;
 }
 body.etx-modulos-ui :is(.btn-primary,.btn-save):hover {filter:brightness(1.06);opacity:1;}
 body.etx-modulos-ui .btn-accent {
@@ -246,10 +249,10 @@ body.etx-modulos-ui :is(.hr-btn,.ck-btn,.ev-btn,.pp-btn,.org-btn):hover {
   border-color:var(--etx-ui-cyan-line);color:var(--etx-ui-cyan);background:var(--etx-ui-cyan-tint);
 }
 body.etx-modulos-ui :is(.ck-btn.primary,.org-btn.primary,.pp-btn.pp-btn-primary) {
-  background:var(--etx-ui-terra);border-color:var(--etx-ui-terra);color:#0f0e0c;font-weight:600;
+  background:var(--etx-ui-terra-solido,var(--etx-ui-terra));border-color:var(--etx-ui-terra-solido,var(--etx-ui-terra));color:var(--etx-ui-terra-tinta,#fff);font-weight:600;
 }
 body.etx-modulos-ui :is(.ck-btn.primary,.org-btn.primary,.pp-btn.pp-btn-primary):hover {
-  filter:brightness(1.06);background:var(--etx-ui-terra);color:#0f0e0c;
+  filter:brightness(1.06);background:var(--etx-ui-terra-solido,var(--etx-ui-terra));color:var(--etx-ui-terra-tinta,#fff);
 }
 body.etx-modulos-ui :is(.org-btn.on,.hr-btn.on,.ck-btn.on,.ev-btn.on) {
   background:var(--etx-ui-cyan-tint);border-color:var(--etx-ui-cyan-line);color:var(--etx-ui-cyan);
@@ -458,7 +461,7 @@ body.etx-module-cards .etx-tool-card {position:relative;}
 body.etx-module-cards .etx-tool-card :is(.cf-card-cta,.dx-card-cta,.etx-tool-cta) {
   position:absolute;right:20px;top:50%;transform:translateY(-50%);margin:0!important;padding:9px 16px!important;
   display:inline-flex;align-items:center;gap:7px;white-space:nowrap;border-radius:999px;
-  background:var(--etx-ui-terra)!important;color:var(--etx-ui-panel)!important;font-size:12.5px!important;font-weight:600;line-height:1.2;
+  background:var(--etx-ui-terra-solido,var(--etx-ui-terra))!important;color:var(--etx-ui-terra-tinta,#fff)!important;font-size:12.5px!important;font-weight:600;line-height:1.2;
   box-shadow:0 4px 14px color-mix(in srgb,var(--etx-ui-terra) 32%,transparent);transition:filter .15s,box-shadow .15s;}
 body.etx-module-cards .etx-tool-card:hover :is(.cf-card-cta,.dx-card-cta,.etx-tool-cta) {filter:brightness(1.07);box-shadow:0 6px 18px color-mix(in srgb,var(--etx-ui-terra) 42%,transparent);}
 body.etx-module-cards .etx-tool-card :is(.cf-card-title,.dx-card-title,.cat-btn-title,.cf-card-desc,.dx-card-desc,.cat-btn-desc) {padding-right:var(--etx-cta-w,150px);box-sizing:border-box;}

@@ -153,3 +153,91 @@
 #cajBody .cj-ctas-grid > div > div:last-child > span:first-child > .op-icon {margin-right:5px;}
 
 @media(max-width:600px) {#cajBody > .cj-acum > div:first-child {flex-basis:100%;}#cajBody > .cj-acum > .cj-acum-val {width:100%;}}
+
+/* ══ LA CAJA FUERTE EN VISTAS (Edwin, 26-nov) ═════════════════════════════════
+   Pestañas: Saldo disponible · Cuentas bancarias · Previsiones · Anticipos ·
+   Otros apartados. Cada vista arranca con sus totales en recuadros y abajo su
+   desglose; los montos que restan van en su color y el resultado resalta. */
+#cajOverlay .cjv-tabs {display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:-24px;z-index:3;margin:-24px -24px 0;padding:14px 24px 12px;background:var(--op-panel);border-bottom:1px solid var(--op-line);}
+#cajOverlay .cjv-tab {display:inline-flex;align-items:center;gap:8px;min-height:40px!important;padding:7px 13px!important;border:1px solid var(--op-line)!important;border-radius:11px!important;
+  background:transparent!important;color:var(--op-muted)!important;font:500 12.5px 'DM Sans',sans-serif;cursor:pointer;}
+#cajOverlay .cjv-tab b {font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;font-size:12.5px;}
+#cajOverlay .cjv-tab.on {background:var(--etx-ui-cyan-tint,rgba(140,228,238,.08))!important;border-color:var(--etx-ui-cyan-line,#537e83)!important;color:var(--op-cyan)!important;}
+#cajOverlay .cjv-tab .etx-ic {width:17px;height:17px;}
+#cajOverlay .cjv-vista {display:flex;flex-direction:column;gap:14px;padding-top:16px;}
+#cajOverlay .cjv-cab {display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+#cajOverlay .cjv-tit {font:700 17px/1.3 'DM Sans',sans-serif;color:var(--text);}
+#cajOverlay .cjv-acc {display:flex;gap:8px;flex-wrap:wrap;}
+#cajOverlay .cjv-btn {display:inline-flex;align-items:center;gap:7px;min-height:36px!important;padding:7px 13px!important;border:1px solid var(--op-line)!important;border-radius:9px!important;
+  background:transparent!important;color:var(--text)!important;font:500 12.5px 'DM Sans',sans-serif;text-decoration:none;cursor:pointer;white-space:nowrap;}
+#cajOverlay .cjv-btn:hover {border-color:var(--op-cyan)!important;color:var(--op-cyan)!important;}
+#cajOverlay .cjv-btn.prim {background:var(--etx-ui-terra-solido,var(--op-terra))!important;border-color:transparent!important;color:var(--etx-ui-terra-tinta,#fff)!important;font-weight:600;}
+#cajOverlay .cjv-btn .etx-ic {width:15px;height:15px;--green:currentColor;}
+#cajOverlay .cjv-dos {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+#cajOverlay .cjv-tres {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+#cajOverlay .cjv-tile {border:1px solid var(--op-line);border-radius:14px;padding:16px 18px;background:var(--op-panel);min-width:0;}
+#cajOverlay .cjv-tile-tit {font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--op-muted);}
+#cajOverlay .cjv-tile-val {font:700 28px/1.2 'DM Sans',sans-serif;letter-spacing:-.6px;margin:6px 0 4px;color:var(--text);font-variant-numeric:tabular-nums;}
+#cajOverlay .cjv-tile-txt {font-size:11.5px;line-height:1.5;color:var(--op-muted);}
+#cajOverlay .cjv-total {border-color:color-mix(in srgb,var(--op-cyan) 45%,var(--op-line));}
+#cajOverlay .cjv-disp {border-color:color-mix(in srgb,var(--green) 50%,var(--op-line));background:color-mix(in srgb,var(--green) 6%,var(--op-panel));}
+#cajOverlay .cjv-disp .cjv-tile-val {color:var(--green);}
+#cajOverlay :is(.cjv-disp,.cjv-fin).neg .cjv-tile-val,#cajOverlay .cjv-fin.neg .cjv-monto {color:var(--red);}
+#cajOverlay .cjv-camino-t .cjv-tile-val {color:var(--accent);}
+#cajOverlay :is(.cjv-prev,.cjv-apt) .cjv-tile-val {color:var(--viol,#8b5cf6);}
+#cajOverlay .cjv-ant .cjv-tile-val {color:var(--accent);}
+#cajOverlay .cjv-eq {display:flex;flex-direction:column;border:1px solid var(--op-line);border-radius:14px;background:var(--op-panel);overflow:hidden;}
+#cajOverlay .cjv-fila {display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 16px;border-top:1px solid var(--op-line);}
+#cajOverlay .cjv-fila:first-child {border-top:0;}
+#cajOverlay .cjv-signo {font:700 15px 'DM Sans',sans-serif;color:var(--op-muted);text-align:center;}
+#cajOverlay .cjv-lbl {font-size:13px;color:var(--text);display:flex;flex-direction:column;gap:2px;min-width:0;}
+#cajOverlay .cjv-lbl small {font-size:11px;color:var(--op-muted);line-height:1.45;}
+#cajOverlay .cjv-monto {font:700 14.5px 'DM Sans',sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap;}
+#cajOverlay .cjv-sub {background:color-mix(in srgb,var(--op-line) 30%,transparent);}
+#cajOverlay .cjv-sub .cjv-lbl {font-weight:600;}
+#cajOverlay .cjv-resta .cjv-monto {color:var(--red);}
+#cajOverlay .cjv-resta .cjv-monto::before {content:'− ';}
+#cajOverlay .cjv-camino .cjv-monto {color:var(--accent);}
+#cajOverlay .cjv-fin {background:color-mix(in srgb,var(--green) 7%,var(--op-panel));}
+#cajOverlay .cjv-fin .cjv-lbl {font-weight:700;}
+#cajOverlay .cjv-fin .cjv-monto {font-size:17px;color:var(--green);}
+#cajOverlay .cjv-ir {cursor:pointer;}
+#cajOverlay .cjv-ir:hover .cjv-lbl {color:var(--op-cyan);}
+#cajOverlay .cjv-ctas {display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;}
+#cajOverlay .cjv-cta {display:flex;flex-direction:column;gap:10px;border:1px solid var(--op-line);border-radius:14px;padding:14px;background:var(--op-panel);}
+#cajOverlay .cjv-cta-top {display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+#cajOverlay .cjv-cta-nom {display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:600 14px 'DM Sans',sans-serif;color:var(--text);}
+#cajOverlay .cjv-eq-cta {border-radius:11px;}
+#cajOverlay .cjv-chip {font-size:9.5px;font-weight:600;border-radius:999px;padding:2px 8px;border:1px solid var(--op-line);}
+#cajOverlay .cjv-chip.oro {color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent);}
+#cajOverlay .cjv-chip.rojo {color:var(--red);border-color:color-mix(in srgb,var(--red) 45%,transparent);}
+#cajOverlay .cjv-tira {display:flex;align-items:center;gap:8px;font-size:11px;color:var(--op-muted);padding:7px 11px;border-radius:9px;background:color-mix(in srgb,var(--red) 6%,transparent);border:1px solid color-mix(in srgb,var(--red) 20%,transparent);}
+#cajOverlay .cjv-tira span {flex:1;min-width:0;}
+#cajOverlay .cjv-tira b {color:var(--red);font-variant-numeric:tabular-nums;}
+#cajOverlay .cjv-tira .etx-ic {width:14px;height:14px;}
+#cajOverlay .cjv-pie {font-size:11px;color:var(--op-muted);line-height:1.5;}
+#cajOverlay .cjv-tabla {border:1px solid var(--op-line);border-radius:14px;overflow:auto;background:var(--op-panel);}
+#cajOverlay .cjv-tabla .cj-table {margin:0;}
+#cajOverlay .cjv-tabla tfoot td {font-weight:700;border-top:1px solid var(--op-line);}
+#cajOverlay .cjv-mini {font-size:11px;color:var(--op-muted);}
+#cajOverlay .cjv-venc td {background:color-mix(in srgb,var(--red) 5%,transparent);}
+#cajOverlay .cjv-vacio {display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:30px 20px;border:1px dashed var(--op-line);border-radius:14px;color:var(--op-muted);font-size:12.5px;line-height:1.6;}
+#cajOverlay .cjv-vacio .etx-ic {width:28px;height:28px;}
+#cajOverlay .cjv-sec {display:flex;flex-direction:column;gap:8px;}
+#cajOverlay .cjv-sec-tit {display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--op-muted);}
+#cajOverlay .cjv-tc {border:1px solid var(--op-line);border-left:3px solid var(--op-line);border-radius:11px;padding:11px 13px;background:var(--op-panel);}
+#cajOverlay .cjv-tc-top {display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+#cajOverlay .cjv-tc-banco {font-weight:600;font-size:13px;}
+#cajOverlay .cjv-tc-dig,#cajOverlay .cjv-tc-nota {font-size:10.5px;color:var(--op-muted);}
+#cajOverlay .cjv-tc-der {display:flex;align-items:center;gap:12px;}
+#cajOverlay .cjv-tc-deuda {font:700 14px 'DM Sans',sans-serif;color:var(--red);}
+#cajOverlay .cjv-barra {height:4px;border-radius:4px;background:var(--op-line);overflow:hidden;margin-top:8px;}
+#cajOverlay .cjv-barra > div {height:100%;border-radius:4px;}
+#cajOverlay .cjv-pliegue {width:100%;display:flex!important;align-items:center;justify-content:space-between!important;gap:10px;padding:11px 14px!important;border:1px solid var(--op-line)!important;
+  border-radius:11px!important;background:transparent!important;color:var(--text)!important;font-size:11px;letter-spacing:1.3px;text-transform:uppercase;cursor:pointer;}
+#cajOverlay .cjv-pliegue > span:first-child {display:inline-flex;align-items:center;gap:7px;}
+@media (max-width:760px) {
+  #cajOverlay :is(.cjv-dos,.cjv-tres) {grid-template-columns:1fr;}
+  #cajOverlay .cjv-tab-tx {display:none;}
+  #cajOverlay .cjv-tab.on .cjv-tab-tx {display:inline;}
+}

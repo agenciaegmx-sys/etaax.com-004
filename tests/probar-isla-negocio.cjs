@@ -152,7 +152,7 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
         });
         await caso('…y al tocar fuera', async () => {
             await p.click('#navToggleBtn');
-            await p.mouse.click(640, 860);
+            await p.mouse.click(8, 880);   // una orilla vacía (en el centro ahora hay tarjetas de la caja fuerte)
             assert.equal(await p.evaluate(() => document.getElementById('nav').classList.contains('etx-sub-abierto')), false);
         });
         await caso('«Cambiar módulo»: se expande y despliega sus opciones debajo de él', async () => {
@@ -234,7 +234,7 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             const b = await barra();
             assert.ok(/Insumos\*/.test(b) && / · Proveedores$/.test(b), b);
         });
-        for (const [vista, titulo, fns] of [['ingresos', 'Ingresos', ['cortes', 'extras']], ['egresos', 'Egresos', ['gastos', 'depositos', 'fijos', 'nominas', 'mayores']], ['gestion', 'Gestión', ['caja']]]) {
+        for (const [vista, titulo, fns] of [['ingresos', 'Ingresos', ['cortes', 'extras']], ['egresos', 'Egresos', ['gastos', 'depositos', 'fijos', 'nominas', 'mayores']], ['gestion', 'Gestión', ['caja', 'caja_bancos', 'caja_prev', 'caja_ant', 'caja_apt']]]) {
             await ir(p, '/administrativo/diario.html?vista=' + vista);
             await caso('Admin·ax, ' + titulo + ': su título en la isla y SOLO sus tarjetas, en su orden', async () => {
                 const r = await p.evaluate(() => ({ t: document.getElementById('etxCtxTitulo').textContent,

@@ -8222,7 +8222,7 @@ console.log('\n══ BC5 · La meta que se veía en dos sucursales ══');
     /* Y las NUEVAS sí son independientes: el selector del formulario ofrece
        sucursales REALES, así que cada una nace con su dueño. */
     test('el formulario ofrece sucursales reales, no negocios', () => {
-        const i = prev.indexOf("sel.innerHTML='<option value=\"\">🌐 Todas las sucursales</option>'");
+        const i = prev.indexOf("sel.innerHTML='<option value=\"\">Todas las sucursales</option>'");   // (26-nov) sin emoji
         return eq(prev.slice(i, i + 300).indexOf('_loadNegocios().forEach') > -1, true, 'reales');
     });
     test('…y al crear se propone la sucursal donde vienes navegando', () =>
@@ -8387,21 +8387,17 @@ console.log('\n══ BC7 · Anticipos en pantalla (diario.html) ══');
        corte anterior, el mismo anticipo se aplicaría dos veces. */
     test('abrir un corte carga lo suyo y descarta lo del anterior', () =>
         eq(dia.indexOf('_antAplic = (d.anticipos||[]).map(') > -1, true, 'se recarga'));
-    /* El anticipo SÍ cuenta en el disponible: ese billete ya entró y el negocio lo
-       puede operar. Es la diferencia con una PREVISIÓN, que sí se resta porque su
-       dinero ya tiene un gasto con nombre esperándolo.
-       Decisión de Edwin, y se fija aquí para que no se "arregle" de vuelta: los
-       dos comportamientos se ven razonables leyendo el código, y sin un test que
-       diga cuál se eligió, el siguiente que pase lo cambia de buena fe. */
-    test('el disponible SÍ incluye los anticipos (ya son dinero del negocio)', () =>
-        eq(dia.indexOf('var saldoDisponible = saldoTotal - aptTot;') > -1
-        && dia.indexOf('saldoTotal - aptTot - antTot') === -1, true, 'incluidos'));
-    test('…pero la previsión sí se resta: su dinero ya tiene un gasto esperándolo', () =>
-        eq(dia.indexOf('saldoTotal - aptTot') > -1, true, 'apartado fuera'));
-    test('…y el card avisa cuánto de ese disponible trae compromiso', () =>
-        eq(dia.indexOf("Incluye '+fmtM(antTot)+' de anticipos") > -1, true, 'avisa'));
-    test('…y tiene su card, aparte del de previsiones', () =>
-        eq(dia.indexOf('🎟️ Anticipos por aplicar') > -1, true, 'card'));
+    /* CAMBIO DE REGLA (Edwin, 26-nov): el anticipo YA NO cuenta en el disponible.
+       Antes sí («ese billete ya entró»); ahora la caja fuerte separa lo que se
+       puede usar de lo que ya tiene dueño, y un anticipo se debe en producto.
+       La cuenta vive en el núcleo (EtaaxCore.cajaDisponible, suite BH101) y la
+       caja fuerte se la pide: aquí se fija que la pantalla no la recalcule. */
+    test('el disponible ya NO incluye los anticipos (se deben en producto)', () =>
+        eq(dia.indexOf('EtaaxCore.cajaDisponible(') > -1 && /anticipos:_anS\.saldo/.test(dia), true, 'restados'));
+    test('…ni las previsiones ni los otros apartados', () =>
+        eq(/previsiones:_clases\.prevision\.saldo, apartados:_clases\.apartado\.saldo/.test(dia), true, 'restados'));
+    test('…y los anticipos tienen su propia vista en la caja fuerte', () =>
+        eq(dia.indexOf("['anticipos','Anticipos','cjf-anticipo', R.anticipos]") > -1, true, 'vista'));
     /* Al elegir cuál aplicar NO se cuenta lo que el propio corte ya lleva: si no,
        su consumo se vería como saldo gastado y no se podría corregir. */
     test('al elegir, el corte no se descuenta a sí mismo', () => {
@@ -19094,7 +19090,7 @@ console.log('\n══ BH94 · Stock en su unidad; entradas en piezas y con su ho
         const d = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
         const i = d.indexOf('var VISTAS = {'), V = new Function('return ' + d.slice(i + 13, d.indexOf('};', i) + 1))();
         return eq(['ingresos', 'egresos', 'gestion'].map(k => k + ':' + V[k].fns.join(',')).join(' | '),
-                  'ingresos:cortes,extras | egresos:gastos,depositos,fijos,nominas,mayores | gestion:caja');
+                  'ingresos:cortes,extras | egresos:gastos,depositos,fijos,nominas,mayores | gestion:caja,caja_bancos,caja_prev,caja_ant,caja_apt');   // (26-nov) la caja fuerte en cinco vistas
     });
     test('…esconder lo que no es de la vista no compite con los permisos (clase con !important)', () => {
         const d = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
@@ -33601,7 +33597,7 @@ console.log('\n══ BH91 · El tipo de platillo manda en el costeo ══');
     const ent = { grupo:'Entradas' };   // sano 18–25%, sin IVA: $116 → $100
     test('entrada al 24% (dentro de 18–25) → Óptimo aunque pase la meta de 22', () => eq(dg(116, 24, ent), 'optimo'));
     test('entrada al 27% (hasta 3 puntos arriba del rango) → Vigilar', () => eq(dg(116, 27, ent), 'vigilar'));
-    test('entrada al 29% → Ajustar merma o precio', () => eq(dg(116, 29, ent), 'ajustar'));
+    test('entrada al 29% → Ajustar precio', () => eq(dg(116, 29, ent), 'ajustar'));
     test('utilidad negativa → Pérdida', () => eq(dg(116, 70, ent), 'perdida'));
     test('sin precio en carta → Sin precio (no se inventa)', () => eq(dg('', 17.85), 'sinprecio'));
     test('«General» no tiene rango: su tope es la meta (30%, con medio punto de holgura)', () =>
@@ -33721,6 +33717,66 @@ console.log('\n══ BH100 · El margen de error del costeo ══');
         const js = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8'), html = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
         return eq(JSON.stringify([/Margen de error \+'\+_p1\(_sug\.margenErrorPct\)/.test(js), /_sugF\.margen > 0/.test(html), /id="s-margen-fila"/.test(html)]), JSON.stringify([true, true, true]), 'renglón');
     });
+})();
+
+/* ═══════ BH101 · LA CAJA FUERTE EN VISTAS: TOTAL Y DISPONIBLE (26-nov) ═══════
+   Edwin: «en la vista general de saldo disponible hay un total y un sub total:
+   un total de todo el dinero que existe y el subtotal, que es el disponible, o
+   sea el que está conciliado y no está en previsiones, apartados o anticipos».
+   Y en cuentas bancarias: total calculado = conciliado + sin conciliar, y el
+   anticipo que entró a la cuenta se desglosa y no cuenta en el disponible. */
+console.log('\n══ BH101 · La caja fuerte: total y disponible ══');
+(function () {
+    const J = (x) => JSON.stringify(x);
+    const R = Core.cajaDisponible({ caja: 1000, banco: 5000, transito: 800, previsiones: 600, apartados: 300, anticipos: 400 });
+    test('TOTAL = caja fuerte + bancos conciliado + lo que viene en camino', () => eq(R.total, 6800, 'total'));
+    test('DISPONIBLE = conciliado − previsiones − otros apartados − anticipos (lo sin conciliar no cuenta)', () => eq(R.disponible, 4700, 'disponible'));
+    test('…y el desglose cuadra: total − sin conciliar − comprometido = disponible', () =>
+        eq(Math.round((R.total - R.transito - R.comprometido) * 100) / 100, R.disponible, 'cuadra'));
+    test('sin nada apartado ni en camino, disponible = total', () => {
+        const r = Core.cajaDisponible({ caja: 200, banco: 300 });
+        return eq(J([r.total, r.disponible]), J([500, 500]), 'igual');
+    });
+    test('un tránsito negativo (abono de más) no infla el total', () => eq(Core.cajaDisponible({ caja: 100, banco: 0, transito: -50 }).total, 100, 'tope'));
+    test('el disponible puede salir negativo: es el aviso de que se apartó más de lo que hay', () =>
+        eq(Core.cajaDisponible({ caja: 100, banco: 0, previsiones: 300 }).disponible, -200, 'negativo'));
+
+    /* «Otros apartados»: mismo catálogo y mismos movimientos que las previsiones, sumados aparte. */
+    const prevs = [{ id: 'p1', concepto: 'Aguinaldo' }, { id: 'a1', concepto: 'Fondo de emergencia', clase: 'apartado' }];
+    const deps = [
+        { tipo: 'apartado', previsionId: 'p1', fondo: 'caja_fuerte', monto: 1000 },
+        { tipo: 'apartado', previsionId: 'a1', fondo: 'banco', fondoCuentaId: 'c1', monto: 500 },
+        { tipo: 'apartado', previsionId: 'a1', fondo: 'banco', fondoCuentaId: 'c1', monto: -200 },   // liberado
+    ];
+    const C = Core.previsionSaldosPorClase(Core.previsionSaldos(prevs, deps, []));
+    test('previsiones y otros apartados salen del mismo cálculo, separados por clase', () =>
+        eq(J([C.prevision.saldo, C.apartado.saldo]), J([1000, 300]), 'clases'));
+    test('…liberar es un apartado en negativo: el saldo baja y queda el rastro', () => eq(C.apartado.enBanco, 300, 'liberado'));
+    test('un apartado libre no mueve dinero (depEfecto en cero, como una previsión)', () =>
+        eq(J(Core.depEfecto(deps[1])), J({ caja: 0, banco: 0, tcPago: 0 }), 'sin movimiento'));
+
+    /* Por cuenta: lo comprometido dentro de cada cuenta bancaria. */
+    const ant = Core.anticipoSaldos([{ id: 'x1', tipo: 'anticipo', fondo: 'banco', cuentaId: 'c1', monto: 700 },
+                                     { id: 'x2', tipo: 'anticipo', fondo: 'caja_fuerte', monto: 250 }], [], []);
+    const pc = Core.comprometidoPorCuenta(prevs, deps, [], ant);
+    test('en la cuenta c1: el anticipo que entró ahí y el apartado libre (los de caja no)', () =>
+        eq(J(pc.c1), J({ previsiones: 0, apartados: 300, anticipos: 700 }), 'c1'));
+    test('…lo usado de una previsión baja proporcional en cada cuenta', () => {
+        const p2 = Core.comprometidoPorCuenta([{ id: 'p9' }], [{ tipo: 'apartado', previsionId: 'p9', fondo: 'banco', fondoCuentaId: 'c2', monto: 400 }],
+            [{ previsionId: 'p9', monto: 100 }], { porId: {} });
+        return eq(p2.c2.previsiones, 300, 'proporcional');
+    });
+
+    /* La pantalla: cinco vistas, una tarjeta por vista en Gestión. */
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    test('la caja fuerte tiene sus cinco vistas', () =>
+        eq(['disponible', 'bancos', 'previsiones', 'anticipos', 'apartados'].every(v => dia.indexOf("['" + v + "','") > -1), true, 'vistas'));
+    test('…y Gestión tiene una tarjeta por vista, con el permiso de caja fuerte', () =>
+        eq(['caja_bancos', 'caja_prev', 'caja_ant', 'caja_apt'].every(f => dia.indexOf('data-fn="' + f + '"') > -1 && new RegExp(f + ":\\s*'ventas\\.cajaFuerte'").test(dia)), true, 'tarjetas'));
+    test('«⚖️ Conciliar» funciona también con UNA sola cuenta (antes pedía dos)', () =>
+        eq(/var _pcCF = _ctasDebCF\.length \? _debitoPorCuenta\(/.test(dia) && dia.indexOf('if (_ctasDebCF.length > 1) {') === -1, true, 'una cuenta'));
+    test('Previsiones (configuración) no enseña los otros apartados como metas', () =>
+        eq(/esApartadoLibre\(p\)\) return false/.test(fs.readFileSync(path.join(RAIZ, 'financiero/previsiones.html'), 'utf8')), true, 'fuera'));
 })();
 
 

@@ -147,16 +147,16 @@ const nube$ = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('__nube') 
         });
         await caso('el semáforo es el rango sano: el Guacamole al 30.4% (entradas 18–25) y el Flan al 25.6% (postres 15–22) → Ajustar', async () => {
             const g = await celdas(p, 'Guacamole'), f = await celdas(p, 'Flan napolitano');
-            assert.deepEqual([g.real[3], g.real[9], f.real[3], f.real[9]], ['30.4%', 'Ajustar merma o precio', '25.6%', 'Ajustar merma o precio']);
+            assert.deepEqual([g.real[3], g.real[9], f.real[3], f.real[9]], ['30.4%', 'Ajustar precio', '25.6%', 'Ajustar precio']);
         });
         await caso('el tipo se adivina por el grupo: Guacamole es Entrada (33%) y la Arrachera Plato fuerte (44%)', async () => {
             const g = await celdas(p, 'Guacamole'), a = await celdas(p, 'Arrachera');
             assert.match(g.real[0], /Automático · Entradas/); assert.match(g.real[5], / 33%$/);
             assert.match(a.real[0], /Automático · Platos fuertes/); assert.match(a.real[5], / 44%$/);
         });
-        await caso('la Arrachera con 42.8% de food cost contra 30% de meta → «Ajustar merma o precio» y le faltan pesos', async () => {
+        await caso('la Arrachera con 42.8% de food cost contra 30% de meta → «Ajustar precio» y le faltan pesos', async () => {
             const a = await celdas(p, 'Arrachera');
-            assert.equal(a.real[9], 'Ajustar merma o precio');
+            assert.equal(a.real[9], 'Ajustar precio');
             assert.match(a.proy[9], /^Faltan \$/);
         });
         await caso('sin precio en carta no se inventa: «Sin precio»', async () => {

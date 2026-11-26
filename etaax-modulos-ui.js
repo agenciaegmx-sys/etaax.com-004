@@ -189,15 +189,26 @@
         '🚚':'cat-proveedores',    '⭐':'cat-clientes',           '📦':'mod-inventarios',
         '🔒':'candado',            '🌐':'org-corporativo',       '🏪':'sucursal',
         '📈':'fin-estadisticas',   '💳':'fin-cuentas-bancarias', '🍽':'restaurante',
-        '🍽️':'restaurante'
+        '🍽️':'restaurante',
+        /* (26-nov) Configuración de Admin·ax (previsiones y cuentas) y la caja fuerte. */
+        '✏️':'ins-editar',         '✏':'ins-editar',             '🗑️':'ins-eliminar',
+        '🗑':'ins-eliminar',       '⏳':'adm-pendiente',          '🔄':'adm-programado',
+        '✅':'adm-pagado',         '❌':'cjf-cerrar',             '🔮':'fin-previsiones',
+        '📍':'sucursal',           '💾':'adm-guardar',           '⏸️':'cjf-inactiva',
+        '⏸':'cjf-inactiva',        '▶️':'adm-pagado',            '⚖️':'cjf-conciliar',
+        '⚖':'cjf-conciliar',       '📜':'cjf-historial',          '🎟️':'cjf-anticipo',
+        '🎟':'cjf-anticipo'
     };
     /* Dónde sí: lo que es interfaz. Dónde no: celdas de tabla y campos. */
     var CROMO = 'button, .dx-win-title, .dx-card-title, .cf-card-title, .brand-title, ' +
-                '.dx-sec-title, .corte-sec-title, .gs-sec-title, .ck-title, .ev-title, label';
+                '.dx-sec-title, .corte-sec-title, .gs-sec-title, .ck-title, .ev-title, label, ' +
+                '.modal-pv .modal-header h2, .cb-modal-title, .cj-title, .cjv-tit';
 
     var cromoIntentos = 0;
     function iconosEnCromo(raiz) {
         if (embebido) return;
+        if (typeof window.etaaxIcono === 'function')
+            (raiz || document).querySelectorAll('[data-etx-ico]:empty').forEach(function (el) { el.innerHTML = window.etaaxIcono(el.getAttribute('data-etx-ico'), { tam: 28 }); });
         /* Mismo cuidado que en el menú: si el sprite todavía no llegó, se vuelve
            a intentar en vez de dejar los emojis puestos para siempre. */
         if (typeof window.etaaxIcono !== 'function') {
@@ -528,7 +539,8 @@
     }
     function pintarTarjetas() {
         var recetas = {btnVerRecetas:'cat-recetas',btnCaratula:'fin-resumen-resultados',btnEscSimple:'mod-escandallos',btnEscAlimentos:'giro-restaurante-bar',btnEscBebidas:'giro-bar',btnEscSubAlimentos:'cat-sub-recetas',btnEscSubBebidas:'giro-bar',btnMenuSucursal:'cor-comedor'};
-        var diarios = {gastos:'fin-gastos',cortes:'fin-ventas',nominas:'cat-colaboradores',fijos:'sh-info-negocio',depositos:'fin-previsiones',mayores:'fin-gastos',caja:'candado',extras:'fin-ventas'};
+        var diarios = {gastos:'fin-gastos',cortes:'fin-ventas',nominas:'cat-colaboradores',fijos:'sh-info-negocio',depositos:'fin-previsiones',mayores:'fin-gastos',caja:'cjf-disponible',extras:'fin-ventas',
+            caja_bancos:'cjf-banco',caja_prev:'cjf-prevision',caja_ant:'cjf-anticipo',caja_apt:'adm-categoria'};   // (26-nov) la caja fuerte en cinco vistas
         document.querySelectorAll('.cf-card,.dx-card,#vistaMenuReceta .cat-btn').forEach(function(card){
             card.classList.add('etx-tool-card');
             var nombre = card.dataset.icono || recetas[card.id] || diarios[card.dataset.fn], href = card.getAttribute('href');

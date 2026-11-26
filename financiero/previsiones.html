@@ -12,7 +12,7 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=7a651810">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=b1bccada">
     <link rel="preload" as="script" href="/etaax-header.js?v=a0ec334a">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=ed06c1f0">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=59bd8179">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -105,7 +105,8 @@
 
     </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=6934b62d">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=ab7ca42a">
+<link rel="stylesheet" href="/financiero/config-ui.css"><!-- (26-nov) la cara del sistema para la configuración de Admin·ax -->
 </head>
 <body>
 <script src="/etaax-ui-inicio.js?v=efe4ba79"></script>
@@ -208,7 +209,7 @@
                         <tbody id="prevTbody"></tbody>
                     </table>
                     <div id="prevEmpty" class="empty-state" style="display:none">
-                        <div style="font-size:32px;margin-bottom:10px">🔮</div>
+                        <div class="cfg-vacio-ic" data-etx-ico="fin-previsiones" aria-hidden="true"></div>
                         <div>Sin previsiones registradas para este período.<br>Agrega una nueva previsión para comenzar a planificar.</div>
                     </div>
                 </div>
@@ -222,7 +223,7 @@
 <div class="modal-overlay" id="modalPrev">
     <div class="modal-pv">
         <div class="modal-header">
-            <h2 id="modalTitle">🔮 Nueva Previsión</h2>
+            <h2><span data-etx-ico="fin-previsiones" aria-hidden="true"></span><span id="modalTitle">Nueva Previsión</span></h2>
             <button class="modal-close" id="btnCerrarPrev">✕</button>
         </div>
         <div class="modal-body">
@@ -265,17 +266,17 @@
                 <div class="fg">
                     <label>Estado</label>
                     <select id="pvEstado">
-                        <option value="pendiente">⏳ Pendiente</option>
-                        <option value="en_curso">🔄 En curso</option>
-                        <option value="cumplida">✅ Cumplida</option>
-                        <option value="cancelada">❌ Cancelada</option>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="en_curso">En curso</option>
+                        <option value="cumplida">Cumplida</option>
+                        <option value="cancelada">Cancelada</option>
                     </select>
                 </div>
             </div>
             <div class="fg">
                 <label>Sucursal</label>
                 <select id="pvSucursal">
-                    <option value="">🌐 Todas las sucursales</option>
+                    <option value="">Todas las sucursales</option>
                 </select>
             </div>
             <div id="pvPreview" style="display:none;margin:2px 0 14px;padding:11px 14px;border-radius:9px;
@@ -402,11 +403,12 @@ function _plan(p, saldos, hoy){
     return EtaaxCore.previsionPlan(p, s?s.apartado:0, hoy||todayStr());
 }
 var _EST_RITMO = {
-    cumplida:    { txt:'✅ Cumplida',    col:'var(--green)' },
-    al_corriente:{ txt:'🟢 Al corriente',col:'var(--green)' },
-    adelantado:  { txt:'🔵 Adelantado',  col:'var(--blue,#4a9eff)' },
-    atrasado:    { txt:'🔴 Atrasado',    col:'var(--red)' },
-    sin_fecha:   { txt:'⚪ Sin fechas',  col:'var(--text-dim)' }
+    /* (26-nov) Un punto del color del estado en vez de emojis. */
+    cumplida:    { txt:'● Cumplida',    col:'var(--green)' },
+    al_corriente:{ txt:'● Al corriente',col:'var(--green)' },
+    adelantado:  { txt:'● Adelantado',  col:'var(--blue,#4a9eff)' },
+    atrasado:    { txt:'● Atrasado',    col:'var(--red)' },
+    sin_fecha:   { txt:'○ Sin fechas',  col:'var(--text-dim)' }
 };
 function _sbUp(record) { sbUpsert('previsiones', record); }
 function _sbDel(id) { sbDelete('previsiones', id); }
@@ -451,7 +453,7 @@ function _sucBloqueada(){
 function _negLabel(id){
     if(!id) return '🌐 Todas';
     var suc=_loadNegocios().find(function(x){ return x.id===id; });
-    return suc ? ((suc.emoji||'📍')+' '+(suc.nombre||'Sucursal')) : '📍 Sucursal';
+    return suc ? (suc.nombre||'Sucursal') : 'Sucursal';
 }
 function _renderSucMenu(){
     var menu=document.getElementById('sucMenu');
@@ -482,6 +484,8 @@ function renderAll(hoyRef){
     var mes=document.getElementById('mesInput').value||mesStr();
     var hoy=hoyRef||todayStr();   // el ritmo se mide contra hoy, no contra el mes elegido
     var lista=loadAll().filter(function(p){
+        /* (26-nov) «Otros apartados» viven en este catálogo pero no son metas: se ven en la Caja fuerte. */
+        if(EtaaxCore.esApartadoLibre && EtaaxCore.esApartadoLibre(p)) return false;
         var _sp=_sucDePrev(p);
         if(_sucursalId && _sp && _sp!==_sucursalId) return false;
         if(_filtroEstado&&p.estado!==_filtroEstado) return false;
@@ -557,7 +561,7 @@ function renderAll(hoyRef){
             ? '<div style="font-size:32px;margin-bottom:8px">🔍</div>'
               +'<div>Tienes <b>'+_todas+'</b> previsión'+(_todas!==1?'es':'')+', pero ninguna pasa '+_motivos.join(' + ')+'.</div>'
               +'<div style="margin-top:10px"><button class="btn-ghost" onclick="_verTodasPrev()">Ver todas</button></div>'
-            : '<div style="font-size:32px;margin-bottom:8px">🔮</div>'
+            : '<div class="cfg-vacio-ic" data-etx-ico="fin-previsiones" aria-hidden="true"></div>'
               +'<div>Sin previsiones registradas.<br>Agrega una nueva para comenzar a planificar.</div>';
         tbody.innerHTML='';empty.style.display='block';return;
     }
@@ -603,7 +607,7 @@ function renderAll(hoyRef){
                    +'<div style="font-size:10px;color:var(--text-dim)">cada '+_esc(pl.freqNom.toLowerCase().replace(/al$/,'a').replace(/mensua$/,'mes'))+'</div>')+'</td>'
             +'<td><span class="est-badge" style="color:'+est.col+';border:1px solid '+est.col+';background:transparent">'+est.txt+'</span>'
                 +(pl.estado==='atrasado'?'<div style="font-size:10px;color:var(--red);margin-top:3px">'+fmtM(-pl.diferencia)+' atrás</div>':'')
-                +(p.estado==='cancelada'?'<div style="font-size:10px;color:var(--text-dim);margin-top:3px">❌ cancelada</div>':'')+'</td>'
+                +(p.estado==='cancelada'?'<div style="font-size:10px;color:var(--text-dim);margin-top:3px">cancelada</div>':'')+'</td>'
             +'<td><div style="display:flex;align-items:center;gap:6px"><div class="prog-bar"><div class="prog-fill '+pFill+'" style="width:'+Math.min(100,pct)+'%"></div></div><span style="font-size:10px;color:var(--text-dim)">'+pct+'%</span></div></td>'
             +'<td style="white-space:nowrap"><button class="btn-row" data-edit="'+p.id+'">✏️</button> <button class="btn-row del" data-del="'+p.id+'">🗑️</button></td>'
             +'</tr>';
@@ -668,10 +672,10 @@ function abrirModal(id){
     var sel=document.getElementById('pvSucursal');
     /* "Todas" es una opción de verdad: una meta como el aguinaldo es del negocio
        entero, no de una sucursal. Las demás son las sucursales REALES. */
-    sel.innerHTML='<option value="">🌐 Todas las sucursales</option>';
+    sel.innerHTML='<option value="">Todas las sucursales</option>';
     _loadNegocios().forEach(function(sc){
         var opt=document.createElement('option');
-        opt.value=sc.id; opt.textContent=(sc.emoji||'📍')+' '+(sc.nombre||'Sucursal');
+        opt.value=sc.id; opt.textContent=(sc.nombre||'Sucursal');
         if(p.sucursalId===sc.id)opt.selected=true;
         sel.appendChild(opt);
     });
@@ -679,7 +683,7 @@ function abrirModal(id){
        ya traía. Dejarlo siempre en "todas" hacía que las metas de una sucursal
        nacieran sin dueño. */
     document.getElementById('pvSucursal').value = id ? (p.sucursalId||'') : (_sucursalId||'');
-    document.getElementById('modalTitle').textContent=id?'✏️ Editar meta':'🔮 Nueva meta de previsión';
+    document.getElementById('modalTitle').textContent=id?'Editar meta':'Nueva meta de previsión';
     _pvPreview();
     document.getElementById('modalPrev').classList.add('open');
     setTimeout(function(){document.getElementById('pvConcepto').focus();},60);
@@ -699,7 +703,7 @@ function _pvPreview(){
     if(!(pl.objetivo>0)||!pl.conFecha){ box.style.display='none'; return; }
     box.style.display='';
     var unidad=pl.freqNom.toLowerCase();
-    box.innerHTML='📌 Apartando <b style="color:var(--green)">'+fmtM(pl.porPeriodo)+'</b> '
+    box.innerHTML='Apartando <b style="color:var(--green)">'+fmtM(pl.porPeriodo)+'</b> '
         +'cada periodo <b>'+_esc(unidad)+'</b>, en <b>'+pl.periodos+'</b> aportaciones '
         +'juntas <b>'+fmtM(pl.objetivo)+'</b> para el <b>'+_esc(document.getElementById('pvFechaFin').value)+'</b>.'
         +'<div style="margin-top:5px;font-size:11px;color:var(--text-dim)">Apartar no gasta el dinero: '
@@ -764,7 +768,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
-<script src="/etaax-core.js?v=66b6078c"></script><!-- metas y saldos de previsión: una sola verdad -->
+<script src="/etaax-core.js?v=c531f6d0"></script><!-- metas y saldos de previsión: una sola verdad -->
 <script src="/etaax-store.js?v=3bbcc75c"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js?v=20ae7d34"></script>
 <script src="../security.js?v=c188734e"></script>
@@ -779,6 +783,6 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="/etaax-sidebar.js?v=b1bccada"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=a0ec334a"></script>
-<script src="/etaax-modulos-ui.js?v=ed06c1f0"></script>
+<script src="/etaax-modulos-ui.js?v=59bd8179"></script>
 </body>
 </html>

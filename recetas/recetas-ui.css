@@ -3,7 +3,7 @@
 body.etx-recetas-page {
   --r-panel:var(--etx-ui-panel,#171611);--r-line:var(--etx-ui-line,#3a3830);
   --r-muted:var(--etx-ui-muted,#b5afa3);--r-cyan:var(--etx-ui-cyan,#8ce4ee);
-  --r-terra:var(--etx-ui-terra,#fb9b6f);--r-input:#211f19;--r-selected:#1d3236;--r-ink:#13110e;
+  --r-terra:var(--etx-ui-terra,#fb9b6f);--r-input:#211f19;--r-selected:#1d3236;--r-ink:#fff;
   font-family:'DM Sans',sans-serif;
 }
 [data-theme="light"] body.etx-recetas-page {--r-input:#f7f5f0;--r-selected:#e8f3f4;--r-ink:#fff;}
@@ -44,7 +44,7 @@ body.etx-recetas-page {
 .etx-recetas-page :is(.modal-close,.etx-close-btn,.etx-min-btn) {background:transparent!important;border:1px solid var(--r-line)!important;color:var(--text)!important;min-width:40px;width:auto!important;padding:9px 12px!important;font:12px 'DM Sans',sans-serif!important;}
 .etx-recetas-page :is(.modal-close,.etx-close-btn,.etx-min-btn):hover {background:var(--r-input)!important;border-color:var(--r-cyan)!important;}
 .etx-recetas-page :is(.btn-vista,.btn-add):not(:disabled):hover {border-color:var(--r-cyan);background:var(--r-input);}
-.etx-recetas-page :is(#btnGuardarReceta,#btnGuardarCaratulaEdit,#btnNuevaReceta,#btnNuevaRecCat,#editorWrap [onclick="agregarIngrediente()"],#editorWrap [onclick="agregarSubRecetaComoInsumo()"]) {background:var(--r-terra)!important;border:1px solid transparent!important;color:var(--r-ink)!important;font-weight:600;min-height:44px;padding:11px 15px!important;border-radius:9px;}
+.etx-recetas-page :is(#btnGuardarReceta,#btnGuardarCaratulaEdit,#btnNuevaReceta,#btnNuevaRecCat,#editorWrap [onclick="agregarIngrediente()"],#editorWrap [onclick="agregarSubRecetaComoInsumo()"]) {background:var(--etx-ui-terra-solido,var(--r-terra))!important;border:1px solid transparent!important;color:var(--r-ink)!important;font-weight:600;min-height:44px;padding:11px 15px!important;border-radius:9px;}
 .etx-recetas-page :is(#btnGuardarReceta,#btnGuardarCaratulaEdit,#btnNuevaReceta,#btnNuevaRecCat,#editorWrap [onclick="agregarIngrediente()"],#editorWrap [onclick="agregarSubRecetaComoInsumo()"]) .etx-ic {--green:var(--r-ink);}
 .etx-recetas-page #btnEliminarReceta .etx-ic {--green:currentColor;}
 .etx-recetas-page :is(#modalCosteoFlotante,#modalIframeInsumo,#modalFichaInsumo) button:has(> .r-ui-icon) {display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;min-width:40px;border-radius:9px;}

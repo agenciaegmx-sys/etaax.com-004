@@ -2,7 +2,7 @@
    recordatorios. No reemplaza controles, handlers, reglas ni datos guardados. */
 (function () {
     'use strict';
-    var RAICES = '#cajOverlay,#concOverlay,#concHistOverlay,#dxOv_extras,#modalAnticipo,#modalVentaExtra,#dxOv_mayores,#modalConfirm,#dxRecordatorio';
+    var RAICES = '#cajOverlay,#concOverlay,#concHistOverlay,#dxOv_extras,#modalAnticipo,#modalAptLibre,#modalVentaExtra,#dxOv_mayores,#modalConfirm,#dxRecordatorio';
     var prefijo = /^(?:\s|[🔒🔐🔓💰🏢🏦🏛💳🔮🎟🎪🎉🍽📦📋📜⚖💵🔀📅🗓🎯👤✅🖨⬇✕✖✏🗑↩🔴⚠⏳🔔⭐⏸＋+−—]|\uFE0F)+/u;
     var pendiente = false;
     function cada(s, fn) { document.querySelectorAll(s).forEach(fn); }
@@ -87,9 +87,8 @@
         cada('#cajBody > div[style*="display:grid"] > div > div:first-child', function (el) {
             if (el.textContent.replace(prefijo, '').trim() === 'Tarjetas de Crédito') { el.classList.add('op-section-label'); icono(el, 'cjf', 'credito'); }
         });
-        var controles = {'#cajBody [onclick^="conciliarCuenta"]':'conciliar','#cajBody [onclick="abrirHistConciliaciones()"]':'historial',
-            '#cajBody [onclick="congelarHistorialCuentas()"]':'congelar','#cajBody [onclick^="pagarTarjetaCredito"]':'credito',
-            '#cjCortesBtn > span:first-child':'detalle','#concBtnGuardar':'guardar','#concCuentaNombre':'banco'};
+        /* (26-nov) Las vistas de la caja fuerte ya traen sus íconos: aquí solo lo de la conciliación. */
+        var controles = {'#concBtnGuardar':'guardar','#concCuentaNombre':'banco'};
         Object.keys(controles).forEach(function (s) { cada(s, function (el) { icono(el, 'cjf', controles[s]); }); });
         cada('#concHistBody tbody td:nth-child(2)', function (el) {
             icono(el, 'cjf', 'banco'); var tipo = el.querySelector('div');

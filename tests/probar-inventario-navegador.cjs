@@ -414,7 +414,7 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 assert.match(r.txt, /Mix Negroni PR.*hace: Mix Negroni.*Gin Tanqueray, Campari, Vermouth Rosso/);
             });
             await caso('…y el que no tiene área dice por qué no sale, con el botón para arreglarlo', async () =>
-                assert.match(await contenido(), /Venecia Spritz PR — no tiene área asignada 📍 Ponerlo en Barra/));
+                assert.match(await contenido(), /Venecia Spritz PR — no tiene área asignada (📍 )?\s*Ponerlo en Barra/   /* (26-nov) el 📍 del botón ahora es ícono de la marca */));
             await page.evaluate(() => { const i = document.getElementById('prod-prMix'); i.value = '3'; i.dispatchEvent(new Event('blur')); });
             await page.waitForTimeout(300);
             await caso('3 Mix Negroni descuentan 900 ml de CADA insumo que lleva', async () => {
