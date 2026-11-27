@@ -381,7 +381,7 @@ body.con-barra { padding-bottom:calc(var(--safe-b) + 108px); }
     color:var(--txt2); font-family:inherit; }
 .hcorr:active { background:var(--sup); }
 .hbloq { font-size:11px; color:var(--dim); display:block; margin-top:6px; opacity:.9; }
-.corwrap { position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.6);
+.corwrap { position:fixed; inset:0; z-index:75; background:rgba(0,0,0,.6);
     display:none; align-items:flex-end; justify-content:center; }
 .corcard { background:var(--sup); border-top:1px solid var(--borde);
     border-radius:16px 16px 0 0; width:100%; max-width:520px;
@@ -394,6 +394,15 @@ body.con-barra { padding-bottom:calc(var(--safe-b) + 108px); }
     padding:0 12px; color:var(--txt); font-family:inherit; }
 .cormsg { font-size:12.5px; line-height:1.5; margin:0 0 12px; color:var(--txt2); }
 .cormsg.err { color:var(--rojo); }
+/* (27-nov) Los botones de corregir eran `btn` a secas —texto suelto, sin fondo—
+   y la ventana parecía congelada. Guardar = el terracota de la app; cancelar
+   con su borde. Con la ventana abierta, el fondo no se desplaza. */
+.corcard .cor-ok { background:var(--terra); color:var(--terra-ink); font-weight:700; margin-bottom:10px; }
+.corcard .cor-ok:active { background:var(--terra-hover); }
+.corcard .cor-ok:disabled { opacity:.55; }
+.corcard .cor-no { background:transparent; border:1px solid var(--borde); color:var(--txt2); }
+.corcard .cor-no:disabled { opacity:.45; }
+body.cor-abierto { overflow:hidden; }
 
 /* ── Avisos ── */
 .toast { position:fixed; left:16px; right:16px; bottom:calc(var(--safe-b) + 92px); z-index:60;

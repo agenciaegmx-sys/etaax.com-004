@@ -1551,6 +1551,8 @@ async function irHistorial(){
             var pz = [];
             if (c.cerradasBodega !== '' && c.cerradasBodega != null) pz.push(c.cerradasBodega + ' bodega');
             if (c.cerradasBarra  !== '' && c.cerradasBarra  != null) pz.push(c.cerradasBarra + ' barra');
+            // Los de la app móvil antes del 27-nov venían como cantidad (v97 la devuelve).
+            if (!pz.length && c.cantidad != null && c.cantidad !== '') pz.push(c.cantidad + (c.unidad ? ' ' + String(c.unidad).toLowerCase() : ''));
             var cant = pz.join(' · ');
             /* El meta viene guardado con el conteo; para los conteos VIEJOS,
                que no lo traen, se busca en el catálogo. Así la lista no queda

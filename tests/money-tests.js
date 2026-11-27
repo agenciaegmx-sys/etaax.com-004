@@ -11409,7 +11409,7 @@ console.log('\n══ BF2 · Conteos del QR que se suman ══');
     /* Los conteos VIEJOS traen pesos: no se pueden tirar. */
     test('los conteos viejos con pesos se siguen leyendo', () => {
         const i = inv.indexOf('function _conteoResumen(c)');
-        return eq(inv.slice(i, i + 600).indexOf('c.pesos') > -1, true, 'compatible');
+        return eq(inv.slice(i, inv.indexOf('\n}', i)).indexOf('c.pesos') > -1, true, 'compatible');
     });
     test('…pero los pesos NO se suman: cada uno es otra botella', () => {
         const i = inv.indexOf('function _aplicarConteoAFila(fila, c, sumar)');
@@ -23180,7 +23180,9 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
 
     /* ── La app móvil, que comparte el flujo ── */
     test('APP · el conteo también guarda su identidad', () =>
-        eq(/\/\/ conteo\s*\n\s*return Object\.assign\(base, \{[\s\S]{0,400}meta: it\.meta/.test(amv),
+        /* (27-nov) el renglón «// conteo» se volvió un comentario de bloque: el conteo
+           ahora viaja en las columnas del inventario (BH103). */
+        eq(/conteo — EN LAS DOS COLUMNAS[\s\S]{0,900}return Object\.assign\(base, \{[\s\S]{0,500}meta: it\.meta/.test(amv),
            true, 'igual que el QR'));
     test('…y se guarda al AGREGAR, no al mandar', () => {
         const i = amv.indexOf('function agregarAlLote()');
@@ -31484,7 +31486,10 @@ console.log('\n══ BE23 · Corregir una captura desde el QR (entrada.html) �
         vm.createContext(c);
         ['corPanel', 'cerrarCorregir', 'corregir', 'guardarCorreccion', 'btnCorregir']
             .forEach((n) => vm.runInContext(corte(n), c, { filename: 'app-movil/app.js:' + n }));
-        vm.runInContext('var _COR=null;', c);
+        /* (27-nov) guardar espera a lo más COR_ESPERA_MS (una respuesta que no
+           llega ya no deja la ventana atrapada): el temporizador es del navegador. */
+        c.setTimeout = setTimeout; c.clearTimeout = clearTimeout; c.Promise = Promise;
+        vm.runInContext('var _COR=null, COR_ESPERA_MS=20000;', c);
         vm.runInContext(delegado(mtxt), c, { filename: 'app-movil/app.js:delegado' });
         return c;
     };
@@ -33799,7 +33804,7 @@ console.log('\n══ BH102 · Guías de la app móvil; la puerta de la caja fue
         eq(/id:'guias-movil'/.test(adm) && /id="tab-guias-movil"/.test(adm) && /AdmGuiasMovil\.montar\(\)/.test(adm) && /admin-guias-movil\.js/.test(adm), true));
     test('Learn·ax no enseña las guías de la app (viven debajo de su módulo)', () =>
         eq(/movil_/.test(leer('consultoria/guias.js')), true));
-    test('la caché de la app subió (cambió su código)', () => eq(/etaax-movil-v17/.test(leer('app-movil/sw.js')), true));
+    test('la caché de la app subió (cambió su código)', () => eq(+/etaax-movil-v(\d+)/.exec(leer('app-movil/sw.js'))[1] >= 17, true));
     const dia = leer('administrativo/diario.html');
     test('la caja fuerte pide la contraseña UNA vez, al entrar a su vista; adentro sus tarjetas ya no', () =>
         eq(/candado: true/.test(dia) && /function _cjPedirEntrada\(\)/.test(dia) && /if\(_cjAutorizado\)\{ abrir\(\); return; \}/.test(dia), true));
@@ -33809,6 +33814,73 @@ console.log('\n══ BH102 · Guías de la app móvil; la puerta de la caja fue
         const c = leer('captura.html');
         return eq(/captura-movil\.css/.test(c) && /class="cap-movil"/.test(c) && !/📷 Tomar foto|🖼️ Galería/.test(c), true);
     });
+})();
+
+/* ═══════ BH103 · LOS CONTEOS DE LA APP MÓVIL LLEGAN AL INVENTARIO (27-nov) ═══════
+   Edwin: «los conteos de QR en el inventario me salen en ceros y en la opción
+   de corregir de la versión móvil se queda congelado en el modal». La app
+   mandaba cada conteo como `cantidad` + `unidad` y el inventario solo leía
+   piezas en bodega / barra (`cerradasBodega`/`cerradasBarra`, lo del QR del
+   navegador): el conteo llegaba y valía CERO. Se corre el código REAL de
+   inventarios.js y de la app. La app de verdad: probar-app-movil.cjs; el
+   servidor (v97): probar-sql-v97.mjs.                                        */
+console.log('\n══ BH103 · Los conteos de la app móvil llegan al inventario ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    const inv = leer('recetas/inventarios.js'), app = leer('app-movil/app.js'), css = leer('app-movil/app.css');
+    const cuerpo = (src, n) => { const i = src.indexOf('function ' + n + '('); return i < 0 ? '' : src.slice(i, src.indexOf('\n}', i) + 2); };
+    const ctx = vm.createContext({});
+    vm.runInContext(['_conteoEnPiezas', '_conteoPartes', '_conteoPiezas', '_conteosTotal', '_conteoResumen', '_aplicarConteoAFila']
+        .map(n => cuerpo(inv, n)).join('\n'), ctx);
+    const C = (o) => Object.assign({ id: 'c', insumoId: 'i1', fecha: '2026-11-27', hora: '22:00', contadoPor: 'Ana' }, o);
+    test('un conteo VIEJO de la app (6 PZA en barra) vale 6 piezas, no cero', () =>
+        eq(ctx._conteoPiezas(C({ cantidad: 6, unidad: 'PZA', area: 'barra' })), 6));
+    test('…y se aplica en el área; contado en un almacén, en bodega', () => {
+        const f1 = { cerradasBodega: '', cerradasBarra: '' }, f2 = { cerradasBodega: '', cerradasBarra: '' };
+        ctx._aplicarConteoAFila(f1, C({ cantidad: 6, unidad: 'PZA', area: 'barra', notas: 'refri' }), false);
+        ctx._aplicarConteoAFila(f2, C({ cantidad: 4, unidad: 'BOT', area: 'almacen_barra' }), false);
+        return eq([f1.cerradasBarra, f1.cerradasBodega, f1.conteoQR.nota, f2.cerradasBodega, f2.cerradasBarra].join('|'), '6||refri|4|');
+    });
+    test('lo del QR del navegador (bodega / barra) sigue igual, y manda sobre la cantidad', () => {
+        const c = C({ cerradasBodega: 4, cerradasBarra: 2, cantidad: 99 });
+        return eq([ctx._conteoPiezas(c), ctx._conteoResumen(c)].join('|'), '6|4 bodega · 2 barra');
+    });
+    test('corregido en la app (ya trae columnas) se lee por las columnas, no por la cantidad vieja', () =>
+        eq(ctx._conteoPiezas(C({ cantidad: 6, unidad: 'PZA', cerradasBarra: 5 })), 5));
+    test('cajas o kilos no se vuelven piezas a ciegas: valen 0 y el resumen lo dice', () => {
+        const c = C({ cantidad: 2, unidad: 'CAJA', area: 'barra' });
+        return eq(ctx._conteoPiezas(c) + '|' + /2 caja \(no son piezas/.test(ctx._conteoResumen(c)), '0|true');
+    });
+    test('el resumen de uno viejo de la app dice su número (antes decía «sin datos»)', () =>
+        eq(ctx._conteoResumen(C({ cantidad: 6, unidad: 'PZA', area: 'barra' })), '6 barra'));
+    test('sumar dos conteos de la app (barra + bodega) da el total', () =>
+        eq(ctx._conteosTotal([C({ cantidad: 6, unidad: 'PZA', area: 'barra' }), C({ cerradasBodega: 3, cerradasBarra: '' })]), 9));
+
+    /* La app ya manda las dos columnas. */
+    const ctxA = vm.createContext({ FOTOS: [], SUC: 'suc_principal', AREA: 'barra', FLUJO: 'conteo', NOTA: null,
+        hoyStr: () => '2026-11-27', horaStr: () => '22:00', $: () => ({ value: ' del refri ' }) });
+    vm.runInContext(cuerpo(app, 'armarRegistro'), ctxA);
+    test('la app manda el conteo en las columnas del inventario (barra o bodega) y el comentario en `nota`', () => {
+        const a = ctxA.armarRegistro({ id: 'x', insumoId: 'i1', nombre: 'Bohemia', cantidad: 6, unidad: 'PZA', donde: 'barra' });
+        const b = ctxA.armarRegistro({ id: 'y', insumoId: 'i1', nombre: 'Bohemia', cantidad: 4, unidad: 'PZA', donde: 'bodega' });
+        return eq([a.cerradasBarra, a.cerradasBodega, a.cantidad, a.unidad, a.nota, b.cerradasBodega, b.cerradasBarra].join('|'), '6||6|PZA|del refri|4|');
+    });
+    test('en un conteo el selector dice DÓNDE (barra / bodega), no PZA/CAJA/KG', () => {
+        const t = cuerpo(app, 'pintarUnidades');
+        return eq(/FLUJO === 'conteo'/.test(t) && /value="bodega"/.test(t) && /'Piezas en'/.test(t), true);
+    });
+
+    /* El modal que «se quedaba congelado». */
+    test('corregir: guardar es terracota y cancelar tiene borde (antes eran texto suelto)', () =>
+        eq(/class="btn cor-ok" id="corOk"/.test(app) && /class="btn cor-no" id="corNo"/.test(app) &&
+           /\.corcard \.cor-ok \{ background:var\(--terra\)/.test(css) && /\.corcard \.cor-no \{ background:transparent; border:1px solid/.test(css), true));
+    test('…tocar fuera cierra, y una respuesta que no llega suelta la ventana a los 20 s', () =>
+        eq(/if \(ev && ev\.target === p\) cerrarCorregir\(\)/.test(app) && /COR_ESPERA_MS = 20000/.test(app) && /Promise\.race\(/.test(cuerpo(app, 'guardarCorreccion')) &&
+           /yo\.guardando = false/.test(cuerpo(app, 'guardarCorreccion')), true));
+    test('…un conteo viejo abre con su número puesto y al guardar viajan los dos lados', () =>
+        eq(/_deCant: deCant/.test(app) && /if \(_COR\.orig && _COR\.orig\._deCant && k !== 'nota'\) antes = '';/.test(app), true));
+    test('el SW de la app subió de versión (si no, el teléfono sigue con la app vieja)', () =>
+        eq(/var CACHE = 'etaax-movil-v(\d+)'/.exec(leer('app-movil/sw.js'))[1] >= 18, true));
 })();
 
 

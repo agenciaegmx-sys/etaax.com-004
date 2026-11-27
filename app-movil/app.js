@@ -553,6 +553,8 @@ function areasPermitidas() {
              : ['barra', 'cocina', 'almacen_general'];
 }
 function nomArea(k) { return (_SA() && _SA().nomIns(k)) || k; }
+/* El nombre del área sin su emoji («🍸 Barra» → «Barra»): para rótulos chicos. */
+function nomAreaTexto(k) { return String(nomArea(k) || '').replace(/^[^0-9A-Za-z\u00C0-\u024F]+/, '').trim() || k; }
 
 /* ── El catálogo ──
    Se deduplica maestro/copia y se acota a la sucursal del QR: el colaborador
@@ -1682,8 +1684,20 @@ function limpiarElegido() {
 function pintarUnidades() {
     var p = (SEL && SEL.presentaciones && SEL.presentaciones[0]) || {};
     var u = String(p.umContenido || '').toUpperCase();
-    var ops;
-    if (FLUJO === 'entrada' || FLUJO === 'conteo') {
+    var ops, lbl = document.querySelector('label[for="unidad"]');
+    if (lbl) lbl.textContent = FLUJO === 'conteo' ? 'Piezas en' : 'Unidad';
+    /* UN CONTEO SON PIEZAS CERRADAS, EN BODEGA O EN EL ÁREA (27-nov). Es lo
+       que el inventario sabe leer —sus dos columnas— y lo que manda el QR
+       del navegador. Antes aquí se elegía PZA/BOT/CAJA/KG/LT, el conteo
+       viajaba como `cantidad` y en el inventario llegaba en CEROS. */
+    if (FLUJO === 'conteo') {
+        $('boxUnidad').hidden = false;
+        $('unidad').innerHTML = '<option value="barra">' + etx(/^almacen/.test(AREA) ? 'Barra' : (nomAreaTexto(AREA) || 'Barra')) + '</option>' +
+            '<option value="bodega">Bodega</option>';
+        $('unidad').value = /^almacen/.test(AREA) ? 'bodega' : 'barra';
+        return;
+    }
+    if (FLUJO === 'entrada') {
         ops = ['PZA', 'BOT', 'CAJA', 'KG', 'LT'];
         $('boxUnidad').hidden = false;
     } else {
@@ -1740,6 +1754,8 @@ function agregarAlLote() {
         meta: metaIns(SEL),
         unidad: $('unidad') ? $('unidad').value : 'PZA'
     };
+    /* En un conteo el selector dice DÓNDE (barra / bodega); siempre son piezas. */
+    if (FLUJO === 'conteo') { it.donde = it.unidad === 'bodega' ? 'bodega' : 'barra'; it.unidad = 'PZA'; }
     if (FLUJO === 'entrada') {
         it.tipo = NOTA ? NOTA.tipo : ENT_TIPO;
         it.fecha = NOTA ? '' : (($('entFecha') || {}).value || hoyStr());
@@ -1782,7 +1798,7 @@ function pintarLote() {
             var det = [it.meta, it.tipo ? tipoEntLbl(it.tipo) : '', it.fecha && it.fecha !== hoyStr() ? it.fecha : '', it.motivo, it.salidaTipo].filter(Boolean).join(' · ');
             return '<div class="lote-it"><span>' + etx(it.titulo || it.nombre) +
                 (det ? '<small>' + etx(det) + '</small>' : '') + '</span>' +
-                '<b>' + it.cantidad + ' ' + etx(it.unidad) + '</b>' +
+                '<b>' + it.cantidad + ' ' + etx(it.donde ? (it.donde === 'bodega' ? 'en bodega' : 'en ' + (/^almacen/.test(AREA) ? 'barra' : String(nomAreaTexto(AREA) || 'barra').toLowerCase())) : it.unidad) + '</b>' +
                 '<button data-del="' + it.id + '" aria-label="Quitar">✕</button></div>';
         }).join('');
     c.onclick = function (e) {
@@ -1896,9 +1912,16 @@ function armarRegistro(it) {
         concepto: 'salida', salidaTipo: it.salidaTipo, insumoId: it.insumoId,
         nombre: it.nombre, familia: it.familia, cantidad: it.cantidad, unidad: it.unidad
     });
-    // conteo
+    /* conteo — EN LAS DOS COLUMNAS QUE LEE EL INVENTARIO (27-nov): piezas en
+       bodega o en el área, como el QR del navegador. `cantidad` y `unidad` se
+       quedan para el historial; el comentario va en `nota`, que es la llave
+       de los conteos (la de las entradas es `notas`). */
+    var donde = it.donde === 'bodega' ? 'bodega' : 'barra';
     return Object.assign(base, {
-        insumoId: it.insumoId, nombre: it.nombre, cantidad: it.cantidad, unidad: it.unidad,
+        insumoId: it.insumoId, nombre: it.nombre, cantidad: it.cantidad, unidad: 'PZA', donde: donde,
+        cerradasBodega: donde === 'bodega' ? it.cantidad : '',
+        cerradasBarra:  donde === 'barra'  ? it.cantidad : '',
+        nota: base.notas,
         /* Viaja con el conteo: el historial lo arma el servidor y ahí no está
            el catálogo. Sin esto, tres conteos de tres Bohemias distintas se
            leen como tres renglones idénticos que dicen «Bohemia». */
@@ -2109,6 +2132,17 @@ function pintarHist() {
         if (c.cerradasBarra  !== '' && c.cerradasBarra  != null) pz.push(c.cerradasBarra + ' barra');
         if (!pz.length && c.cantidad) pz.push(c.cantidad + (c.unidad ? ' ' + c.unidad : ''));
         var cant = pz.join(' · ');
+        /* Un conteo mandado antes del 27-nov trae `cantidad` y no bodega/barra
+           (el servidor la devuelve desde la v97). «Corregir» abre con ese
+           número en su lado —en blanco parecía que se había perdido— y
+           `_deCant` avisa que al guardar viajan los dos lados. */
+        var vBod = c.cerradasBodega == null ? '' : String(c.cerradasBodega),
+            vBar = c.cerradasBarra  == null ? '' : String(c.cerradasBarra), deCant = 0;
+        var uC = String(c.unidad || '').toUpperCase();
+        if (vBod === '' && vBar === '' && c.cantidad != null && c.cantidad !== '' && (!uC || uC === 'PZA' || uC === 'PZ' || uC === 'BOT')) {
+            if (/^almacen/.test(String(c.area || ''))) vBod = String(c.cantidad); else vBar = String(c.cantidad);
+            deCant = 1;
+        }
         /* Los conteos VIEJOS no traen `meta` —se empezó a guardar con esta
            entrega— así que se resuelven contra el catálogo ya cargado. */
         var m = c.meta;
@@ -2120,8 +2154,7 @@ function pintarHist() {
             ['Conteo', m, (c.fecha || '')].filter(Boolean).join(' · ') + horaDe(c),
             c.quien + (c.editadoPor ? ' · corregido por ' + c.editadoPor : ''),
             btnCorregir(c, 'conteo', {
-                cerradasBodega: String(c.cerradasBodega == null ? '' : c.cerradasBodega),
-                cerradasBarra:  String(c.cerradasBarra  == null ? '' : c.cerradasBarra),
+                cerradasBodega: vBod, cerradasBarra: vBar, _deCant: deCant,
                 nota: String(c.nota || '') }));
     }
 
@@ -2191,7 +2224,7 @@ function btnCorregir(reg, tipo, valores) {
         etx(JSON.stringify({ t:tipo, id:reg.id, v:(parseInt(reg.ver, 10) || 1),
                              n:(reg.nombre || ''), val:valores })) + '">✏️ Corregir</button>';
 }
-var _COR = null;
+var _COR = null, COR_ESPERA_MS = 20000;
 /* Un solo escucha para todos los botones de corregir: el historial se repinta
    entero en cada recarga y enganchar uno por botón deja escuchas colgando de
    nodos que ya no existen. */
@@ -2212,13 +2245,26 @@ function corPanel() {
         '<b id="corTit"></b><small id="corSub"></small>' +
         '<div id="corCampos"></div>' +
         '<div id="corMsg" class="cormsg" style="display:none"></div>' +
-        '<button class="btn" id="corOk" onclick="guardarCorreccion()">Guardar la corrección</button>' +
-        '<button class="btn ghost" onclick="cerrarCorregir()">Cancelar</button></div>';
+        /* (27-nov) Los dos botones eran `btn` a secas, sin fondo ni borde: se
+           veían como texto suelto y la ventana parecía CONGELADA. Ahora el de
+           guardar es el terracota de la app, cancelar tiene su borde, y tocar
+           fuera también cierra (salvo mientras guarda). */
+        '<button type="button" class="btn cor-ok" id="corOk">Guardar la corrección</button>' +
+        '<button type="button" class="btn cor-no" id="corNo">Cancelar</button></div>';
+    p.onclick = function (ev) { if (ev && ev.target === p) cerrarCorregir(); };
     document.body.appendChild(p);
+    /* LA CAUSA DE LA VENTANA «CONGELADA»: los botones decían
+       onclick="guardarCorreccion()", pero app.js vive dentro de una función
+       cerrada y esos nombres no existen afuera — tocar Guardar o Cancelar
+       tronaba en silencio y no había salida. Se enganchan aquí, directo. */
+    $('corOk').onclick = function () { guardarCorreccion(); };
+    $('corNo').onclick = function () { cerrarCorregir(); };
     return p;
 }
 function cerrarCorregir() {       // cancelar no escribe nada
+    if (_COR && _COR.guardando) return;   // a medio guardar no se suelta: diría que no pasó nada
     var p = $('corPanel'); if (p) p.style.display = 'none';
+    var _bc = document.body && document.body.classList; if (_bc) _bc.remove('cor-abierto');
     _COR = null;
 }
 function corregir(tipo, id, ver, nombre, valores) {
@@ -2226,7 +2272,8 @@ function corregir(tipo, id, ver, nombre, valores) {
     var p = corPanel();
     $('corTit').textContent = 'Corregir · ' + (nombre || '—');
     $('corSub').textContent = tipo === 'conteo'
-        ? 'Se corrige lo contado. El producto y la fecha no cambian.'
+        ? ('Se corrige lo contado, en piezas. El producto y la fecha no cambian.' +
+           (valores && valores._deCant ? ' Revisa si quedó en barra o en bodega.' : ''))
         : 'Se corrige la cantidad. El producto y la fecha no cambian.';
     var campos = tipo === 'conteo'
         ? [['cerradasBodega', 'Bodega', 'number'], ['cerradasBarra', 'Barra', 'number'], ['nota', 'Comentario', 'text']]
@@ -2240,6 +2287,7 @@ function corregir(tipo, id, ver, nombre, valores) {
     $('corMsg').style.display = 'none'; $('corMsg').textContent = '';
     $('corOk').disabled = false;
     p.style.display = 'flex';
+    var _bc = document.body && document.body.classList; if (_bc) _bc.add('cor-abierto');   // el fondo no se desplaza
 }
 async function guardarCorreccion() {
     if (!_COR) return;
@@ -2255,6 +2303,11 @@ async function guardarCorreccion() {
     campos.forEach(function (k) {
         var el = $('cor_' + k); if (!el) return;
         var antes = (_COR.orig && _COR.orig[k] != null) ? String(_COR.orig[k]) : '';
+        /* Conteo viejo (venía en `cantidad`): bodega y barra todavía NO están
+           guardadas —el número de la casilla es prestado—, así que viajan las
+           dos aunque no se toquen. Si no, corregir solo un lado borraría el
+           otro: el inventario deja de leer la cantidad en cuanto hay columnas. */
+        if (_COR.orig && _COR.orig._deCant && k !== 'nota') antes = '';
         /* Un número vacío NO es cero —mandarlo borraría lo contado—; un texto
            vacío SÍ viaja, porque es como se borra un comentario. Y lo que no
            cambió no se manda: subiría la versión por nada. */
@@ -2277,11 +2330,22 @@ async function guardarCorreccion() {
         _COR.opHuella = _huella;
     }
     btn.disabled = true; msg.className = 'cormsg'; msg.style.display = ''; msg.textContent = 'Guardando…';
-    var r;
+    var r, yo = _COR, _tmo = null;
+    yo.guardando = true; $('corNo').disabled = true;
     try {
-        r = await _supabase.rpc('entrada_editar', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH,
-            p_tipo: _COR.tipo, p_id: _COR.id, p_ver: _COR.ver, p_cambios: cambios, p_op: _COR.op });
+        /* Con la señal de una bodega la respuesta puede no llegar nunca: a los
+           20 s se suelta como «no se pudo» y el reintento va con el MISMO `op`,
+           así que si sí se había guardado no cuenta dos veces. */
+        r = await Promise.race([
+            _supabase.rpc('entrada_editar', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH,
+                p_tipo: _COR.tipo, p_id: _COR.id, p_ver: _COR.ver, p_cambios: cambios, p_op: _COR.op }),
+            new Promise(function (res) { _tmo = setTimeout(function () { res({ error: { message: 'tiempo' } }); }, COR_ESPERA_MS); })
+        ]);
     } catch (e) { r = { error: e }; }
+    if (_tmo) clearTimeout(_tmo);
+    /* Pase lo que pase, la ventana vuelve a soltarse: una respuesta perdida
+       no puede dejar a nadie atrapado aquí. */
+    yo.guardando = false; $('corNo').disabled = false;
     if (!r || r.error || !r.data) {
         /* Se conserva lo escrito y se dice que está pendiente: fingir el
            guardado es lo que hace que alguien cierre la pantalla creyendo que

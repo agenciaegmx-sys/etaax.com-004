@@ -53,7 +53,14 @@ function rpcs(opc) {
                 { id: 'i2', nombre: 'Refresco Cola', activo: '1', sucursales: ['suc_dos'], empaque: 'Botella', presentaciones: [{ contNeto: '600', umContenido: 'ML' }] }] } : null,
             /* Lo que la app manda queda en window.__regs (para revisar la nota). */
             entrada_registrar: (p) => ok(p) ? ((window.__regs = (window.__regs || []).concat([p.p_datos])), 'id-' + window.__regs.length) : null,
-            entrada_historial: (p) => ok(p) ? { ok: true, desde: null, inventario: null, conteos: [], movimientos: [
+            /* (27-nov) Conteos: lo que la app manda queda en window.__cnts; la
+               corrección en window.__editar. El historial trae un conteo VIEJO de
+               la app (cantidad + unidad, sin bodega/barra; la v97 lo devuelve). */
+            inventario_conteo_registrar: (p) => ok(p) ? ((window.__cnts = (window.__cnts || []).concat([p.p_datos])), 'c-' + window.__cnts.length) : null,
+            entrada_editar: (p) => ok(p) ? ((window.__editar = (window.__editar || []).concat([p])), { ok: true, ver: (p.p_ver || 1) + 1 }) : null,
+            entrada_historial: (p) => ok(p) ? { ok: true, desde: null, inventario: null, conteos: [
+                { id: 'cv1', tipo: 'conteo', ver: 1, nombre: 'Tequila', insumoId: 'i1', cantidad: '6', unidad: 'PZA', area: 'barra', cerradasBodega: null, cerradasBarra: null,
+                  fecha: '2026-11-26', hora: '22:10', quien: 'Ana López', puedeEditar: true }], movimientos: [
                 { id: 'e1', concepto: 'entrada', nombre: 'Refresco Cola', insumoId: 'i2', cantidad: '12', unidad: 'PZA', tipoEntrada: 'compra', fecha: '2026-11-25', quien: 'Ana López', notaId: 'N1', notaFolio: 'F-1', notaProveedor: 'Coca-Cola FEMSA', fotos: 1, ver: 1, puedeEditar: true },
                 { id: 'e2', concepto: 'entrada', nombre: 'Agua mineral', insumoId: 'i3', cantidad: '6', unidad: 'PZA', tipoEntrada: 'compra', fecha: '2026-11-25', quien: 'Ana López', notaId: 'N1', notaFolio: 'F-1', notaProveedor: 'Coca-Cola FEMSA', fotos: 1, ver: 1, puedeEditar: true },
                 { id: 'e3', concepto: 'entrada', nombre: 'Tequila Blanco', insumoId: 'i1', cantidad: '2', unidad: 'BOT', tipoEntrada: 'prestamo_pagado', fecha: '2026-11-24', quien: 'Ana López', ver: 1, puedeEditar: true },
@@ -404,6 +411,58 @@ const cabecera = (p) => p.evaluate(() => [document.getElementById('hdrNombre').t
             assert.equal(await ep.evaluate(() => window.__desag && window.__desag.p_nota), 'N1'));
         await caso('…sin desbordarse a lo ancho', async () => assert.equal(await sinAncho(ep), true));
         await E.ctx.close();
+
+        console.log('\n══ App móvil · conteos: llegan al inventario y se corrigen (27-nov) ══');
+        const K = await abrir(browser, {});
+        await nip(K.page, '12345');
+        const kp = K.page;
+        await kp.click('#menuPortal [data-mod="costax"] .btn-ver'); await kp.waitForTimeout(150);
+        await kp.click('[data-despl="inventarios"]'); await kp.waitForTimeout(100);
+        await kp.click('#rejInventarios .rect:has-text("Registrar existencias")'); await kp.waitForTimeout(300);
+        await kp.fill('#buscar', 'cola'); await kp.waitForTimeout(250);
+        await kp.click('#sugs > *:has-text("Refresco Cola")'); await kp.waitForTimeout(150);
+        await foto(kp, 'm9-conteo');
+        await caso('CONTEO: el selector dice dónde (piezas en Barra / Bodega), no PZA/CAJA/KG', async () => {
+            const r = await kp.evaluate(() => [document.querySelector('label[for="unidad"]').textContent,
+                [...document.querySelectorAll('#unidad option')].map(o => o.value + ':' + o.textContent), document.getElementById('unidad').value]);
+            assert.deepEqual(r, ['Piezas en', ['barra:Barra', 'bodega:Bodega'], 'barra'], JSON.stringify(r));
+        });
+        await kp.fill('#cant', '4'); await kp.selectOption('#unidad', 'bodega'); await kp.fill('#nota', 'cava');
+        await kp.click('#btnAgregar'); await kp.waitForTimeout(150);
+        await caso('…en la lista dice «4 en bodega»', async () =>
+            assert.match(await kp.evaluate(() => document.querySelector('#lote .lote-it b').textContent), /^4 en bodega$/));
+        await kp.click('#btnEnviar'); await kp.waitForTimeout(500);
+        await caso('…y viaja en las columnas que lee el inventario (cerradasBodega), con su comentario en `nota`', async () => {
+            const r = await kp.evaluate(() => window.__cnts.map(x => [x.insumoId, x.cerradasBodega, x.cerradasBarra, x.cantidad, x.unidad, x.nota, x.area]));
+            assert.deepEqual(r, [['i2', 4, '', 4, 'PZA', 'cava', 'barra']]);
+        });
+        await kp.evaluate(() => abrirHistorial()); await kp.waitForTimeout(400);
+        await kp.click('#histChips [data-f="conteo"]'); await kp.waitForTimeout(150);
+        await caso('LO REGISTRADO: un conteo viejo de la app enseña su número (antes salía sin cantidad)', async () =>
+            assert.match(await kp.evaluate(() => document.querySelector('#histBody .hmov b').textContent), /Tequila\s+·\s+6 PZA/));
+        await kp.click('#histBody .hcorr'); await kp.waitForTimeout(200);
+        await foto(kp, 'm9b-corregir');
+        await caso('CORREGIR: abre con el 6 en Barra; «Guardar» en terracota y «Cancelar» con borde, los dos a la vista', async () => {
+            const r = await kp.evaluate(() => {
+                const ok = document.getElementById('corOk'), no = document.getElementById('corNo'), cs = getComputedStyle(ok), cn = getComputedStyle(no);
+                const vis = (el) => { const b = el.getBoundingClientRect(); return b.height > 40 && b.bottom <= innerHeight + 1 && b.top >= 0; };
+                const enc = (el) => { const b = el.getBoundingClientRect(); return document.elementFromPoint((b.left + b.right) / 2, (b.top + b.bottom) / 2) === el; };
+                return [document.getElementById('cor_cerradasBarra').value, document.getElementById('cor_cerradasBodega').value,
+                        cs.backgroundColor !== 'rgba(0, 0, 0, 0)', cn.borderTopStyle, vis(ok) && vis(no), enc(ok) && enc(no)];
+            });
+            assert.deepEqual(r, ['6', '', true, 'solid', true, true], JSON.stringify(r));
+        });
+        await kp.mouse.click(195, 60); await kp.waitForTimeout(150);
+        await caso('…tocar fuera de la ventana la cierra (ya no queda «congelada»)', async () =>
+            assert.equal(await kp.evaluate(() => getComputedStyle(document.getElementById('corPanel')).display), 'none'));
+        await kp.click('#histBody .hcorr'); await kp.waitForTimeout(200);
+        await kp.fill('#cor_cerradasBodega', '2'); await kp.click('#corOk'); await kp.waitForTimeout(500);
+        await caso('…guardar manda LOS DOS lados (el 6 de barra no se pierde al sumar 2 en bodega) y la ventana se cierra', async () => {
+            const r = await kp.evaluate(() => [window.__editar.map(x => [x.p_tipo, x.p_id, x.p_ver, JSON.stringify(x.p_cambios)]),
+                getComputedStyle(document.getElementById('corPanel')).display, document.body.classList.contains('cor-abierto')]);
+            assert.deepEqual(r, [[['conteo', 'cv1', 1, '{"cerradasBodega":2,"cerradasBarra":6}']], 'none', false]);
+        });
+        await K.ctx.close();
 
         console.log('\n══ App móvil · lo no contratado y lo que no hay ══');
         const b = await abrir(browser, { apps: ['costax'], evals: [] });

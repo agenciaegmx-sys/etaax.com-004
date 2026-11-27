@@ -9751,15 +9751,40 @@ function _conteoDeFila(fila) { return _conteosDeFila(fila)[0] || null; }
    dato de la tara, que vive aquí. */
 function _conteoPiezas(c) {
     if (!c) return 0;
-    return (parseFloat(c.cerradasBodega) || 0) + (parseFloat(c.cerradasBarra) || 0);
+    var p = _conteoPartes(c);
+    return (p.bod || 0) + (p.bar || 0);
+}
+/* BODEGA Y BARRA DE UN CONTEO (Edwin, 27-nov: «los conteos del QR en el
+   inventario me salen en ceros»). El QR del navegador los manda así; la app
+   móvil, hasta el 27-nov, mandaba `cantidad` + `unidad` y aquí solo se leía
+   lo primero —el conteo llegaba, pero valía cero—. Un conteo de la app se lee
+   por su cantidad: en bodega si se contó en un almacén (o así lo dijo), en el
+   área si no. Solo piezas (PZA, BOT o sin unidad): una caja o unos kilos no se
+   vuelven piezas sin adivinar, así que esos no se aplican solos. NaN = no
+   trae ese lado (no es lo mismo que un cero contado). */
+function _conteoEnPiezas(c) {
+    var u = String((c && c.unidad) || '').toUpperCase();
+    return !u || u === 'PZA' || u === 'PZ' || u === 'BOT';
+}
+function _conteoPartes(c) {
+    var bod = parseFloat(c && c.cerradasBodega), bar = parseFloat(c && c.cerradasBarra);
+    if (!c || !isNaN(bod) || !isNaN(bar)) return { bod: bod, bar: bar };
+    var cant = parseFloat(c.cantidad);
+    if (isNaN(cant) || !_conteoEnPiezas(c)) return { bod: NaN, bar: NaN };
+    return (c.donde === 'bodega' || /^almacen/i.test(String(c.area || '')))
+        ? { bod: cant, bar: NaN } : { bod: NaN, bar: cant };
 }
 function _conteosTotal(lista) {
     return (lista || []).reduce(function (a, c) { return a + _conteoPiezas(c); }, 0);
 }
 function _conteoResumen(c) {
-    var p = [];
-    if (c.cerradasBodega !== '' && c.cerradasBodega != null) p.push(c.cerradasBodega + ' bodega');
-    if (c.cerradasBarra !== '' && c.cerradasBarra != null) p.push(c.cerradasBarra + ' barra');
+    var p = [], pt = _conteoPartes(c);
+    if (!isNaN(pt.bod)) p.push(pt.bod + ' bodega');
+    if (!isNaN(pt.bar)) p.push(pt.bar + ' barra');
+    /* Uno de la app en cajas o kilos: se enseña tal cual, avisando que no
+       entra solo —nadie debería ver «sin datos» cuando sí se contó—. */
+    if (!p.length && c.cantidad != null && c.cantidad !== '' && !_conteoEnPiezas(c))
+        p.push(c.cantidad + ' ' + String(c.unidad || '').toLowerCase() + ' (no son piezas: captúralo a mano)');
     /* Los conteos VIEJOS (anteriores a este cambio) sí pueden traer pesos: se
        siguen leyendo para no perder lo que ya estaba en la tabla. */
     var np = (c.pesos || []).filter(function (x) { return x !== '' && x != null; }).length;
@@ -9884,7 +9909,7 @@ function chipConteoQR(fila, idx) {
                     + '<span style="color:#7ab8f5;min-width:64px">Conteo ' + (i + 1) + '</span>'
                     + '<span style="min-width:110px">' + etx(_conteoResumen(c)) + '</span>'
                     + '<span style="color:var(--text-dim);flex:1">' + etx(c.contadoPor || '—') + ' · ' + etx(c.hora || '') + '</span>'
-                    + (c.nota ? '<span style="color:var(--text-dim);font-style:italic">' + etx(c.nota) + '</span>' : '')
+                    + ((c.nota || c.notas) ? '<span style="color:var(--text-dim);font-style:italic">' + etx(c.nota || c.notas) + '</span>' : '')
                     + '<button class="btn-vista" title="Quitar solo este conteo" style="font-size:9.5px;padding:2px 7px;color:var(--text-dim)" '
                         + 'onclick="descartarUnConteoQR(\'' + c.id + '\')">✕</button>'
                 + '</div>';
@@ -9902,7 +9927,7 @@ function _fmtNum(v) { return (Math.round((parseFloat(v) || 0) * 100) / 100) + ''
    o el último borraría a los anteriores — que es exactamente el bug que esto
    viene a quitar. */
 function _aplicarConteoAFila(fila, c, sumar) {
-    var bod = parseFloat(c.cerradasBodega), bar = parseFloat(c.cerradasBarra);
+    var _pt = _conteoPartes(c), bod = _pt.bod, bar = _pt.bar;   // también los de la app (cantidad)
     if (!isNaN(bod)) fila.cerradasBodega = (sumar ? (parseFloat(fila.cerradasBodega) || 0) : 0) + bod;
     if (!isNaN(bar)) fila.cerradasBarra  = (sumar ? (parseFloat(fila.cerradasBarra)  || 0) : 0) + bar;
     /* Los conteos VIEJOS pueden traer pesos de botellas abiertas. Se respetan
@@ -9913,7 +9938,7 @@ function _aplicarConteoAFila(fila, c, sumar) {
     // Queda escrito de dónde salió el número, y cuántos conteos lo formaron.
     var previo = (fila.conteoQR && sumar) ? (fila.conteoQR.conteos || 1) : 0;
     fila.conteoQR = { por: c.contadoPor || '', fecha: c.fecha || '', hora: c.hora || '',
-                      nota: c.nota || '', conteos: previo + 1 };
+                      nota: c.nota || c.notas || '', conteos: previo + 1 };
 }
 /* Conteos ya resueltos (aplicados o descartados) en ESTE navegador. Es el seguro
    contra la mala red: si el sello no alcanza a subir, el conteo no reaparece
