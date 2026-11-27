@@ -92,6 +92,7 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         await page.waitForTimeout(500);
         await caso('la tarjeta «Staff ETAAX» ya no es «Próximamente» y abre su pantalla', async () => {
             assert.equal(await page.evaluate(() => document.querySelector('.adm-card[data-card="auditores"]').tagName), 'BUTTON');
+            await page.evaluate(() => admArea('plataforma')); await page.waitForTimeout(150);   // (27-nov) la portada va por áreas
             await page.click('.adm-card[data-card="auditores"]'); await page.waitForTimeout(400);
             const t = await texto(page, '#tab-auditores');
             assert.match(t, /Da de alta a la persona con su usuario y su contraseña/);

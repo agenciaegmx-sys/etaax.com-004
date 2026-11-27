@@ -349,6 +349,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
 }
 </style>
 <link rel="stylesheet" href="/admin-documentos.css?v=18b28c03">
+<link rel="stylesheet" href="/admin-espacio.css?v=5e0430c0"><!-- (27-nov) el espacio de trabajo de ETAAX: isla, media luna de áreas, tarjetas -->
 </head>
 <body>
 
@@ -412,11 +413,14 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
        catálogos, administración) y cada herramienta abre su propia pantalla,
        con su regreso. Los bloques los pinta renderAdmHome() con sus cuentas. -->
   <section id="admHome">
-    <div class="adm-hero">
-      <div class="adm-eyebrow">Plataforma ETAAX</div>
-      <h1 class="adm-title">Admin <span class="g">maestro</span></h1>
-      <p class="adm-sub">Los movimientos extraordinarios de la plataforma: negocios y su cobro, clientes nuevos, catálogos maestros y la administración de ETAAX.</p>
+    <!-- (27-nov) La isla del negocio, como en el hub de una sucursal, pero el
+         negocio es ETAAX: espacio de trabajo a la izquierda, ETAAX al centro. -->
+    <div class="adm-isla-bar" id="admIslaBar">
+      <span class="adm-isla-tit">Espacio de <b>trabajo</b></span>
+      <span class="adm-isla-neg"><img src="/marca/etaax-isotipo.svg" alt="" width="34" height="34"><span><b>ETAAX</b><small>Plataforma SaaS · admin maestro</small></span></span>
+      <span class="adm-isla-der"></span>
     </div>
+    <h1 class="adm-title" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Admin maestro · ETAAX</h1>
 
     <div class="stat-grid">
       <div class="stat-card">
@@ -458,6 +462,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
     </div>
 
   <div id="tab-documentos" class="tab-panel"></div>
+  <!-- (27-nov) Tablero de ingresos de ETAAX (lo pinta admin-tablero.js) -->
+  <div id="tab-tablero" class="tab-panel"></div>
 
   <!-- TAB: USUARIOS -->
   <div id="tab-usuarios" class="tab-panel active">
@@ -749,8 +755,10 @@ async function betaAppCopiar() {
 <script src="/password.js"></script><!-- medidor y generador: la misma regla que el alta -->
 <script src="/reporte-marca.js?v=90a9c06c"></script>
 <script src="/precios.js?v=c0cc0bbf"></script><!-- tabla de precios por sucursal (una sola verdad) -->
-<script src="/admin-documentos.js?v=da9fff10"></script>
-<script src="/etaax-core.js?v=a2ab0f50"></script><!-- importeLetra para recibos y presupuestos -->
+<script src="/admin-documentos.js?v=0d89b454"></script>
+<script src="/admin-espacio.js?v=8e3aef86"></script><!-- (27-nov) la portada como el hub de una sucursal, a nivel SaaS -->
+<script src="/admin-tablero.js?v=9f7f9de0"></script><!-- (27-nov) tablero de ingresos de ETAAX -->
+<script src="/etaax-core.js?v=810b747f"></script><!-- importeLetra para recibos y presupuestos -->
 <script src="/etaax-iconos.js?v=7a651810"></script><!-- los iconos de la app (SVG) -->
 <script src="/etaax-header.js?v=a0ec334a"></script><!-- la barra de arriba, la misma de todo el sistema -->
 <script src="/admin-migrar-sucursal.js?v=61629f85"></script><!-- migrar una sucursal: el plan (lo aplica la v86) -->
@@ -2979,32 +2987,39 @@ function cerrarDetail() {
      tipo 'pagina' → otra página del admin
      tipo 'accion' → hace algo (abre un modal, corre una revisión)
      prox          → todavía no existe: se enseña para que se vea a dónde va. */
+/* (27-nov, Edwin: «trabaja sobre ETAAX como negocio replicando la interfaz de
+   la gestión de una sucursal, pero a nivel SaaS, conservando todo lo funcional»).
+   Los bloques ahora son las ÁREAS de ETAAX, como los módulos de una sucursal:
+   se eligen en la media luna de la portada (admin-espacio.js) y cada una enseña
+   sus herramientas con su grupo. Las herramientas son las de siempre (mismos
+   ids, mismas pantallas); se sumó el Tablero de ingresos. */
 var ADM_BLOQUES = [
-  { id:'activos', tag:'Operación', tit:'Negocios activos', desc:'Los negocios que ya trabajan en ETAAX: su cobro, sus cuentas, su gente y las sucursales que piden.', cards:[
-    { id:'negocios', tipo:'panel', ic:'sh-info-negocio', tit:'Negocios', desc:'Suscripción, día de cobro, recibos, respaldo, accesos y baja de cada negocio.' },
-    { id:'usuarios', tipo:'panel', ic:'usuario', tit:'Cuentas', desc:'Los dueños registrados, su plan y cuántos negocios tiene cada uno.' },
-    { id:'staff', tipo:'panel', ic:'cat-colaboradores', tit:'Staff global', desc:'Todos los colaboradores de la plataforma, con su rol, usuario y negocio.' },
-    { id:'solicitudes', tipo:'panel', ic:'anadir-sucursal', tit:'Solicitudes de sucursal', desc:'Negocios que pidieron agregar una sucursal: activarla o rechazarla.' }
+  { id:'clientes', tag:'Clientes', ic:'sh-info-negocio', tit:'Clientes', desc:'Los negocios que trabajan en ETAAX: su cobro, sus cuentas, su gente, lo que piden y quién está por llegar.', cards:[
+    { id:'negocios', grupo:'Negocios activos', tipo:'panel', ic:'sh-info-negocio', tit:'Negocios', desc:'Suscripción, día de cobro, recibos, respaldo, accesos y baja de cada negocio.' },
+    { id:'usuarios', grupo:'Negocios activos', tipo:'panel', ic:'usuario', tit:'Cuentas', desc:'Los dueños registrados, su plan y cuántos negocios tiene cada uno.' },
+    { id:'staff', grupo:'Negocios activos', tipo:'panel', ic:'cat-colaboradores', tit:'Staff global', desc:'Todos los colaboradores de la plataforma, con su rol, usuario y negocio.' },
+    { id:'solicitudes', grupo:'Negocios activos', tipo:'panel', ic:'anadir-sucursal', tit:'Solicitudes de sucursal', desc:'Negocios que pidieron agregar una sucursal: activarla o rechazarla.' },
+    { id:'invitaciones', grupo:'Nuevos clientes', tipo:'panel', ic:'sto-correo', tit:'Invitaciones', desc:'El link de alta a nombre de un correo: caduca y se usa una sola vez.' },
+    { id:'por-activar', grupo:'Nuevos clientes', tipo:'accion', ic:'adm-pendiente', tit:'Por activar', desc:'Negocios dados de alta que esperan su primer pago o que los actives.' }
   ]},
-  { id:'clientes', tag:'Ventas', tit:'Nuevos clientes', desc:'El alta es solo por invitación: de la cotización al link de alta y al primer cobro.', cards:[
-    { id:'invitaciones', tipo:'panel', ic:'sto-correo', tit:'Invitaciones', desc:'El link de alta a nombre de un correo: caduca y se usa una sola vez.' },
-    { id:'presupuesto', tipo:'accion', ic:'adm-comprobante', tit:'Presupuesto / recibo', desc:'Cotiza la suscripción por sucursales y servicios, o emite un recibo de pago.', cta:'Crear documento →' },
-    { id:'por-activar', tipo:'accion', ic:'adm-pendiente', tit:'Por activar', desc:'Negocios dados de alta que esperan su primer pago o que los actives.' }
+  { id:'ingresos', tag:'Ingresos', ic:'fin-ventas', tit:'Ingresos', desc:'Lo que ETAAX cobra: el MRR de cada mes, la cobranza por cliente, los recibos y los presupuestos.', cards:[
+    { id:'tablero', grupo:'Resultados', tipo:'panel', ic:'fin-resumen-resultados', tit:'Tablero de ingresos', desc:'MRR, cobrado y pendiente mes a mes, y la cobranza de cada cliente.' },
+    { id:'documentos', grupo:'Documentos', tipo:'panel', ic:'nom-recibo', tit:'Historial de recibos', desc:'Recibos y presupuestos emitidos, en grupos, con vista previa y reimpresión.' },
+    { id:'presupuesto', grupo:'Documentos', tipo:'accion', ic:'adm-comprobante', tit:'Presupuesto / recibo', desc:'Cotiza la suscripción por sucursales y servicios, o emite un recibo de pago.', cta:'Crear' }
   ]},
-  { id:'catalogos', tag:'Catálogos', tit:'Catálogos ETAAX', desc:'Las listas maestras que ETAAX comparte con todos los negocios.', cards:[
-    { id:'insumos', tipo:'pagina', ic:'cat-insumos', tit:'Insumos', desc:'El catálogo maestro de insumos, con presentaciones, marcas y costos de referencia.' },
-    { id:'proveedores', tipo:'panel', ic:'cat-proveedores', tit:'Proveedores', desc:'Los proveedores sugeridos para todos los negocios, con su contacto.' },
-    { id:'rrhh', tipo:'pagina', ic:'sto-perfiles', tit:'Perfiles y evaluaciones', desc:'Perfiles de puesto y evaluaciones de referencia para recursos humanos.' }
+  { id:'catalogos', tag:'Catálogos', ic:'cat-insumos', tit:'Catálogos', desc:'Las listas maestras que ETAAX comparte con todos los negocios.', cards:[
+    { id:'insumos', grupo:'Abastecimiento', tipo:'pagina', ic:'cat-insumos', tit:'Insumos', desc:'El catálogo maestro de insumos, con presentaciones, marcas y costos de referencia.' },
+    { id:'proveedores', grupo:'Abastecimiento', tipo:'panel', ic:'cat-proveedores', tit:'Proveedores', desc:'Los proveedores sugeridos para todos los negocios, con su contacto.' },
+    { id:'rrhh', grupo:'Equipo', tipo:'pagina', ic:'sto-perfiles', tit:'Perfiles y evaluaciones', desc:'Perfiles de puesto y evaluaciones de referencia para recursos humanos.' }
   ]},
-  { id:'admin', tag:'Plataforma', tit:'Administración ETAAX', desc:'Revisiones, documentos emitidos y los movimientos extraordinarios de la plataforma.', cards:[
-    { id:'documentos', tipo:'panel', ic:'nom-recibo', tit:'Historial de recibos', desc:'Recibos y presupuestos emitidos, pagos pendientes y reimpresiones.' },
-    { id:'auditar', tipo:'accion', ic:'adm-buscar', tit:'Auditar cruces', desc:'Busca recetas que quedaron en el negocio equivocado. Solo lectura.', cta:'Revisar →' },
-    { id:'app', tipo:'panel', ic:'adm-celular', tit:'App móvil (beta)', desc:'El enlace único de la app de registro, para probarla en una barra real.' },
-    { id:'guias-movil', tipo:'panel', ic:'rec-tutorial', tit:'Guías de la app móvil', desc:'Sube los tutoriales en video y PDF que salen debajo de Cost·ax y Equip·ax en la app, para quien entra con su clave.' },
-    { id:'guias-web', tipo:'panel', ic:'rec-tutorial', tit:'Guías de la app web', desc:'Sube los tutoriales en video y PDF de cada módulo: salen en su portada (botón «Guías») y en Learn·ax.' },
-    { id:'papelera', tipo:'pagina', ic:'mov-eliminar', tit:'Papelera', desc:'Lo que se eliminó en la plataforma, para revisarlo o recuperarlo.' },
-    { id:'migrar', tipo:'panel', ic:'adm-sucursal', tit:'Migrar sucursal', desc:'Copiar una sucursal a otro negocio, revisarla y eliminarla del original. Lo eliminado se puede restaurar.' },
-    { id:'auditores', tipo:'panel', ic:'stf-admin', tit:'Staff ETAAX', desc:'El equipo de ETAAX entra con su usuario a los negocios, sucursales y módulos que le des aquí.' }
+  { id:'plataforma', tag:'Plataforma', ic:'stf-admin', tit:'Plataforma', desc:'El equipo de ETAAX, la app móvil, las guías de uso y los movimientos extraordinarios de la plataforma.', cards:[
+    { id:'auditores', grupo:'Equipo ETAAX', tipo:'panel', ic:'stf-admin', tit:'Staff ETAAX', desc:'El equipo de ETAAX entra con su usuario a los negocios, sucursales y módulos que le des aquí.' },
+    { id:'app', grupo:'App móvil', tipo:'panel', ic:'adm-celular', tit:'App móvil (beta)', desc:'El enlace único de la app de registro, para probarla en una barra real.' },
+    { id:'guias-movil', grupo:'Guías de uso', tipo:'panel', ic:'rec-tutorial', tit:'Guías de la app móvil', desc:'Sube los tutoriales en video y PDF que salen debajo de Cost·ax y Equip·ax en la app, para quien entra con su clave.' },
+    { id:'guias-web', grupo:'Guías de uso', tipo:'panel', ic:'rec-tutorial', tit:'Guías de la app web', desc:'Sube los tutoriales en video y PDF de cada módulo: salen en su portada, en el hub y en Learn·ax.' },
+    { id:'migrar', grupo:'Movimientos', tipo:'panel', ic:'adm-sucursal', tit:'Migrar sucursal', desc:'Copiar una sucursal a otro negocio, revisarla y eliminarla del original. Lo eliminado se puede restaurar.' },
+    { id:'auditar', grupo:'Revisiones', tipo:'accion', ic:'adm-buscar', tit:'Auditar cruces', desc:'Busca recetas que quedaron en el negocio equivocado. Solo lectura.', cta:'Revisar' },
+    { id:'papelera', grupo:'Revisiones', tipo:'pagina', ic:'mov-eliminar', tit:'Papelera', desc:'Lo que se eliminó en la plataforma, para revisarlo o recuperarlo.' }
   ]}
 ];
 var _admCargado = false;   // hasta que contesta la nube, las tarjetas no dicen «0»
@@ -3061,19 +3076,25 @@ function _admChip(id) {
     return '';
 }
 function _admCardHTML(c) {
-    var cta = c.prox ? 'Próximamente' : (c.cta || 'Abrir →');
+    /* (27-nov) Como las tarjetas de las portadas de módulo: ícono, su grupo y su
+       cuenta arriba, título y descripción, y el óvalo «Abrir» a la derecha. */
+    var cta = c.prox ? 'Pronto' : (c.cta || 'Abrir');
     return '<' + (c.prox ? 'div' : 'button type="button"') + ' class="adm-card' + (c.prox ? ' prox' : '') + '" data-card="' + esc(c.id) + '"' +
         (c.prox ? ' aria-disabled="true"' : ' onclick="admAbrir(\'' + etaaxJsArg(c.id) + '\')"') + '>' +
-        '<div class="adm-card-cab"><span class="adm-card-ic">' + _admIc(c.ic, 30) + '</span>' +
-            (c.prox ? '<span class="adm-chip">Próximamente</span>' : _admChip(c.id)) + '</div>' +
-        '<div class="adm-card-tit">' + esc(c.tit) + '</div>' +
-        '<div class="adm-card-desc">' + esc(c.desc) + '</div>' +
-        '<div class="adm-card-cta">' + esc(cta) + '</div>' +
+        '<span class="adm-card-ic">' + _admIc(c.ic, 26) + '</span>' +
+        '<span class="adm-card-cuerpo">' +
+            '<span class="adm-card-top">' + (c.grupo ? '<span class="adm-card-grupo">' + esc(c.grupo) + '</span>' : '') +
+                (c.prox ? '<span class="adm-chip">Próximamente</span>' : _admChip(c.id)) + '</span>' +
+            '<span class="adm-card-tit">' + esc(c.tit) + '</span>' +
+            '<span class="adm-card-desc">' + esc(c.desc) + '</span>' +
+        '</span>' +
+        '<span class="adm-card-cta">' + esc(cta) + '</span>' +
     '</' + (c.prox ? 'div' : 'button') + '>';
 }
 function renderAdmHome() {
     var cont = document.getElementById('admBloques'); if (!cont) return;
-    cont.innerHTML = ADM_BLOQUES.map(function (b) {
+    if (window.AdmEspacio) { AdmEspacio.pintar(cont); }
+    else cont.innerHTML = ADM_BLOQUES.map(function (b) {
         return '<section class="adm-bloque" data-bloque="' + esc(b.id) + '">' +
             '<div class="adm-bloque-cab"><span class="adm-bloque-tag">' + esc(b.tag) + '</span>' +
                 '<h2 class="adm-bloque-tit">' + esc(b.tit) + '</h2>' +
@@ -3126,6 +3147,8 @@ function switchTab(tab, sinHistorial) {
     if (tab === 'auditores' && window.AdmEtx) AdmEtx.abrir();
     if (tab === 'guias-movil' && window.AdmGuiasMovil) AdmGuiasMovil.montar();
     if (tab === 'guias-web' && window.AdmGuiasMovil) AdmGuiasMovil.montarWeb();
+    if (tab === 'tablero' && window.AdmTablero) AdmTablero.montar();
+    if (window.AdmEspacio) AdmEspacio.recordar(t.bloque.id);   // al volver, la portada queda en su área
     document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.toggle('active', p === panel); });
     document.getElementById('admPanelBloque').textContent = t.bloque.tit;
     document.getElementById('admPanelTit').textContent = t.card.tit;

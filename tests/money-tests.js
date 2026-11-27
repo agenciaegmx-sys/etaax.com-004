@@ -17740,7 +17740,7 @@ console.log('\n══ BH83 · Migrar una sucursal: el plan ══');
     });
     test('el panel admin ofrece la herramienta (ya no «Próximamente») y carga el motor', () => {
         const h = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
-        return eq(/id:'migrar', tipo:'panel'/.test(h) && /<script src="\/admin-migrar-sucursal\.js\?v=/.test(h) && /id="tab-migrar"/.test(h), true);
+        return eq(/id:'migrar', (grupo:'[^']+', )?tipo:'panel'/.test(h) &&   /* (27-nov) la tarjeta dice su grupo */ /<script src="\/admin-migrar-sucursal\.js\?v=/.test(h) && /id="tab-migrar"/.test(h), true);
     });
 }
 
@@ -34019,6 +34019,85 @@ console.log('\n══ BH105 · Recibos en grupos con vista previa; los modales c
         return eq(i > -1 && /\.modal, \.modal-box, \.modal-content \{ max-height: calc\(100vh - 20px\); max-height: calc\(100dvh - 20px\); \}/.test(st.slice(i, i + 600)) &&
                   !/\n\.modal \{ max-height: calc\(100dvh/.test(st), true);
     });
+})();
+
+/* ═══════ BH106 · ETAAX COMO NEGOCIO: EL ESPACIO DE TRABAJO DEL PANEL Y EL TABLERO DE INGRESOS (27-nov) ═══════
+   Edwin: «trabaja sobre ETAAX como negocio replicando la interfaz de la gestión
+   de una sucursal pero a nivel SaaS en el panel admin, conservando todo lo
+   funcional». La portada del panel es el hub de una sucursal (isla de ETAAX,
+   media luna de áreas, herramientas del área) y se sumó el Tablero de ingresos.
+   La UI de verdad: probar-planes-apps.cjs (67), probar-staff-etaax.cjs,
+   probar-admin-migrar.cjs. */
+console.log('\n══ BH106 · ETAAX como negocio: espacio de trabajo y tablero de ingresos ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const R = (o) => Object.assign({ tipo: 'recibo', estado: 'pagado', moneda: 'MXN', meses: 1 }, o);
+    const docs = [
+        R({ id: 'a', total: 2699, suscripcion_monto: 1799, periodo_desde: '2026-11-01', fecha: '2026-11-02', fecha_pago: '2026-11-03', cliente_negocio_id: 'A', cliente: 'EL MIAMI' }),
+        R({ id: 'b', total: 16191, suscripcion_monto: 16191, meses: 12, periodo_desde: '2026-06-01', fecha: '2026-06-01', fecha_pago: '2026-06-02', cliente: 'TATA' }),
+        R({ id: 'c', total: 900, suscripcion_monto: 0, fecha: '2026-10-05', fecha_pago: '2026-10-05', cliente_negocio_id: 'A', cliente: 'EL MIAMI' }),
+        R({ id: 'd', estado: 'pendiente', total: 1799, suscripcion_monto: 1799, periodo_desde: '2026-12-01', fecha: '2026-11-20', cliente_negocio_id: 'B', cliente: 'PORCINOS' }),
+        R({ id: 'e', estado: 'anulado', total: 5000, suscripcion_monto: 5000, periodo_desde: '2026-11-01', fecha: '2026-11-01', cliente: 'X' }),
+        R({ id: 'f', total: 1000, suscripcion_monto: 1000, periodo_desde: '2026-11-01', fecha: '2026-11-01', fecha_pago: '2026-11-01', cliente: 'Y', eliminado_at: '2026-11-02' }),
+        { id: 'g', tipo: 'presupuesto', estado: 'pendiente', total: 9999, suscripcion_monto: 9999, periodo_desde: '2026-11-01', fecha: '2026-11-01', cliente: 'Z' }];
+    const vivos = docs.filter(d => !d.eliminado_at);
+    test('serie de 12 meses que termina en el mes elegido, del más viejo al más nuevo (cruza de año)', () => {
+        const s = C.serieIngresosAdmin(vivos, '2027-01', 12);
+        return eq([s.length, s[0].mes, s[11].mes].join(','), '12,2026-02,2027-01');
+    });
+    test('…cada mes con la MISMA vara que el resumen del mes (resumenDocumentosAdmin)', () => {
+        const s = C.serieIngresosAdmin(vivos, '2026-11', 12);
+        return eq(s.every(x => { const r = C.resumenDocumentosAdmin(vivos, x.mes); return r.mrr === x.mrr && r.cobrado === x.cobrado && r.emitido === x.emitido; }), true);
+    });
+    test('…el anual se reparte en sus 12 meses: 16,191 ÷ 12 = 1,349.25 de junio a mayo, y fuera de ese rango no cuenta', () => {
+        const s = C.serieIngresosAdmin([docs[1]], '2027-06', 13);
+        return eq([s[0].mrr, s[11].mrr, s[12].mrr].join(','), '1349.25,1349.25,0');
+    });
+    test('…sin presupuestos ni anulados: en nov-26 el MRR es 1,799 + 1,349.25 (el anulado de 5,000 y el presupuesto no entran)', () =>
+        eq(C.serieIngresosAdmin(vivos, '2026-11', 1)[0].mrr, 3148.25));
+    const cl = C.clientesIngresosAdmin(docs, '2026-11');
+    test('cobranza por cliente: por negocio (los dos recibos de EL MIAMI juntos) y los sin negocio por nombre; sin anulados, eliminados ni presupuestos', () =>
+        eq(cl.map(c => c.cliente + ':' + c.recibos).sort().join(','), 'EL MIAMI:2,PORCINOS:1,TATA:1'));
+    test('…cobrado, pendiente, último pago y MRR del mes de cada uno; primero el que más MRR aporta', () =>
+        eq(cl.map(c => [c.cliente, c.mrr, c.cobrado, c.pendiente, c.ultimoPago].join('|')).join(' / '),
+           'EL MIAMI|1799|3599|0|2026-11-03 / TATA|1349.25|16191|0|2026-06-02 / PORCINOS|0|0|1799|'));
+
+    /* El espacio de trabajo: lo de antes se conserva. */
+    const adm = leer('admin.html');
+    const bloques = new Function(adm.slice(adm.indexOf('var ADM_BLOQUES = ['), adm.indexOf('];', adm.indexOf('var ADM_BLOQUES = [')) + 2) + '; return ADM_BLOQUES;')();
+    const ids = [].concat.apply([], bloques.map(b => b.cards.map(c => c.id)));
+    const ANTES = ['negocios', 'usuarios', 'staff', 'solicitudes', 'invitaciones', 'presupuesto', 'por-activar', 'insumos', 'proveedores', 'rrhh',
+                   'documentos', 'auditar', 'app', 'guias-movil', 'guias-web', 'papelera', 'migrar', 'auditores'];
+    test('las cuatro áreas de ETAAX, en el orden de la media luna: Clientes, Ingresos, Catálogos, Plataforma', () =>
+        eq(bloques.map(b => b.id).join(','), 'clientes,ingresos,catalogos,plataforma'));
+    test('…conservan TODAS las herramientas de antes (los mismos 18 ids) y suman el Tablero de ingresos, sin repetir ninguna', () =>
+        eq([ANTES.every(x => ids.indexOf(x) > -1), ids.indexOf('tablero') > -1, ids.length, new Set(ids).size].join(','), 'true,true,19,19'));
+    test('…cada herramienta tiene a dónde ir: su pantalla (#tab-…), su página o su acción', () => {
+        const pag = ['insumos', 'rrhh', 'papelera'], acc = ['presupuesto', 'auditar', 'por-activar'];
+        return eq(ids.filter(x => !(pag.indexOf(x) > -1 && adm.indexOf(x + ":'admin-") > -1) && !(acc.indexOf(x) > -1 && adm.indexOf("id === '" + x + "'") > -1) &&
+            adm.indexOf('id="tab-' + x + '"') < 0).join(','), '');
+    });
+    test('…y cada tarjeta dice su grupo (como las portadas de módulo)', () => eq(bloques.every(b => b.cards.every(c => !!c.grupo)), true));
+    const esp = leer('admin-espacio.js'), hub = leer('hub-modulos.js');
+    test('la media luna del panel es la del hub: misma geometría (paso, giro, profundidad, desenfoque) y con tope, sin dar la vuelta', () => {
+        const geo = (t) => (t.match(/translateY\('\s*\+\s*\(a \* a \* 9\)[\s\S]{0,400}?scale\('\s*\+\s*Math\.max\(\.6, 1 - a \* \.1\)/) || [''])[0].replace(/\s+/g, '');
+        return eq([geo(esp) !== '' && geo(esp) === geo(hub), /Math\.max\(128, Math\.min\(270, \(\(d && d\.clientWidth\) \|\| 800\) \* 0\.25\)\)/.test(esp),
+                   /con tope, sin dar la vuelta/.test(esp), /delCentro\(l\)/.test(esp)].join(','), 'true,true,true,true');
+    });
+    test('…arranca en el área del CENTRO (con cuatro, Ingresos) y al volver de una herramienta se queda en SU área', () => {
+        const ctx = vm.createContext({ window: {}, document: { querySelectorAll() { return []; } } }); ctx.window = ctx;
+        vm.runInContext(esp, ctx);
+        return eq([ctx.AdmEspacio.delCentro(bloques).id, /if \(window\.AdmEspacio\) AdmEspacio\.recordar\(t\.bloque\.id\);/.test(adm)].join(','), 'ingresos,true');
+    });
+    test('…y al refrescar datos solo se repintan las tarjetas: la rueda no vuelve a girar desde cero', () =>
+        eq(/if \(ya && ya\.getAttribute\('data-areas'\) === ids\)/.test(esp) && /\.adm-esp-dock\.quieta \.adm-esp-tab\{transition:none;\}/.test(leer('admin-espacio.css')), true));
+    const tb = leer('admin-tablero.js');
+    test('el tablero pinta con el núcleo (serie, cobranza y resumen) y lee los MISMOS recibos que el historial (AdminDocs.lista)', () =>
+        eq(/C\.serieIngresosAdmin\(_docs, _mes, 12\)/.test(tb) && /C\.clientesIngresosAdmin\(_docs, _mes\)/.test(tb) && /C\.resumenDocumentosAdmin\(_docs, _mes\)/.test(tb) &&
+           /await AdminDocs\.cargar\(\); _docs = AdminDocs\.lista\(\);/.test(tb) && /function lista\(\)\{return filas\.filter\(vivo\);\}/.test(leer('admin-documentos.js')), true));
+    test('…su gráfica: una sola serie y un solo eje, barras ancladas a la base con extremo redondeado de 4 px, y su tabla con los números', () =>
+        eq(/var r = Math\.min\(4, bh, ancho \/ 2\);/.test(tb) && /Ver los números/.test(tb) && (tb.match(/class="barra/g) || []).length === 1, true));
 })();
 
 

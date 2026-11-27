@@ -179,6 +179,48 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         const pa = s2.page;
         await pa.goto(ORIGEN + '/admin.html');
         await pa.waitForFunction(() => document.getElementById('viewAdmin').style.display === 'block' && window._admCargado, null, { timeout: 15000 });
+        await foto(pa, 'p0-admin-portada');
+        /* (27-nov) ETAAX como negocio: la portada es el hub de una sucursal, a nivel SaaS. */
+        const esp = () => pa.evaluate(() => ({ tabs: [...document.querySelectorAll('.adm-esp-tab')].map(t => t.dataset.area + (t.getAttribute('aria-selected') === 'true' ? '*' : '')),
+            tit: (document.querySelector('.adm-esp-cab-tit') || {}).textContent, num: (document.querySelector('.adm-esp-cab-num') || {}).textContent,
+            cards: [...document.querySelectorAll('.adm-area:not([hidden]) .adm-card')].map(c => c.dataset.card),
+            centro: (() => { const d = document.getElementById('admEspDock').getBoundingClientRect(), t = document.querySelector('.adm-esp-tab[aria-selected="true"]').getBoundingClientRect(); return Math.abs((t.left + t.right) / 2 - (d.left + d.right) / 2) < 3; })() }));
+        await caso('ESPACIO ETAAX: la isla «Espacio de trabajo · ETAAX», como la de una sucursal', async () =>
+            assert.deepEqual(await pa.evaluate(() => [document.querySelector('.adm-isla-tit').textContent, document.querySelector('.adm-isla-neg b').textContent, !!document.querySelector('.adm-isla-neg img')]),
+                ['Espacio de trabajo', 'ETAAX', true]));
+        await caso('…la media luna con las cuatro áreas; arranca en la del CENTRO (Ingresos), al centro, con sus herramientas abajo', async () =>
+            assert.deepEqual(await esp(), { tabs: ['clientes', 'ingresos*', 'catalogos', 'plataforma'], tit: 'Ingresos', num: 'Área 2 · activa', cards: ['tablero', 'documentos', 'presupuesto'], centro: true }));
+        await caso('…cada herramienta con su grupo y el óvalo «Abrir» a la derecha (como las portadas de módulo)', async () =>
+            assert.deepEqual(await pa.evaluate(() => [...document.querySelectorAll('.adm-area:not([hidden]) .adm-card')].map(c => c.querySelector('.adm-card-grupo').textContent + ' · ' + c.querySelector('.adm-card-tit').textContent + ' · ' + c.querySelector('.adm-card-cta').textContent)),
+                ['Resultados · Tablero de ingresos · Abrir', 'Documentos · Historial de recibos · Abrir', 'Documentos · Presupuesto / recibo · Crear']));
+        await pa.click('.adm-esp-flecha[data-dir="1"]'); await pa.waitForTimeout(650); await pa.click('.adm-esp-flecha[data-dir="1"]'); await pa.waitForTimeout(650);
+        await caso('…las flechas la giran y tiene TOPE en Plataforma (no da la vuelta)', async () => {
+            const r = await esp();
+            assert.deepEqual([r.tabs, r.cards, r.centro, await pa.evaluate(() => document.querySelector('.adm-esp-flecha[data-dir="1"]').disabled)],
+                [['clientes', 'ingresos', 'catalogos', 'plataforma*'], ['auditores', 'app', 'guias-movil', 'guias-web', 'migrar', 'auditar', 'papelera'], true, true]);
+        });
+        await pa.click('.adm-esp-tab[data-area="catalogos"]'); await pa.waitForTimeout(650);
+        await caso('…tocar el área de al lado la trae al centro: Catálogos con sus tres herramientas', async () => {
+            const r = await esp(); assert.deepEqual([r.tabs, r.cards, r.centro], [['clientes', 'ingresos', 'catalogos*', 'plataforma'], ['insumos', 'proveedores', 'rrhh'], true]);
+        });
+        await pa.evaluate(() => admArea('clientes')); await pa.waitForTimeout(650);
+        await caso('…Clientes con sus seis herramientas (negocios activos y nuevos clientes)', async () =>
+            assert.deepEqual((await esp()).cards, ['negocios', 'usuarios', 'staff', 'solicitudes', 'invitaciones', 'por-activar']));
+        await caso('…las tarjetas de las otras áreas siguen en la página (escondidas), con sus cuentas', async () =>
+            assert.deepEqual(await pa.evaluate(() => [document.querySelectorAll('.adm-card').length, !!document.querySelector('.adm-area[hidden] .adm-card[data-card="migrar"]'),
+                (document.querySelector('.adm-card[data-card="solicitudes"] .adm-chip') || {}).textContent]), [19, true, '1 pendiente'], JSON.stringify(await pa.evaluate(() => [document.querySelectorAll('.adm-card').length, (document.querySelector('.adm-card[data-card="solicitudes"] .adm-chip') || {}).textContent]))));
+        await pa.evaluate(() => { switchTab('migrar'); admInicio(); }); await pa.waitForTimeout(250);
+        await caso('…abrir una herramienta y volver deja la portada en SU área (Plataforma)', async () =>
+            assert.equal((await esp()).tit, 'Plataforma'));
+        await pa.setViewportSize({ width: 390, height: 844 }); await pa.waitForTimeout(500);
+        await foto(pa, 'p0b-admin-telefono');
+        await caso('…en el teléfono: sin desbordarse a lo ancho, la rueda adentro y las herramientas en una columna', async () => {
+            const r = await pa.evaluate(() => { const cs = [...document.querySelectorAll('.adm-area:not([hidden]) .adm-card')].map(c => Math.round(c.getBoundingClientRect().left));
+                const sel = document.getElementById('admEspSelector').getBoundingClientRect();
+                return [document.documentElement.scrollWidth <= innerWidth + 1, sel.right <= innerWidth + 1, new Set(cs).size]; });
+            assert.deepEqual(r, [true, true, 1]);
+        });
+        await pa.setViewportSize({ width: 1280, height: 900 }); await pa.waitForTimeout(400);
         await pa.evaluate(() => switchTab('negocios')); await pa.waitForTimeout(300);
         await caso('la lista de negocios dice el plan de cada uno', async () =>
             assert.match(await texto(pa, '#tbodyNegocios'), /Cost·ax \(1\) · Paquete completo \(1\) · mensual/));
@@ -361,6 +403,36 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
             assert.equal(await pa.evaluate(() => document.getElementById('admDocsTabla').innerText.indexOf('REC-20261125') > -1), true);
             assert.equal(await pa.evaluate(() => document.querySelector('#admDocsMetricas > div strong').textContent), '$2,799.00');
         });
+        /* (27-nov) El Tablero de ingresos de ETAAX, con los mismos recibos. */
+        await pa.evaluate(() => switchTab('tablero')); await pa.waitForSelector('#tab-tablero .atb-kpi'); await pa.waitForTimeout(300);
+        await foto(pa, 'p3d-tablero');
+        await caso('TABLERO: MRR, cobrado y pendiente del mes con la MISMA vara que el historial (EtaaxCore.resumenDocumentosAdmin)', async () => {
+            const r = await pa.evaluate(() => { const mes = document.getElementById('atbMes').value, x = EtaaxCore.resumenDocumentosAdmin(AdminDocs.lista(), mes),
+                f = (v) => '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                return [[...document.querySelectorAll('#tab-tablero .atb-kpi strong')].slice(0, 3).map(s => s.textContent), [f(x.mrr), f(x.cobrado), f(x.pendiente)], x.mrr > 0]; });
+            assert.deepEqual(r[0], r[1]); assert.equal(r[2], true);
+        });
+        await caso('…el ARR es el MRR × 12 y los clientes al corriente salen del estado de su suscripción', async () => {
+            const r = await pa.evaluate(() => { const k = document.querySelectorAll('#tab-tablero .atb-kpi'); return [k[0].querySelector('span').textContent, k[3].querySelector('strong').textContent.replace(/\s+/g, ' ')]; });
+            assert.match(r[0], /^ARR \$[\d,]+\.\d\d/); assert.match(r[1], /^\d+ de 1$/);
+        });
+        await caso('…la gráfica: 12 meses, una barra por mes, la cifra solo en el mes elegido, y su tabla con los números', async () =>
+            assert.deepEqual(await pa.evaluate(() => [document.querySelectorAll('#atbGraf .zona').length, document.querySelectorAll('#atbGraf .barra.on').length, document.querySelectorAll('#atbGraf .val').length,
+                document.querySelectorAll('#tab-tablero details .atb-tabla tbody tr').length]), [12, 1, 1, 12]));
+        await pa.hover('#atbGraf .zona[data-i="11"]'); await pa.waitForTimeout(150);
+        await caso('…pasar sobre una barra enseña su mes: MRR, emitido y cobrado', async () =>
+            assert.match(await pa.evaluate(() => document.querySelector('#atbGraf .atb-tip').textContent), /MRR\$[\d,.]+Emitido\$[\d,.]+Cobrado\$[\d,.]+/));
+        await caso('…la cobranza por cliente: por negocio (con «Ver negocio») y los recibos sin negocio por su nombre', async () => {
+            const r = await pa.evaluate(() => [...document.querySelectorAll('#tab-tablero .atb-caja:last-child tbody tr')].map(tr => tr.cells[0].querySelector('b').textContent + ' | ' + !!tr.querySelector('button')));
+            assert.deepEqual(r.slice().sort(), ['EGMx | true', 'Recibo viejo | false'], JSON.stringify(r));
+        });
+        await caso('…y avisa que hay recibos sin clasificar que no cuentan en el MRR (con el atajo al historial)', async () => {
+            assert.match(await pa.evaluate(() => document.querySelector('#tab-tablero .atb-aviso').textContent), /1 recibo sin clasificar no cuenta en el MRR/);
+            await pa.click('#tab-tablero .atb-aviso button'); await pa.waitForTimeout(400);
+            assert.deepEqual(await pa.evaluate(() => [document.getElementById('tab-documentos').classList.contains('active'), [...document.querySelectorAll('#admDocsTabla .adoc-folio')].map(b => b.textContent)]),
+                [true, ['ARCH-1']]);
+            await pa.evaluate(() => AdminDocs.grupo(''));
+        });
         await pa.click(filaDoc('ARCH-1') + ' button:has-text("Editar")'); await pa.waitForTimeout(300);
         await caso('un PDF recuperado (no se puede rearmar) sigue con su ventanita de estado, también con «Eliminar»', async () =>
             assert.deepEqual(await pa.evaluate(() => [!!document.getElementById('adoc-guardar'), !!document.getElementById('adoc-eliminar'), !!document.getElementById('docOv')]), [true, true, false]));
@@ -376,6 +448,7 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         await pa.evaluate(() => admInicio()); await pa.waitForTimeout(200);
         await caso('el panel admin tiene la tarjeta «Guías de la app móvil»', async () =>
             assert.equal(await pa.evaluate(() => !!document.querySelector('.adm-card[data-card="guias-movil"]')), true));
+        await pa.evaluate(() => admArea('plataforma')); await pa.waitForTimeout(150);   // (27-nov) la portada va por áreas
         await pa.click('.adm-card[data-card="guias-movil"]'); await pa.waitForTimeout(500);
         await caso('…abre con Cost·ax y Equip·ax, cada uno con SUS guías (las de Learn·ax no salen)', async () => {
             const r = await pa.evaluate(() => [...document.querySelectorAll('#tab-guias-movil .agm-mod')].map(m => m.querySelector('.agm-mod-nom').textContent + ': ' +
@@ -406,6 +479,7 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         await pa.evaluate(() => admInicio()); await pa.waitForTimeout(200);
         await caso('el panel admin tiene la tarjeta «Guías de la app web»', async () =>
             assert.equal(await pa.evaluate(() => !!document.querySelector('.adm-card[data-card="guias-web"]')), true));
+        await pa.evaluate(() => admArea('plataforma')); await pa.waitForTimeout(150);   // (27-nov) la portada va por áreas
         await pa.click('.adm-card[data-card="guias-web"]'); await pa.waitForTimeout(500);
         await caso('…abre con los cinco módulos, cada uno con SUS guías (las de la app móvil no salen) y el otro panel se vacía', async () => {
             const r = await pa.evaluate(() => [[...document.querySelectorAll('#tab-guias-web .agm-mod')].map(m => m.querySelector('.agm-mod-nom').textContent + ': ' +

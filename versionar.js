@@ -48,7 +48,7 @@ const COMPARTIDOS = [
     'recetas/subreceta-rendimientos.js',
     'administrativo/fijos-ui.css', 'administrativo/fijos-ui.js',
     'administrativo/movimientos-ui.css', 'administrativo/movimientos-ui.js',
-    'administrativo/operaciones-ui.css', 'administrativo/operaciones-ui.js', 'financiero/config-ui.css', 'etaax-guias.js',
+    'administrativo/operaciones-ui.css', 'administrativo/operaciones-ui.js', 'financiero/config-ui.css', 'etaax-guias.js', 'admin-espacio.js', 'admin-espacio.css', 'admin-tablero.js',
     'admin-guard-ui.css', 'admin-guard-ui.js'
 ].filter(f => fs.existsSync(path.join(RAIZ, f)));
 

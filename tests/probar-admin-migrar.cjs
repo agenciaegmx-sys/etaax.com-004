@@ -70,6 +70,7 @@ const nube = {
         const enNube = (t) => page.evaluate((t) => JSON.parse(localStorage.getItem('__nube'))[t] || [], t);
 
         console.log('\n══ Pasar una sucursal a otro negocio · la pantalla ══');
+        await page.evaluate(() => admArea('plataforma')); await page.waitForTimeout(150);   // (27-nov) la portada va por áreas
         await page.click('.adm-card[data-card="migrar"]'); await page.waitForTimeout(400);
         await caso('la pantalla explica los 3 pasos y tiene copiar, eliminar y el archivo', async () => {
             const t = await page.evaluate(() => document.getElementById('tab-migrar').innerText.replace(/\s+/g, ' '));

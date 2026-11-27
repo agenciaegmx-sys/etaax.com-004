@@ -30,7 +30,12 @@ function mensaje(s){var n=document.getElementById('admDocsAviso');if(n)n.textCon
 function base(){var q=busqueda.toLowerCase().trim();return filas.filter(function(d){return (!q||(d.folio+' '+d.cliente).toLowerCase().includes(q))&&(!tipo||d.tipo===tipo)&&(estado==='eliminado'?!vivo(d):(vivo(d)&&(!estado||d.estado===estado)))&&(!desde||d.fecha>=desde)&&(!hasta||d.fecha<=hasta);});}
 function visible(){return base().filter(function(d){return !grupo||grupoDe(d)===grupo;});}
 function guardarEnLista(d){var i=filas.findIndex(function(x){return x.id===d.id;});if(i<0)filas.unshift(d);else filas[i]=d;pintar();}
-async function cargar(){
+/* (27-nov) Una sola lectura a la vez, compartida: el Tablero de ingresos espera
+   la misma que el historial (lista() da los vivos). */
+var _lectura=null;
+function cargar(){if(_lectura)return _lectura;_lectura=_cargarAhora().then(function(){_lectura=null;},function(){_lectura=null;});return _lectura;}
+function lista(){return filas.filter(vivo);}
+async function _cargarAhora(){
  if(cargando)return;cargando=true;mensaje('Cargando histórico…');
  try{var nuevas=[],offset=0;while(true){var r=await _supabase.from('admin_documentos').select(sinV95?columnas:columnasV95).order('fecha',{ascending:false}).order('id',{ascending:false}).range(offset,offset+199);if(r.error&&!sinV95&&/eliminado/.test(r.error.message||'')){sinV95=true;continue;}var chunk=error(r)||[];nuevas=nuevas.concat(chunk);if(chunk.length<200)break;offset+=200;}
  filas=nuevas;mensaje('');pintar();}catch(err){mensaje('No se pudo cargar el histórico: '+err.message);}finally{cargando=false;}
@@ -175,6 +180,6 @@ async function importar(){
  var saved=registro(await _supabase.rpc('admin_documento_crear',{p_documento:d}));guardarEnLista(saved);ov.remove();}catch(err){ov.querySelector('.adoc-error').textContent=err.message;btn.disabled=false;}};
 }
 function csv(){var rows=[['Folio','Tipo','Grupo','Estado','Cliente','Fecha emisión','Fecha pago','Total MXN','Suscripción MXN','Meses','Primer mes','Origen']].concat(visible().map(function(d){return[d.folio,d.tipo,(GRUPOS.find(function(x){return x.k===grupoDe(d);})||{t:''}).t,d.estado,d.cliente,d.fecha,d.fecha_pago,d.total,d.suscripcion_monto,d.meses,d.periodo_desde,d.origen];}));var txt=rows.map(function(row){return row.map(function(v){var s=String(v==null?'':v);if(/^[=+@\-\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}).join(',');}).join('\r\n');var url=URL.createObjectURL(new Blob(['\uFEFF'+txt],{type:'text/csv;charset=utf-8'}));var a=document.createElement('a');a.href=url;a.download='ETAAX-historico-'+hoy()+'.csv';a.click();setTimeout(function(){URL.revokeObjectURL(url);},1000);}
-window.AdminDocs={montar:montar,vista:vistaPrevia,grupo:filtroGrupo,htmlDocumento:htmlDocumento,cargar:cargar,filtro:filtro,ver:ver,imprimir:imprimir,crear:crear,imprimirArchivo:imprimirArchivo,importar:importar,csv:csv,folio:folio,hoy:hoy,
+window.AdminDocs={montar:montar,lista:lista,vista:vistaPrevia,grupo:filtroGrupo,htmlDocumento:htmlDocumento,cargar:cargar,filtro:filtro,ver:ver,imprimir:imprimir,crear:crear,imprimirArchivo:imprimirArchivo,importar:importar,csv:csv,folio:folio,hoy:hoy,
  reemitir:reemitir,eliminar:eliminar,restaurar:restaurar,convertir:convertir,bitacoraHTML:bitacoraHTML,editable:editable};
 })();

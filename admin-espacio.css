@@ -1,0 +1,96 @@
+/* ══ EL ESPACIO DE TRABAJO DE ETAAX (Edwin, 27-nov) ══════════════════════════
+   La portada del panel con la cara del hub de una sucursal: la isla del negocio
+   (ETAAX), la media luna de áreas y las herramientas del área elegida en
+   tarjetas compactas, como las portadas de módulo. La geometría de la rueda es
+   la de hub-modulos.css; los colores, los del panel (--cyan, --terra, --s1…). */
+
+/* ── La isla del negocio ── */
+.adm-isla-bar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;min-height:62px;padding:10px 22px;margin:4px 0 22px;
+  border:1px solid var(--cyan-line);border-radius:999px;background:var(--s1);box-shadow:0 8px 24px rgba(0,0,0,.14);}
+.adm-isla-tit{font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text);white-space:nowrap;}
+.adm-isla-tit b{color:var(--terra);font-weight:700;}
+.adm-isla-neg{display:inline-flex;align-items:center;gap:12px;justify-self:center;}
+.adm-isla-neg img{width:38px;height:38px;border-radius:50%;padding:5px;box-sizing:border-box;background:var(--s2);border:1px solid var(--b1);}
+.adm-isla-neg span{display:flex;flex-direction:column;line-height:1.25;}
+.adm-isla-neg b{font-size:17px;font-weight:700;letter-spacing:.3px;}
+.adm-isla-neg small{font-size:11.5px;color:var(--muted);}
+.adm-isla-der{justify-self:end;}
+@media (max-width:720px){
+  .adm-isla-bar{grid-template-columns:1fr;justify-items:center;border-radius:20px;padding:12px 16px;gap:6px;}
+  .adm-isla-tit{font-size:11px;}
+  .adm-isla-der{display:none;}
+}
+
+/* ── La cápsula del nombre (la de las portadas; el panel no carga esa hoja) ── */
+.adm-esp .etx-isla{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;border-radius:999px;background:linear-gradient(135deg,#17525a 0%,#21707a 100%);color:#fff;}
+.adm-esp .etx-isla-nombre{display:inline-flex;align-items:center;font-weight:700;letter-spacing:-.1px;line-height:1;white-space:nowrap;}
+.adm-esp .etx-isla-resto{display:inline-flex;align-items:center;}
+.adm-esp .etx-isla-punto{color:#ffb48f;margin:0 1px;}
+.adm-esp .etx-isla.etx-isla--chica{height:26px;min-width:26px;padding:0 12px;box-shadow:0 3px 9px rgba(14,48,53,.22);}
+.adm-esp .etx-isla.etx-isla--chica .etx-isla-nombre{font-size:13px;}
+
+/* ── La media luna de áreas ── */
+.adm-esp{margin-top:6px;}
+.adm-esp-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:4px 0 10px;font-size:11px;color:var(--muted);}
+.adm-esp-intro>span:first-child{font-size:9px;letter-spacing:2px;text-transform:uppercase;}
+.adm-esp-selector{position:relative;overflow:hidden;padding:16px 58px 18px;border:1px solid var(--cyan-line);border-radius:18px;background:var(--s1);}
+.adm-esp-dock{position:relative;height:184px;perspective:1100px;transform-style:preserve-3d;touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 16%,#000 84%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 16%,#000 84%,transparent 100%);}
+.adm-esp-dock.arrastre{cursor:grabbing;}
+.adm-esp-tab{position:absolute;left:50%;top:50%;width:min(232px,44vw);height:150px;margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  padding:16px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--text);font-family:inherit;cursor:pointer;
+  transition:transform .5s cubic-bezier(.2,.8,.2,1),opacity .4s ease,filter .4s ease;will-change:transform,opacity;backface-visibility:hidden;--green:var(--cyan);}
+.adm-esp-dock.arrastre .adm-esp-tab,.adm-esp-dock.quieta .adm-esp-tab{transition:none;}
+.adm-esp-tab[aria-selected="true"]{border-color:var(--cyan);background:linear-gradient(var(--cyan-tint),var(--cyan-tint)),var(--s1);box-shadow:inset 0 -3px var(--cyan);}
+.adm-esp-tab:focus-visible{outline:2px solid var(--cyan);outline-offset:3px;}
+.adm-esp-tab-ic{display:inline-flex;}
+.adm-esp-tab-num{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+.adm-esp-tab-nom{display:inline-flex;}
+.adm-esp-flecha{position:absolute;top:calc(16px + 92px);transform:translateY(-50%);z-index:300;display:inline-flex;align-items:center;justify-content:center;
+  width:40px;height:40px;border-radius:50%;border:1px solid var(--cyan-line);background:var(--s1);color:var(--text);cursor:pointer;--green:var(--cyan);box-shadow:0 6px 16px rgba(0,0,0,.12);}
+.adm-esp-flecha:hover{border-color:var(--cyan);background:var(--cyan-tint);}
+.adm-esp-flecha:disabled{opacity:.35;cursor:default;}
+.adm-esp-flecha[data-dir="-1"]{left:10px;}
+.adm-esp-flecha[data-dir="-1"] .etx-ic{transform:rotate(180deg);}
+.adm-esp-flecha[data-dir="1"]{right:10px;}
+@media (max-width:720px){
+  .adm-esp-intro{flex-direction:column;align-items:flex-start;gap:6px;}
+  .adm-esp-selector{padding:12px 44px 16px;}
+  .adm-esp-dock{height:168px;}
+  .adm-esp-tab{width:min(200px,58vw);height:138px;}
+  .adm-esp-flecha{top:calc(12px + 84px);width:34px;height:34px;}
+  .adm-esp-flecha[data-dir="-1"]{left:6px;}.adm-esp-flecha[data-dir="1"]{right:6px;}
+}
+@media (prefers-reduced-motion:reduce){.adm-esp-tab{transition:none;}}
+
+/* ── El área elegida: su nombre centrado, como el módulo en el hub ── */
+.adm-esp-cab{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;margin:26px 0 20px;}
+.adm-esp-cab-ic{display:inline-flex;align-items:center;justify-content:center;width:58px;height:58px;border-radius:15px;border:1px solid var(--cyan-line);background:var(--cyan-tint);--green:var(--cyan);}
+.adm-esp-cab-num{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.adm-esp-cab-tit{font-size:24px;font-weight:700;letter-spacing:-.3px;color:var(--terra);line-height:1.2;}
+.adm-esp-cab-desc{font-size:13.5px;font-weight:500;line-height:1.6;color:var(--text);max-width:640px;margin:6px auto 0;}
+
+/* ── Las herramientas: tarjetas compactas a dos columnas (como las portadas) ── */
+.adm-area[hidden]{display:none!important;}
+.adm-grid.adm-grid-2{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+@media (max-width:760px){.adm-grid.adm-grid-2{grid-template-columns:minmax(0,1fr);}}
+.adm-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:16px;min-height:0;padding:16px 18px;background:var(--s1);
+  border:1px solid var(--b1);border-radius:16px;text-align:left;}
+.adm-card:hover{border-color:var(--cyan-line);background:var(--cyan-tint);}
+.adm-card .adm-card-ic{align-self:start;display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:13px;background:var(--cyan-tint);
+  border:1px solid var(--cyan-soft);color:var(--text);--green:var(--cyan);}
+.adm-card .adm-card-ic .etx-ic{width:26px;height:26px;}
+.adm-card-cuerpo{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.adm-card-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:20px;}
+.adm-card-grupo{font-size:9.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--cyan);border:1px solid var(--cyan-soft);border-radius:20px;padding:2px 9px;white-space:nowrap;}
+.adm-card .adm-card-tit{font-size:16px;font-weight:600;letter-spacing:-.2px;line-height:1.3;}
+.adm-card .adm-card-desc{font-size:12.5px;line-height:1.55;color:var(--muted);}
+.adm-card .adm-card-cta{margin:0;padding:0 18px;min-height:38px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;
+  background:var(--terra);color:#fff;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 6px 16px rgba(173,75,39,.25);}
+[data-theme="light"] .adm-card .adm-card-cta{background:#ad4b27;}
+:root:not([data-theme="light"]) .adm-card .adm-card-cta{background:#c45f37;}
+.adm-card.prox .adm-card-cta{background:transparent;color:var(--dim);border:1px dashed var(--b1);box-shadow:none;}
+@media (max-width:520px){
+  .adm-card{grid-template-columns:auto minmax(0,1fr);row-gap:10px;}
+  .adm-card .adm-card-cta{grid-column:2;justify-self:start;}
+}

@@ -2449,6 +2449,41 @@
         if (n(d.suscripcion_monto) <= 0) return 'servicio';
         return /^\d{4}-(0[1-9]|1[0-2])(?:-|$)/.test(String(d.periodo_desde || '')) ? 'suscripcion' : 'clasificar';
     }
+    /* (27-nov) EL TABLERO DE INGRESOS DE ETAAX. Con la misma vara que el
+       resumen del mes (resumenDocumentosAdmin): solo recibos, sin anulados, en
+       MXN; los eliminados no llegan (los filtra quien llama, o aquí abajo).
+       · serieIngresosAdmin: emitido, cobrado y MRR de los N meses que terminan
+         en `mesFin` (YYYY-MM), del más viejo al más nuevo.
+       · clientesIngresosAdmin: la cobranza por cliente (por negocio; los que no
+         tienen negocio, por nombre): cobrado de siempre, pendiente, último pago,
+         su MRR de `mes` y cuántos recibos. Primero los que más MRR aportan. */
+    function serieIngresosAdmin(documentos, mesFin, meses) {
+        var m = String(mesFin || '').match(/^(\d{4})-(\d{2})$/); if (!m) return [];
+        var y = +m[1], mo = +m[2] - 1, out = [], nM = Math.max(1, Math.floor(n(meses) || 12));
+        for (var i = nM - 1; i >= 0; i--) {
+            var t = y * 12 + mo - i, k = Math.floor(t / 12) + '-' + String(t % 12 + 1).padStart(2, '0');
+            var r = resumenDocumentosAdmin(documentos, k);
+            out.push({ mes: k, emitido: r.emitido, cobrado: r.cobrado, mrr: r.mrr });
+        }
+        return out;
+    }
+    function clientesIngresosAdmin(documentos, mes) {
+        var por = {}, vistos = {};
+        (documentos || []).forEach(function (d) {
+            if (!d || d.tipo !== 'recibo' || d.estado === 'anulado' || d.eliminado_at || (d.moneda && d.moneda !== 'MXN') || (d.id && vistos[d.id])) return;
+            if (d.id) vistos[d.id] = true;
+            var k = d.cliente_negocio_id ? 'n:' + d.cliente_negocio_id : 'c:' + String(d.cliente || '').trim().toLowerCase();
+            var c = por[k] || (por[k] = { clave: k, negocioId: d.cliente_negocio_id || null, cliente: d.cliente || '', cobrado: 0, pendiente: 0, ultimoPago: '', mrr: 0, recibos: 0 });
+            var cent = Math.round(n(d.total) * 100);
+            c.recibos++;
+            if (d.estado === 'pagado') { c.cobrado += cent; if (String(d.fecha_pago || '') > c.ultimoPago) c.ultimoPago = String(d.fecha_pago || ''); }
+            if (d.estado === 'pendiente') c.pendiente += cent;
+            c.mrr += Math.round(resumenDocumentosAdmin([d], mes).mrr * 100);
+            if (!c.cliente && d.cliente) c.cliente = d.cliente;
+        });
+        return Object.keys(por).map(function (k) { var c = por[k]; c.cobrado /= 100; c.pendiente /= 100; c.mrr /= 100; return c; })
+            .sort(function (a, b) { return (b.mrr - a.mrr) || (b.cobrado - a.cobrado) || String(a.cliente).localeCompare(String(b.cliente)); });
+    }
     var OZ_ML = 29.5735;                 // mililitros por onza líquida
     // Equivalencias del líquido abierto; las botellas cerradas no entran aquí.
     // OJO: esta recorta en cero a propósito (es líquido medido en una botella,
@@ -2584,6 +2619,7 @@
         montoRecurrenteDocumento: montoRecurrenteDocumento,
         resumenDocumentosAdmin: resumenDocumentosAdmin,
         grupoDocumentoAdmin: grupoDocumentoAdmin,
+        serieIngresosAdmin: serieIngresosAdmin, clientesIngresosAdmin: clientesIngresosAdmin,
         unidadesCompraInventario: unidadesCompraInventario,
         estadoStockInventario: estadoStockInventario,
         rendimientosSubReceta: rendimientosSubReceta,
