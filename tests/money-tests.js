@@ -33971,6 +33971,56 @@ console.log('\n══ BH104 · Guías de la app web; la marca que se ve; cuentas
         eq(/<video src="' \+ e\(g\.url\) \+ '" controls playsinline/.test(leer('consultoria/guias.js')), true));
 })();
 
+/* ═══════ BH105 · RECIBOS Y PRESUPUESTOS EN GRUPOS CON VISTA PREVIA; LOS MODALES CABEN EN LA PANTALLA (27-nov) ═══════
+   Edwin: «dame una vista previa de los recibos y presupuestos en el panel admin,
+   separa presupuestos de recibos, y los recibos de suscripciones de los de
+   servicios que no contienen pago de suscripción»; «el modal de registro de la
+   existencia en la tablet se queda muy grande: que los modales flotantes se
+   ajusten a la pantalla». La UI de verdad: probar-planes-apps.cjs (grupos y
+   vista previa) y probar-inventario-navegador.cjs (tableta 960×560 y 960×430). */
+console.log('\n══ BH105 · Recibos en grupos con vista previa; los modales caben ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const g = (d) => C.grupoDocumentoAdmin(d);
+    test('presupuesto → aparte (aunque traiga suscripción): no es ingreso', () =>
+        eq(g({ tipo: 'presupuesto', suscripcion_monto: 1799, periodo_desde: '2026-11-01' }), 'presupuesto'));
+    test('recibo con suscripción y su primer mes → «suscripcion» (aunque sume servicios)', () =>
+        eq(g({ tipo: 'recibo', suscripcion_monto: 1799, total: 2699, periodo_desde: '2026-11-01' }), 'suscripcion'));
+    test('recibo con suscripción en 0 → «servicio» (no contiene pago de suscripción)', () =>
+        eq([g({ tipo: 'recibo', suscripcion_monto: 0 }), g({ tipo: 'recibo', suscripcion_monto: '0' })].join(','), 'servicio,servicio'));
+    test('sin importe de suscripción, o con suscripción y sin primer mes → «clasificar»', () =>
+        eq([g({ tipo: 'recibo', suscripcion_monto: null }), g({ tipo: 'recibo' }), g({ tipo: 'recibo', suscripcion_monto: 1799, periodo_desde: null }),
+            g({ tipo: 'recibo', suscripcion_monto: 1799, periodo_desde: '2026-13-01' })].join(','), 'clasificar,clasificar,clasificar,clasificar'));
+    test('…«por clasificar» cuenta LOS MISMOS recibos que el aviso del MRR', () => {
+        const docs = [{ id: 'a', tipo: 'recibo', estado: 'pagado', total: 1, suscripcion_monto: null }, { id: 'b', tipo: 'recibo', estado: 'pagado', total: 1, suscripcion_monto: 500, periodo_desde: null },
+                      { id: 'c', tipo: 'recibo', estado: 'pagado', total: 1, suscripcion_monto: 0 }, { id: 'd', tipo: 'recibo', estado: 'pagado', total: 1, suscripcion_monto: 500, periodo_desde: '2026-11-01' },
+                      { id: 'e', tipo: 'presupuesto', estado: 'pendiente', total: 1, suscripcion_monto: null }];
+        return eq(C.resumenDocumentosAdmin(docs, '2026-11').porClasificar, docs.filter(d => g(d) === 'clasificar').length);
+    });
+    const adm = leer('admin-documentos.js');
+    test('el panel agrupa con el núcleo (EtaaxCore.grupoDocumentoAdmin), con botones por grupo y una tabla por grupo', () =>
+        eq(/EtaaxCore\.grupoDocumentoAdmin\(d\)/.test(adm) && /id="admDocsGrupos" class="adoc-grupos"/.test(adm) && /class="adoc-grupo adoc-g-'\+g\.k\+'"/.test(adm) &&
+           !/<option value="recibo">Recibos<\/option><option value="presupuesto">/.test(adm), true));
+    test('la vista previa: el HTML archivado (con el cobro de hoy) en un iframe aislado (sandbox), sin abrir la impresión', () =>
+        eq(/function htmlDocumento\(d\)/.test(adm) && /<iframe class="adoc-vista-frame" sandbox/.test(adm) && /fr\.srcdoc=htmlDocumento\(d\)/.test(adm) &&
+           /if\(!etaaxAbrirReporte\(htmlDocumento\(d\)\)\)/.test(adm), true));
+    test('…el CSV dice el grupo de cada documento', () => eq(/\['Folio','Tipo','Grupo','Estado',/.test(adm), true));
+
+    /* Los modales caben en la pantalla. */
+    const inv = leer('recetas/inventarios.js'), invH = leer('recetas/inventarios.html'), st = leer('styles.css');
+    test('registro de existencia: la tarjeta mide como mucho lo visible (dvh) y se desplaza ADENTRO; encabezado y pie fijos', () =>
+        eq(/\.p12-modal-caja \.ent-form-card \{ max-height: calc\(100vh - 24px\); max-height: calc\(100dvh - 24px\); overflow-y: auto;/.test(invH) &&
+           /\.p12-modal-caja \.exist-cab \{ position: sticky; top: 0;/.test(invH) && /\.p12-modal-caja \.exist-pie \{ position: sticky; bottom: 0;/.test(invH) &&
+           (inv.match(/class="exist-cab"/g) || []).length === 2 && (inv.match(/<div class="exist-pie">/g) || []).length === 2, true));
+    test('…y en pantallas bajas (tableta horizontal) se compacta', () => eq(/@media \(max-height: 820px\) \{\s*\.p12-modal \{ padding: 8px; \}/.test(invH), true));
+    test('los modales compartidos (styles.css) caben en pantallas bajas, y en las altas no cambian', () => {
+        const i = st.indexOf('@media (max-height: 820px) {\n    .modal-overlay { padding: 10px; }');
+        return eq(i > -1 && /\.modal, \.modal-box, \.modal-content \{ max-height: calc\(100vh - 20px\); max-height: calc\(100dvh - 20px\); \}/.test(st.slice(i, i + 600)) &&
+                  !/\n\.modal \{ max-height: calc\(100dvh/.test(st), true);
+    });
+})();
+
 
 /* ═══════════ BH61 · «PAGADA», «PARCIAL» O «POR PAGAR» ═══════════
    La pregunta no es sí o no. La pantalla puede estar mirando NOVIEMBRE y la

@@ -635,6 +635,29 @@ const desborde = (page) => page.evaluate(() => document.documentElement.scrollWi
                 assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('p1Modal')).display), 'flex');
                 assert.ok(await page.evaluate(() => !!document.querySelector('#p1Modal .ent-form-card')));
             });
+            /* (27-nov) Edwin: «en la tablet el modal de existencia queda muy grande para la pantalla». */
+            await page.setViewportSize({ width: 960, height: 560 }); await page.waitForTimeout(300);
+            if (process.env.SHOTS) await page.screenshot({ path: require('path').join(process.env.SHOTS, 'inv-existencia-tableta.png') });
+            await caso('TABLETA (960×560): el modal CABE en la pantalla; su encabezado (nombre, ✕) y «Siguiente» se ven y el contenido se desplaza adentro', async () => {
+                const r = await page.evaluate(() => {
+                    const card = document.querySelector('#p1Modal .ent-form-card'), c = card.getBoundingClientRect();
+                    const cab = card.querySelector('.exist-cab').getBoundingClientRect(), sig = [...card.querySelectorAll('button')].find(b => /Siguiente/.test(b.textContent)).getBoundingClientRect();
+                    const x = [...card.querySelectorAll('button')].find(b => b.textContent.trim() === '✕').getBoundingClientRect();
+                    return [c.top >= 0 && c.bottom <= innerHeight + 1, cab.top >= c.top - 1 && x.top >= 0, sig.bottom <= innerHeight + 1 && sig.top >= 0, getComputedStyle(card).overflowY];
+                });
+                assert.deepEqual(r, [true, true, true, 'auto'], JSON.stringify(r));
+            });
+            /* Más bajita (teléfono acostado): ya no cabe todo y el contenido se desplaza ADENTRO. */
+            await page.setViewportSize({ width: 960, height: 430 }); await page.waitForTimeout(300);
+            await caso('…en una pantalla más baja el contenido se desplaza adentro y el encabezado y «Siguiente» siguen fijos', async () => {
+                const r = await page.evaluate(() => {
+                    const card = document.querySelector('#p1Modal .ent-form-card'), desborda = card.scrollHeight > card.clientHeight + 4; card.scrollTop = card.scrollHeight;
+                    const c = card.getBoundingClientRect(), cab = card.querySelector('.exist-cab').getBoundingClientRect(), pie = card.querySelector('.exist-pie').getBoundingClientRect();
+                    return [desborda, c.bottom <= innerHeight + 1, Math.abs(cab.top - c.top) < 2, Math.abs(pie.bottom - c.bottom) < 2];
+                });
+                assert.deepEqual(r, [true, true, true, true], JSON.stringify(r));
+            });
+            await page.setViewportSize({ width: 1280, height: 800 }); await page.waitForTimeout(300);
             await page.evaluate(() => [...document.querySelectorAll('#existCardWrap button')].find(b => /Siguiente/.test(b.textContent)).click());
             await page.waitForTimeout(400);
             await caso('«Registrar — Siguiente» lo pasa a la derecha y abre el siguiente pendiente', async () => {

@@ -261,7 +261,14 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
                   presupuesto_id: null, version: 1, created_at: mes + '-02', datos: cfg, html: '<html>viejo</html>', cambios: [{ fecha: '2026-11-25T00:00:00Z', accion: 'creado' }] },
                 { id: 'd2', folio: 'ARCH-1', tipo: 'recibo', estado: 'pagado', cliente_negocio_id: null, cliente: 'Recibo viejo', fecha: '2026-10-01', total: 900, moneda: 'MXN',
                   suscripcion_monto: null, meses: 1, periodo_desde: null, fecha_pago: '2026-10-02', metodo: '', referencia: '', origen: 'pdf_recuperado', version: 1,
-                  created_at: '2026-10-01', datos: { archivo: 'x.pdf' }, html: '', pdf_base64: 'JVBERi0=', cambios: [] }];
+                  created_at: '2026-10-01', datos: { archivo: 'x.pdf' }, html: '', pdf_base64: 'JVBERi0=', cambios: [] },
+                /* (27-nov) Uno de SERVICIOS (sin suscripción: importe 0) y un PRESUPUESTO. */
+                { id: 'd3', folio: 'REC-SERV-1', tipo: 'recibo', estado: 'pagado', cliente_negocio_id: 'A', cliente: 'TATA MEZCALERIA', fecha: '2026-10-05', total: 3000, moneda: 'MXN',
+                  suscripcion_monto: 0, meses: 1, periodo_desde: '2026-10-01', fecha_pago: '2026-10-05', metodo: 'Transferencia', referencia: '', origen: 'generado', version: 1,
+                  created_at: '2026-10-05', datos: { tipo: 'recibo' }, html: '<html><body><h1>Servicio de consultoría</h1></body></html>', cambios: [] },
+                { id: 'd4', folio: 'PRE-1', tipo: 'presupuesto', estado: 'pendiente', cliente_negocio_id: null, cliente: 'YA TE LA FORTY SIX', fecha: '2026-10-07', total: 1799, moneda: 'MXN',
+                  suscripcion_monto: 1799, meses: 1, periodo_desde: '2026-11-01', fecha_pago: null, metodo: '', referencia: '', origen: 'generado', version: 1,
+                  created_at: '2026-10-07', datos: { tipo: 'presupuesto' }, html: '<html><body><h1>Presupuesto</h1></body></html>', cambios: [] }];
             window.__nube.escribir(db);
             const fila = (id) => { const db = window.__nube.leer(); return [db, db.admin_documentos.find(x => x.id === id)]; };
             window.__rpcExtra = Object.assign(window.__rpcExtra || {}, {
@@ -277,8 +284,40 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         await pa.evaluate(() => switchTab('documentos')); await pa.waitForTimeout(400);
         await pa.evaluate(() => AdminDocs.cargar()); await pa.waitForTimeout(500);
         const filaDoc = (folio) => '#admDocsTabla tr:has-text("' + folio + '")';
-        await caso('cada recibo con «Editar», «Reimprimir» y «Eliminar»', async () =>
-            assert.deepEqual(await pa.locator(filaDoc('REC-20261125') + ' .adoc-actions button').allTextContents(), ['Editar', 'Reimprimir', 'Eliminar']));
+        await caso('cada recibo con «Vista previa», «Editar», «Reimprimir» y «Eliminar»', async () =>
+            assert.deepEqual(await pa.locator(filaDoc('REC-20261125') + ' .adoc-actions button').allTextContents(), ['Vista previa', 'Editar', 'Reimprimir', 'Eliminar']));
+        /* (27-nov) Grupos: presupuestos aparte; recibos de suscripción, de servicios y por clasificar. */
+        await foto(pa, 'p3b-grupos');
+        await caso('GRUPOS: botones con cuántos hay —Todos, Suscripción, Servicios, Por clasificar, Presupuestos—', async () =>
+            assert.deepEqual(await pa.evaluate(() => [...document.querySelectorAll('#admDocsGrupos .adoc-grupo-btn')].map(b => b.textContent.replace(/\s+/g, ' ').trim())),
+                ['Todos 4', 'Suscripción 1', 'Servicios 1', 'Por clasificar 1', 'Presupuestos 1']));
+        await caso('…en «Todos», una tabla por grupo con su total, cada documento en el suyo', async () =>
+            assert.deepEqual(await pa.evaluate(() => [...document.querySelectorAll('#admDocsTabla .adoc-grupo')].map(g => g.querySelector('h3').textContent + ': ' +
+                [...g.querySelectorAll('.adoc-folio')].map(b => b.textContent).join(',') + ' · ' + g.querySelector('.adoc-grupo-cab span').textContent.replace(/\s+/g, ' ').trim())),
+                ['Recibos de suscripción: REC-20261125-29BD7408 · 1 documento · $2,699.00', 'Recibos de servicios: REC-SERV-1 · 1 documento · $3,000.00',
+                 'Recibos por clasificar: ARCH-1 · 1 documento · $900.00', 'Presupuestos: PRE-1 · 1 documento · $1,799.00']));
+        await caso('…el recibo de suscripción dice cuánto es suscripción y cuánto servicios; el de servicios, que no trae suscripción', async () =>
+            assert.deepEqual(await pa.evaluate(() => [document.querySelector('.adoc-g-suscripcion td:nth-child(2) small').textContent, document.querySelector('.adoc-g-servicio td:nth-child(2) small').textContent]),
+                [await pa.evaluate(() => 'Suscripción $1,799.00 desde ' + document.querySelector('.adoc-g-suscripcion td:nth-child(3)').textContent.slice(0, 7) + ' · + servicios $900.00'), 'Servicios · sin suscripción']));
+        await pa.click('#admDocsGrupos .adoc-grupo-btn:has-text("Servicios")'); await pa.waitForTimeout(150);
+        await caso('…elegir «Servicios» deja solo su tabla', async () =>
+            assert.deepEqual(await pa.evaluate(() => [...document.querySelectorAll('#admDocsTabla .adoc-folio')].map(b => b.textContent)), ['REC-SERV-1']));
+        await pa.click('#admDocsGrupos .adoc-grupo-btn:has-text("Todos")'); await pa.waitForTimeout(150);
+        await pa.click(filaDoc('REC-SERV-1') + ' button:has-text("Vista previa")'); await pa.waitForSelector('#adocVista'); await pa.waitForTimeout(200);
+        await foto(pa, 'p3c-vista-previa');
+        await caso('VISTA PREVIA: el documento en una ventana del panel (iframe aislado), con su grupo, cliente y total, y sin abrir la impresión', async () => {
+            const r = await pa.evaluate(() => { const v = document.getElementById('adocVista'), f = v.querySelector('iframe');
+                return [v.querySelector('h2').textContent, v.querySelector('header small').textContent, f.hasAttribute('sandbox'), /Servicio de consultoría/.test(f.srcdoc), window.__impresos.length]; });
+            assert.deepEqual(r, ['REC-SERV-1', 'Recibos de servicios · TATA MEZCALERIA · $3,000.00 · pagado', true, true, 0]);
+        });
+        await pa.click('#adocVista [data-acc="imprimir"]'); await pa.waitForTimeout(150);
+        await caso('…«Reimprimir» desde la vista previa imprime ESE documento', async () =>
+            assert.equal(await pa.evaluate(() => window.__impresos.length === 1 && /Servicio de consultoría/.test(window.__impresos[0])), true));
+        await pa.click('#adocVista [data-cerrar]'); await pa.waitForTimeout(100);
+        await pa.click('.adoc-folio:has-text("ARCH-1")'); await pa.waitForSelector('#adocVista'); await pa.waitForTimeout(200);
+        await caso('…tocar el folio también la abre; un PDF recuperado se ve incrustado en computadora', async () =>
+            assert.equal(await pa.evaluate(() => /^blob:/.test((document.querySelector('#adocVista iframe') || {}).getAttribute('src') || '')), true));
+        await pa.evaluate(() => { const v = document.getElementById('adocVista'); if (v) v.remove(); window.__impresos = []; });
         await pa.click(filaDoc('REC-20261125') + ' button:has-text("Editar")'); await pa.waitForSelector('#docOv'); await pa.waitForTimeout(250);
         await foto(pa, 'p4-editar-recibo');
         await caso('«Editar» abre el MISMO generador, lleno con lo guardado, con su folio fijo y sin cambiar de tipo', async () => {
@@ -315,7 +354,7 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
         });
         await pa.evaluate(() => AdminDocs.filtro('estado', 'eliminado')); await pa.waitForTimeout(150);
         await caso('…en el filtro «Eliminados» aparece con su motivo y «Restaurar»', async () =>
-            assert.match((await pa.locator(filaDoc('REC-20261125')).innerText()).replace(/\s+/g, ' '), /Eliminado: Duplicado\s*Restaurar/));
+            assert.match((await pa.locator(filaDoc('REC-20261125')).innerText()).replace(/\s+/g, ' '), /Eliminado: Duplicado\s*Vista previa\s*Restaurar/));
         await pa.click(filaDoc('REC-20261125') + ' button:has-text("Restaurar")'); await pa.waitForTimeout(300);
         await pa.evaluate(() => AdminDocs.filtro('estado', '')); await pa.waitForTimeout(150);
         await caso('…y «Restaurar» lo regresa, con sus totales', async () => {

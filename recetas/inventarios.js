@@ -6412,7 +6412,7 @@ function renderCardExist() {
 
     cont.innerHTML = `
         <div class="ent-form-card">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+            <div class="exist-cab" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
                 <div>
                     <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
@@ -6475,7 +6475,8 @@ function renderCardExist() {
             <!-- Inputs según método -->
             ${buildInputsExist(fila, idx)}
 
-            <!-- Resultado -->
+            <!-- Resultado y «Siguiente»: fijos abajo en el modal (27-nov) -->
+            <div class="exist-pie">
             <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);
                 display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:12px;color:var(--text-dim)">Existencia actual</span>
@@ -6493,6 +6494,7 @@ function renderCardExist() {
                     font-weight:600;cursor:pointer;transition:all .15s">
                     ${exist>0?'✓ Registrado — Siguiente →':'⊙ Registrar en cero — Siguiente →'}
                 </button>
+            </div>
             </div>
         </div>`;
 }
@@ -6524,7 +6526,7 @@ function _cardExistPeso(fila, idx) {
     const difCol = Math.abs(dif) <= teo * 0.1 ? 'var(--green)' : 'var(--red)';
     return `
         <div class="ent-form-card">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+            <div class="exist-cab" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
                 <div>
                     <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center">
@@ -6570,6 +6572,7 @@ function _cardExistPeso(fila, idx) {
                 </div>
             </div>
 
+            <div class="exist-pie">
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:12px;color:var(--text-dim)">Diferencia (física − teórica)</span>
                 <span id="ef-${idx}" style="font-size:20px;font-weight:900;color:${difCol}">${dif>0?'+':''}${_fmtBase(dif)} ${u}</span>
@@ -6577,6 +6580,7 @@ function _cardExistPeso(fila, idx) {
 
             <div style="margin-top:14px;display:flex;gap:8px">
                 <button onclick="limpiarSeleccionExist()" style="flex:1;background:rgba(61,190,122,.15);border:1px solid var(--green);color:var(--green);border-radius:8px;padding:10px 0;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">✓ Registrado — Siguiente →</button>
+            </div>
             </div>
         </div>`;
 }

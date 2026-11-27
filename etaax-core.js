@@ -2434,6 +2434,21 @@
         r.emitido/=100;r.cobrado/=100;r.pendiente/=100;r.mrr=Math.round(recurrente)/100;
         return r;
     }
+    /* (27-nov, Edwin: «separa los presupuestos de los recibos, y los recibos de
+       suscripciones de los de servicios que no contienen pago de suscripción»).
+       El grupo de un documento del historial, con LA MISMA VARA que el MRR:
+         · presupuesto  → no es ingreso;
+         · suscripcion  → el recibo trae pago de suscripción (aunque sume servicios);
+         · servicio     → importe de suscripción en 0: solo servicios;
+         · clasificar   → sin importe de suscripción, o con suscripción y sin el
+                          primer mes cubierto (los mismos que cuenta `porClasificar`). */
+    function grupoDocumentoAdmin(d) {
+        if (!d) return '';
+        if (d.tipo === 'presupuesto') return 'presupuesto';
+        if (d.suscripcion_monto == null || d.suscripcion_monto === '') return 'clasificar';
+        if (n(d.suscripcion_monto) <= 0) return 'servicio';
+        return /^\d{4}-(0[1-9]|1[0-2])(?:-|$)/.test(String(d.periodo_desde || '')) ? 'suscripcion' : 'clasificar';
+    }
     var OZ_ML = 29.5735;                 // mililitros por onza líquida
     // Equivalencias del líquido abierto; las botellas cerradas no entran aquí.
     // OJO: esta recorta en cero a propósito (es líquido medido en una botella,
@@ -2568,6 +2583,7 @@
         equivalenciasBarra: equivalenciasBarra,
         montoRecurrenteDocumento: montoRecurrenteDocumento,
         resumenDocumentosAdmin: resumenDocumentosAdmin,
+        grupoDocumentoAdmin: grupoDocumentoAdmin,
         unidadesCompraInventario: unidadesCompraInventario,
         estadoStockInventario: estadoStockInventario,
         rendimientosSubReceta: rendimientosSubReceta,

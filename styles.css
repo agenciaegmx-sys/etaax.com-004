@@ -1376,6 +1376,19 @@ textarea:focus {
     justify-content: flex-end;
     gap: 10px;
 }
+/* (27-nov, Edwin: «aplica una condición en los modales flotantes de ajustarse a
+   las pantallas»). En pantallas BAJAS —tableta horizontal, teléfono— el modal
+   mide como mucho lo visible (dvh: descuenta la barra del navegador), el
+   cuerpo se desplaza adentro y los márgenes se compactan. En pantallas altas
+   no cambia nada. */
+@media (max-height: 820px) {
+    .modal-overlay { padding: 10px; }
+    .modal, .modal-box, .modal-content { max-height: calc(100vh - 20px); max-height: calc(100dvh - 20px); }
+    .modal-box, .modal-content { overflow-y: auto; overscroll-behavior: contain; }
+    .modal-header { padding: 12px 18px 10px; }
+    .modal-body { padding: 14px 18px; max-height: calc(100dvh - 150px); }
+    .modal-footer { padding: 10px 18px; }
+}
 
 /* ── IMPORT STEPS ── */
 .import-step {

@@ -22,7 +22,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles.css?v=89654af5">
+    <link rel="stylesheet" href="../styles.css?v=5ad7a2f2">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="/etaax-store.js?v=3bbcc75c"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
 <script src="../supabase-config.js"></script>
@@ -353,8 +353,8 @@ document.addEventListener('DOMContentLoaded', function(){
     </main>
 </div>
 
-<script src="/etaax-core.js?v=c531f6d0"></script>
-<script src="/recetas/inventarios.js?v=45367773"></script>
+<script src="/etaax-core.js?v=a2ab0f50"></script>
+<script src="/recetas/inventarios.js?v=1248ac68"></script>
 <script>
 function toggleNav() {
     const nav = document.getElementById('nav');
@@ -673,6 +673,30 @@ body .step3-lista .step3-menu-item.has-cnt { background: var(--surface) !importa
     padding: 6vh 16px 16px; overflow-y: auto; }
 .p12-modal-caja { width: min(640px, 100%); }
 .p12-modal-caja .ent-form-card { box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+/* (27-nov, Edwin: «en la tablet el modal de existencia queda muy grande para la
+   pantalla») EL REGISTRO CABE EN LO VISIBLE: la tarjeta mide como mucho la
+   altura de la pantalla, su contenido se desplaza ADENTRO, y el encabezado
+   (nombre, Ver, ✕) y el pie (existencia actual + «Siguiente») se quedan fijos.
+   En pantallas bajas (tableta horizontal, teléfono) todo se compacta. */
+.p12-modal { align-items: center; padding: 12px; }
+.p12-modal-caja .ent-form-card { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 0 20px; }
+/* La tarjeta no lleva relleno arriba ni abajo: lo traen su encabezado y su pie, que así se fijan en la orilla (Chrome fija lo pegajoso DENTRO del relleno del contenedor). */
+.p12-modal-caja .exist-cab { position: sticky; top: 0; z-index: 3; background: var(--surface); margin: 0 -20px 14px !important; padding: 16px 20px 12px; border-bottom: 1px solid var(--border); }
+.p12-modal-caja .exist-pie { position: sticky; bottom: 0; z-index: 3; background: var(--surface); margin: 14px -20px 0; padding: 12px 20px 16px; border-top: 1px solid var(--border); }
+.p12-modal-caja .exist-pie > div:first-child { margin-top: 0 !important; padding-top: 0 !important; border-top: 0 !important; }
+.p12-modal-caja .exist-pie > div:last-child { margin-top: 10px !important; }
+@media (max-height: 820px) {
+    .p12-modal { padding: 8px; }
+    .p12-modal-caja .ent-form-card { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); padding: 0 16px; }
+    .p12-modal-caja .exist-cab { margin: 0 -16px 10px !important; padding: 10px 16px 8px; }
+    .p12-modal-caja .exist-pie { margin: 10px -16px 0; padding: 8px 16px 10px; }
+    #existCardWrap .ent-tipo-btn { padding: 6px 12px; font-size: 12.5px; }
+    #existCardWrap .inv-peso-input { height: 44px; font-size: 17px; }
+    #existCardWrap .inv-peso-add { min-height: 44px; }
+    #existCardWrap .calc-celda .inv-num-input { min-height: 0; height: 46px; font-size: 18px; }
+    #existCardWrap .calc-op { min-height: 0; font-size: 17px; }
+    #existCardWrap .ent-form-card > [style*="margin-bottom:16px"], #existCardWrap .ent-form-card > [style*="margin-bottom:14px"] { margin-bottom: 10px !important; }
+}
 /* Lo registrado del Paso 2, agrupado por insumo. */
 .eg { border: 1px solid var(--border); border-radius: 11px; background: var(--surface); margin-bottom: 8px; overflow: hidden; }
 .eg > summary { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; list-style: none; }
