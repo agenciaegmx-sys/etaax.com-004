@@ -59,3 +59,12 @@ body.etx-module-cards .cb-modal-title [data-etx-ico],body.etx-module-cards .moda
    los módulos: el botón principal se pinta aquí, naranja con letra blanca. */
 body.etx-module-cards :is(.btn-primary,#btnAddPrev) {background:var(--etx-ui-terra-solido,var(--etx-ui-terra));border:1px solid var(--etx-ui-terra-solido,var(--etx-ui-terra));color:var(--etx-ui-terra-tinta,#fff);font-weight:600;border-radius:9px;}
 html.embed body.etx-module-cards .main-content {padding-top:8px;}
+
+/* (27-nov) Dentro de la caja fuerte (?embed=1) el título ya lo dice la barra de
+   la ventana («Caja fuerte · Cuentas bancarias»): la cabecera de la página
+   pierde su rótulo «Salud financiera» y su título, y se queda con los botones,
+   alineada con el contenido y sin pegarse arriba. */
+html.embed body.etx-module-cards .main-content > .header {position:static;top:auto;display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:10px;
+  max-width:1100px;width:100%;box-sizing:border-box;margin:0 auto 14px;padding:16px 20px 0;min-height:0;background:transparent;border:0;box-shadow:none;}
+html.embed body.etx-module-cards .main-content > .header .brand {display:none;}
+html.embed body.etx-module-cards .main-content > .header .hdr-acts {flex-wrap:wrap;justify-content:flex-end;gap:10px;}

@@ -40,7 +40,14 @@ function nube() {
         suscripciones: [{ negocio_id: 'n1', estado: 'activa', plan: null }],
         /* (v92) La app móvil, activa solo en Matriz. */
         movil_acceso: [{ negocio_id: 'n1', datos: { sucursales: { suc_principal: true, suc_dos: false } } }],
-        negocio_insumos: [], cortes: [], req_pedido: [], req_historial: [], permisos: []
+        negocio_insumos: [], cortes: [], req_pedido: [], req_historial: [], permisos: [],
+        /* (27-nov) Guías de uso de la app web: tres de Fin·ax (una oculta no cuenta) y ninguna de Equip·ax. */
+        guias: [
+            { id: 'g1', titulo: 'Cómo leer el resumen', descripcion: 'Ventas, metas y resultado', tipo: 'video', url: 'https://www.youtube.com/watch?v=abcdefghijk', modulo: 'financiero', orden: 1, activa: true },
+            { id: 'g2', titulo: 'Metas del mes', tipo: 'video', url: 'https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/video/web-a.mp4', modulo: 'financiero', orden: 2, activa: true },
+            { id: 'g3', titulo: 'Manual de KPIs', tipo: 'pdf', url: 'https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/pdf/web-b.pdf', modulo: 'financiero', orden: 3, activa: true },
+            { id: 'g4', titulo: 'Borrador', tipo: 'pdf', url: 'x.pdf', modulo: 'financiero', orden: 4, activa: false },
+            { id: 'g5', titulo: 'De la app', tipo: 'pdf', url: 'y.pdf', modulo: 'movil_costax', orden: 1, activa: true }]
     };
 }
 function semilla(n) {
@@ -62,6 +69,8 @@ function semilla(n) {
         if (!sessionStorage.getItem('__ses')) sessionStorage.setItem('__ses', JSON.stringify({ id: 'u1', email: 'duena@etaax.prueba' }));
     })();`;
 }
+/* SHOTS=<carpeta>: capturas para revisarlas a ojo (27-nov). */
+const foto = (page, nombre) => process.env.SHOTS ? page.waitForTimeout(300).then(() => page.screenshot({ path: path.join(process.env.SHOTS, nombre + '.png') })) : null;
 async function abrir(browser, ancho) {
     const ctx = await browser.newContext({ viewport: { width: ancho || 1280, height: 900 } });
     await ctx.route('**/*', async (route) => {
@@ -378,6 +387,47 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             assert.equal(r.grupos, 'Personal,Operativo,Operativo,Desarrollo,Estructura de staff,Estructura de staff,Estructura de staff');
             assert.ok(r.alto <= 160, 'tarjeta de ' + r.alto + ' px');
         });
+        await caso('…Equip·ax no tiene guías: su portada NO enseña el botón «Guías»', async () =>
+            assert.equal(await p.evaluate(() => !!document.querySelector('.etx-guias-btn')), false));
+        /* (27-nov) Guías de uso: un botón en la fila de la isla del nombre y cada guía en su ventana flotante. */
+        await ir(p, '/financiero/index.html');
+        await p.waitForSelector('.etx-guias-btn', { timeout: 8000 }).catch(() => {});
+        await caso('GUÍAS: en la portada de Fin·ax, «Guías 3» en la MISMA fila de la isla, pegado a la orilla derecha de las tarjetas', async () => {
+            const r = await p.evaluate(() => {
+                const b = document.querySelector('.etx-guias-btn'), i = document.querySelector('.etx-isla'); if (!b) return null;
+                const rb = b.getBoundingClientRect(), ri = i.getBoundingClientRect();
+                const cards = [...document.querySelectorAll('.etx-portada-modulos .cf-card')].filter(c => c.offsetParent);
+                const der = Math.max.apply(null, cards.map(c => c.getBoundingClientRect().right));
+                return [b.textContent, Math.abs((rb.top + rb.bottom) / 2 - (ri.top + ri.bottom) / 2) < 2, Math.abs(rb.right - der) < 3, rb.left > ri.right];
+            });
+            assert.deepEqual(r, ['Guías3', true, true, true], JSON.stringify(r));
+        });
+        await p.click('.etx-guias-btn'); await p.waitForTimeout(200);
+        await caso('…despliega sus guías (solo las activas y solo de este módulo), con su tipo', async () =>
+            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.etx-guias-pop .etx-guias-it')].map(x => x.querySelector('b').textContent + ' | ' + x.querySelector('em').textContent)),
+                ['Cómo leer el resumen | Video · YouTube', 'Metas del mes | Video', 'Manual de KPIs | PDF']));
+        await p.click('.etx-guias-it[data-i="0"]'); await p.waitForTimeout(250);
+        await caso('…la guía abre en una VENTANA FLOTANTE (sin fondo oscuro): YouTube sin cookies, y la lista se cierra', async () =>
+            assert.deepEqual(await p.evaluate(() => { const w = document.querySelector('.etx-guia-flot'); return [!!w, w && w.querySelector('iframe').getAttribute('src'), !!document.querySelector('.etx-guias-pop'),
+                getComputedStyle(w).position, !document.querySelector('.modal-overlay.open, .cj-overlay.open')]; }),
+                [true, 'https://www.youtube-nocookie.com/embed/abcdefghijk?rel=0', false, 'fixed', true]));
+        await p.click('.etx-guias-btn'); await p.waitForTimeout(150); await p.click('.etx-guias-it[data-i="1"]'); await p.waitForTimeout(250);
+        await caso('…otra guía abre OTRA ventana, corrida (el video del Storage se ve aquí mismo)', async () =>
+            assert.deepEqual(await p.evaluate(() => { const ws = [...document.querySelectorAll('.etx-guia-flot')]; return [ws.length, !!ws[1].querySelector('video[controls]'),
+                ws[0].getBoundingClientRect().right !== ws[1].getBoundingClientRect().right]; }), [2, true, true]));
+        await caso('…se arrastra por su barra y no se sale de la pantalla', async () => {
+            const cab = await p.$('.etx-guia-flot:last-of-type .etx-guia-cab-tx'); const bb = await cab.boundingBox();
+            await p.mouse.move(bb.x + 20, bb.y + 8); await p.mouse.down(); await p.mouse.move(40, 120, { steps: 6 }); await p.mouse.move(-400, 120, { steps: 4 }); await p.mouse.up();
+            const r = await p.evaluate(() => { const w = [...document.querySelectorAll('.etx-guia-flot')].pop().getBoundingClientRect(); return [Math.round(w.left), w.top < 200]; });
+            assert.deepEqual(r, [0, true]);
+        });
+        await caso('…se minimiza (queda su barra) y se cierra', async () => {
+            await p.click('.etx-guia-flot:last-of-type [data-acc="min"]');
+            const min = await p.evaluate(() => { const w = [...document.querySelectorAll('.etx-guia-flot')].pop(); return [w.classList.contains('min'), getComputedStyle(w.querySelector('.etx-guia-cuerpo')).display]; });
+            await p.click('.etx-guia-flot:last-of-type [data-acc="cerrar"]'); await p.waitForTimeout(100);
+            assert.deepEqual([min, await p.evaluate(() => document.querySelectorAll('.etx-guia-flot').length)], [[true, 'none'], 1]);
+        });
+        await foto(p, 'g1-guias-finax');
         /* (24-nov) Centrado de verdad y la foto del negocio solo en el botón de la cuenta. */
         await p.evaluate(() => localStorage.setItem('etaax_n1_logo', 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="4" height="4" fill="#c0442a"/></svg>')));
         await p.goto(ORIGEN + '/hub.html?negocios=1'); await p.waitForFunction(() => document.querySelector('#brandInfoBar .hub-isla-ident'), null, { timeout: 20000 }); await p.waitForTimeout(600);

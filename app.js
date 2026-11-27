@@ -2133,7 +2133,8 @@ function verFichaInsumo(insumoId) {
     } else {
         if (ins.familia)      html += _fichaFila('Familia',              ins.familia);
         if (ins.categoria)    html += _fichaFila('Categoría',            ins.categoria);
-        if (ins.marca)        html += _fichaFila('Marca',                ins.marca);
+        var _mFicha = (typeof insumoPartes === 'function') ? insumoPartes(ins).marca : ins.marca;   // la del editor (27-nov)
+        if (_mFicha)          html += _fichaFila('Marca',                _mFicha);
         if (ins.variedad)     html += _fichaFila('Variedad',             ins.variedad);
         if (ins.subcategoria) html += _fichaFila('Subcategoría',         ins.subcategoria);
         if (ins.maduracion)   html += _fichaFila('Añejamiento / Estado', ins.maduracion);

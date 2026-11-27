@@ -216,6 +216,24 @@ const filas = (p, raiz) => p.evaluate((r) => [...document.querySelectorAll((r ||
                 return [!!(d.getElementById('etaax-header') && d.getElementById('etaax-header').offsetParent), getComputedStyle(b).color]; });
             assert.deepEqual(r, [false, 'rgb(255, 255, 255)']);
         });
+        /* (27-nov) Edwin: «al crear o administrar se abre el modal viejo conectado al Fin·ax
+           viejo». Las páginas no cargaban embed.js: adentro salía el encabezado viejo, la
+           barra «Salud financiera», «Ir a Módulos» y «Cerrar sesión». */
+        const cromoViejo = () => p.evaluate(() => { const d = document.getElementById('cjCfgFrame').contentWindow.document;
+            const vis = (s) => [...d.querySelectorAll(s)].some(e => e.offsetParent !== null && e.getBoundingClientRect().height > 0);
+            return { arriba: vis('.top-bar'), lateral: vis('nav.nav, .fin-nav, .etx-fin-nav, aside'), salir: [...d.querySelectorAll('a,button')].some(e => e.offsetParent && /Ir a Módulos|Cerrar sesión/.test(e.textContent)),
+                     ventana: document.querySelector('#cjCfgOv .op-title-copy') && document.querySelector('#cjCfgOv .op-title-copy').textContent }; });
+        await caso('…sin el Fin·ax viejo adentro: ni su encabezado, ni la barra lateral, ni «Ir a Módulos» / «Cerrar sesión»; la ventana dice «Caja fuerte · Cuentas bancarias»', async () =>
+            assert.deepEqual(await cromoViejo(), { arriba: false, lateral: false, salir: false, ventana: 'Caja fuerte · Cuentas bancarias' }));
+        await p.evaluate(() => { const d = document.getElementById('cjCfgFrame').contentWindow.document; const b = d.querySelector('.cb-cancel'); if (b) b.click(); });
+        await p.waitForTimeout(300);
+        await foto(p, 'k9-gestionar-cuentas');
+        await p.evaluate(() => abrirCjCfg('previsiones'));
+        await p.waitForFunction(() => { const f = document.getElementById('cjCfgFrame'); try { return /previsiones/.test(f.contentWindow.location.href) && f.contentWindow.document.readyState === 'complete' && f.contentWindow.document.querySelector('.main-content'); } catch (e) { return false; } }, null, { timeout: 20000 });
+        await p.waitForTimeout(700);
+        await foto(p, 'k10-gestionar-previsiones');
+        await caso('previsiones igual: sin el Fin·ax viejo y la ventana dice «Caja fuerte · Previsiones»', async () =>
+            assert.deepEqual(await cromoViejo(), { arriba: false, lateral: false, salir: false, ventana: 'Caja fuerte · Previsiones' }));
         await p.evaluate(() => cerrarCjCfg()); await p.waitForTimeout(300);
         await caso('cerrar la ventana vuelve a la caja y relee los saldos', async () =>
             assert.deepEqual(await p.evaluate(() => [document.getElementById('cjCfgOv').classList.contains('open'), document.getElementById('cajOverlay').classList.contains('open')]), [false, true]));

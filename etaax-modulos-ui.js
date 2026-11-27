@@ -666,8 +666,136 @@
             if (ro) ro.observe(cta);
         });
     }
+    /* ══ GUÍAS DE USO DEL MÓDULO (Edwin, 27-nov) ══════════════════════════════
+       «En la misma fila del botón del nombre del módulo vamos a crear un acceso
+       que abra ventanas flotantes de las guías de uso de ese módulo». Las guías
+       las sube ETAAX en el panel admin («Guías de la app web»): filas de `guias`
+       (v45) con `modulo` = el id de este módulo. Las lee cualquiera con sesión
+       (RLS de la v45). Sin guías el botón no aparece: un acceso que abre una
+       lista vacía se lee como algo a medias.
+       Cada guía abre su VENTANA FLOTANTE (sin fondo oscuro, se arrastra y se
+       minimiza) para seguir el tutorial mientras se trabaja en el módulo. */
+    var _guias = { lista: [], mod: null, pop: null, n: 0 };
+    function _ytId(u) { var m = String(u || '').match(/(?:youtu\.be\/|watch\?v=|\/embed\/|\/shorts\/|\/live\/)([A-Za-z0-9_-]{11})/); return m ? m[1] : ''; }
+    function _guiaTipo(g) { return g.tipo === 'pdf' ? 'PDF' : (_ytId(g.url) ? 'Video · YouTube' : 'Video'); }
+    function guiasDelModulo() {
+        var wrap = document.querySelector('.etx-isla-wrap');
+        if (!wrap || wrap.querySelector('.etx-guias-btn')) return;
+        var mod = moduloActual();
+        if (!mod || typeof window._supabase === 'undefined' || !window._supabase || !window._supabase.from) return;
+        window._supabase.from('guias').select('id,titulo,descripcion,tipo,url,modulo,orden,activa,created_at')
+            .eq('modulo', mod.id).eq('activa', true).order('orden').order('created_at')
+            .then(function (r) {
+                var l = (r && !r.error && r.data) ? r.data : [];
+                if (!l.length || wrap.querySelector('.etx-guias-btn')) return;
+                _guias.lista = l; _guias.mod = mod;
+                var b = document.createElement('button');
+                b.type = 'button'; b.className = 'etx-guias-btn'; b.setAttribute('aria-haspopup', 'true'); b.setAttribute('aria-expanded', 'false');
+                b.title = 'Guías de uso de ' + mod.nombre;
+                b.innerHTML = '<span class="etx-guias-ic" aria-hidden="true">' + ic('rec-tutorial', 17) + '</span><span class="etx-guias-tx">Guías</span><b>' + l.length + '</b>';
+                b.addEventListener('click', function (ev) { ev.stopPropagation(); if (_guias.pop) cerrarListaGuias(); else abrirListaGuias(b); });
+                wrap.appendChild(b);
+                wrap.classList.add('etx-isla-con-guias');
+                /* Pegado a la orilla derecha de LAS TARJETAS, no de la franja: en
+                   varias portadas las tarjetas son más angostas que la página. */
+                var alinear = function () {
+                    var cards = [].filter.call(document.querySelectorAll('.cf-card, .dx-card, .etx-tool-card'), function (c) { return c.offsetParent; });
+                    if (!cards.length) return;
+                    var der = Math.max.apply(null, cards.map(function (c) { return c.getBoundingClientRect().right; }));
+                    b.style.right = Math.max(0, Math.round(wrap.getBoundingClientRect().right - der)) + 'px';
+                };
+                alinear(); window.addEventListener('resize', alinear);
+                if (document.fonts && document.fonts.ready) document.fonts.ready.then(alinear);
+            }, function () {});
+    }
+    function abrirListaGuias(b) {
+        cerrarListaGuias();
+        var pop = document.createElement('div');
+        pop.className = 'etx-guias-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Guías de uso de ' + _guias.mod.nombre);
+        pop.innerHTML = '<div class="etx-guias-pop-cab"><b>Guías de uso</b><span>' + esc(_guias.mod.nombre) + ' · ' + _guias.lista.length + (_guias.lista.length === 1 ? ' guía' : ' guías') + '</span></div>' +
+            '<div class="etx-guias-pop-lista">' + _guias.lista.map(function (g, i) {
+                return '<button type="button" class="etx-guias-it" data-i="' + i + '">' +
+                    '<span class="etx-guias-it-ic" aria-hidden="true">' + ic(g.tipo === 'pdf' ? 'ins-ficha' : 'rec-tutorial', 18) + '</span>' +
+                    '<span class="etx-guias-it-tx"><b>' + esc(g.titulo) + '</b>' + (g.descripcion ? '<small>' + esc(g.descripcion) + '</small>' : '') +
+                    '<em>' + esc(_guiaTipo(g)) + '</em></span></button>';
+            }).join('') + '</div>';
+        pop.addEventListener('click', function (ev) {
+            var it = ev.target.closest('.etx-guias-it'); if (!it) return;
+            var g = _guias.lista[+it.getAttribute('data-i')]; cerrarListaGuias(); if (g) abrirGuiaFlotante(g);
+        });
+        document.body.appendChild(pop);
+        var r = b.getBoundingClientRect(), w = Math.min(380, window.innerWidth - 24);
+        pop.style.width = w + 'px';
+        pop.style.top = Math.round(r.bottom + 8) + 'px';
+        pop.style.left = Math.round(Math.max(12, Math.min(r.right - w, window.innerWidth - w - 12))) + 'px';
+        _guias.pop = pop; b.setAttribute('aria-expanded', 'true');
+        setTimeout(function () { document.addEventListener('click', _fueraGuias); document.addEventListener('keydown', _escGuias); window.addEventListener('scroll', cerrarListaGuias, { passive: true, once: true }); }, 0);
+    }
+    function _fueraGuias(ev) { if (_guias.pop && !_guias.pop.contains(ev.target)) cerrarListaGuias(); }
+    function _escGuias(ev) { if (ev.key === 'Escape') cerrarListaGuias(); }
+    function cerrarListaGuias() {
+        if (_guias.pop) { _guias.pop.remove(); _guias.pop = null; }
+        var b = document.querySelector('.etx-guias-btn'); if (b) b.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('click', _fueraGuias); document.removeEventListener('keydown', _escGuias);
+    }
+    /* El visor: video (archivo) aquí mismo, YouTube con el reproductor sin
+       cookies y el PDF incrustado en computadora (en tableta y teléfono el
+       navegador no pinta un PDF dentro de una página: se abre en otra pestaña). */
+    function abrirGuiaFlotante(g) {
+        var ya = document.querySelector('.etx-guia-flot[data-id="' + String(g.id).replace(/"/g, '') + '"]');
+        if (ya) { ya.classList.remove('min'); ya.style.zIndex = String(10050 + (++_guias.n)); return ya; }
+        var yt = _ytId(g.url), pdfAqui = g.tipo === 'pdf' && window.matchMedia && window.matchMedia('(pointer:fine)').matches && window.innerWidth > 900;
+        var cuerpo;
+        if (g.tipo === 'pdf') cuerpo = pdfAqui
+            ? '<iframe class="etx-guia-pdf" src="' + esc(g.url) + '" title="' + esc(g.titulo) + '"></iframe>'
+            : '<div class="etx-guia-abrir"><span aria-hidden="true">' + ic('ins-ficha', 34) + '</span><p>' + esc(g.descripcion || 'Guía en PDF') + '</p><a class="etx-guia-btn" href="' + esc(g.url) + '" target="_blank" rel="noopener">Abrir el PDF</a></div>';
+        else if (yt) cuerpo = '<iframe class="etx-guia-video" src="https://www.youtube-nocookie.com/embed/' + yt + '?rel=0" title="' + esc(g.titulo) + '" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe>';
+        else cuerpo = '<video class="etx-guia-video" src="' + esc(g.url) + '" controls playsinline preload="metadata"></video>';
+        var w = document.createElement('div'), k = _guias.n++;
+        w.className = 'etx-guia-flot' + (g.tipo === 'pdf' && pdfAqui ? ' es-pdf' : '');
+        w.setAttribute('role', 'dialog'); w.setAttribute('aria-label', g.titulo); w.dataset.id = g.id;
+        w.style.zIndex = String(10050 + k);
+        w.innerHTML = '<div class="etx-guia-cab" title="Arrastra para moverla">' +
+                '<span class="etx-guia-cab-ic" aria-hidden="true">' + ic(g.tipo === 'pdf' ? 'ins-ficha' : 'rec-tutorial', 16) + '</span>' +
+                '<span class="etx-guia-cab-tx"><b>' + esc(g.titulo) + '</b><small>' + esc((_guias.mod ? _guias.mod.nombre + ' · ' : '') + _guiaTipo(g)) + '</small></span>' +
+                '<button type="button" class="etx-guia-acc" data-acc="min" aria-label="Minimizar">' + ic('cjf-minimizar', 15) + '</button>' +
+                '<button type="button" class="etx-guia-acc" data-acc="cerrar" aria-label="Cerrar">' + ic('cjf-cerrar', 15) + '</button>' +
+            '</div><div class="etx-guia-cuerpo">' + cuerpo + '</div>';
+        document.body.appendChild(w);
+        /* Una encima de otra, corridas: dos guías abiertas no se tapan del todo. */
+        var off = (k % 4) * 26;
+        w.style.right = (16 + off) + 'px'; w.style.bottom = (16 + off) + 'px';
+        w.addEventListener('pointerdown', function () { w.style.zIndex = String(10050 + (++_guias.n)); });
+        w.querySelector('[data-acc="cerrar"]').addEventListener('click', function () { w.remove(); });
+        w.querySelector('[data-acc="min"]').addEventListener('click', function () { w.classList.toggle('min'); });
+        _arrastrable(w, w.querySelector('.etx-guia-cab'));
+        return w;
+    }
+    function _arrastrable(w, asa) {
+        var x0, y0, l0, t0, mov = false;
+        asa.addEventListener('pointerdown', function (ev) {
+            if (ev.target.closest('button')) return;
+            var r = w.getBoundingClientRect(); x0 = ev.clientX; y0 = ev.clientY; l0 = r.left; t0 = r.top; mov = true;
+            w.style.left = l0 + 'px'; w.style.top = t0 + 'px'; w.style.right = 'auto'; w.style.bottom = 'auto';
+            try { asa.setPointerCapture(ev.pointerId); } catch (e) {}
+        });
+        asa.addEventListener('pointermove', function (ev) {
+            if (!mov) return;
+            var r = w.getBoundingClientRect();
+            w.style.left = Math.max(0, Math.min(window.innerWidth - r.width, l0 + ev.clientX - x0)) + 'px';
+            w.style.top = Math.max(0, Math.min(window.innerHeight - 48, t0 + ev.clientY - y0)) + 'px';
+        });
+        var fin = function () { mov = false; };
+        asa.addEventListener('pointerup', fin); asa.addEventListener('pointercancel', fin);
+    }
+    window.etaaxGuias = { abrir: abrirGuiaFlotante, recargar: guiasDelModulo, lista: function () { return _guias.lista.slice(); } };
     function iniciar() {
         try { vigilarIsla(); } catch (e) {}
+        if (!embebido) {
+            /* El cliente de Supabase puede llegar después que esta hoja. */
+            if (typeof window._supabase !== 'undefined') { try { guiasDelModulo(); } catch (e) {} }
+            else window.addEventListener('load', function () { try { guiasDelModulo(); } catch (e) {} });
+        }
         try { portadaCompacta(); } catch (e) {}
         pintarTarjetas();
         try { medirCtas(); } catch (e) {}

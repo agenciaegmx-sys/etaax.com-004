@@ -361,6 +361,26 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
             await pa.click('#tab-guias-movil .agm-it:has-text("Tu turno en la app") button:has-text("Eliminar")'); await pa.waitForTimeout(400);
             assert.equal(await pa.evaluate(() => !!window.__nube.leer().guias.find(x => x.titulo === 'Tu turno en la app')), false);
         });
+
+        /* (27-nov) Guías de la app web: las mismas filas de `guias`, con el id del módulo. */
+        console.log('\n══ Panel admin · guías de la app web ══');
+        await pa.evaluate(() => admInicio()); await pa.waitForTimeout(200);
+        await caso('el panel admin tiene la tarjeta «Guías de la app web»', async () =>
+            assert.equal(await pa.evaluate(() => !!document.querySelector('.adm-card[data-card="guias-web"]')), true));
+        await pa.click('.adm-card[data-card="guias-web"]'); await pa.waitForTimeout(500);
+        await caso('…abre con los cinco módulos, cada uno con SUS guías (las de la app móvil no salen) y el otro panel se vacía', async () => {
+            const r = await pa.evaluate(() => [[...document.querySelectorAll('#tab-guias-web .agm-mod')].map(m => m.querySelector('.agm-mod-nom').textContent + ': ' +
+                [...m.querySelectorAll('.agm-it b')].map(b => b.textContent).join(',')), document.getElementById('tab-guias-movil').innerHTML === '']);
+            assert.deepEqual(r, [['Cost·ax: Guía de Learn·ax', 'Admin·ax: ', 'Fin·ax: ', 'Equip·ax: ', 'Learn·ax: '], true]);
+        });
+        await pa.selectOption('#agmModulo', 'financiero'); await pa.fill('#agmTitulo', 'Cómo leer el resumen');
+        await pa.click('.agm-tipo[data-tipo="link"]'); await pa.fill('#agmUrl', 'https://www.youtube.com/watch?v=abcDEF12345');
+        await pa.click('#agmGuardar'); await pa.waitForTimeout(500);
+        await caso('…agregar una guía a Fin·ax la guarda con modulo «financiero» y categoría «Fin·ax» (así la agrupa Learn·ax)', async () => {
+            const g = await pa.evaluate(() => window.__nube.leer().guias.find(x => x.titulo === 'Cómo leer el resumen'));
+            assert.deepEqual([g && g.modulo, g && g.tipo, g && g.categoria, g && g.activa], ['financiero', 'video', 'Fin·ax', true]);
+            assert.match(await pa.evaluate(() => document.getElementById('agmMsg').textContent), /ya aparece en el sistema/);
+        });
     } finally {
         await browser.close();
     }

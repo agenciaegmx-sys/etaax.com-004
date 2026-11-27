@@ -33883,6 +33883,68 @@ console.log('\n══ BH103 · Los conteos de la app móvil llegan al inventario
         eq(/var CACHE = 'etaax-movil-v(\d+)'/.exec(leer('app-movil/sw.js'))[1] >= 18, true));
 })();
 
+/* ═══════ BH104 · GUÍAS DE LA APP WEB; LA MARCA QUE SE VE; CUENTAS Y PREVISIONES EN LA CAJA (27-nov) ═══════
+   Edwin: «en el panel admin también debemos tener el apartado de subir guías
+   de uso para la app web… en la misma fila del nombre del módulo un acceso que
+   abra ventanas flotantes de las guías de ese módulo, y también en Learn·ax»;
+   «se queda pegada la info de variedad o marca vieja que ya no está en el
+   insumo (La Brü Maíz Azul dice Stout)»; «al crear o administrar una cuenta
+   bancaria o una previsión se abre el modal viejo del Fin·ax viejo». La UI de
+   verdad: probar-isla-negocio.cjs, probar-planes-apps.cjs, probar-caja-fuerte.cjs. */
+console.log('\n══ BH104 · Guías de la app web; la marca que se ve; cuentas y previsiones en la caja ══');
+(function () {
+    const leer = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    /* La etiqueta compartida, ejecutada de verdad. */
+    const ctx = vm.createContext({ window: {} }); ctx.window = ctx;
+    vm.runInContext(leer('insumo-label.js'), ctx);
+    const P = { contNeto: '355', umContenido: 'ML' };
+    test('cerveza: la marca es la de «Marca del producto» (maduracion), no la `marca` escondida y vieja', () =>
+        eq(ctx.insumoMeta({ nombre: 'La Brü', variedad: 'Maíz Azúl', maduracion: 'Cervecería X', marca: 'La Bru Stout', tipoInsumo: 'cerveza', presentaciones: [P] }), '355 ml · Cervecería X'));
+    test('…la de la Maíz Azul (marca = nombre) ya no dice «La Bru Stout»: solo su contenido', () =>
+        eq(ctx.insumoMeta({ nombre: 'La Brü', variedad: 'Maíz Azúl', maduracion: 'La brü', marca: 'La Bru Stout', tipoInsumo: 'cerveza', presentaciones: [P] }), '355 ml'));
+    test('…y la marca no se cuela como variedad cuando la variedad está vacía', () =>
+        eq(ctx.insumoTitulo({ nombre: 'Modelo', maduracion: 'Grupo Modelo', tipoInsumo: 'cerveza' }), 'Modelo'));
+    test('refresco igual; abarrote no enseña la marca escondida; destilado sigue con su `marca`', () =>
+        eq([ctx.insumoMeta({ nombre: 'Agua', variedad: 'Mineral', maduracion: 'Peñafiel', marca: 'Vieja', tipoInsumo: 'refresco' }),
+            ctx.insumoMeta({ nombre: 'Chiles', variedad: 'La Costeña', marca: 'Vieja', tipoInsumo: 'abarrote' }),
+            ctx.insumoMeta({ nombre: 'Ginebra', marca: 'Tanqueray', tipoInsumo: 'destilado' }),
+            ctx.insumoMeta({ nombre: 'Algo', marca: 'Sin tipo' })].join('|'), 'Peñafiel||Tanqueray|Sin tipo'));
+    test('el catálogo de insumos y la ficha de receta leen la marca por la etiqueta (no `ins.marca` a mano)', () =>
+        eq(/insumoPartes\(ins\)\.marca \? '<div style="font-size:10px/.test(leer('recetas/insumos.js')) && !/\(insumoContenido\(ins\)\|\|ins\.marca\)/.test(leer('recetas/insumos.js')) &&
+           /_mFicha = \(typeof insumoPartes === 'function'\) \? insumoPartes\(ins\)\.marca/.test(leer('app.js')), true));
+
+    /* Cuentas bancarias y previsiones, dentro de la caja. */
+    test('cuentas y previsiones cargan embed.js ANTES de page-guard (dentro de la ventana, sin el Fin·ax viejo)', () =>
+        eq(['financiero/cuentas-bancarias.html', 'financiero/previsiones.html'].every(f => { const t = leer(f); const a = t.indexOf('/embed.js'), b = t.indexOf('/page-guard.js'); return a > -1 && a < b; }), true));
+    test('…la ventana se titula «Caja Fuerte · …» y operaciones-ui la viste como la caja', () =>
+        eq(/'Caja Fuerte · Cuentas bancarias' : 'Caja Fuerte · Previsiones'/.test(leer('administrativo/diario.html')) && /RAICES = '#cajOverlay,#cjCfgOv,/.test(leer('administrativo/operaciones-ui.js')), true));
+    test('…los accesos que abrían la página suelta entran por la caja (hub, Resumen y «agregar débito» del corte)', () => {
+        const hub = leer('hub-modulos.js'), rs = leer('financiero/resumen.html'), d = leer('administrativo/diario.html');
+        return eq(/ruta: 'administrativo\/diario\.html\?vista=gestion&caja=bancos'/.test(hub) && /ruta: 'administrativo\/diario\.html\?vista=gestion&caja=previsiones'/.test(hub) &&
+                  !/ruta: 'financiero\/(cuentas-bancarias|previsiones)\.html'/.test(hub) && /\/administrativo\/diario\.html\?vista=gestion&caja=bancos/.test(rs) &&
+                  !/href="\.\.\/financiero\/cuentas-bancarias\.html"/.test(d) && (d.match(/abrirCjCfg\(\\'cuentas\\',1\);return false/g) || []).length === 2, true);
+    });
+    test('…`?caja=` abre esa vista DESPUÉS de la contraseña de la puerta (una sola vez)', () => {
+        const d = leer('administrativo/diario.html');
+        return eq(/function _cjDesbloquear\(\)\{ _cjAutorizado = true; document\.body\.classList\.remove\('cj-cerrada'\); _cjIrDeUrl\(\); \}/.test(d) && /_cjIrUrl=null;/.test(d), true);
+    });
+
+    /* Guías de la app web. */
+    const mui = leer('etaax-modulos-ui.js'), adm = leer('admin-guias-movil.js');
+    const idsModulos = (mui.match(/\{ id:'([a-z]+)', nombre:'[^']+·ax'/g) || []).map(x => /id:'([a-z]+)'/.exec(x)[1]);
+    const idsWeb = (/web:\s+\{[\s\S]*?mods: \[([\s\S]*?)\] \}/.exec(adm) || ['', ''])[1].match(/id: '([a-z_]+)'/g).map(x => /'([a-z_]+)'/.exec(x)[1]);
+    test('el panel sube guías web con el MISMO id que usa cada portada (moduloDeRuta): los cinco módulos', () =>
+        eq(idsWeb.join(',') + ' | ' + idsModulos.join(','), 'recetas,administrativo,financiero,equipo,consultoria | recetas,administrativo,financiero,equipo,consultoria'));
+    test('…y la categoría de una guía web es el nombre de su módulo (Learn·ax las agrupa así)', () =>
+        eq(/categoria: PLATAFORMAS\[_plat\]\.categoria \|\| \(MODS\.find/.test(adm) && /web:\s+\{ panel: 'tab-guias-web', categoria: null/.test(adm), true));
+    test('la portada pide SOLO las guías activas de su módulo y sin guías no pinta el botón', () =>
+        eq(/\.eq\('modulo', mod\.id\)\.eq\('activa', true\)/.test(mui) && /if \(!l\.length \|\| wrap\.querySelector\('\.etx-guias-btn'\)\) return;/.test(mui), true));
+    test('…cada guía en su ventana flotante: YouTube sin cookies, video del Storage aquí, PDF incrustado solo en computadora', () =>
+        eq(/youtube-nocookie\.com\/embed\//.test(mui) && /<video class="etx-guia-video"/.test(mui) && /matchMedia\('\(pointer:fine\)'\)/.test(mui) && /function _arrastrable\(w, asa\)/.test(mui), true));
+    test('Learn·ax reproduce aquí un video subido como archivo (antes lo mandaba fuera)', () =>
+        eq(/<video src="' \+ e\(g\.url\) \+ '" controls playsinline/.test(leer('consultoria/guias.js')), true));
+})();
+
 
 /* ═══════════ BH61 · «PAGADA», «PARCIAL» O «POR PAGAR» ═══════════
    La pregunta no es sí o no. La pantalla puede estar mirando NOVIEMBRE y la

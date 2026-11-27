@@ -46,8 +46,23 @@
        es el ESTADO DE COMPRA (Fresco, Congelado -18°C) y en frutas el TIPO DE
        COMPRA (A granel, Por pieza). Esas no son identidad: no van en el nombre. */
     var NO_ES_VARIEDAD = /congelad|refrigerad|fresco|iqf|granel|por pieza|por manojo|por caja|por bolsa|por charola|cubeta|peso variable|peso aprox/i;
+    /* (27-nov, Edwin: «se queda pegada la info de variedad o marca vieja que ya no
+       está en el insumo») LA MARCA ES LA QUE SE VE EN EL EDITOR. En cervezas y
+       refrescos el editor ESCONDE el campo `marca` y su «Marca del producto»
+       guarda `maduracion`; en abarrotes la marca va dentro de «Marca / Variedad».
+       Leer `marca` ahí enseñaba un valor viejo que ya no se ve ni se puede
+       borrar («La Bru Stout» debajo de la La Brü Maíz Azul). No es caché: es un
+       campo escondido. Los datos no se tocan (la llave de empate los usa). */
+    var MARCA_EN_MADURACION = { cerveza: 1, cerveza_barril: 1, refresco: 1 }, MARCA_OCULTA = { abarrote: 1 };
+    function _marca(o) {
+        var t = o.tipoInsumo || '';
+        if (MARCA_EN_MADURACION[t]) return String(o.maduracion || '').trim();
+        if (MARCA_OCULTA[t]) return '';
+        return o.marca || '';
+    }
     function _variedad(o) {
         if (o.variedad) return o.variedad;
+        if (MARCA_EN_MADURACION[o.tipoInsumo || '']) return '';   // ahí `maduracion` es la marca, no la variedad
         var m = String(o.maduracion || '').trim();
         if (!m || o.tipoInsumo === 'carne' || o.tipoInsumo === 'fruta' || NO_ES_VARIEDAD.test(m)) return '';
         return m;
@@ -66,7 +81,7 @@
 
     function _partes(o) {
         o = _canon(o) || {};
-        var nombre = o.nombreBase || o.nombre || '', variedad = _variedad(o), marca = o.marca || '';
+        var nombre = o.nombreBase || o.nombre || '', variedad = _variedad(o), marca = _marca(o);
         // Una marca igual al nombre (o a la variedad) no dice nada nuevo: no se repite.
         if (_mismo(marca, nombre) || _mismo(marca, variedad)) marca = '';
         return {

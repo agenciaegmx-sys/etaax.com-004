@@ -179,10 +179,17 @@
         var cuerpo;
         if (g.tipo === 'video') {
             var vid = ytId(g.url);
+            /* (27-nov) Las guías del panel admin pueden ser un ARCHIVO de video
+               (mp4 en el Storage): se ve aquí mismo, como en la app y en la
+               ventana flotante de cada módulo. */
+            var archivo = /\.(mp4|webm|mov)(\?|#|$)/i.test(g.url || '') || /\/storage\/v1\/object\/public\//.test(g.url || '');
             cuerpo = vid
                 ? '<iframe src="https://www.youtube-nocookie.com/embed/' + e(vid) + '" allowfullscreen ' +
                   'style="width:100%;aspect-ratio:16/9;border:0;border-radius:10px;background:#000"></iframe>'
-                : _fuera(g.url);
+                : archivo
+                    ? '<video src="' + e(g.url) + '" controls playsinline preload="metadata" ' +
+                      'style="display:block;width:100%;max-height:76vh;border-radius:10px;background:#000"></video>'
+                    : _fuera(g.url);
         } else if (g.tipo === 'pdf') {
             // #view=FitH abre ajustado al ancho: en un PDF vertical, el default deja
             // media hoja en blanco y obliga a hacer zoom cada vez.

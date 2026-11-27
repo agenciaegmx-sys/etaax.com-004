@@ -13,10 +13,26 @@
    ════════════════════════════════════════════════════════════════════════ */
 (function () {
     'use strict';
-    var MODS = [
-        { id: 'movil_costax',  nom: 'Cost·ax',  lema: 'Inventario y recetas' },
-        { id: 'movil_equipax', nom: 'Equip·ax', lema: 'Tu turno' }
-    ];
+    /* (27-nov) LA MISMA PANTALLA SIRVE A LAS DOS APPS. Edwin: «en el panel admin
+       también debemos tener el apartado de subir guías de uso para la app web».
+       Las de la web son las mismas filas de `guias` con `modulo` = el id del
+       módulo (recetas, administrativo…: el que usa `moduloDeRuta()`), y su
+       `categoria` es el nombre del módulo, así Learn·ax las agrupa por módulo.
+       Cada portada las abre desde su botón «Guías» (etaax-modulos-ui.js). */
+    var PLATAFORMAS = {
+        movil: { panel: 'tab-guias-movil', categoria: 'App móvil', prefijo: 'movil-', donde: 'en la app',
+                 nota: 'Cada guía aparece en la app, debajo de su módulo, para quien entra con su clave. ',
+                 mods: [{ id: 'movil_costax',  nom: 'Cost·ax',  lema: 'Inventario y recetas' },
+                        { id: 'movil_equipax', nom: 'Equip·ax', lema: 'Tu turno' }] },
+        web:   { panel: 'tab-guias-web', categoria: null, prefijo: 'web-', donde: 'en el sistema',
+                 nota: 'Cada guía aparece en la portada de su módulo (botón «Guías», junto al nombre del módulo) y en Learn·ax, para todo el equipo con sesión. ',
+                 mods: [{ id: 'recetas',        nom: 'Cost·ax',  lema: 'Recetas, insumos e inventarios' },
+                        { id: 'administrativo', nom: 'Admin·ax', lema: 'Ingresos, egresos y caja' },
+                        { id: 'financiero',     nom: 'Fin·ax',   lema: 'Resultados y KPIs' },
+                        { id: 'equipo',         nom: 'Equip·ax', lema: 'Personal y horarios' },
+                        { id: 'consultoria',    nom: 'Learn·ax', lema: 'Aprende y analiza' }] }
+    };
+    var _plat = 'movil', MODS = PLATAFORMAS.movil.mods;
     var TOPE_VIDEO = 50 * 1024 * 1024, TOPE_PDF = 40 * 1024 * 1024;
     var _lista = [], _cargando = false;
 
@@ -86,13 +102,13 @@
                 (gs.length ? gs.map(function (g) {
                     return '<div class="agm-it' + (g.activa ? '' : ' off') + '" data-id="' + esc(g.id) + '">' +
                         '<span class="agm-it-ic">' + ic(g.tipo === 'pdf' ? 'ins-ficha' : 'rec-tutorial', 18) + '</span>' +
-                        '<span class="agm-it-tx"><b>' + esc(g.titulo) + '</b><small>' + esc(tipoTxt(g)) + (g.activa ? '' : ' · oculta en la app') + '</small></span>' +
+                        '<span class="agm-it-tx"><b>' + esc(g.titulo) + '</b><small>' + esc(tipoTxt(g)) + (g.activa ? '' : ' · oculta ' + PLATAFORMAS[_plat].donde) + '</small></span>' +
                         '<span class="agm-it-acc">' +
                             '<a class="btn-mini" href="' + esc(g.url) + '" target="_blank" rel="noopener">Ver</a>' +
                             '<button class="btn-mini" onclick="AdmGuiasMovil.alternar(\'' + esc(g.id) + '\')">' + (g.activa ? 'Ocultar' : 'Mostrar') + '</button>' +
                             '<button class="btn-mini" style="color:#e05a3a;border-color:rgba(224,90,58,.45)" onclick="AdmGuiasMovil.eliminar(\'' + esc(g.id) + '\')">Eliminar</button>' +
                         '</span></div>';
-                }).join('') : '<div class="agm-vacio">Sin guías todavía. Agrégala abajo: aparecerá debajo de ' + esc(m.nom) + ' en la app.</div>') +
+                }).join('') : '<div class="agm-vacio">Sin guías todavía. Agrégala abajo: aparecerá ' + (_plat === 'web' ? 'en la portada de ' + esc(m.nom) + ' y en Learn·ax' : 'debajo de ' + esc(m.nom) + ' en la app') + '.</div>') +
             '</div>';
         }).join('');
     }
@@ -107,18 +123,21 @@
         $('agmArchivoLbl').firstChild.textContent = t === 'pdf' ? 'Archivo PDF (hasta 40 MB)' : 'Archivo de video (mp4, hasta 50 MB)';
     }
 
-    function montar() {
-        var p = $('tab-guias-movil'); if (!p) return;
+    function montar(plat) {
+        _plat = PLATAFORMAS[plat] ? plat : 'movil'; MODS = PLATAFORMAS[_plat].mods;
+        var C = PLATAFORMAS[_plat], p = $(C.panel); if (!p) return;
+        /* Los dos paneles usan los mismos ids: solo uno vive a la vez. */
+        Object.keys(PLATAFORMAS).forEach(function (k) { var o = $(PLATAFORMAS[k].panel); if (o && o !== p) o.innerHTML = ''; });
         estilos();
         p.innerHTML =
             '<div class="agm">' +
-                '<div class="adm-nota">Cada guía aparece en la app, debajo de su módulo, para quien entra con su clave. ' +
+                '<div class="adm-nota">' + C.nota +
                     'Un video puede ser un archivo o un enlace de YouTube (mejor para videos largos: no pesa en Storage).</div>' +
                 '<div class="agm-mods" id="agmMods"><div class="agm-vacio">Cargando…</div></div>' +
                 '<div class="agm-form">' +
                     '<div class="agm-anc" style="font-size:15px;font-weight:700;text-transform:none;letter-spacing:0">Agregar guía</div>' +
                     '<label>Módulo<select id="agmModulo">' + MODS.map(function (m) { return '<option value="' + m.id + '">' + esc(m.nom) + ' · ' + esc(m.lema) + '</option>'; }).join('') + '</select></label>' +
-                    '<label>Título<input id="agmTitulo" maxlength="80" placeholder="Ej. Cómo registrar entradas"></label>' +
+                    '<label>Título<input id="agmTitulo" maxlength="80" placeholder="' + (_plat === 'web' ? 'Ej. Cómo hacer un corte de caja' : 'Ej. Cómo registrar entradas') + '"></label>' +
                     '<div class="agm-anc"><div class="agm-tipos">' +
                         '<button type="button" class="agm-tipo on" data-tipo="video" onclick="AdmGuiasMovil.tipo(\'video\')">' + ic('rec-tutorial', 16) + 'Video (archivo)</button>' +
                         '<button type="button" class="agm-tipo" data-tipo="link" onclick="AdmGuiasMovil.tipo(\'link\')">' + ic('rec-enlace', 16) + 'Video (enlace de YouTube)</button>' +
@@ -137,7 +156,7 @@
 
     async function subir(file, carpeta) {
         var ext = (file.name && file.name.indexOf('.') >= 0) ? file.name.split('.').pop().toLowerCase() : (carpeta === 'pdf' ? 'pdf' : 'mp4');
-        var ruta = '_guias/' + carpeta + '/movil-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + '.' + ext;
+        var ruta = '_guias/' + carpeta + '/' + PLATAFORMAS[_plat].prefijo + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + '.' + ext;
         var r = await _supabase.storage.from('evidencias').upload(ruta, file, { contentType: file.type || (carpeta === 'pdf' ? 'application/pdf' : 'video/mp4'), upsert: false });
         if (r.error) throw new Error(r.error.message);
         return _supabase.storage.from('evidencias').getPublicUrl(ruta).data.publicUrl;
@@ -164,11 +183,12 @@
             msg.textContent = 'Guardando…';
             var r = await _supabase.from('guias').insert({
                 id: genId(), titulo: titulo, descripcion: ($('agmDesc').value || '').trim() || null,
-                categoria: 'App móvil', tipo: tipo, url: url, modulo: $('agmModulo').value,
+                categoria: PLATAFORMAS[_plat].categoria || (MODS.find(function (m) { return m.id === $('agmModulo').value; }) || {}).nom || 'General',
+                tipo: tipo, url: url, modulo: $('agmModulo').value,
                 audiencia: 'ambas', orden: parseInt($('agmOrden').value, 10) || 0, activa: true
             });
             if (r.error) { msg.textContent = 'No se pudo guardar: ' + r.error.message; return; }
-            msg.textContent = 'Listo: ya aparece en la app.';
+            msg.textContent = 'Listo: ya aparece ' + PLATAFORMAS[_plat].donde + '.';
             $('agmTitulo').value = ''; $('agmDesc').value = ''; $('agmUrl').value = ''; $('agmArchivo').value = '';
             await cargar();
         } catch (e) {
@@ -183,7 +203,7 @@
     }
     async function eliminar(id) {
         var g = _lista.find(function (x) { return x.id === id; }); if (!g) return;
-        if (!confirm('¿Eliminar la guía «' + g.titulo + '»? Deja de verse en la app.')) return;
+        if (!confirm('¿Eliminar la guía «' + g.titulo + '»? Deja de verse ' + PLATAFORMAS[_plat].donde + '.')) return;
         var r = await _supabase.from('guias').delete().eq('id', id);
         if (r.error) { pintarAviso('No se pudo eliminar: ' + r.error.message); return; }
         /* El archivo también, si es nuestro (no se borra un enlace de YouTube). */
@@ -192,5 +212,7 @@
         await cargar();
     }
 
-    window.AdmGuiasMovil = { montar: montar, guardar: guardar, alternar: alternar, eliminar: eliminar, tipo: setTipo, esYoutube: esYoutube };
+    window.AdmGuiasMovil = { montar: function () { montar('movil'); }, montarWeb: function () { montar('web'); },
+                             guardar: guardar, alternar: alternar, eliminar: eliminar, tipo: setTipo, esYoutube: esYoutube,
+                             plataformas: PLATAFORMAS };
 })();

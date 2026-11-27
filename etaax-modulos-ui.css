@@ -798,3 +798,55 @@ body.etx-module-cards .etx-portada-modulos .etx-tool-card .cf-card-cta {padding-
 /* Centrado automático (etaax-header.js: etaaxAutoCentrar): con la sucursal fuera de
    la fila, los botones se van a la derecha a cualquier ancho. */
 body.etx-modulos-ui .etx-ctx-isla.etx-ident-libre .ctx-right {margin-left:auto!important;}
+
+/* ══ GUÍAS DE USO DEL MÓDULO (Edwin, 27-nov) ══════════════════════════════════
+   El botón «Guías» vive en la MISMA fila que la isla del nombre, pegado a la
+   orilla derecha de las tarjetas; al bajar se encoge a su ícono, como la isla.
+   Cada guía abre una ventana flotante: sin fondo oscuro, se arrastra por su
+   barra y se minimiza, para seguir el tutorial mientras se trabaja. */
+.cf-hero.etx-isla-wrap .etx-guias-btn { position:absolute; right:0; top:0; pointer-events:auto; display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 13px;
+  border-radius:999px; border:1px solid var(--etx-ui-line,var(--border)); background:var(--etx-ui-panel,var(--surface)); color:var(--text); cursor:pointer;
+  font:600 13px/1 'DM Sans',sans-serif; box-shadow:0 4px 12px rgba(0,0,0,.12); transition:border-color .15s, color .15s; animation:etxIslaEntra .35s ease-out both; }
+.cf-hero.etx-isla-wrap .etx-guias-btn:hover, .cf-hero.etx-isla-wrap .etx-guias-btn[aria-expanded="true"] { border-color:var(--etx-ui-cyan-line,#537e83); color:var(--etx-ui-cyan,#8ce4ee); }
+.etx-guias-btn .etx-guias-ic { display:inline-flex; color:var(--etx-ui-cyan,#8ce4ee); }
+.etx-guias-btn .etx-guias-ic .etx-ic { width:17px; height:17px; }
+.etx-guias-btn b { min-width:18px; height:18px; padding:0 5px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; font-size:11px;
+  background:var(--etx-ui-cyan-tint,rgba(140,228,238,.12)); color:var(--etx-ui-cyan,#8ce4ee); box-sizing:border-box; }
+.cf-hero.etx-isla-wrap:has(.etx-isla--mini) .etx-guias-tx { display:none; }
+@media (max-width:560px) { .cf-hero.etx-isla-wrap .etx-guias-tx { display:none; } .cf-hero.etx-isla-wrap .etx-guias-btn { padding:0 10px; } }
+
+.etx-guias-pop { position:fixed; z-index:10040; max-height:min(62vh,520px); overflow:auto; box-sizing:border-box; padding:10px; border-radius:16px;
+  background:var(--etx-ui-panel,var(--surface)); border:1px solid var(--etx-ui-line,var(--border)); color:var(--text); box-shadow:0 18px 44px rgba(0,0,0,.28); }
+.etx-guias-pop-cab { display:flex; flex-direction:column; gap:2px; padding:6px 8px 10px; border-bottom:1px solid var(--etx-ui-line,var(--border)); margin-bottom:6px; }
+.etx-guias-pop-cab b { font:700 15px/1.3 'DM Sans',sans-serif; }
+.etx-guias-pop-cab span { font-size:12px; color:var(--etx-ui-muted,var(--text-dim)); }
+.etx-guias-pop-lista { display:flex; flex-direction:column; gap:4px; }
+.etx-guias-it { display:flex; align-items:flex-start; gap:10px; width:100%; text-align:left; padding:10px; border-radius:12px; border:1px solid transparent; background:transparent; color:inherit; cursor:pointer; font-family:inherit; }
+.etx-guias-it:hover, .etx-guias-it:focus-visible { border-color:var(--etx-ui-cyan-line,#537e83); background:var(--etx-ui-cyan-tint,rgba(140,228,238,.06)); outline:none; }
+.etx-guias-it-ic { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:10px; background:var(--etx-ui-cyan-tint,rgba(140,228,238,.1)); color:var(--etx-ui-cyan,#8ce4ee); }
+.etx-guias-it-tx { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.etx-guias-it-tx b { font-size:13.5px; font-weight:600; overflow-wrap:anywhere; }
+.etx-guias-it-tx small { font-size:12px; color:var(--etx-ui-muted,var(--text-dim)); line-height:1.4; }
+.etx-guias-it-tx em { font-style:normal; font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--etx-ui-muted,var(--text-dim)); margin-top:2px; }
+
+.etx-guia-flot { position:fixed; width:min(560px, calc(100vw - 24px)); box-sizing:border-box; border-radius:16px; overflow:hidden;
+  background:var(--etx-ui-panel,var(--surface)); border:1px solid var(--etx-ui-line,var(--border)); color:var(--text); box-shadow:0 22px 56px rgba(0,0,0,.36); }
+.etx-guia-flot.es-pdf { width:min(760px, calc(100vw - 24px)); }
+.etx-guia-cab { display:flex; align-items:center; gap:10px; padding:10px 10px 10px 14px; cursor:grab; user-select:none; touch-action:none; border-bottom:1px solid var(--etx-ui-line,var(--border)); }
+.etx-guia-cab:active { cursor:grabbing; }
+.etx-guia-cab-ic { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:9px; background:var(--etx-ui-cyan-tint,rgba(140,228,238,.1)); color:var(--etx-ui-cyan,#8ce4ee); }
+.etx-guia-cab-tx { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.etx-guia-cab-tx b { font:600 13.5px/1.3 'DM Sans',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.etx-guia-cab-tx small { font-size:11px; color:var(--etx-ui-muted,var(--text-dim)); }
+.etx-guia-acc { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:9px; border:1px solid var(--etx-ui-line,var(--border)); background:transparent; color:var(--text); cursor:pointer; }
+.etx-guia-acc:hover { border-color:var(--etx-ui-cyan-line,#537e83); color:var(--etx-ui-cyan,#8ce4ee); }
+.etx-guia-cuerpo { background:#000; }
+.etx-guia-video { display:block; width:100%; aspect-ratio:16/9; border:0; background:#000; }
+.etx-guia-pdf { display:block; width:100%; height:min(70vh,640px); border:0; background:#fff; }
+.etx-guia-abrir { display:flex; flex-direction:column; align-items:center; gap:10px; padding:26px 18px; background:var(--etx-ui-panel,var(--surface)); text-align:center; }
+.etx-guia-abrir span { color:var(--etx-ui-cyan,#8ce4ee); }
+.etx-guia-abrir p { margin:0; font-size:13px; color:var(--etx-ui-muted,var(--text-dim)); }
+.etx-guia-btn { display:inline-flex; align-items:center; min-height:40px; padding:0 18px; border-radius:10px; background:var(--etx-ui-terra-solido,#c45f37); color:var(--etx-ui-terra-tinta,#fff); font-weight:600; text-decoration:none; }
+.etx-guia-flot.min { width:min(320px, calc(100vw - 24px)); }
+.etx-guia-flot.min .etx-guia-cuerpo { display:none; }
+.etx-guia-flot.min .etx-guia-cab { border-bottom:0; }

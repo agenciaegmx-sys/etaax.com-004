@@ -2,7 +2,7 @@
    recordatorios. No reemplaza controles, handlers, reglas ni datos guardados. */
 (function () {
     'use strict';
-    var RAICES = '#cajOverlay,#concOverlay,#concHistOverlay,#dxOv_extras,#modalAnticipo,#modalAptLibre,#modalVentaExtra,#dxOv_mayores,#modalConfirm,#dxRecordatorio';
+    var RAICES = '#cajOverlay,#cjCfgOv,#concOverlay,#concHistOverlay,#dxOv_extras,#modalAnticipo,#modalAptLibre,#modalVentaExtra,#dxOv_mayores,#modalConfirm,#dxRecordatorio';
     var prefijo = /^(?:\s|[🔒🔐🔓💰🏢🏦🏛💳🔮🎟🎪🎉🍽📦📋📜⚖💵🔀📅🗓🎯👤✅🖨⬇✕✖✏🗑↩🔴⚠⏳🔔⭐⏸＋+−—]|\uFE0F)+/u;
     var pendiente = false;
     function cada(s, fn) { document.querySelectorAll(s).forEach(fn); }
@@ -58,6 +58,11 @@
     }
     function caja() {
         titulo(document.querySelector('#cajOverlay .cj-title'), 'cjf', 'caja-fuerte', false);
+        /* (27-nov) La ventana de Cuentas bancarias / Previsiones con la misma cara
+           que la caja: placa con ícono y «Caja fuerte · …» en dos colores (antes
+           salía el título dorado y los botones morado/rojo del Fin·ax viejo). */
+        var cfgT = document.querySelector('#cjCfgOv .cj-title');
+        if (cfgT) titulo(cfgT, 'cjf', /Previsi/.test(cfgT.textContent) ? 'prevision' : 'banco', false);
         titulo(document.querySelector('#concOverlay .cj-title'), 'cjf', 'conciliar', false);
         titulo(document.querySelector('#concHistOverlay .cj-title'), 'cjf', 'historial', false);
         var nombres = {'Disponible de verdad':'disponible','Saldo disponible total':'disponible',

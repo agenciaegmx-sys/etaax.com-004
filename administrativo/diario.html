@@ -12,14 +12,14 @@
     <link rel="preload" as="script" href="/etaax-iconos.js?v=7a651810">
     <link rel="preload" as="script" href="/etaax-sidebar.js?v=b1bccada">
     <link rel="preload" as="script" href="/etaax-header.js?v=a0ec334a">
-    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=3d1b38de">
+    <link rel="preload" as="script" href="/etaax-modulos-ui.js?v=dc5e5298">
     <link rel="preload" as="script" href="/administrativo/gastos-ui.js?v=93b54efc">
     <link rel="preload" as="script" href="/administrativo/cortes-ui.js?v=585bb93b">
     <link rel="preload" as="script" href="/admin-guard-ui.js?v=009662b5">
     <link rel="preload" as="script" href="/administrativo/nominas-ui.js?v=a1054e8d">
     <link rel="preload" as="script" href="/administrativo/fijos-ui.js?v=043e00fe">
     <link rel="preload" as="script" href="/administrativo/movimientos-ui.js?v=466c7833">
-    <link rel="preload" as="script" href="/administrativo/operaciones-ui.js?v=adedd239">
+    <link rel="preload" as="script" href="/administrativo/operaciones-ui.js?v=9050f7cf">
 
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
          navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
@@ -533,7 +533,7 @@
     
 </style>
 <link rel="stylesheet" href="/etaax-sidebar.css?v=c5d36d5e">
-<link rel="stylesheet" href="/etaax-modulos-ui.css?v=ab7ca42a">
+<link rel="stylesheet" href="/etaax-modulos-ui.css?v=509d2efa">
 <link rel="stylesheet" href="/administrativo/gastos-ui.css?v=6e39b31e">
 <link rel="stylesheet" href="/administrativo/cortes-ui.css?v=27878e84">
 <link rel="stylesheet" href="/admin-guard-ui.css?v=4b8e0bf3">
@@ -1596,7 +1596,7 @@
 <!-- ══ (26-nov) CUENTAS BANCARIAS / PREVISIONES, DESDE LA CAJA FUERTE ══ -->
 <div class="cj-overlay" id="cjCfgOv" style="z-index:9250" onclick="if(event.target===this)cerrarCjCfg()">
     <div class="cj-panel cjcfg-panel">
-        <div class="cj-header"><span class="cj-title cjcfg-tit" id="cjCfgTit">Cuentas bancarias</span><button class="modal-close" onclick="cerrarCjCfg()">✕ Cerrar</button></div>
+        <div class="cj-header"><span class="cj-title cjcfg-tit" id="cjCfgTit">Caja Fuerte · Cuentas bancarias</span><button class="modal-close" onclick="cerrarCjCfg()">✕ Cerrar</button></div>
         <iframe id="cjCfgFrame" title="Gestión de la caja fuerte" class="cjcfg-frame"></iframe>
     </div>
 </div>
@@ -3628,7 +3628,7 @@ function renderTarjetaCuentas(saved, fallbackTotal){
     var lineA=document.getElementById('tarCtaA');
     if(lineA) lineA.innerHTML = ctaA
         ? '→ '+_ctaLabel(ctaA)+' · neto <span id="netoCta_'+keyA+'" style="color:var(--green)">$0.00</span>'
-        : 'Sin cuenta · <a href="../financiero/cuentas-bancarias.html" style="color:var(--green)">agregar débito</a>';
+        : 'Sin cuenta · <a href="#" onclick="abrirCjCfg(\'cuentas\',1);return false" style="color:var(--green)">agregar débito</a>';
     // Cuenta B → fila secundaria (visible solo si existe)
     var rowB=document.getElementById('rowTarB');
     if(rowB) rowB.style.display=ctaB?'':'none';
@@ -3806,7 +3806,7 @@ function renderTransferCuentas(saved, fallbackTotal){
     };
     wrap.innerHTML = ctas.length
         ? ctas.map(function(c){ return campo(c.id, etx(_ctaLabel(c)), saved[c.id]); }).join('')
-        : campo('_sin', 'Sin cuenta · <a href="../financiero/cuentas-bancarias.html" style="color:var(--green)">agregar débito</a>', saved['_sin']);
+        : campo('_sin', 'Sin cuenta · <a href="#" onclick="abrirCjCfg(\'cuentas\',1);return false" style="color:var(--green)">agregar débito</a>', saved['_sin']);
     calcTransfer();
 }
 function calcTransfer(){
@@ -4149,7 +4149,20 @@ var _cjVista = 'disponible';
    vez al entrar a «Caja fuerte · Gestión de saldos» y, ya adentro, sus tarjetas
    abren sin volver a pedirla. Fuera de esa vista, cada apertura la pide. */
 var _cjAutorizado = false;
-function _cjDesbloquear(){ _cjAutorizado = true; document.body.classList.remove('cj-cerrada'); }
+/* (27-nov) `?caja=bancos|previsiones|…` llega directo a esa vista de la caja
+   (y `&cfg=cuentas|previsiones` abre además su gestión): así los accesos que
+   antes abrían la página suelta del Fin·ax viejo —el hub, el Resumen— entran
+   por la puerta de la caja, con su contraseña. Se usa una sola vez. */
+var _cjIrUrl = (function(){ try { var q=new URLSearchParams(location.search); return { v:q.get('caja')||'', cfg:q.get('cfg')||'' }; } catch(e){ return { v:'', cfg:'' }; } })();
+function _cjIrDeUrl(){
+    var ir=_cjIrUrl; if(!ir||(!ir.v&&!ir.cfg)) return; _cjIrUrl=null;
+    var v = ['disponible','bancos','previsiones','anticipos','apartados'].indexOf(ir.v)>-1 ? ir.v : (ir.cfg==='previsiones'?'previsiones':'bancos');
+    setTimeout(function(){
+        abrirCajaFuerte(v);
+        if(ir.cfg==='cuentas'||ir.cfg==='previsiones') setTimeout(function(){ abrirCjCfg(ir.cfg); }, 120);
+    }, 60);
+}
+function _cjDesbloquear(){ _cjAutorizado = true; document.body.classList.remove('cj-cerrada'); _cjIrDeUrl(); }
 function _cjPedirEntrada(){
     if(_cjAutorizado){ _cjDesbloquear(); return; }
     if(!_puede('ventas.cajaFuerte')) return;
@@ -4172,7 +4185,7 @@ function abrirCjCfg(que, nueva){
     var ov=document.getElementById('cjCfgOv'), fr=document.getElementById('cjCfgFrame');
     if(!ov||!fr) return;
     var url = (que==='cuentas' ? '/financiero/cuentas-bancarias.html' : '/financiero/previsiones.html') + '?embed=1' + (nueva?'&nueva=1':'');
-    document.getElementById('cjCfgTit').textContent = que==='cuentas' ? 'Cuentas bancarias' : 'Previsiones';
+    document.getElementById('cjCfgTit').textContent = que==='cuentas' ? 'Caja Fuerte · Cuentas bancarias' : 'Caja Fuerte · Previsiones';
     fr.src = url;
     ov.classList.add('open');
 }
@@ -10710,13 +10723,13 @@ function renderFijosPanel(){
 <script src="/etaax-sidebar.js?v=b1bccada"></script>
 <script src="/negocio-tipos.js?v=7fdc2cd9"></script>
 <script src="/etaax-header.js?v=a0ec334a"></script>
-<script src="/etaax-modulos-ui.js?v=3d1b38de"></script>
+<script src="/etaax-modulos-ui.js?v=dc5e5298"></script>
 <script src="/administrativo/gastos-ui.js?v=93b54efc"></script>
 <script src="/administrativo/cortes-ui.js?v=585bb93b"></script>
 <script src="/admin-guard-ui.js?v=009662b5"></script>
 <script src="/administrativo/nominas-ui.js?v=a1054e8d"></script>
 <script src="/administrativo/fijos-ui.js?v=043e00fe"></script>
 <script src="/administrativo/movimientos-ui.js?v=466c7833"></script>
-<script src="/administrativo/operaciones-ui.js?v=adedd239"></script>
+<script src="/administrativo/operaciones-ui.js?v=9050f7cf"></script>
 </body>
 </html>

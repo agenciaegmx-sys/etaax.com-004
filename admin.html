@@ -549,6 +549,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
 
   <!-- TAB: GUÍAS DE LA APP MÓVIL (lo pinta admin-guias-movil.js; la app las lee por la v96) -->
   <div id="tab-guias-movil" class="tab-panel"></div>
+  <!-- TAB: GUÍAS DE LA APP WEB (27-nov; mismas filas de `guias`, modulo = id del módulo) -->
+  <div id="tab-guias-web" class="tab-panel"></div>
 
   <!-- TAB: SOLICITUDES DE PLAN (nueva sucursal vía asesor) -->
   <!-- TAB: INVITACIONES
@@ -2998,6 +3000,7 @@ var ADM_BLOQUES = [
     { id:'auditar', tipo:'accion', ic:'adm-buscar', tit:'Auditar cruces', desc:'Busca recetas que quedaron en el negocio equivocado. Solo lectura.', cta:'Revisar →' },
     { id:'app', tipo:'panel', ic:'adm-celular', tit:'App móvil (beta)', desc:'El enlace único de la app de registro, para probarla en una barra real.' },
     { id:'guias-movil', tipo:'panel', ic:'rec-tutorial', tit:'Guías de la app móvil', desc:'Sube los tutoriales en video y PDF que salen debajo de Cost·ax y Equip·ax en la app, para quien entra con su clave.' },
+    { id:'guias-web', tipo:'panel', ic:'rec-tutorial', tit:'Guías de la app web', desc:'Sube los tutoriales en video y PDF de cada módulo: salen en su portada (botón «Guías») y en Learn·ax.' },
     { id:'papelera', tipo:'pagina', ic:'mov-eliminar', tit:'Papelera', desc:'Lo que se eliminó en la plataforma, para revisarlo o recuperarlo.' },
     { id:'migrar', tipo:'panel', ic:'adm-sucursal', tit:'Migrar sucursal', desc:'Copiar una sucursal a otro negocio, revisarla y eliminarla del original. Lo eliminado se puede restaurar.' },
     { id:'auditores', tipo:'panel', ic:'stf-admin', tit:'Staff ETAAX', desc:'El equipo de ETAAX entra con su usuario a los negocios, sucursales y módulos que le des aquí.' }
@@ -3121,6 +3124,7 @@ function switchTab(tab, sinHistorial) {
     if (tab === 'migrar') renderMigrar();
     if (tab === 'auditores' && window.AdmEtx) AdmEtx.abrir();
     if (tab === 'guias-movil' && window.AdmGuiasMovil) AdmGuiasMovil.montar();
+    if (tab === 'guias-web' && window.AdmGuiasMovil) AdmGuiasMovil.montarWeb();
     document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.toggle('active', p === panel); });
     document.getElementById('admPanelBloque').textContent = t.bloque.tit;
     document.getElementById('admPanelTit').textContent = t.card.tit;

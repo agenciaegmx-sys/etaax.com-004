@@ -2094,7 +2094,7 @@
                    ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
                return '<tr>' +
                    '<td class="w ind">' + etx(insumoTitulo(ins)) + (ins.esSubReceta ? ' 🍳' : '') +
-                       (ins.marca ? '<div style="font-size:10px;color:#8a8a8a;font-weight:400">' + etx(ins.marca) + '</div>' : '') + '</td>' +
+                       (insumoPartes(ins).marca ? '<div style="font-size:10px;color:#8a8a8a;font-weight:400">' + etx(insumoPartes(ins).marca) + '</div>' : '')   /* la marca que se ve en el editor (27-nov) */ + '</td>' +
                    '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx([ins.categoria, ins.subcategoria].filter(Boolean).join(' · ') || '—') + '</td>' +
                    '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx(_presTxtPDF(ins, p)) + '</td>' +
                    '<td>' + (p ? _mx(p.precio) : '—') + '</td>' +
@@ -2428,7 +2428,7 @@
                        }
                        <div>
                            <div style="font-weight:500">${etx(insumoTitulo(ins))}${ins.esSubReceta ? ' <span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.3);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">🍳 Sub-receta</span>' : ''}${novBadgeHTML(ins)}</div>
-                           ${(insumoContenido(ins)||ins.marca) ? `<div style="font-size:11px;color:var(--text-muted)">${insumoMetaHTML(ins)}</div>` : ''}
+                           ${insumoMeta(ins) ? `<div style="font-size:11px;color:var(--text-muted)">${insumoMetaHTML(ins)}</div>` : ''}
                            ${_catGlobalIns() ? `<div style="margin-top:3px">${_insumoBadgesIns(ins)}</div>` : ''}
                        </div>
                    </div>
@@ -2544,7 +2544,7 @@
                '<div class="insumo-card-body">' +
                    '<div class="insumo-card-nombre" title="' + etx(insumoEtiqueta(ins)) + '">' + etx(insumoTitulo(ins)) + '</div>' +
                    (ins.esSubReceta ? '<div style="font-size:9px;color:var(--accent);margin-top:2px">🍳 Sub-receta</div>' : '') +
-                   ((insumoContenido(ins)||ins.marca) ? '<div class="insumo-card-variedad">' + insumoMetaHTML(ins) + '</div>' : '') +
+                   (insumoMeta(ins) ? '<div class="insumo-card-variedad">' + insumoMetaHTML(ins) + '</div>' : '') +
                    (cat ? '<div class="insumo-card-cat">' + cat + '</div>' : '') +
                    '<div class="insumo-card-costo">' + etx(costo) + '</div>' +
                    (prov ? '<div class="insumo-card-prov">📍 ' + prov + '</div>' : '') +
