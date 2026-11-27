@@ -102,7 +102,7 @@
                 (gs.length ? gs.map(function (g) {
                     return '<div class="agm-it' + (g.activa ? '' : ' off') + '" data-id="' + esc(g.id) + '">' +
                         '<span class="agm-it-ic">' + ic(g.tipo === 'pdf' ? 'ins-ficha' : 'rec-tutorial', 18) + '</span>' +
-                        '<span class="agm-it-tx"><b>' + esc(g.titulo) + '</b><small>' + esc(tipoTxt(g)) + (g.activa ? '' : ' · oculta ' + PLATAFORMAS[_plat].donde) + '</small></span>' +
+                        '<span class="agm-it-tx"><b>' + esc(g.titulo) + '</b><small>' + esc((_plat === 'web' && window.EtaaxGuias ? EtaaxGuias.submodulo(g) + ' · ' : '') + (_plat === 'web' ? (g.tipo === 'pdf' ? 'Guía de uso · ' : 'Tutorial · ') : '') + tipoTxt(g)) + (g.activa ? '' : ' · oculta ' + PLATAFORMAS[_plat].donde) + '</small></span>' +
                         '<span class="agm-it-acc">' +
                             '<a class="btn-mini" href="' + esc(g.url) + '" target="_blank" rel="noopener">Ver</a>' +
                             '<button class="btn-mini" onclick="AdmGuiasMovil.alternar(\'' + esc(g.id) + '\')">' + (g.activa ? 'Ocultar' : 'Mostrar') + '</button>' +
@@ -136,7 +136,11 @@
                 '<div class="agm-mods" id="agmMods"><div class="agm-vacio">Cargando…</div></div>' +
                 '<div class="agm-form">' +
                     '<div class="agm-anc" style="font-size:15px;font-weight:700;text-transform:none;letter-spacing:0">Agregar guía</div>' +
-                    '<label>Módulo<select id="agmModulo">' + MODS.map(function (m) { return '<option value="' + m.id + '">' + esc(m.nom) + ' · ' + esc(m.lema) + '</option>'; }).join('') + '</select></label>' +
+                    '<label>Módulo<select id="agmModulo" onchange="AdmGuiasMovil.subs()">' + MODS.map(function (m) { return '<option value="' + m.id + '">' + esc(m.nom) + ' · ' + esc(m.lema) + '</option>'; }).join('') + '</select></label>' +
+                    /* (27-nov) En la web cada guía va en un SUBMÓDULO: así se agrupan en la
+                       portada, en el hub y en Learn·ax. Vive en la categoría
+                       («Fin·ax · Ventas totales»), sin migración. */
+                    (_plat === 'web' ? '<label>Submódulo<select id="agmSub"></select></label>' : '') +
                     '<label>Título<input id="agmTitulo" maxlength="80" placeholder="' + (_plat === 'web' ? 'Ej. Cómo hacer un corte de caja' : 'Ej. Cómo registrar entradas') + '"></label>' +
                     '<div class="agm-anc"><div class="agm-tipos">' +
                         '<button type="button" class="agm-tipo on" data-tipo="video" onclick="AdmGuiasMovil.tipo(\'video\')">' + ic('rec-tutorial', 16) + 'Video (archivo)</button>' +
@@ -151,7 +155,19 @@
                 '</div>' +
             '</div>';
         setTipo('video');
+        pintarSubs();
         cargar();
+    }
+    function subsDe(mod) { return (window.EtaaxGuias && EtaaxGuias.SUBMODULOS[mod]) || []; }
+    function pintarSubs() {
+        var sel = $('agmSub'), mod = $('agmModulo') && $('agmModulo').value; if (!sel) return;
+        sel.innerHTML = ['General'].concat(subsDe(mod)).map(function (x) { return '<option value="' + esc(x) + '">' + esc(x) + '</option>'; }).join('');
+    }
+    function categoriaDe(mod) {
+        if (PLATAFORMAS[_plat].categoria) return PLATAFORMAS[_plat].categoria;
+        var sub = $('agmSub') ? $('agmSub').value : 'General';
+        if (window.EtaaxGuias) return EtaaxGuias.categoria(mod, sub);
+        return (MODS.find(function (m) { return m.id === mod; }) || {}).nom || 'General';
     }
 
     async function subir(file, carpeta) {
@@ -183,12 +199,13 @@
             msg.textContent = 'Guardando…';
             var r = await _supabase.from('guias').insert({
                 id: genId(), titulo: titulo, descripcion: ($('agmDesc').value || '').trim() || null,
-                categoria: PLATAFORMAS[_plat].categoria || (MODS.find(function (m) { return m.id === $('agmModulo').value; }) || {}).nom || 'General',
+                categoria: categoriaDe($('agmModulo').value),
                 tipo: tipo, url: url, modulo: $('agmModulo').value,
                 audiencia: 'ambas', orden: parseInt($('agmOrden').value, 10) || 0, activa: true
             });
             if (r.error) { msg.textContent = 'No se pudo guardar: ' + r.error.message; return; }
             msg.textContent = 'Listo: ya aparece ' + PLATAFORMAS[_plat].donde + '.';
+            if (window.EtaaxGuias) EtaaxGuias.olvidar();
             $('agmTitulo').value = ''; $('agmDesc').value = ''; $('agmUrl').value = ''; $('agmArchivo').value = '';
             await cargar();
         } catch (e) {
@@ -213,6 +230,6 @@
     }
 
     window.AdmGuiasMovil = { montar: function () { montar('movil'); }, montarWeb: function () { montar('web'); },
-                             guardar: guardar, alternar: alternar, eliminar: eliminar, tipo: setTipo, esYoutube: esYoutube,
+                             guardar: guardar, alternar: alternar, eliminar: eliminar, tipo: setTipo, esYoutube: esYoutube, subs: pintarSubs,
                              plataformas: PLATAFORMAS };
 })();

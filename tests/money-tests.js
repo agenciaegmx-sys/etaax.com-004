@@ -33929,18 +33929,44 @@ console.log('\n══ BH104 · Guías de la app web; la marca que se ve; cuentas
         return eq(/function _cjDesbloquear\(\)\{ _cjAutorizado = true; document\.body\.classList\.remove\('cj-cerrada'\); _cjIrDeUrl\(\); \}/.test(d) && /_cjIrUrl=null;/.test(d), true);
     });
 
-    /* Guías de la app web. */
-    const mui = leer('etaax-modulos-ui.js'), adm = leer('admin-guias-movil.js');
+    /* Tutoriales y guías de uso de la app web (etaax-guias.js, ejecutado de verdad). */
+    const mui = leer('etaax-modulos-ui.js'), adm = leer('admin-guias-movil.js'), gu = leer('etaax-guias.js'), hubm = leer('hub-modulos.js');
+    const cg = vm.createContext({ document: { addEventListener() {}, readyState: 'loading', querySelector() { return null; } }, location: { pathname: '/', search: '' },
+                                  URLSearchParams, Promise, setTimeout });
+    cg.window = cg; cg.window.addEventListener = () => {};
+    vm.runInContext(gu, cg);
+    const G = cg.EtaaxGuias;
     const idsModulos = (mui.match(/\{ id:'([a-z]+)', nombre:'[^']+·ax'/g) || []).map(x => /id:'([a-z]+)'/.exec(x)[1]);
     const idsWeb = (/web:\s+\{[\s\S]*?mods: \[([\s\S]*?)\] \}/.exec(adm) || ['', ''])[1].match(/id: '([a-z_]+)'/g).map(x => /'([a-z_]+)'/.exec(x)[1]);
-    test('el panel sube guías web con el MISMO id que usa cada portada (moduloDeRuta): los cinco módulos', () =>
-        eq(idsWeb.join(',') + ' | ' + idsModulos.join(','), 'recetas,administrativo,financiero,equipo,consultoria | recetas,administrativo,financiero,equipo,consultoria'));
-    test('…y la categoría de una guía web es el nombre de su módulo (Learn·ax las agrupa así)', () =>
-        eq(/categoria: PLATAFORMAS\[_plat\]\.categoria \|\| \(MODS\.find/.test(adm) && /web:\s+\{ panel: 'tab-guias-web', categoria: null/.test(adm), true));
-    test('la portada pide SOLO las guías activas de su módulo y sin guías no pinta el botón', () =>
-        eq(/\.eq\('modulo', mod\.id\)\.eq\('activa', true\)/.test(mui) && /if \(!l\.length \|\| wrap\.querySelector\('\.etx-guias-btn'\)\) return;/.test(mui), true));
-    test('…cada guía en su ventana flotante: YouTube sin cookies, video del Storage aquí, PDF incrustado solo en computadora', () =>
-        eq(/youtube-nocookie\.com\/embed\//.test(mui) && /<video class="etx-guia-video"/.test(mui) && /matchMedia\('\(pointer:fine\)'\)/.test(mui) && /function _arrastrable\(w, asa\)/.test(mui), true));
+    test('los cinco módulos con el MISMO id en el sistema (moduloDeRuta), en las guías y en el panel', () =>
+        eq(idsWeb.join(',') + ' | ' + G.ORDEN.join(',') + ' | ' + idsModulos.join(','),
+           'recetas,administrativo,financiero,equipo,consultoria | recetas,administrativo,financiero,equipo,consultoria | recetas,administrativo,financiero,equipo,consultoria'));
+    test('el submódulo vive en la categoría: «Fin·ax · Ventas totales» (General = solo el módulo) y se lee de vuelta', () =>
+        eq([G.categoria('financiero', 'Ventas totales'), G.categoria('financiero', 'General'), G.submodulo({ categoria: 'Fin·ax · Ventas totales' }),
+            G.submodulo({ categoria: 'Fin·ax' }), G.submodulo({ categoria: 'Primeros pasos' })].join('|'), 'Fin·ax · Ventas totales|Fin·ax|Ventas totales|General|General'));
+    test('agrupa por submódulo en el orden del módulo (General primero, lo desconocido al final)', () =>
+        eq(G.grupos([{ id: 'a', categoria: 'Fin·ax · KPIs' }, { id: 'b', categoria: 'Fin·ax' }, { id: 'c', categoria: 'Fin·ax · Otra cosa' }, { id: 'd', categoria: 'Fin·ax · Resumen financiero' }], 'financiero')
+            .map(g => g.sub + ':' + g.guias.map(x => x.id).join('')).join(' / '), 'General:b / Resumen financiero:d / KPIs:a / Otra cosa:c'));
+    test('los submódulos de Cost·ax y Fin·ax incluyen las herramientas del hub (nadie sube una guía a un submódulo que no existe)', () => {
+        const nombres = (id) => { const m = new RegExp("\\{ id: '" + id + "'[\\s\\S]*?\\]\\}").exec(hubm)[0]; return (m.match(/nombre: '([^']+)', clave/g) || []).map(x => /'([^']+)'/.exec(x)[1]); };
+        return eq(['recetas', 'financiero'].every(id => nombres(id).every(n => G.SUBMODULOS[id].indexOf(n) > -1)), true);
+    });
+    test('tutorial = video (archivo o YouTube); guía de uso = PDF; sin guías no se enseña nada y sin un tipo no se enseña ese tipo', () =>
+        eq(/function seccion\(g\) \{ return g\.tipo === 'pdf' \? 'pdf' : 'tut'; \}/.test(gu) && /if \(!l\.length \|\| wrap\.querySelector\('\.etx-gu-btn'\)\) return;/.test(gu) &&
+           /if \(!l\.length\) \{ cont\.hidden = true; cont\.innerHTML = ''; return; \}/.test(gu) && (gu.match(/if \(!gs\.length\) return '';/g) || []).length === 2, true));
+    test('…pide solo las ACTIVAS de los cinco módulos (las de la app móvil no), y una lectura vacía no se queda guardada', () =>
+        eq(/\.in\('modulo', ORDEN\)\.eq\('activa', true\)/.test(gu) && /if \(!l\.length\) _carga = null;/.test(gu), true));
+    test('la portada: dos botones (Tutoriales / Guías de uso) con sus opciones OCULTAS hasta tocarlos', () =>
+        eq(/class="etx-gu-acc" data-sec="' \+ s\.k \+ '" aria-expanded="false"/.test(gu) && /<div class="etx-gu-sec" data-sec="' \+ s\.k \+ '" hidden>/.test(gu), true));
+    test('el hub: dos columnas SIEMPRE abiertas que se contraen con su encabezado, debajo de la descripción del módulo', () =>
+        eq(/var _plegado = \{ tut: false, pdf: false \}/.test(gu) && /EtaaxGuias\.pintarHub\(document\.getElementById\('hubGuias'\), activo\.id\)/.test(hubm) &&
+           leer('hub.html').indexOf('id="hubModuloDescripcion"') < leer('hub.html').indexOf('id="hubGuias"') && /\.etx-gu-hub\[hidden\]/.test(gu), true));
+    test('cada guía en su ventana flotante: YouTube sin cookies, video del Storage aquí, PDF incrustado solo en computadora', () =>
+        eq(/youtube-nocookie\.com\/embed\//.test(gu) && /<video class="etx-guia-video"/.test(gu) && /matchMedia\('\(pointer:fine\)'\)/.test(gu) && /function arrastrable\(w, asa\)/.test(gu), true));
+    test('etaax-guias.js llega a las cinco portadas, al hub y al panel admin (y el panel guarda la categoría con su submódulo)', () =>
+        eq(['recetas/index.html', 'administrativo/index.html', 'financiero/index.html', 'equipo/index.html', 'consultoria/index.html', 'hub.html', 'admin.html']
+               .every(f => /<script src="\/etaax-guias\.js\?v=[0-9a-f]+"><\/script>/.test(leer(f))) &&
+           /if \(window\.EtaaxGuias\) return EtaaxGuias\.categoria\(mod, sub\);/.test(adm) && !/guiasDelModulo/.test(mui), true));
     test('Learn·ax reproduce aquí un video subido como archivo (antes lo mandaba fuera)', () =>
         eq(/<video src="' \+ e\(g\.url\) \+ '" controls playsinline/.test(leer('consultoria/guias.js')), true));
 })();

@@ -373,12 +373,18 @@ const nubeDe = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__
                 [...m.querySelectorAll('.agm-it b')].map(b => b.textContent).join(',')), document.getElementById('tab-guias-movil').innerHTML === '']);
             assert.deepEqual(r, [['Cost·ax: Guía de Learn·ax', 'Admin·ax: ', 'Fin·ax: ', 'Equip·ax: ', 'Learn·ax: '], true]);
         });
-        await pa.selectOption('#agmModulo', 'financiero'); await pa.fill('#agmTitulo', 'Cómo leer el resumen');
+        await caso('…en la web cada guía va en un SUBMÓDULO: la lista cambia con el módulo (General + los del módulo)', async () => {
+            await pa.selectOption('#agmModulo', 'financiero');
+            assert.deepEqual(await pa.evaluate(() => [...document.querySelectorAll('#agmSub option')].map(o => o.value)),
+                ['General', 'Resumen financiero', 'Ventas totales', 'Gastos totales', 'KPIs', 'Estadísticas']);
+        });
+        await pa.selectOption('#agmSub', 'Ventas totales'); await pa.fill('#agmTitulo', 'Cómo leer el resumen');
         await pa.click('.agm-tipo[data-tipo="link"]'); await pa.fill('#agmUrl', 'https://www.youtube.com/watch?v=abcDEF12345');
         await pa.click('#agmGuardar'); await pa.waitForTimeout(500);
-        await caso('…agregar una guía a Fin·ax la guarda con modulo «financiero» y categoría «Fin·ax» (así la agrupa Learn·ax)', async () => {
+        await caso('…agregar una guía a Fin·ax → Ventas totales la guarda con modulo «financiero» y categoría «Fin·ax · Ventas totales» (así la agrupan la portada, el hub y Learn·ax)', async () => {
             const g = await pa.evaluate(() => window.__nube.leer().guias.find(x => x.titulo === 'Cómo leer el resumen'));
-            assert.deepEqual([g && g.modulo, g && g.tipo, g && g.categoria, g && g.activa], ['financiero', 'video', 'Fin·ax', true]);
+            assert.deepEqual([g && g.modulo, g && g.tipo, g && g.categoria, g && g.activa], ['financiero', 'video', 'Fin·ax · Ventas totales', true]);
+            assert.match(await pa.evaluate(() => document.querySelectorAll('#tab-guias-web .agm-mod')[2].textContent), /Cómo leer el resumen.*Ventas totales · Tutorial · Video · YouTube/);
             assert.match(await pa.evaluate(() => document.getElementById('agmMsg').textContent), /ya aparece en el sistema/);
         });
     } finally {

@@ -331,6 +331,7 @@
             if (ir) ir.removeAttribute('href');
             ultimoAcceso = '';
             tarjetas.innerHTML = '';
+            if (window.EtaaxGuias) EtaaxGuias.pintarHub(document.getElementById('hubGuias'), '');
             aviso.textContent = 'Elige un negocio para ver sus herramientas.';
             panel.removeAttribute('aria-labelledby');
             panel.setAttribute('aria-label', 'Herramientas');
@@ -343,6 +344,8 @@
         document.getElementById('hubModuloNumero').textContent = 'Módulo ' + (visibles.indexOf(activo) + 1) + ' · activo';
         document.getElementById('hubModuloTitulo').textContent = activo.nombre;
         document.getElementById('hubModuloDescripcion').textContent = activo.descripcion;
+        /* (27-nov) Debajo, sus tutoriales y guías de uso en dos columnas (sin guías, nada). */
+        if (window.EtaaxGuias) EtaaxGuias.pintarHub(document.getElementById('hubGuias'), activo.id);
         /* La acción queda en la columna del módulo elegido, debajo de su
            tarjeta y fuera del tablist. Comparte su portada y permisos. */
         if (ir) {

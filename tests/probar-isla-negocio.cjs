@@ -43,11 +43,12 @@ function nube() {
         negocio_insumos: [], cortes: [], req_pedido: [], req_historial: [], permisos: [],
         /* (27-nov) Guías de uso de la app web: tres de Fin·ax (una oculta no cuenta) y ninguna de Equip·ax. */
         guias: [
-            { id: 'g1', titulo: 'Cómo leer el resumen', descripcion: 'Ventas, metas y resultado', tipo: 'video', url: 'https://www.youtube.com/watch?v=abcdefghijk', modulo: 'financiero', orden: 1, activa: true },
-            { id: 'g2', titulo: 'Metas del mes', tipo: 'video', url: 'https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/video/web-a.mp4', modulo: 'financiero', orden: 2, activa: true },
-            { id: 'g3', titulo: 'Manual de KPIs', tipo: 'pdf', url: 'https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/pdf/web-b.pdf', modulo: 'financiero', orden: 3, activa: true },
-            { id: 'g4', titulo: 'Borrador', tipo: 'pdf', url: 'x.pdf', modulo: 'financiero', orden: 4, activa: false },
-            { id: 'g5', titulo: 'De la app', tipo: 'pdf', url: 'y.pdf', modulo: 'movil_costax', orden: 1, activa: true }]
+            { id: 'g1', titulo: 'Cómo leer el resumen', descripcion: 'Ventas, metas y resultado', categoria: 'Fin·ax · Resumen financiero', tipo: 'video', url: 'https://www.youtube.com/watch?v=abcdefghijk', modulo: 'financiero', orden: 1, activa: true },
+            { id: 'g2', titulo: 'Metas del mes', categoria: 'Fin·ax · Ventas totales', tipo: 'video', url: 'https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/video/web-a.mp4', modulo: 'financiero', orden: 2, activa: true },
+            { id: 'g3', titulo: 'Manual de KPIs', categoria: 'Fin·ax', tipo: 'pdf', url: 'https://byjuocnkyuxxudondciz.supabase.co/storage/v1/object/public/evidencias/_guias/pdf/web-b.pdf', modulo: 'financiero', orden: 3, activa: true },
+            { id: 'g4', titulo: 'Borrador', categoria: 'Fin·ax', tipo: 'pdf', url: 'x.pdf', modulo: 'financiero', orden: 4, activa: false },
+            { id: 'g5', titulo: 'De la app', categoria: 'App móvil', tipo: 'pdf', url: 'y.pdf', modulo: 'movil_costax', orden: 1, activa: true },
+            { id: 'g6', titulo: 'Tu primer escandallo', categoria: 'Cost·ax · Escandallos', tipo: 'video', url: 'https://youtu.be/zyxwvutsrqp', modulo: 'recetas', orden: 1, activa: true }]
     };
 }
 function semilla(n) {
@@ -387,31 +388,38 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             assert.equal(r.grupos, 'Personal,Operativo,Operativo,Desarrollo,Estructura de staff,Estructura de staff,Estructura de staff');
             assert.ok(r.alto <= 160, 'tarjeta de ' + r.alto + ' px');
         });
-        await caso('…Equip·ax no tiene guías: su portada NO enseña el botón «Guías»', async () =>
-            assert.equal(await p.evaluate(() => !!document.querySelector('.etx-guias-btn')), false));
-        /* (27-nov) Guías de uso: un botón en la fila de la isla del nombre y cada guía en su ventana flotante. */
+        await caso('…Equip·ax no tiene guías: su portada NO enseña «Tutoriales y guías» (sin guías, nada)', async () =>
+            assert.equal(await p.evaluate(() => !!document.querySelector('.etx-gu-btn')), false));
+        /* (27-nov) Tutoriales (videos) y guías de uso (PDF): en la portada, un desplegable en la fila de la isla. */
         await ir(p, '/financiero/index.html');
-        await p.waitForSelector('.etx-guias-btn', { timeout: 8000 }).catch(() => {});
-        await caso('GUÍAS: en la portada de Fin·ax, «Guías 3» en la MISMA fila de la isla, pegado a la orilla derecha de las tarjetas', async () => {
+        await p.waitForSelector('.etx-gu-btn', { timeout: 8000 }).catch(() => {});
+        await caso('PORTADA: «Tutoriales y guías 3» en la MISMA fila de la isla, pegado a la orilla derecha de las tarjetas', async () => {
             const r = await p.evaluate(() => {
-                const b = document.querySelector('.etx-guias-btn'), i = document.querySelector('.etx-isla'); if (!b) return null;
+                const b = document.querySelector('.etx-gu-btn'), i = document.querySelector('.etx-isla'); if (!b) return null;
                 const rb = b.getBoundingClientRect(), ri = i.getBoundingClientRect();
                 const cards = [...document.querySelectorAll('.etx-portada-modulos .cf-card')].filter(c => c.offsetParent);
                 const der = Math.max.apply(null, cards.map(c => c.getBoundingClientRect().right));
                 return [b.textContent, Math.abs((rb.top + rb.bottom) / 2 - (ri.top + ri.bottom) / 2) < 2, Math.abs(rb.right - der) < 3, rb.left > ri.right];
             });
-            assert.deepEqual(r, ['Guías3', true, true, true], JSON.stringify(r));
+            assert.deepEqual(r, ['Tutoriales y guías3', true, true, true], JSON.stringify(r));
         });
-        await p.click('.etx-guias-btn'); await p.waitForTimeout(200);
-        await caso('…despliega sus guías (solo las activas y solo de este módulo), con su tipo', async () =>
-            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.etx-guias-pop .etx-guias-it')].map(x => x.querySelector('b').textContent + ' | ' + x.querySelector('em').textContent)),
-                ['Cómo leer el resumen | Video · YouTube', 'Metas del mes | Video', 'Manual de KPIs | PDF']));
-        await p.click('.etx-guias-it[data-i="0"]'); await p.waitForTimeout(250);
+        await p.click('.etx-gu-btn'); await p.waitForTimeout(200);
+        await caso('…despliega DOS botones —Tutoriales (2 videos) y Guías de uso (1 PDF)— con sus opciones OCULTAS', async () =>
+            assert.deepEqual(await p.evaluate(() => [[...document.querySelectorAll('.etx-gu-pop .etx-gu-acc')].map(b => b.querySelector('b').textContent + ' | ' + b.querySelector('small').textContent + ' | ' + b.getAttribute('aria-expanded')),
+                [...document.querySelectorAll('.etx-gu-pop .etx-gu-sec')].map(x => x.hidden)]),
+                [['Tutoriales | Ver tutoriales · 2 videos | false', 'Guías de uso | Ver guías de uso · 1 PDF | false'], [true, true]]));
+        await p.click('.etx-gu-acc[data-sec="tut"]'); await p.waitForTimeout(150);
+        await caso('…tocar «Tutoriales» despliega sus videos AGRUPADOS POR SUBMÓDULO (las guías siguen cerradas)', async () =>
+            assert.deepEqual(await p.evaluate(() => [[...document.querySelectorAll('.etx-gu-sec[data-sec="tut"] .etx-gu-grupo')].map(g => g.querySelector('.etx-gu-grupo-t').textContent + ': ' +
+                [...g.querySelectorAll('.etx-gu-it b')].map(b => b.textContent).join(',')), document.querySelector('.etx-gu-sec[data-sec="pdf"]').hidden]),
+                [['Resumen financiero: Cómo leer el resumen', 'Ventas totales: Metas del mes'], true]));
+        await p.click('.etx-gu-sec[data-sec="tut"] .etx-gu-it:has-text("Cómo leer el resumen")'); await p.waitForTimeout(250);
         await caso('…la guía abre en una VENTANA FLOTANTE (sin fondo oscuro): YouTube sin cookies, y la lista se cierra', async () =>
-            assert.deepEqual(await p.evaluate(() => { const w = document.querySelector('.etx-guia-flot'); return [!!w, w && w.querySelector('iframe').getAttribute('src'), !!document.querySelector('.etx-guias-pop'),
-                getComputedStyle(w).position, !document.querySelector('.modal-overlay.open, .cj-overlay.open')]; }),
-                [true, 'https://www.youtube-nocookie.com/embed/abcdefghijk?rel=0', false, 'fixed', true]));
-        await p.click('.etx-guias-btn'); await p.waitForTimeout(150); await p.click('.etx-guias-it[data-i="1"]'); await p.waitForTimeout(250);
+            assert.deepEqual(await p.evaluate(() => { const w = document.querySelector('.etx-guia-flot'); return [!!w, w && w.querySelector('iframe').getAttribute('src'), !!document.querySelector('.etx-gu-pop'),
+                getComputedStyle(w).position, w.querySelector('small').textContent]; }),
+                [true, 'https://www.youtube-nocookie.com/embed/abcdefghijk?rel=0', false, 'fixed', 'Fin·ax · Resumen financiero · Tutorial']));
+        await p.click('.etx-gu-btn'); await p.waitForTimeout(150); await p.click('.etx-gu-acc[data-sec="tut"]'); await p.waitForTimeout(100);
+        await p.click('.etx-gu-it:has-text("Metas del mes")'); await p.waitForTimeout(250);
         await caso('…otra guía abre OTRA ventana, corrida (el video del Storage se ve aquí mismo)', async () =>
             assert.deepEqual(await p.evaluate(() => { const ws = [...document.querySelectorAll('.etx-guia-flot')]; return [ws.length, !!ws[1].querySelector('video[controls]'),
                 ws[0].getBoundingClientRect().right !== ws[1].getBoundingClientRect().right]; }), [2, true, true]));
@@ -427,7 +435,37 @@ const ir = async (p, ruta) => { await p.goto(ORIGEN + ruta); await p.waitForFunc
             await p.click('.etx-guia-flot:last-of-type [data-acc="cerrar"]'); await p.waitForTimeout(100);
             assert.deepEqual([min, await p.evaluate(() => document.querySelectorAll('.etx-guia-flot').length)], [[true, 'none'], 1]);
         });
+        await p.click('.etx-gu-btn'); await p.waitForTimeout(150); await p.click('.etx-gu-acc[data-sec="pdf"]'); await p.waitForTimeout(150);
         await foto(p, 'g1-guias-finax');
+        await p.keyboard.press('Escape');
+        /* El hub: debajo del módulo elegido, las dos columnas SIEMPRE abiertas. */
+        await ir(p, '/hub.html'); await p.waitForTimeout(500);
+        await p.waitForFunction(() => { const h = document.getElementById('hubGuias'); return h && !h.hidden; }, null, { timeout: 8000 }).catch(() => {});
+        await caso('HUB: con Fin·ax elegido, debajo de su descripción, dos columnas —Tutoriales | Guías de uso— ABIERTAS y agrupadas por submódulo', async () => {
+            const r = await p.evaluate(() => {
+                const h = document.getElementById('hubGuias'), d = document.getElementById('hubModuloDescripcion').getBoundingClientRect();
+                const cols = [...h.querySelectorAll('.etx-gu-col')];
+                return [h.hidden, h.getBoundingClientRect().top >= d.bottom, cols.length, cols.length === 2 && Math.abs(cols[0].getBoundingClientRect().top - cols[1].getBoundingClientRect().top) < 2,
+                    cols.map(c => c.querySelector('.etx-gu-col-cab b').textContent + ' [' + [...c.querySelectorAll('.etx-gu-grupo')].map(g => g.querySelector('.etx-gu-grupo-t').textContent + ': ' +
+                        [...g.querySelectorAll('.etx-gu-it b')].map(b => b.textContent).join(',')).join(' / ') + '] ' + !c.querySelector('.etx-gu-col-cuerpo').hidden)];
+            });
+            assert.deepEqual(r, [false, true, 2, true, ['Tutoriales [Resumen financiero: Cómo leer el resumen / Ventas totales: Metas del mes] true', 'Guías de uso [General: Manual de KPIs] true']], JSON.stringify(r));
+        });
+        await foto(p, 'g2-guias-hub');
+        await p.click('#hubGuias .etx-gu-col-cab[data-sec="tut"]'); await p.waitForTimeout(150);
+        await caso('…tocar el encabezado «Tutoriales» contrae esa columna (la otra sigue abierta)', async () =>
+            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#hubGuias .etx-gu-col')].map(c => c.querySelector('.etx-gu-col-cuerpo').hidden)), [true, false]));
+        await p.evaluate(() => etaaxSeleccionarModulo('recetas')); await p.waitForTimeout(500);
+        await caso('…otro módulo enseña SUS guías (Cost·ax solo tiene un tutorial: una columna, y sigue contraída)', async () =>
+            assert.deepEqual(await p.evaluate(() => { const h = document.getElementById('hubGuias'); return [h.hidden, h.classList.contains('una'), [...h.querySelectorAll('.etx-gu-col')].map(c => c.dataset.sec + ':' + c.querySelector('.etx-gu-col-cuerpo').hidden)]; }),
+                [false, true, ['tut:true']]));
+        await p.click('#hubGuias .etx-gu-col-cab'); await p.waitForTimeout(100);
+        await p.click('#hubGuias .etx-gu-it'); await p.waitForTimeout(250);
+        await caso('…y sus guías abren la misma ventana flotante desde el hub', async () =>
+            assert.equal(await p.evaluate(() => (document.querySelector('.etx-guia-flot iframe') || {}).src), 'https://www.youtube-nocookie.com/embed/zyxwvutsrqp?rel=0'));
+        await p.evaluate(() => { document.querySelectorAll('.etx-guia-flot').forEach(w => w.remove()); etaaxSeleccionarModulo('equipo'); }); await p.waitForTimeout(400);
+        await caso('…y un módulo sin guías no enseña las columnas', async () =>
+            assert.equal(await p.evaluate(() => { const h = document.getElementById('hubGuias'); return h.hidden && getComputedStyle(h).display === 'none'; }), true));
         /* (24-nov) Centrado de verdad y la foto del negocio solo en el botón de la cuenta. */
         await p.evaluate(() => localStorage.setItem('etaax_n1_logo', 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="4" height="4" fill="#c0442a"/></svg>')));
         await p.goto(ORIGEN + '/hub.html?negocios=1'); await p.waitForFunction(() => document.querySelector('#brandInfoBar .hub-isla-ident'), null, { timeout: 20000 }); await p.waitForTimeout(600);

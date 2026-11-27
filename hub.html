@@ -938,6 +938,8 @@ body.etx-staff:not(.etx-global) .hub-global-grid { display:none !important; }
           <span class="hub-herramientas-icon" id="hubModuloIcono" aria-hidden="true"></span>
           <div><p id="hubModuloNumero" class="hub-modulo-numero"></p><h2 id="hubModuloTitulo"></h2><p id="hubModuloDescripcion" class="hub-modulo-desc"></p></div>
         </div>
+        <!-- (27-nov) Tutoriales | Guías de uso del módulo elegido: dos columnas siempre abiertas (etaax-guias.js); sin guías no se ve -->
+        <div id="hubGuias" class="etx-gu-hub" hidden></div>
         <div id="hubHerramientasTarjetas" class="hub-tools-grid"></div>
         <p id="hubHerramientasEstado" class="hub-herramientas-estado" role="status"></p>
       </section>
@@ -4865,7 +4867,8 @@ async function guardarNuevaPassword(){
 <script src="/etaax-acceso-movil.js?v=e3a3da63"></script><!-- el QR y el enlace de la versión móvil (menú de la cuenta) -->
 <script src="/etaax-header.js?v=a0ec334a"></script><!-- la barra de arriba: una sola para todo el sistema, y fija -->
 <script src="/hub-interacciones.js?v=43cd2b2b"></script>
-<script src="/hub-modulos.js?v=db1a8a51"></script>
+<script src="/etaax-guias.js?v=66e7b49d"></script><!-- (27-nov) tutoriales y guías de uso del módulo (portada, hub y panel) -->
+<script src="/hub-modulos.js?v=a59fad2c"></script>
 <script src="security.js?v=c188734e"></script>
 <script src="/modal-drag.js?v=4f2eff35"></script>
 <script src="/modal-dock.js?v=5cd269fc"></script>
